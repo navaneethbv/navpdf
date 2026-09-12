@@ -1,0 +1,1863 @@
+Yes. I’d give a coding agent a **product-spec + architecture + implementation prompt**, not just “build an Acrobat clone.” The prompt below deliberately limits scope to something one developer can realistically own while still producing a genuinely useful Acrobat-like desktop app.
+
+You can paste this into **Codex, Claude Code, Cursor, OpenCode, Replit Agent, or another coding agent**.
+
+```text
+You are a senior staff-level desktop application engineer and product architect.
+
+I want you to design and build a production-quality, LOCAL-FIRST desktop PDF application inspired by the useful personal-document features of Adobe Acrobat.
+
+This is NOT intended to copy Adobe branding, proprietary UI, proprietary code, or proprietary algorithms.
+
+The goal is to build a lightweight, privacy-focused, single-user PDF editor for personal/local use that provides approximately 80–90% of the PDF functionality an individual user commonly needs.
+
+Working name:
+
+NavPDF
+
+==================================================
+1. PRODUCT GOAL
+==================================================
+
+Build a polished desktop PDF application that allows me to:
+
+1. Open PDFs
+2. View PDFs
+3. Search PDFs
+4. Select/copy text
+5. Zoom and navigate
+6. View page thumbnails
+7. Reorder pages
+8. Delete pages
+9. Rotate pages
+10. Insert pages
+11. Extract pages
+12. Merge PDFs
+13. Split PDFs
+14. Add text
+15. Edit/replace existing text where technically feasible
+16. Add images
+17. Move/resize images
+18. Highlight text
+19. Underline text
+20. Strike through text
+21. Draw/freehand annotate
+22. Add comments/notes
+23. Fill PDF forms
+24. Create basic form fields
+25. Add signatures
+26. Save signatures locally
+27. Redact content properly
+28. Crop pages
+29. Add page numbers
+30. Add headers/footers
+31. Add watermarks
+32. Compress PDFs
+33. OCR scanned PDFs
+34. Make scanned PDFs searchable
+35. Password-protect PDFs
+36. Remove password protection when the password is known
+37. Edit document metadata
+38. Print PDFs
+39. Save / Save As
+40. Undo / Redo
+
+Everything should work locally whenever possible.
+
+DO NOT build:
+- user accounts
+- subscriptions
+- cloud storage
+- collaboration
+- analytics
+- telemetry
+- ads
+- enterprise administration
+- Adobe integrations
+- proprietary Adobe features
+
+Privacy is a core feature.
+
+Documents should never leave the computer unless the user explicitly chooses an external service in a future version.
+
+==================================================
+2. TARGET PLATFORM
+==================================================
+
+Primary platform:
+
+macOS Apple Silicon
+
+My development machine:
+
+MacBook Pro
+Apple Silicon
+48 GB RAM
+
+However, architect the application so Windows and Linux support can be added later.
+
+==================================================
+3. PREFERRED TECHNOLOGY STACK
+==================================================
+
+Use:
+
+Desktop shell:
+Tauri
+
+Frontend:
+React
+TypeScript
+Vite
+
+Styling:
+Tailwind CSS
+
+State management:
+Zustand
+
+PDF rendering:
+PDF.js
+
+PDF manipulation:
+Choose the best combination of:
+
+- pdf-lib
+- MuPDF
+- PDFium
+- qpdf
+
+Native/backend layer:
+Rust through Tauri
+
+OCR:
+Prefer an entirely local solution.
+
+Evaluate:
+
+- Tesseract OCR
+- OCRmyPDF
+- Apple Vision framework on macOS
+
+If Apple Vision produces substantially better OCR on macOS, design an abstraction layer so we can use:
+
+macOS -> Apple Vision
+Windows/Linux -> Tesseract or another OCR engine
+
+Do NOT attempt to implement the PDF specification manually.
+
+Use proven open-source PDF libraries.
+
+Before adopting a library, verify:
+- license
+- maintenance status
+- platform support
+- performance
+- ability to modify PDFs
+- suitability for redistribution
+
+Prefer permissive licenses where possible.
+
+==================================================
+4. HIGH-LEVEL ARCHITECTURE
+==================================================
+
+Use approximately this architecture:
+
+React UI
+    |
+    v
+Document State Layer
+    |
+    +-----------------------------+
+    |                             |
+    v                             v
+PDF Rendering Layer          PDF Editing Layer
+PDF.js                       Rust/Tauri
+                                  |
+                       +----------+-----------+
+                       |          |           |
+                       v          v           v
+                    MuPDF       qpdf       pdf-lib
+                       |
+                       v
+                     PDF
+
+Additional services:
+
+OCR Service
+Search Index
+Annotation Service
+Undo/Redo Command System
+Autosave Service
+Recent Documents Service
+Preferences Service
+Signature Storage Service
+
+All sensitive information should remain local.
+
+==================================================
+5. UI DESIGN
+==================================================
+
+Create a clean professional UI inspired by modern productivity applications.
+
+DO NOT visually clone Adobe Acrobat.
+
+General layout:
+
+--------------------------------------------------------
+| File | Edit | View | Annotate | Organize | Tools     |
+--------------------------------------------------------
+|        Main Toolbar                                  |
+--------------------------------------------------------
+| Page        |                         | Properties   |
+| thumbnails  |        PDF Canvas       | / Tools      |
+|             |                         |              |
+| Page 1      |                         | Text         |
+| Page 2      |                         | Image        |
+| Page 3      |                         | Signature    |
+|             |                         | Annotate     |
+--------------------------------------------------------
+| Page 3 / 27     110%       Search         Status     |
+--------------------------------------------------------
+
+LEFT SIDEBAR
+
+Tabs:
+
+Pages
+Bookmarks
+Search
+Comments
+
+Page thumbnails must support drag-and-drop reorder.
+
+CENTER
+
+PDF rendering canvas.
+
+RIGHT SIDEBAR
+
+Context-sensitive tools.
+
+Examples:
+
+When text selected:
+- highlight
+- underline
+- strike
+- copy
+- redact
+
+When image selected:
+- resize
+- move
+- delete
+- replace
+
+When annotation selected:
+- color
+- opacity
+- thickness
+- delete
+
+==================================================
+6. TOOLBAR
+==================================================
+
+Main toolbar should contain:
+
+Open
+
+Save
+
+Print
+
+Undo
+Redo
+
+Pointer
+
+Hand tool
+
+Text selection
+
+Edit PDF
+
+Add text
+
+Add image
+
+Highlight
+
+Draw
+
+Comment
+
+Signature
+
+Redact
+
+Zoom out
+Zoom percentage
+Zoom in
+
+Fit width
+Fit page
+
+Previous page
+Next page
+
+Search
+
+==================================================
+7. VIEWER REQUIREMENTS
+==================================================
+
+Implement a high-quality PDF viewer.
+
+Support:
+
+continuous scrolling
+
+single-page view
+
+two-page view
+
+fit-to-width
+
+fit-to-page
+
+zoom:
+25%–500%
+
+keyboard shortcuts
+
+trackpad zoom
+
+smooth scrolling
+
+page navigation
+
+large PDFs
+
+lazy page rendering
+
+render only visible/nearby pages
+
+Do NOT render a 1,000-page PDF completely into memory.
+
+Use virtualization.
+
+==================================================
+8. PAGE MANAGEMENT
+==================================================
+
+Create an "Organize Pages" mode.
+
+Allow:
+
+drag reorder
+
+multi-select
+
+delete
+
+duplicate
+
+rotate clockwise
+
+rotate counterclockwise
+
+extract
+
+insert blank page
+
+insert PDF
+
+insert image as page
+
+replace page
+
+crop
+
+split document
+
+Merge workflow:
+
+File -> Merge PDFs
+
+Allow selecting multiple PDFs.
+
+Show thumbnails.
+
+Allow drag/drop reorder.
+
+Click:
+
+Merge
+
+Then save result.
+
+==================================================
+9. ANNOTATIONS
+==================================================
+
+Support:
+
+highlight
+
+underline
+
+strike-through
+
+freehand drawing
+
+rectangle
+
+ellipse
+
+arrow
+
+line
+
+sticky note
+
+text box
+
+stamp
+
+Each annotation should support appropriate properties:
+
+color
+
+opacity
+
+border width
+
+font
+
+font size
+
+Delete
+
+Move
+
+Resize
+
+Annotations should be saved INTO THE PDF whenever the chosen library supports standard PDF annotations.
+
+Do not simply store annotations in an app-specific database unless unavoidable.
+
+==================================================
+10. TEXT ADDITION
+==================================================
+
+Users should be able to click anywhere on the page and add text.
+
+Properties:
+
+font family
+
+font size
+
+bold
+
+italic
+
+text color
+
+alignment
+
+rotation
+
+opacity
+
+The resulting text must be embedded in the PDF.
+
+==================================================
+11. EXISTING TEXT EDITING
+==================================================
+
+This is one of the most difficult features.
+
+Implement this carefully.
+
+Do NOT pretend PDFs behave like Word documents.
+
+When the user chooses:
+
+Edit PDF
+
+analyze the page.
+
+Identify text runs / blocks and their bounding boxes.
+
+Display editable overlays around detected text objects.
+
+On click:
+
+extract:
+
+text
+
+font
+
+font size
+
+font weight where possible
+
+text color
+
+bounding box
+
+baseline
+
+position
+
+rotation
+
+When edited:
+
+attempt to preserve original styling.
+
+If the original embedded font cannot legally or technically be reused, substitute a visually similar available font.
+
+Strategy can include:
+
+1. locate original text object
+2. remove or mask original text
+3. insert replacement text
+4. preserve coordinates
+5. preserve visual layout
+
+If proper content-stream editing is possible using MuPDF/PDFium, prefer that over simply painting a white rectangle over text.
+
+Support a fallback mode when exact editing is impossible.
+
+Clearly communicate:
+
+"Exact font unavailable — replacement font used."
+
+==================================================
+12. IMAGE EDITING
+==================================================
+
+In Edit PDF mode detect images.
+
+Allow:
+
+select
+
+move
+
+resize
+
+delete
+
+replace
+
+rotate
+
+Maintain aspect ratio by default.
+
+Allow holding a modifier key for free resizing.
+
+==================================================
+13. OCR
+==================================================
+
+Create:
+
+Tools -> OCR
+
+Options:
+
+Current page
+
+Selected pages
+
+Entire document
+
+Languages:
+
+English initially.
+
+Architecture must support additional languages later.
+
+OCR pipeline:
+
+PDF page
+   ↓
+Render high-resolution image
+   ↓
+Image preprocessing
+   ↓
+OCR
+   ↓
+Recognized text
+   ↓
+Bounding boxes
+   ↓
+Invisible PDF text layer
+   ↓
+Searchable PDF
+
+Preserve the visual appearance of scanned documents.
+
+Allow:
+
+Deskew
+
+Auto-rotate
+
+Noise reduction
+
+Contrast enhancement
+
+Do not visibly replace the original scan unless explicitly requested.
+
+==================================================
+14. SEARCH
+==================================================
+
+Cmd/Ctrl + F
+
+Search entire document.
+
+Show:
+
+result count
+
+result list
+
+page number
+
+context
+
+highlight matches on page
+
+Support:
+
+case sensitivity
+
+whole word
+
+Search must work with:
+
+native PDF text
+
+OCR text
+
+==================================================
+15. REDACTION
+==================================================
+
+Redaction MUST actually remove the underlying information.
+
+Do NOT implement fake redaction by drawing black rectangles.
+
+Workflow:
+
+Select Redact
+
+Draw/select region
+
+Preview redaction
+
+Apply Redactions
+
+After application:
+
+remove underlying text
+
+remove overlapping image content where possible
+
+remove metadata associated with redacted objects when appropriate
+
+flatten result where necessary
+
+Warn that redaction is permanent.
+
+==================================================
+16. FORMS
+==================================================
+
+Support existing AcroForms.
+
+Allow users to fill:
+
+text fields
+
+checkboxes
+
+radio buttons
+
+dropdowns
+
+date fields where applicable
+
+signature fields
+
+Create basic form editing mode.
+
+Allow creating:
+
+text input
+
+checkbox
+
+radio group
+
+dropdown
+
+signature area
+
+==================================================
+17. SIGNATURES
+==================================================
+
+Signature tool.
+
+Allow:
+
+Draw signature using mouse/trackpad
+
+Type signature
+
+Import signature image
+
+Store signatures locally.
+
+Never upload signatures.
+
+Saved signatures should be stored encrypted where practical.
+
+Allow:
+
+position
+
+resize
+
+rotate
+
+delete
+
+Signatures in V1 may be appearance annotations.
+
+Architect separately for cryptographic digital signatures.
+
+==================================================
+18. DIGITAL SIGNATURES - LATER FEATURE
+==================================================
+
+Do NOT prioritize certificate-based digital signatures for V1.
+
+But architect so a future version could support:
+
+PKCS#12 certificates
+
+certificate validation
+
+signed PDF verification
+
+timestamp authority
+
+digital signature integrity
+
+==================================================
+19. SECURITY
+==================================================
+
+Tools -> Protect PDF
+
+Allow:
+
+Set open password
+
+Set permissions password if supported
+
+Encrypt PDF
+
+Remove encryption when password is known
+
+Use strong modern encryption supported by the PDF libraries.
+
+Never invent cryptography.
+
+==================================================
+20. COMPRESSION
+==================================================
+
+Create:
+
+Tools -> Compress PDF
+
+Presets:
+
+High Quality
+
+Balanced
+
+Small File
+
+Advanced
+
+Compression strategies:
+
+image downsampling
+
+JPEG quality
+
+unused object cleanup
+
+duplicate resource cleanup
+
+stream compression
+
+font optimization where safe
+
+Show:
+
+Original size
+
+New size
+
+Percentage reduction
+
+==================================================
+21. CROP
+==================================================
+
+Interactive crop tool.
+
+User drags crop boundaries.
+
+Options:
+
+Current page
+
+Selected pages
+
+All pages
+
+Allow page boxes to be adjusted correctly.
+
+==================================================
+22. HEADER / FOOTER
+==================================================
+
+Add:
+
+header
+
+footer
+
+page number
+
+date
+
+document title
+
+Support:
+
+left
+
+center
+
+right
+
+font
+
+font size
+
+margin
+
+page range
+
+==================================================
+23. WATERMARK
+==================================================
+
+Allow:
+
+text watermark
+
+image watermark
+
+Properties:
+
+rotation
+
+opacity
+
+scale
+
+position
+
+page range
+
+==================================================
+24. METADATA
+==================================================
+
+File -> Document Properties
+
+Display/edit:
+
+Title
+
+Author
+
+Subject
+
+Keywords
+
+Creator
+
+Producer where appropriate
+
+Creation date
+
+Modification date
+
+PDF version
+
+Page count
+
+Encryption status
+
+File size
+
+==================================================
+25. UNDO / REDO
+==================================================
+
+Implement a proper command architecture.
+
+Example:
+
+interface Command {
+    execute(): Promise<void>;
+    undo(): Promise<void>;
+    redo(): Promise<void>;
+}
+
+Every editing action should become a command where practical.
+
+Examples:
+
+AddTextCommand
+
+DeletePageCommand
+
+RotatePageCommand
+
+MoveAnnotationCommand
+
+RedactCommand
+
+InsertImageCommand
+
+This should support robust undo/redo.
+
+==================================================
+26. FILE SAFETY
+==================================================
+
+NEVER overwrite the user's PDF in a way that could corrupt the only copy.
+
+Use:
+
+temporary file
+
+write modifications
+
+validate file
+
+atomic rename
+
+Implement:
+
+Save
+
+Save As
+
+Autosave recovery
+
+Crash recovery
+
+If Save fails:
+
+retain the original document.
+
+==================================================
+27. RECENT DOCUMENTS
+==================================================
+
+Home screen:
+
+Recent Files
+
+Open PDF
+
+Merge PDFs
+
+Edit PDF
+
+OCR PDF
+
+Compress PDF
+
+Recent file metadata stored locally.
+
+Allow:
+
+Clear recent documents
+
+Disable recent documents
+
+==================================================
+28. KEYBOARD SHORTCUTS
+==================================================
+
+Implement standard shortcuts.
+
+Cmd/Ctrl + O
+Open
+
+Cmd/Ctrl + S
+Save
+
+Cmd/Ctrl + Shift + S
+Save As
+
+Cmd/Ctrl + P
+Print
+
+Cmd/Ctrl + F
+Find
+
+Cmd/Ctrl + Z
+Undo
+
+Cmd/Ctrl + Shift + Z
+Redo
+
+Cmd/Ctrl + +
+Zoom In
+
+Cmd/Ctrl + -
+Zoom Out
+
+Cmd/Ctrl + 0
+Fit Page
+
+Delete
+Delete selected object
+
+Arrow keys
+move selected object
+
+==================================================
+29. PERFORMANCE
+==================================================
+
+Performance matters.
+
+Test:
+
+5-page PDF
+
+100-page PDF
+
+500-page PDF
+
+1,000-page PDF
+
+Large scanned PDFs
+
+PDF containing many high-resolution images
+
+Avoid:
+
+loading every rendered page into RAM
+
+re-rendering unchanged pages
+
+blocking the UI thread
+
+Use:
+
+workers
+
+lazy loading
+
+virtualized scrolling
+
+caching
+
+background tasks
+
+Rust worker threads where useful
+
+==================================================
+30. ERROR HANDLING
+==================================================
+
+Create user-friendly error messages.
+
+Examples:
+
+"This PDF appears to be damaged."
+
+"This PDF is password protected."
+
+"This font cannot be embedded."
+
+"OCR could not recognize text on this page."
+
+"Changes could not be saved."
+
+"Some PDF features are not supported."
+
+Never silently fail.
+
+Log technical information locally for troubleshooting.
+
+==================================================
+31. LOGGING
+==================================================
+
+Implement local structured logging.
+
+Logs should include:
+
+timestamp
+
+severity
+
+component
+
+operation
+
+error stack
+
+Never log:
+
+document contents
+
+passwords
+
+signature images
+
+sensitive form values
+
+==================================================
+32. PRIVACY
+==================================================
+
+Privacy requirements:
+
+No telemetry.
+
+No analytics.
+
+No tracking.
+
+No account.
+
+No server backend.
+
+No document upload.
+
+No document metadata upload.
+
+No signature upload.
+
+No external network requests unless explicitly added as an optional future capability.
+
+Provide a setting:
+
+Allow Network Access
+
+Default:
+
+OFF
+
+==================================================
+33. SETTINGS
+==================================================
+
+Create Settings sections:
+
+General
+
+Appearance
+
+PDF Viewing
+
+Editing
+
+OCR
+
+Privacy
+
+Advanced
+
+Options:
+
+Theme:
+System
+Light
+Dark
+
+Default zoom
+
+Default page layout
+
+Remember last page
+
+Autosave recovery
+
+Recent files
+
+OCR language
+
+Network access
+
+Hardware acceleration
+
+==================================================
+34. PROJECT STRUCTURE
+==================================================
+
+Use a clean modular structure approximately like:
+
+navpdf/
+  src/
+    app/
+    components/
+    features/
+      viewer/
+      editor/
+      annotations/
+      pages/
+      search/
+      forms/
+      signatures/
+      ocr/
+      redact/
+      merge/
+      split/
+      compress/
+    hooks/
+    stores/
+    services/
+    types/
+    utils/
+
+  src-tauri/
+    src/
+      commands/
+      pdf/
+        render/
+        edit/
+        pages/
+        forms/
+        annotations/
+        security/
+        compression/
+        metadata/
+      ocr/
+      filesystem/
+      security/
+      logging/
+
+    Cargo.toml
+
+  tests/
+    unit/
+    integration/
+    pdf-fixtures/
+
+==================================================
+35. CODING STANDARDS
+==================================================
+
+TypeScript:
+
+strict mode
+
+No unnecessary `any`.
+
+React:
+
+functional components
+
+hooks
+
+small components
+
+avoid giant components
+
+Rust:
+
+idiomatic Rust
+
+Result-based error handling
+
+avoid unwrap() in production paths
+
+Strong typing.
+
+Document complicated PDF logic.
+
+Do not over-comment obvious code.
+
+==================================================
+36. TESTING
+==================================================
+
+Implement:
+
+unit tests
+
+integration tests
+
+PDF round-trip tests
+
+UI tests
+
+Test files should cover:
+
+normal PDFs
+
+scanned PDFs
+
+encrypted PDFs
+
+forms
+
+annotations
+
+large PDFs
+
+damaged PDFs
+
+embedded fonts
+
+images
+
+rotated pages
+
+different page dimensions
+
+For editing tests:
+
+Open PDF
+
+Edit
+
+Save
+
+Reopen
+
+Verify modification survived.
+
+For redaction:
+
+verify underlying text cannot be extracted after redaction.
+
+==================================================
+37. DEVELOPMENT PHASES
+==================================================
+
+DO NOT attempt every feature simultaneously.
+
+Build incrementally.
+
+PHASE 1 — FOUNDATION
+
+Create:
+
+Tauri project
+
+React frontend
+
+TypeScript
+
+Tailwind
+
+basic layout
+
+file picker
+
+PDF.js integration
+
+PDF viewer
+
+zoom
+
+scroll
+
+navigation
+
+page thumbnails
+
+search
+
+Deliver a usable PDF reader.
+
+PHASE 2 — PAGE OPERATIONS
+
+Implement:
+
+reorder pages
+
+delete
+
+rotate
+
+extract
+
+insert
+
+merge
+
+split
+
+Save As
+
+PHASE 3 — ANNOTATIONS
+
+Implement:
+
+highlight
+
+underline
+
+strike
+
+drawing
+
+notes
+
+text boxes
+
+shapes
+
+PHASE 4 — CONTENT EDITING
+
+Implement:
+
+add text
+
+add images
+
+move
+
+resize
+
+delete
+
+existing text detection
+
+basic existing-text replacement
+
+PHASE 5 — FORMS AND SIGNATURES
+
+Implement:
+
+form filling
+
+signature drawing
+
+signature images
+
+basic form creation
+
+PHASE 6 — OCR
+
+Implement:
+
+OCR
+
+searchable scanned PDFs
+
+deskew
+
+auto rotate
+
+PHASE 7 — ADVANCED TOOLS
+
+Implement:
+
+redaction
+
+compression
+
+watermark
+
+headers/footers
+
+page numbers
+
+metadata
+
+password protection
+
+PHASE 8 — POLISH
+
+Implement:
+
+keyboard shortcuts
+
+accessibility
+
+performance improvements
+
+crash recovery
+
+autosave
+
+error states
+
+dark mode
+
+installer
+
+application icon
+
+==================================================
+38. MVP DEFINITION
+==================================================
+
+The MVP is complete when I can:
+
+Open a PDF.
+
+Read it smoothly.
+
+Search it.
+
+Highlight text.
+
+Add text.
+
+Add a signature.
+
+Reorder pages.
+
+Delete pages.
+
+Rotate pages.
+
+Merge PDFs.
+
+Split PDFs.
+
+Add an image.
+
+Save the PDF.
+
+Close NavPDF.
+
+Reopen the edited PDF in Preview/Adobe Acrobat.
+
+See all saved modifications correctly.
+
+==================================================
+39. IMPORTANT ENGINEERING RULE
+==================================================
+
+Do not fake features.
+
+For example:
+
+Do not claim redaction works if it merely draws a black rectangle.
+
+Do not claim text editing works if the new text exists only as a React overlay.
+
+Do not claim annotation persistence if annotations disappear when the document is opened outside NavPDF.
+
+All permanent modifications must be written into the actual PDF.
+
+==================================================
+40. FIRST TASK
+==================================================
+
+Before writing substantial code:
+
+1. Analyze the architecture.
+2. Evaluate PDF libraries.
+3. Identify licensing concerns.
+4. Identify technical limitations.
+5. Decide which PDF capabilities belong in:
+   - PDF.js
+   - Rust
+   - MuPDF/PDFium
+   - qpdf
+   - pdf-lib
+6. Produce an Architecture Decision Record.
+
+Then create:
+
+ARCHITECTURE.md
+
+Include:
+
+system architecture
+
+component diagram
+
+data flow
+
+PDF rendering strategy
+
+PDF editing strategy
+
+OCR strategy
+
+undo/redo strategy
+
+file-saving strategy
+
+security model
+
+performance model
+
+library decisions
+
+known limitations
+
+Then generate the project skeleton.
+
+After that begin Phase 1.
+
+==================================================
+41. DEVELOPMENT BEHAVIOR
+==================================================
+
+Work autonomously.
+
+Do not ask me unnecessary questions.
+
+When a reasonable engineering decision is required:
+
+make the decision
+
+document it
+
+continue.
+
+Only stop and ask me when the choice fundamentally changes the product.
+
+At the beginning of each phase:
+
+describe what will be built.
+
+At the end of each phase:
+
+run:
+
+type checking
+
+linting
+
+unit tests
+
+integration tests where applicable
+
+build
+
+Then report:
+
+what was implemented
+
+files changed
+
+tests passed
+
+known limitations
+
+next phase
+
+Do not claim something works without testing it.
+
+==================================================
+42. GIT WORKFLOW
+==================================================
+
+Initialize Git.
+
+Use commits organized around logical functionality.
+
+Examples:
+
+feat(viewer): implement PDF rendering
+feat(pages): add drag-and-drop reordering
+feat(editor): add text insertion
+feat(ocr): add searchable text layer
+feat(redaction): permanently remove selected content
+
+Do not put the entire application into one commit.
+
+==================================================
+43. USER EXPERIENCE STANDARD
+==================================================
+
+This should feel like a real desktop application rather than a programming demo.
+
+Prioritize:
+
+fast startup
+
+smooth scrolling
+
+clean typography
+
+good spacing
+
+obvious controls
+
+keyboard shortcuts
+
+context menus
+
+drag and drop
+
+native file dialogs
+
+loading states
+
+progress indicators
+
+undoable actions
+
+error recovery
+
+==================================================
+44. VISUAL STYLE
+==================================================
+
+Use a modern minimal productivity-app aesthetic.
+
+Think:
+
+macOS Preview
++
+modern IDE
++
+professional document editor
+
+NOT:
+
+Adobe clone
+
+Do not copy Adobe icons, graphics, trademarks, or layout exactly.
+
+Use an icon library such as Lucide.
+
+Use subtle borders.
+
+Avoid excessive rounded cards.
+
+The document should dominate the workspace.
+
+Toolbars should be compact.
+
+==================================================
+45. LONG-TERM ARCHITECTURE
+==================================================
+
+Design internal APIs so that these could eventually be added:
+
+multiple document tabs
+
+batch PDF processing
+
+certificate-based signing
+
+PDF/A conversion
+
+OCR languages
+
+document comparison
+
+accessibility checker
+
+Bates numbering
+
+scan-to-PDF
+
+image enhancement
+
+CLI interface
+
+plugin system
+
+AI document assistant
+
+But do not implement these until the core application is solid.
+
+==================================================
+46. MOST IMPORTANT PRIORITY
+==================================================
+
+The first priority is NOT number of features.
+
+It is:
+
+PDF correctness
++
+reliability
++
+data safety
++
+good UX.
+
+I would rather have 15 PDF tools that work extremely well than 50 partially implemented tools.
+
+Begin by creating the architecture plan and Phase 1 implementation.
+```
+
+### One change I would make when you actually build it
+
+I would **not tell the agent to immediately attack existing-text editing**. Get this sequence working first:
+
+**Viewer → page manipulation → annotations → add text/images → forms/signatures → OCR → existing-text editing → redaction.**
+
+The architecture I'd target is roughly:
+
+```text
+                    NavPDF
+                       │
+       ┌───────────────┴────────────────┐
+       │                                │
+       ▼                                ▼
+ React + TypeScript                  Tauri/Rust
+       │                                │
+       │                            PDF Engine
+       │                       ┌────────┼────────┐
+       ▼                       ▼        ▼        ▼
+    PDF.js                  MuPDF     qpdf    OCR
+       │
+       ▼
+ Rendering / Selection
+       │
+ ┌─────┴──────┐
+ ▼            ▼
+Canvas     Text Layer
+```
+
+And importantly, I would **not use Java for this project**, despite Java being a good fit for most of your backend work. For this particular application, **React + Tauri + Rust + PDF.js/native PDF libraries** gives us a much better path to a polished native-feeling PDF editor.
+
+### An even better way to use this prompt
+
+Don't dump the prompt into the coding agent and tell it, **“finish everything.”** Give it the master prompt, but instruct it to execute only **Phase 1** first. Once you have a real PDF viewer running on your Mac, move through the phases one at a time.
+
+That prevents the typical AI-generated-app problem where you end up with 40 buttons and only 12 of them actually work.
+
+For **our first milestone**, I would consider NavPDF successful when you can open a 500-page PDF, scroll smoothly, search it, use thumbnails, zoom, highlight something, save it, reopen the resulting file in Apple's Preview, and still see the highlight. After that foundation is rock solid, the Acrobat-like editing features become much safer to add.

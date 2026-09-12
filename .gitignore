@@ -1,0 +1,11 @@
+node_modules/
+.venv/
+dist/
+release/
+test-results/
+playwright-report/
+__pycache__/
+.pytest_cache/
+*.tsbuildinfo
+.DS_Store
+engine/tessdata/
