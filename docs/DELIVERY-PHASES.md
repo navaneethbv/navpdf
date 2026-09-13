@@ -43,6 +43,7 @@ The full editor roadmap requires later phases as well.
 - [x] Refresh frontend coverage, lint, typecheck, production build, Rust tests and Clippy.
 - [x] Identify or rebuild the native application used for acceptance.
 - [x] Verify the corrected annotation toolbar visually.
+- [x] Establish the P1-01 root cause in Preview and Acrobat and fix freehand highlight serialization with a saved-object regression.
 - [ ] Open the 500-page fixture, search the final-page marker, highlight, save a copy, close and reopen in NavPDF and Preview.
 - [ ] Verify Save As cancellation and successful destination metadata/recents.
 - [ ] Verify dirty-document Open/Discard followed by cancellation and invalid input.
@@ -85,14 +86,27 @@ This is a manual acceptance artifact, not an automatically generated corpus fixt
 
 ### P1-01: Freehand highlight obscures text in Preview
 
-Status: reproduced natively; fix pending.
+Status: root cause established and serialization fix implemented; native re-authoring on the rebuilt app is pending.
 Reproduction: open the 500-page fixture, activate Highlight, drag horizontally across the sample sentence, save a separate copy, then open page 500 in Preview.
 Expected: the underlying sentence remains readable through the highlight in both readers.
 Observed: NavPDF renders readable highlighted text; Preview displays an opaque yellow bar.
 Independent inspection with pdf-lib found `/Subtype /Ink`, `/IT /InkHighlight`, `/CA 1`, and an appearance stream with `/BM /Multiply`.
 This establishes that the tested path was freehand highlighting, not a text-selection `/Highlight` annotation.
-The exact Preview appearance-handling cause is not yet established.
-Next: compare text-selection highlights and freehand output, implement an interoperable appearance without rewriting unrelated annotations, add a saved-object regression, and repeat the native/Preview workflow.
+
+Root cause: pdf.js writes freehand highlights as `/Ink` annotations with `/CA 1` and relies on the appearance's `/BM /Multiply` blend mode to keep text visible.
+Preview 11.0 honors appearance opacity but ignores that blend mode, so the fill covers the text; Acrobat honors it and shows readable text.
+pdf.js text-selection highlights are saved as `/Highlight` annotations and were readable in both readers.
+
+Fix: `src/features/viewer/highlight-interop.ts` changes only newly drawn freehand highlights while annotation storage is serialized.
+They are saved at opacity 0.5 with a color compensated so Multiply readers still show the chosen color on white.
+Text-selection highlights, reopened translucent highlights, other editors and existing objects are unchanged.
+Saving, recovery copies, page mutations and printing share this serialization path.
+Limits: highlight colors with channels below 50% render paler than chosen, and a later color change to a reopened freehand highlight is saved at its existing opacity without compensation.
+Regression: `tests/integration/pdf-roundtrip.test.ts` inspects the saved annotation, appearance state and color; it fails without the transform.
+Evidence is recorded in the Phase 1 section of the [verification ledger](VERIFICATION.md).
+
+Next: author freehand and text-selection highlights on the 500-page fixture in the rebuilt app, Save As, close and reopen in NavPDF, Preview and Acrobat.
+That native step is blocked in this session because synthetic input for driving NavPDF was not permitted.
 Do not mark the 500-page interoperability checklist complete based on NavPDF rendering alone.
 
 ## Next-phase rule

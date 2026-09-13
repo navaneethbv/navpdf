@@ -26,6 +26,7 @@ import { positionSearchCursor } from "../search/select-result";
 import { boundedZoom, snippet } from "../../utils/search";
 import { markDirty, rememberPage } from "../../services/native";
 import { loadPdfFromBytes } from "../../services/pdf";
+import { installHighlightInterop } from "./highlight-interop";
 
 export class ViewerController {
   readonly bus = new EventBus();
@@ -196,6 +197,7 @@ export class ViewerController {
           }),
       );
     };
+    installHighlightInterop(pdf.annotationStorage);
     try {
       await (
         await pdf.getPage(1)

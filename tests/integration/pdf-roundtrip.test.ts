@@ -2,10 +2,22 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFNumber,
+  PDFRawStream,
+} from "pdf-lib";
+import {
   AnnotationEditorType,
   getDocument,
   GlobalWorkerOptions,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
+import {
+  FREEHAND_HIGHLIGHT_OPACITY,
+  installHighlightInterop,
+} from "../../src/features/viewer/highlight-interop";
 GlobalWorkerOptions.workerSrc = resolve(
   "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
 );
@@ -72,6 +84,92 @@ describe("real PDF parsing and saving", () => {
           .join(" ");
         expect(text).toContain("persistent highlight");
         expect(text).toContain("NEEDLE-0001");
+      } finally {
+        await reopened.loadingTask.destroy();
+      }
+    } finally {
+      await pdf.loadingTask.destroy();
+    }
+  });
+  it("saves freehand highlights with opacity readers without blend modes honor", async () => {
+    const pdf = await open("reader-5.pdf");
+    try {
+      installHighlightInterop(pdf.annotationStorage);
+      const common = {
+        annotationType: AnnotationEditorType.HIGHLIGHT,
+        rotation: 0,
+        color: [245, 207, 88],
+        opacity: 1,
+        thickness: 12,
+      };
+      pdf.annotationStorage.setValue("pdfjs_internal_editor_free", {
+        ...common,
+        pageIndex: 0,
+        rect: [52.24, 580.11, 349.35, 593.71],
+        quadPoints: null,
+        outlines: {
+          outline: [
+            NaN, NaN, NaN, NaN, 52.85, 580.9, NaN, NaN, NaN, NaN, 348.74,
+            580.9, NaN, NaN, NaN, NaN, 348.74, 592.92, NaN, NaN, NaN, NaN,
+            52.85, 592.92,
+          ],
+          points: [[52.85, 586.9, 348.74, 586.9]],
+        },
+      });
+      pdf.annotationStorage.setValue("pdfjs_internal_editor_text", {
+        ...common,
+        pageIndex: 1,
+        rect: [54, 579, 340, 597],
+        quadPoints: [54, 597, 340, 597, 54, 579, 340, 579],
+        outlines: [[54, 579, 340, 579, 340, 597, 54, 597]],
+      });
+      const bytes = await pdf.saveDocument();
+      await writeFile("output/freehand-highlight-interop.pdf", bytes);
+
+      const saved = await PDFDocument.load(bytes);
+      const annotation = (pageIndex: number) =>
+        saved
+          .getPage(pageIndex)
+          .node.lookup(PDFName.of("Annots"), PDFArray)
+          .lookup(0, PDFDict);
+      const number = (dict: PDFDict, key: string) =>
+        dict.lookup(PDFName.of(key), PDFNumber).asNumber();
+
+      const free = annotation(0);
+      expect(free.get(PDFName.of("Subtype"))).toBe(PDFName.of("Ink"));
+      expect(free.get(PDFName.of("IT"))).toBe(PDFName.of("InkHighlight"));
+      expect(number(free, "CA")).toBe(FREEHAND_HIGHLIGHT_OPACITY);
+      const appearance = free
+        .lookup(PDFName.of("AP"), PDFDict)
+        .lookup(PDFName.of("N"), PDFRawStream);
+      const state = appearance.dict
+        .lookup(PDFName.of("Resources"), PDFDict)
+        .lookup(PDFName.of("ExtGState"), PDFDict)
+        .lookup(PDFName.of("R0"), PDFDict);
+      expect(number(state, "ca")).toBe(FREEHAND_HIGHLIGHT_OPACITY);
+      expect(state.get(PDFName.of("BM"))).toBe(PDFName.of("Multiply"));
+      const [red, green] = free
+        .lookup(PDFName.of("C"), PDFArray)
+        .asArray()
+        .map((value) => (value as PDFNumber).asNumber());
+      expect(0.5 + red * 0.5).toBeCloseTo(245 / 255, 2);
+      expect(0.5 + green * 0.5).toBeCloseTo(207 / 255, 2);
+
+      const text = annotation(1);
+      expect(text.get(PDFName.of("Subtype"))).toBe(PDFName.of("Highlight"));
+      expect(number(text, "CA")).toBe(1);
+
+      const reopened = await getDocument({ ...options, data: bytes }).promise;
+      try {
+        expect(await (await reopened.getPage(1)).getAnnotations()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ subtype: "Ink", it: "InkHighlight" }),
+          ]),
+        );
+        const pageText = (await (await reopened.getPage(1)).getTextContent())
+          .items.map((item) => ("str" in item ? item.str : ""))
+          .join(" ");
+        expect(pageText).toContain("persistent highlight");
       } finally {
         await reopened.loadingTask.destroy();
       }

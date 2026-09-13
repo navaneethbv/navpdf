@@ -41,6 +41,48 @@ The final native highlight/save/reopen attempt could not finish because the comp
 The annotation toolbar correction is included in the final successful app rebuild but has not received a final native visual confirmation.
 No physical-printer, clean-account installation, signing, notarization, or complete native recovery/fault-injection acceptance is claimed.
 
+## Phase 1 evidence
+
+Checkpoint: September 13, 2026, branch `delivery/phases-1-10` based on `c0e38496099d32e93dd06798f6af36da050cda5c`.
+The commit that adds this section identifies the P1.1 source change.
+Environment: macOS 26.6.2 on Apple silicon, Preview 11.0, Adobe Acrobat 26.002.21869, pdfjs-dist 6.3.289.
+
+### Automated checks after the P1.1 change
+
+| Check | Result |
+| --- | --- |
+| Frontend tests and coverage | 246 passed across 35 files; 91.95% lines, 82.45% branches, 88.07% functions, 89.79% statements. |
+| Freehand highlight regression | Passes with the fix; the same test without the storage transform fails with `expected 1 to be 0.5`. |
+| ESLint and TypeScript | Passed. |
+| Production frontend build | Passed during app packaging; the existing large-chunk advisory remains. |
+| Rust tests | 10 passed. |
+| Rust Clippy with `-D warnings` | Passed. |
+| App bundle | `npm run package -- --bundles app` succeeded; executable SHA-256 `49743d4074f1664e25ec617c29b623e03bb58035d8498b183a625902749b9df8`. |
+
+### P1-01 independent-reader comparison
+
+Artifacts and their SHA-256 manifest are in the ignored `output/phase1/p1-01/` directory.
+Each Preview and Acrobat image captures only that application's document window.
+
+| Saved object | Preview 11.0 | Acrobat |
+| --- | --- | --- |
+| Original NavPDF output, page 500: `/Ink`, `/IT /InkHighlight`, `/CA 1`, appearance `/BM /Multiply` | Opaque bar hides the sentence. | Not captured; same form as the pdf.js freehand output below. |
+| Same object with `/CA 0.4` and appearance `ca 0.4` | Readable. | Not captured. |
+| Same rectangle as `/Highlight` with QuadPoints | Readable. | Not captured. |
+| Same object without an appearance stream | Nothing drawn. | Not captured. |
+| pdf.js text-selection highlight: `/Highlight`, `/CA 1`, Multiply appearance | Readable. | Readable. |
+| pdf.js freehand highlight at opacity 1 | Opaque bar. | Readable. |
+| pdf.js freehand highlight at opacity 0.5 with compensated color | Readable. | Readable. |
+| Regression output from the fixed serialization | Readable. | Not captured. |
+
+PDFKit offscreen `PDFPage.draw` rendered the original output readably, so offscreen PDFKit rendering is not a substitute for Preview's on-screen result.
+
+### Phase 1 native gaps
+
+The rebuilt app has not yet been used to author highlights on the 500-page fixture and repeat Save As, close and reopen in NavPDF, Preview and Acrobat.
+Synthetic mouse and keyboard input for driving NavPDF was not permitted in this session, so that workflow remains open.
+P1.2 through P1.6 native acceptance has not been rerun.
+
 ## Packaging boundaries
 
 The final `npm run package -- --bundles app` succeeded at `src-tauri/target/release/bundle/macos/NavPDF.app`.
