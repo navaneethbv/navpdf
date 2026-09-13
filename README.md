@@ -1,113 +1,117 @@
 # NavPDF
 
-A local PDF editor for macOS, built with React, Electron and PyMuPDF.
-Documents are processed on your device without accounts, document uploads or a cloud service.
+A local desktop PDF workspace for macOS Apple Silicon, built with Tauri, Rust, React, TypeScript, Tailwind, Zustand, and PDF.js.
+Documents stay on your computer.
+There is no account, server backend, upload, analytics, or telemetry.
 
-## Open the app
+## Current milestone
 
-The locally built macOS app is at `release/mac-arm64/NavPDF.app`.
-Double-click it in Finder, or run:
+This implementation follows **Phase 1: Foundation** in [the supplied specification](docs/PRODUCT-SPEC.txt), plus its requested persistent-highlight milestone.
+It is a reader with standard PDF highlights and validated saving.
+The complete eight-phase editor and MVP feature list are not yet finished.
+
+Available features:
+
+- Native Open, Save, and Save As dialogs.
+- Continuous, single-page, and two-page viewing.
+- Fit page, fit width, 25% to 500% zoom, trackpad zoom, and a hand tool.
+- Page navigation and virtualized thumbnails.
+- Text selection and copying.
+- Whole-document search with case and whole-word options, context, match counts, and occurrence navigation.
+- Bookmarks and inspection of saved notes/highlights.
+- Standard highlight annotations, colors, deletion, undo, and redo.
+- Password prompts for reading encrypted PDFs.
+- Light, dark, and system themes, viewing preferences, and optional local recent history.
+- Validated atomic saves, external-change detection, private recovery copies, and unsaved-change prompts.
+
+Encrypted documents are read-only in this milestone.
+The app does not silently decrypt or resave them.
+The limit is 1 GB per source PDF.
+Search results show the first 250 entries, while Next/Previous match can navigate the entire result set.
+Image-only scans display normally, but require an existing OCR text layer for search.
+
+## Run locally
+
+Prerequisites: Node.js 22.13 or newer, Rust 1.88 or newer, and Xcode Command Line Tools.
+The application itself does not require Node, Python, or a local server after packaging.
 
 ```sh
-open release/mac-arm64/NavPDF.app
-```
-
-To run from source:
-
-```sh
-npm install
-npm run setup
+npm ci
 npm run desktop
 ```
 
-`npm run setup` needs Python 3 and an internet connection to install dependencies and download English OCR data.
-Subsequent desktop editing and OCR work offline.
-The local macOS package uses the Python installation on this Mac; it is not a standalone installer for other computers.
-It is not notarized for public distribution.
-
-For browser development, run `npm run dev` and open http://127.0.0.1:5173.
-The development server supports one shared workspace and binds to loopback only.
-Restarting it resets that workspace, so use the desktop app for normal editing.
-
-## Features
-
-| Feature | How to use it |
-| --- | --- |
-| Open, render, thumbnails, text selection | Open PDF, then select a thumbnail or copy visible text. |
-| Search | Document tools > Search document. |
-| Zoom and page navigation | Use the controls below the page; Fit scales to the available space. |
-| Edit existing text | Choose Edit text, click a line, edit its text or standard font, and apply. |
-| Add text | Drag an area, enter text, select font, size and color, then apply. |
-| Highlight | Drag across text and apply the highlight. |
-| Comments | Choose Comment, click the page, enter your note, and apply. |
-| Drawing and signatures | Draw directly on the page; each stroke becomes a PDF ink annotation. |
-| Add images | Choose Image, select a PNG or JPEG, drag its area, and apply. |
-| Page organization | Add, remove, move, rotate or crop pages using the sidebar and Organize pages. |
-| Merge | Merge PDF appends another PDF, including its form fields. |
-| Split / extract | Export selected page numbers or ranges, such as `1, 3-5`. |
-| Forms | Fill text, checkbox, radio and choice fields through Fill forms. |
-| OCR | Recognize English text on the current scanned page locally. |
-| Redaction | Select content, apply removal, and export a sanitized copy. |
-| Password protection | Set an opening password in Export PDF or Password protection. |
-| Metadata | Edit title, author, subject, keywords and creator. |
-| Undo / redo | Toolbar or Command-Z / Command-Shift-Z. |
-
-The welcome document is an actual editable three-page PDF, suitable for trying the tools.
-Export creates a new copy by default and never silently writes to the source file.
-
-## Editing behavior and limits
-
-Existing-text editing replaces one selected line with a standard PDF font and preserves its original baseline.
-It supports Latin characters, and rejects replacements that do not fit instead of clipping them or deleting neighboring text.
-It does not reconstruct paragraphs, preserve arbitrary embedded fonts, or edit arbitrary vector objects.
-Adding text supports multiline text boxes in the same standard fonts.
-
-A drawn signature is a visible ink mark, not a certificate-based digital signature.
-Certificate signing, XFA forms, prepress validation, arbitrary object editing and exact Acrobat font/layout parity are not implemented.
-
-OCR recognizes English at 200 DPI and replaces the selected page with a raster image plus a searchable text layer.
-Existing forms and annotations on that page become part of the image.
-Other pages remain unchanged.
-
-Redaction removes intersecting text, graphics and image pixels.
-Sanitized export also removes metadata, attachments, document outlines, links, hidden text and comments.
-Text replacement currently uses the same export sanitization policy.
-Review the saved PDF before sharing it, especially when the same sensitive information occurs in multiple places.
-Cropping changes the visible page boundary and is not secure redaction.
-
-An opening password encrypts the exported PDF with AES-256.
-Leaving the password empty exports an unencrypted copy, including when the input was encrypted.
-Passwords are limited to 40 characters and 127 UTF-8 bytes by the engine.
-
-The app supports one open document at a time and keeps working data in memory.
-Export before closing; there is no crash recovery or autosave to disk.
-Undo retains up to 20 changes within a 128 MB history budget, with at least the latest change retained.
-Inputs are limited to 100 MB, and oversized render/OCR operations are bounded.
-
-## Development and validation
+For a browser-only development preview:
 
 ```sh
-npm run build
-npm run lint
-npm test
-npm run test:integration
+npm run dev
+```
+
+Open `http://localhost:1420`.
+The browser preview uses file selection and downloads; native atomic saving, recents, and recovery are verified in the desktop build.
+
+## Build
+
+```sh
 npm run package
 ```
 
-The engine suite validates exported PDF contents, adjacent-line preservation, rotated coordinates, form preservation, OCR, image-pixel redaction, password reopening, and atomic rollback.
-The transport suite exercises a separate local server, including cross-origin rejection and edited-document round trips.
-Browser interaction checks and design comparison are recorded in [docs/VERIFICATION.md](docs/VERIFICATION.md).
+The macOS application is written to `src-tauri/target/release/bundle/macos/NavPDF.app`.
+The installer is written under `src-tauri/target/release/bundle/dmg/`.
+For an app-only build, use `npx tauri build --bundles app`.
+Local builds are not claimed to be signed with a distribution identity or notarized.
+Windows and Linux have not been acceptance-tested.
 
-## Structure
+## File safety and privacy
 
-- `src/components/Canvas.tsx`: page rendering, selection, drawing and text targets.
-- `src/components/Inspector.tsx`: editing controls and document tools.
-- `src/App.tsx`: workspace state, file import, export and keyboard shortcuts.
-- `engine/pdf_engine.py`: PDF operations and in-memory undo transactions.
-- `electron/bridge.cjs`: serialized process communication with the PDF engine.
-- `electron/main.cjs`: isolated desktop window and atomic native save.
-- `vite.config.ts`: loopback-only development transport with same-origin checks and a session token.
+Opening a file creates a private immutable source snapshot.
+PDF.js accesses it through an opaque handle and bounded binary range reads.
+Saving serializes edits, independently parses the result with lopdf, verifies page count, writes a temporary file beside the destination, flushes it, and atomically replaces the destination.
+If the original changed externally, Save stops and asks you to use Save As.
 
-Rendering uses PyMuPDF to keep displayed content and saved-file coordinates on the same PDF engine.
-Page edits use unrotated coordinates internally, following the [PyMuPDF coordinate rules](https://pymupdf.readthedocs.io/en/latest/page.html).
-Electron uses context isolation, a sandboxed renderer and restricted IPC following the [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security).
+Unencrypted recovery copies are saved locally every ten seconds while there are unsaved edits.
+The home screen offers recovery after a crash.
+Saving a recovered document always requires a destination selected through Save As.
+Recovery is a convenience copy, not a backup of all historical versions.
+
+Settings, recent paths, recovery, and structured operation logs are stored under macOS Application Support in `local.navpdf.reader`.
+Logs do not contain PDF text, passwords, signatures, or form values.
+Network access is disabled by the production content security policy and native navigation handler.
+
+## Shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| Cmd/Ctrl + O | Open |
+| Cmd/Ctrl + S | Save |
+| Cmd/Ctrl + Shift + S | Save As |
+| Cmd/Ctrl + F | Search |
+| Cmd/Ctrl + Z | Undo annotation edit |
+| Cmd/Ctrl + Shift + Z | Redo annotation edit |
+| Cmd/Ctrl + plus / minus | Zoom |
+| Cmd/Ctrl + 0 | Fit page |
+| Escape | Return to text selection |
+
+## Validation
+
+```sh
+npm test
+npm run lint
+npm run typecheck
+npm run build
+npm run test:native
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+```
+
+`npm test` generates the standard 5, 100, 500, and 1,000-page corpus before running tests.
+Small special fixtures are checked in for encrypted files, embedded fonts, and image-only scans.
+Their optional regeneration script uses PyMuPDF as a development-only reference engine; it is not part of the product or build.
+See [verification evidence](docs/VERIFICATION.md) for actual UI checks and remaining acceptance work.
+
+## Architecture and next phases
+
+[ARCHITECTURE.md](ARCHITECTURE.md) explains the boundaries, library decisions, licenses, performance model, and OCR strategy.
+[ADR 0001](docs/adr/0001-tauri-pdfjs-foundation.md) records the foundation choice.
+The original Electron/Python prototype is preserved in Git history at `40dbac6`.
+
+The next phase is page operations: reorder, delete, rotate, extract, insert, merge, and split.
+Later phases add the remaining annotation tools, content editing, forms/signatures, OCR, redaction, compression, protection, print, and final polish in the order specified.
