@@ -6,9 +6,11 @@ There is no account, server backend, upload, analytics, or telemetry.
 
 ## Current milestone
 
-This implementation follows **Phase 1: Foundation** in [the supplied specification](docs/PRODUCT-SPEC.txt), plus its requested persistent-highlight milestone.
-It is a reader with standard PDF highlights and validated saving.
-The complete eight-phase editor and MVP feature list are not yet finished.
+The current implementation includes the desktop reader, persisted highlights/ink/free text, initial page operations, content insertion, basic form authoring and signature appearance placement.
+The full editor and Reader-parity acceptance are not yet complete.
+Follow [the active delivery phases](docs/DELIVERY-PHASES.md) for the ordered remaining work and completion gates.
+Phase 1, reader reliability and file safety, is in progress.
+See [the implementation review](docs/PR-1-REVIEW.md) for limitations of the initial editing tools.
 
 Available features:
 
@@ -113,5 +115,5 @@ See [verification evidence](docs/VERIFICATION.md) for actual UI checks and remai
 [ADR 0001](docs/adr/0001-tauri-pdfjs-foundation.md) records the foundation choice.
 The original Electron/Python prototype is preserved in Git history at `40dbac6`.
 
-The next phase is page operations: reorder, delete, rotate, extract, insert, merge, and split.
-Later phases add the remaining annotation tools, content editing, forms/signatures, OCR, redaction, compression, protection, print, and final polish in the order specified.
+Initial page operations and macOS printing exist, with complete native interoperability acceptance still pending.
+The active delivery sequence starts with file safety, then closes annotation and interactive-form gaps before completing the remaining editor capabilities.
