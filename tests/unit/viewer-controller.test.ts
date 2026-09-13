@@ -1,0 +1,326 @@
+// @vitest-environment happy-dom
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+  AnnotationEditorType: { NONE: 0, HIGHLIGHT: 1, FREETEXT: 2, INK: 3 },
+  AnnotationMode: { ENABLE: 1 },
+  AnnotationEditorParamsType: { HIGHLIGHT_COLOR: 7 },
+}));
+
+const busHandlers = new Map<string, (event: never) => void>();
+
+vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
+  EventBus: class {
+    on(name: string, handler: (event: never) => void) {
+      busHandlers.set(name, handler);
+    }
+    dispatch() {}
+  },
+  PDFFindController: class {
+    selected: { pageIdx: number } | null = null;
+    pageMatches: number[][] = [];
+    pageMatchesLength: number[][] = [];
+    _offset: { pageIdx: number | null; matchIdx: number | null; wrapped: boolean } = {
+      pageIdx: null,
+      matchIdx: null,
+      wrapped: false,
+    };
+    constructor(options: object) {
+      Object.assign(this, options);
+    }
+    setDocument() {}
+  },
+  PDFLinkService: class {
+    externalLinkEnabled = true;
+    viewer: unknown = null;
+    document: unknown = null;
+    constructor(options: object) {
+      Object.assign(this, options);
+    }
+    setViewer(viewer: unknown) {
+      this.viewer = viewer;
+    }
+    setDocument(document: unknown) {
+      this.document = document;
+    }
+    async goToDestination() {}
+  },
+  PDFViewer: class {
+    annotationEditorMode: unknown = null;
+    currentScaleValue: unknown = null;
+    currentScale = 1;
+    currentPageNumber = 1;
+    scrollMode = 0;
+    spreadMode = 0;
+    firstPagePromise: Promise<boolean> = Promise.resolve(true);
+    container: unknown;
+    constructor(options: Record<string, unknown>) {
+      Object.assign(this, options);
+      this.container = options.container;
+    }
+    setDocument() {}
+  },
+  ScrollMode: { PAGE: 1, VERTICAL: 0 },
+  SpreadMode: { ODD: 1, NONE: 0 },
+}));
+
+vi.mock("../../src/services/native", () => ({
+  markDirty: vi.fn(async () => {}),
+  rememberPage: vi.fn(async () => {}),
+}));
+
+const loadPdfFromBytes = vi.fn();
+
+vi.mock("../../src/services/pdf", () => ({
+  loadPdfFromBytes: (...args: unknown[]) => loadPdfFromBytes(...args),
+}));
+
+import { ViewerController } from "../../src/features/viewer/controller";
+import { useWorkspace } from "../../src/stores/workspace";
+import { markDirty } from "../../src/services/native";
+
+function makePdf(numPages = 3, outline: unknown = null) {
+  return {
+    numPages,
+    annotationStorage: {} as Record<string, () => void>,
+    getPage: vi.fn(async () => ({
+      getTextContent: vi.fn(async () => ({ items: [] })),
+      getAnnotations: vi.fn(async () => []),
+    })),
+    getOutline: vi.fn(async () => outline),
+  };
+}
+
+let controller: ViewerController;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  busHandlers.clear();
+  useWorkspace.getState().reset();
+  const container = document.createElement("div");
+  const pages = document.createElement("div");
+  container.append(pages);
+  document.body.append(container);
+  controller = new ViewerController(container, pages);
+  return () => {
+    controller.destroy();
+    container.remove();
+  };
+});
+
+describe("ViewerController lifecycle", () => {
+  it("attaches a document and maps outlines with destination-less parents", async () => {
+    const outline = [
+      {
+        title: "Part",
+        dest: null,
+        items: [{ title: "Ch1", dest: ["r1"], items: [] }],
+      },
+      { title: "Empty", dest: null, items: [] },
+      { title: "Lonely", dest: null },
+    ];
+    const pdf = makePdf(3, outline);
+    await controller.attach(pdf as never);
+    expect(controller.pdf).toBe(pdf);
+    const bookmarks = useWorkspace.getState().bookmarks;
+    expect(bookmarks).toHaveLength(1);
+    expect(bookmarks[0].title).toBe("Part");
+    expect(bookmarks[0].children[0].title).toBe("Ch1");
+  });
+
+  it("reports text extraction failures without breaking attach", async () => {
+    const pdf = makePdf();
+    pdf.getPage = vi.fn(async () => {
+      throw new Error("no text");
+    });
+    await controller.attach(pdf as never);
+    expect(useWorkspace.getState().error).toContain("Text extraction failed");
+  });
+
+  it("replaces bytes through a staged revision and marks dirty", async () => {
+    const first = makePdf(2);
+    await controller.attach(first as never);
+    const second = makePdf(4);
+    loadPdfFromBytes.mockReturnValue({
+      promise: Promise.resolve(second),
+      destroy: vi.fn(async () => {}),
+    });
+    await controller.replaceWithBytes(new Uint8Array([1, 2, 3]), "Pages updated");
+    expect(controller.pdf).toBe(second);
+    expect(useWorkspace.getState()).toMatchObject({
+      dirty: true,
+      status: "Pages updated",
+      info: null,
+    });
+    expect(markDirty).toHaveBeenCalledWith(true);
+    expect(loadPdfFromBytes).toHaveBeenCalled();
+  });
+
+  it("updates page counts and clamps the current page on replace", async () => {
+    useWorkspace.getState().set({
+      info: {
+        pages: 9,
+        encrypted: false,
+        title: "",
+        author: "",
+        version: "1.7",
+      },
+      page: 9,
+    });
+    const second = makePdf(2);
+    loadPdfFromBytes.mockReturnValue({
+      promise: Promise.resolve(second),
+      destroy: vi.fn(async () => {}),
+    });
+    await controller.replaceWithBytes(new Uint8Array([1]), "Deleted pages");
+    expect(useWorkspace.getState().info?.pages).toBe(2);
+    expect(useWorkspace.getState().page).toBe(2);
+  });
+
+  it("detaches and destroys cleanly", async () => {
+    const pdf = makePdf();
+    await controller.attach(pdf as never);
+    await controller.detach();
+    expect(controller.pdf).toBeNull();
+    expect(controller.editor).toBeNull();
+  });
+});
+
+describe("ViewerController tools and navigation", () => {
+  it("maps highlight, ink, text, and select tools to editor modes", async () => {
+    const pdf = makePdf();
+    await controller.attach(pdf as never);
+    controller.setTool("highlight");
+    expect(useWorkspace.getState().tool).toBe("highlight");
+    controller.setTool("draw");
+    expect(
+      (controller.viewer.annotationEditorMode as { mode: number }).mode,
+    ).toBe(3);
+    controller.setTool("text");
+    expect(
+      (controller.viewer.annotationEditorMode as { mode: number }).mode,
+    ).toBe(2);
+    controller.setTool("select");
+    expect(
+      (controller.viewer.annotationEditorMode as { mode: number }).mode,
+    ).toBe(0);
+  });
+
+  it("ignores tool changes without a document", () => {
+    controller.setTool("highlight");
+    expect(useWorkspace.getState().tool).toBe("select");
+  });
+
+  it("forwards color, undo, redo, and delete to the editor", async () => {
+    const pdf = makePdf();
+    await controller.attach(pdf as never);
+    const editor = {
+      updateParams: vi.fn(),
+      undo: vi.fn(),
+      redo: vi.fn(),
+      delete: vi.fn(),
+      commitOrRemove: vi.fn(),
+    };
+    busHandlers.get("annotationeditoruimanager")!({ uiManager: editor } as never);
+    controller.setColor("#80d49b");
+    expect(editor.updateParams).toHaveBeenCalledWith(7, "#80d49b");
+    expect(useWorkspace.getState().highlightColor).toBe("#80d49b");
+    controller.undo();
+    controller.redo();
+    controller.deleteSelected();
+    expect(editor.undo).toHaveBeenCalled();
+    expect(editor.redo).toHaveBeenCalled();
+    expect(editor.delete).toHaveBeenCalled();
+  });
+
+  it("tracks editing state from the bus", async () => {
+    const pdf = makePdf();
+    await controller.attach(pdf as never);
+    busHandlers.get("editingstateschanged")!({
+      details: {
+        hasSomethingToUndo: true,
+        hasSomethingToRedo: false,
+        hasSelectedEditor: true,
+      },
+    } as never);
+    expect(useWorkspace.getState()).toMatchObject({
+      canUndo: true,
+      canRedo: false,
+      hasSelection: true,
+    });
+  });
+
+  it("zooms within bounds and clamps page navigation", async () => {
+    const pdf = makePdf(5);
+    await controller.attach(pdf as never);
+    controller.zoom(99);
+    expect(controller.viewer.currentScale).toBe(5);
+    controller.zoom(0.01);
+    expect(controller.viewer.currentScale).toBe(0.25);
+    controller.zoom("page-fit");
+    expect(controller.viewer.currentScaleValue).toBe("page-fit");
+    controller.goTo(99);
+    expect(controller.viewer.currentPageNumber).toBe(5);
+    controller.goTo(-4);
+    expect(controller.viewer.currentPageNumber).toBe(1);
+  });
+
+  it("applies single and spread layouts", async () => {
+    const pdf = makePdf();
+    await controller.attach(pdf as never);
+    controller.setLayout("single");
+    expect(useWorkspace.getState().layout).toBe("single");
+    controller.setLayout("spread");
+    controller.setLayout("continuous");
+    expect(useWorkspace.getState().layout).toBe("continuous");
+  });
+
+  it("drives find, result selection, and close", async () => {
+    const pdf = makePdf(2);
+    await controller.attach(pdf as never);
+    useWorkspace.getState().set({ searchQuery: "river" });
+    controller.search();
+    expect(useWorkspace.getState().searchPending).toBe(true);
+    controller.closeSearch();
+    busHandlers.get("updatefindmatchescount")!({
+      matchesCount: { total: 2 },
+    } as never);
+    expect(useWorkspace.getState().searchCount).toBe(2);
+    busHandlers.get("updatefindcontrolstate")!({ state: 3 } as never);
+    expect(useWorkspace.getState().searchPending).toBe(true);
+  });
+
+  it("reads text and highlight comments page by page", async () => {
+    const pdf = makePdf(2);
+    pdf.getPage = vi.fn(async (n: number) => ({
+      getTextContent: vi.fn(async () => ({ items: [] })),
+      getAnnotations: vi.fn(async () =>
+        n === 1
+          ? [
+              { id: "a1", subtype: "Text", contentsObj: { str: "note" } },
+              { id: "a2", subtype: "Highlight", contentsObj: { str: "" } },
+              { id: "a3", subtype: "Link" },
+            ]
+          : [],
+      ),
+    }));
+    await controller.attach(pdf as never);
+    await controller.readComments();
+    expect(useWorkspace.getState().comments).toHaveLength(2);
+    expect(useWorkspace.getState().comments[1].text).toBe(
+      "Highlight annotation",
+    );
+  });
+
+  it("blocks external links in the capture phase", async () => {
+    const pdf = makePdf();
+    await controller.attach(pdf as never);
+    const anchor = document.createElement("a");
+    anchor.href = "https://example.com";
+    anchor.textContent = "external";
+    (controller.container as HTMLDivElement).append(anchor);
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    anchor.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+});
