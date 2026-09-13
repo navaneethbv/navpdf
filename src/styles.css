@@ -824,7 +824,7 @@ p {
   padding: 3px;
   background: var(--input);
 }
-.color-swatches {
+.color-picker-group {
   display: flex;
   gap: 12px;
 }
@@ -1449,7 +1449,7 @@ p {
    ========================================================================== */
 .annotation-floating-toolbar {
   position: fixed;
-  top: 90px;
+  bottom: 44px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
@@ -1487,17 +1487,17 @@ p {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.tool-group-divider {
+.divider-vert {
   width: 1px;
   height: 20px;
   background: var(--line);
 }
-.color-swatches {
+.color-picker-group {
   display: flex;
   align-items: center;
   gap: 5px;
 }
-.color-swatch-dot {
+.annotation-floating-toolbar .color-dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
