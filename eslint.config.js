@@ -6,10 +6,10 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["**/*.{ts,tsx,js,cjs}"],
+    files: ["**/*.{ts,tsx,js,cjs,mjs}"],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     rules: {
-      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-require-imports": "off",
     },
   },

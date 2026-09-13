@@ -1,0 +1,23 @@
+[package]
+name = "navpdf"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Private local PDF reader and editor"
+
+[lib]
+name = "navpdf_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+tempfile = "3"
+lopdf = { version = "0.45", default-features = false }
+rfd = "0.15"
