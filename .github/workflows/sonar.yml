@@ -1,0 +1,55 @@
+name: Sonar
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for SONAR_TOKEN
+        id: guard
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SONAR_TOKEN is not set. Skipping analysis."
+            echo "::notice::Add the secret and set sonar.organization/sonar.projectKey in sonar-project.properties to enable it."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          # Sonar needs full history to assign blame and compute new-code periods.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.guard.outputs.configured == 'true'
+        run: npm ci
+
+      - name: Generate coverage for analysis
+        if: steps.guard.outputs.configured == 'true'
+        run: npm run test:coverage
+
+      - name: SonarCloud scan
+        if: steps.guard.outputs.configured == 'true'
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

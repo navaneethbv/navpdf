@@ -100,7 +100,7 @@ Network access defaults to off and remains unavailable in this milestone.
 Native navigation handlers reject external destinations.
 Native commands validate identifiers, ranges, size limits, destination selection and document lifecycle.
 Passwords remain in memory and are excluded from logs, preferences, recovery and recent-file metadata.
-The logs record timestamp, severity, component, operation and safe error classification, never document text or complete filesystem paths.
+The logs record timestamp, severity, component, operation and a native backtrace on save errors, never document text or document filesystem paths.
 
 Preferences and recent document paths stay in private local application data.
 Users can disable recents and clear their history.
@@ -144,6 +144,13 @@ Performance evidence reports measured time and live canvas counts separately fro
 - [Tesseract project](https://github.com/tesseract-ocr/tesseract)
 - [OCRmyPDF project](https://github.com/ocrmypdf/OCRmyPDF)
 - [Apple Vision text recognition](https://developer.apple.com/documentation/vision/recognizing-text-in-images)
+
+## Webview compatibility
+
+Before PDF.js initializes, a feature check loads the MIT-licensed web-streams-polyfill only when asynchronous stream iteration is absent.
+This addresses the WebKit text-extraction incompatibility described in [PDF.js issue 20973](https://github.com/mozilla/pdf.js/issues/20973).
+The local range adapter assembles each coalesced PDF.js request into one response while keeping individual native reads bounded.
+PDF.js is pinned because exact occurrence navigation synchronizes its exposed search cursor, which is covered by an integration test against that version.
 
 ## Known milestone limitations
 

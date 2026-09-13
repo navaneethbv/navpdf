@@ -2,6 +2,7 @@ node_modules/
 .venv/
 dist/
 release/
+coverage/
 test-results/
 playwright-report/
 __pycache__/
@@ -9,3 +10,16 @@ __pycache__/
 *.tsbuildinfo
 .DS_Store
 engine/tessdata/
+
+src-tauri/target/
+src-tauri/gen/schemas/
+public/pdfjs/
+tests/pdf-fixtures/*.pdf
+output/
+
+!tests/pdf-fixtures/encrypted.pdf
+!tests/pdf-fixtures/embedded-font.pdf
+!tests/pdf-fixtures/scanned-images.pdf
+
+# Local knowledge-graph cache (regenerate with: graphify update .)
+graphify-out/
