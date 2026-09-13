@@ -1,13 +1,41 @@
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::Path,
 };
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, PersistError};
 
 pub const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_RANGE_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Steps of `atomic_save` where tests can inject an I/O failure.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SaveStep {
+    Write,
+    Flush,
+    Persist,
+}
+
+#[cfg(test)]
+thread_local! {
+    static INJECTED_FAILURE: std::cell::Cell<Option<(SaveStep, io::ErrorKind)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn injected_failure(step: SaveStep) -> io::Result<()> {
+    match INJECTED_FAILURE.with(|failure| failure.get()) {
+        Some((failing, kind)) if failing == step => Err(io::Error::from(kind)),
+        _ => Ok(()),
+    }
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+fn injected_failure(_step: SaveStep) -> io::Result<()> {
+    Ok(())
+}
 
 pub fn fingerprint(path: &Path) -> Result<Vec<u8>, String> {
     let mut file = File::open(path).map_err(|_| "The source file is no longer accessible.")?;
@@ -107,10 +135,11 @@ pub fn atomic_save(
             .set_permissions(permissions)
             .map_err(|_| "Unable to preserve destination permissions.")?;
     }
-    temp.write_all(bytes)
+    injected_failure(SaveStep::Write)
+        .and_then(|()| temp.write_all(bytes))
         .map_err(|_| "Changes could not be saved. The original file is unchanged.")?;
-    temp.as_file()
-        .sync_all()
+    injected_failure(SaveStep::Flush)
+        .and_then(|()| temp.as_file().sync_all())
         .map_err(|_| "Changes could not be flushed to disk. The original file is unchanged.")?;
     // Recheck after the expensive validation and write, before replacing the source.
     if let Some(expected) = expected_hash {
@@ -118,12 +147,19 @@ pub fn atomic_save(
             return Err("The original PDF changed while saving. Use Save As.".into());
         }
     }
-    if expected_hash.is_some() {
-        temp.persist(path)
-            .map_err(|_| "Atomic replacement failed. The original file is unchanged.")?;
-    } else {
-        temp.persist_noclobber(path)
-            .map_err(|_| "The destination already exists or cannot be created. Choose another Save As destination.")?;
+    // A failed persist returns the temporary file inside the error; dropping it
+    // removes the job-owned file so no partial output remains beside the destination.
+    let persisted = match injected_failure(SaveStep::Persist) {
+        Err(error) => Err(PersistError { error, file: temp }),
+        Ok(()) if expected_hash.is_some() => temp.persist(path),
+        Ok(()) => temp.persist_noclobber(path),
+    };
+    if persisted.is_err() {
+        return Err(if expected_hash.is_some() {
+            "Atomic replacement failed. The original file is unchanged.".into()
+        } else {
+            "The destination already exists or cannot be created. Choose another Save As destination.".into()
+        });
     }
     if let Ok(directory) = File::open(parent) {
         let _ = directory.sync_all();
@@ -150,9 +186,12 @@ mod tests {
     use super::*;
     use lopdf::{dictionary, Object, Stream};
     pub fn fixture() -> Vec<u8> {
+        fixture_with_content(Vec::new())
+    }
+    fn fixture_with_content(content: Vec<u8>) -> Vec<u8> {
         let mut doc = lopdf::Document::with_version("1.7");
         let pages = doc.new_object_id();
-        let content = doc.add_object(Stream::new(dictionary! {}, Vec::new()));
+        let content = doc.add_object(Stream::new(dictionary! {}, content));
         let page = doc.add_object(dictionary! {"Type"=>"Page","Parent"=>pages,"MediaBox"=>vec![0.into(),0.into(),300.into(),400.into()],"Contents"=>content});
         doc.objects.insert(
             pages,
@@ -164,6 +203,141 @@ mod tests {
         doc.save_to(&mut bytes).expect("fixture serialization");
         bytes
     }
+    /// Injects a failure at one save step for the lifetime of the guard.
+    struct InjectedFailure;
+    impl InjectedFailure {
+        fn at(step: SaveStep, kind: io::ErrorKind) -> Self {
+            INJECTED_FAILURE.with(|failure| failure.set(Some((step, kind))));
+            Self
+        }
+    }
+    impl Drop for InjectedFailure {
+        fn drop(&mut self) {
+            INJECTED_FAILURE.with(|failure| failure.set(None));
+        }
+    }
+    fn entries(directory: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(directory)
+            .expect("list directory")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn injected_write_flush_and_persist_failures_leave_no_partial_output() {
+        let cases = [
+            (
+                SaveStep::Write,
+                io::ErrorKind::StorageFull,
+                "could not be saved",
+            ),
+            (
+                SaveStep::Flush,
+                io::ErrorKind::StorageFull,
+                "could not be flushed",
+            ),
+            (
+                SaveStep::Persist,
+                io::ErrorKind::PermissionDenied,
+                "Atomic replacement failed",
+            ),
+        ];
+        for (step, kind, message) in cases {
+            let directory = tempfile::tempdir().unwrap();
+            let existing = directory.path().join("existing.pdf");
+            let original = b"%PDF-1.7 original destination bytes".to_vec();
+            fs::write(&existing, &original).unwrap();
+            let hash = fingerprint(&existing).unwrap();
+            {
+                let _failure = InjectedFailure::at(step, kind);
+                let error = atomic_save(&existing, &fixture(), 1, Some(&hash)).unwrap_err();
+                assert!(error.contains(message), "{step:?}: {error}");
+                let new_destination = directory.path().join("new.pdf");
+                assert!(atomic_save(&new_destination, &fixture(), 1, None).is_err());
+                assert!(
+                    !new_destination.exists(),
+                    "{step:?} created a partial destination"
+                );
+            }
+            assert_eq!(
+                fs::read(&existing).unwrap(),
+                original,
+                "{step:?} changed the original"
+            );
+            assert_eq!(
+                entries(directory.path()),
+                ["existing.pdf"],
+                "{step:?} leaked a temporary file"
+            );
+        }
+    }
+
+    #[test]
+    fn save_succeeds_again_after_an_injected_failure_clears() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("retry.pdf");
+        {
+            let _failure = InjectedFailure::at(SaveStep::Write, io::ErrorKind::StorageFull);
+            assert!(atomic_save(&path, &fixture(), 1, None).is_err());
+        }
+        atomic_save(&path, &fixture(), 1, None).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), fixture());
+        assert_eq!(entries(directory.path()), ["retry.pdf"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unwritable_destination_directory_keeps_the_original() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let locked = directory.path().join("locked");
+        fs::create_dir(&locked).unwrap();
+        let existing = locked.join("existing.pdf");
+        fs::write(&existing, b"original").unwrap();
+        let hash = fingerprint(&existing).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+        let result = atomic_save(&existing, &fixture(), 1, Some(&hash));
+        let new_result = atomic_save(&locked.join("new.pdf"), &fixture(), 1, None);
+        let names = entries(&locked);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(result.unwrap_err().contains("destination permissions"));
+        assert!(new_result.is_err());
+        assert_eq!(fs::read(&existing).unwrap(), b"original");
+        assert_eq!(names, ["existing.pdf"]);
+    }
+
+    /// Reproduces a real disk-full condition without filling the user's drive.
+    /// Mount a small disposable volume and run:
+    /// `NAVPDF_CONSTRAINED_DIR=/path/to/volume cargo test -- --ignored real_disk_full`
+    #[test]
+    #[ignore = "requires NAVPDF_CONSTRAINED_DIR on a small disposable volume"]
+    fn real_disk_full_leaves_the_original_and_no_temporary_file() {
+        let directory = std::path::PathBuf::from(
+            std::env::var("NAVPDF_CONSTRAINED_DIR").expect("NAVPDF_CONSTRAINED_DIR"),
+        );
+        let existing = directory.join("existing.pdf");
+        let original = fixture();
+        fs::write(&existing, &original).unwrap();
+        let hash = fingerprint(&existing).unwrap();
+        let before = entries(&directory);
+        let oversized = fixture_with_content(vec![b'0'; 64 * 1024 * 1024]);
+        let error = atomic_save(&existing, &oversized, 1, Some(&hash)).unwrap_err();
+        let after = entries(&directory);
+        let preserved = fs::read(&existing).unwrap();
+        fs::remove_file(&existing).unwrap();
+        assert!(error.contains("original file is unchanged"), "{error}");
+        assert_eq!(preserved, original);
+        assert_eq!(after, before);
+    }
+
     #[test]
     fn new_destination_collision_keeps_the_other_writers_file() {
         let directory = tempfile::tempdir().unwrap();

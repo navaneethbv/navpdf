@@ -50,7 +50,7 @@ The full editor roadmap requires later phases as well.
 - [ ] Verify quit/close cancellation, explicit discard and successful save.
 - [ ] Verify recovery after interrupted editing, failed recovery load and successful recovery Save As.
 - [ ] Verify external source changes, new-destination collisions and destination permission failures preserve the original and dirty/recovery state.
-- [ ] Add bounded disk-full/write-failure injection and verify no partial replacement or temporary-file leakage.
+- [x] Add bounded disk-full/write-failure injection and verify no partial replacement or temporary-file leakage at the persistence boundary; the NavPDF Save error path on a full volume has not been driven natively.
 - [ ] Record residual existing-file concurrent-writer and metadata-preservation limitations.
 
 ### Evidence

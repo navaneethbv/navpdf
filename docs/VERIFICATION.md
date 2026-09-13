@@ -77,6 +77,20 @@ Each Preview and Acrobat image captures only that application's document window.
 
 PDFKit offscreen `PDFPage.draw` rendered the original output readably, so offscreen PDFKit rendering is not a substitute for Preview's on-screen result.
 
+### P1.5 filesystem failure coverage
+
+| Check | Result |
+| --- | --- |
+| Injected `StorageFull` during write and flush, and `PermissionDenied` during persist | Existing destination bytes unchanged, no new destination created, no temporary file left in the destination directory. |
+| Retry after an injected failure clears | Save succeeds and only the destination remains. |
+| Read-only destination directory | Replacement and new-destination saves fail with the permissions message; the original is unchanged and no temporary file remains. |
+| Real disk-full on a disposable 16 MB HFS+ disk image | Saving a 64 MB validated PDF over an existing file failed with "The original file is unchanged."; the original was byte-identical and no temporary file remained. The image was detached and deleted afterwards. |
+| `cargo test` | 13 passed; the real disk-full test is ignored by default and passed when run with `NAVPDF_CONSTRAINED_DIR`. |
+| Clippy with `-D warnings` | Passed. |
+
+The failure hook compiles only in test builds; production saves run the unchanged write, flush and persist sequence.
+These checks exercise `atomic_save` directly; NavPDF's Save and Save As error presentation on a full or read-only volume still needs native UI acceptance.
+
 ### Phase 1 native gaps
 
 The rebuilt app has not yet been used to author highlights on the 500-page fixture and repeat Save As, close and reopen in NavPDF, Preview and Acrobat.
