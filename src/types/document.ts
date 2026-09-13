@@ -11,6 +11,7 @@ export type Tool =
   | "snapshot";
 export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "tools";
 export interface DocumentDescriptor {
+  unsaved?: boolean;
   id: string;
   name: string;
   size: number;

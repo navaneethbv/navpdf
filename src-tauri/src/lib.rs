@@ -112,6 +112,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_document,
+            import_document,
+            print_document,
             open_recent,
             read_range,
             close_document,

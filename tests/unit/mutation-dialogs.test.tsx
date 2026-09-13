@@ -384,10 +384,16 @@ describe("PrintDialog", () => {
       <PrintDialog controller={controller as never} onClose={onClose} />,
     );
     fireEvent.click(screen.getByText("Current page", { exact: false }));
+    // This test checks DOM staging only; happy-dom does not implement PDF
+    // navigation for blob URLs. Native print integration is tested separately.
+    const src = vi.spyOn(HTMLIFrameElement.prototype, "src", "set").mockImplementation(() => {});
+    const onload = vi.spyOn(HTMLIFrameElement.prototype, "onload", "set").mockImplementation(() => {});
     fireEvent.click(screen.getByText("Print"));
     await vi.waitFor(() => {
       expect(document.querySelector("iframe")).toBeTruthy();
     });
     document.querySelector("iframe")?.remove();
+    src.mockRestore();
+    onload.mockRestore();
   });
 });

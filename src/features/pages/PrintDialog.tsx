@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { native, printDocument } from "../../services/native";
 import { Printer, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import { extractPages } from "../../services/document-commands";
@@ -22,6 +23,7 @@ export function PrintDialog({
     setPrinting(true);
     try {
       // Print the current edited revision, including unsaved annotations.
+      controller.editor?.commitOrRemove();
       const bytes = await controller.pdf.saveDocument();
       const totalPages = controller.pdf.numPages;
       const pages = parsePageRange(
@@ -34,6 +36,12 @@ export function PrintDialog({
       // full-document print keeps the original structure intact.
       const payload =
         pages.length === totalPages ? bytes : await extractPages(bytes, pages);
+      if (native) {
+        const printed = await printDocument(payload as Uint8Array<ArrayBuffer>, pages.length);
+        s.set({ status: printed ? "Print operation completed" : "Print cancelled" });
+        onClose();
+        return;
+      }
       const blob = new Blob([payload as unknown as BlobPart], {
         type: "application/pdf",
       });

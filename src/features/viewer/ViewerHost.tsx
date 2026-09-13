@@ -15,6 +15,22 @@ export function ViewerHost({
     const el = container.current!,
       controller = new ViewerController(el, pages.current!);
     onReady(controller);
+    let needsFit = true;
+    const resize = new ResizeObserver(() => {
+      if (el.clientWidth <= 0 || el.clientHeight <= 0) {
+        needsFit = true;
+        return;
+      }
+      if (!controller.pdf) return;
+      // The first document is attached while this frame is hidden. Fit only
+      // once it has real dimensions, then preserve the user's zoom on resize.
+      if (needsFit || controller.viewer.currentScale <= 0) {
+        controller.zoom(useWorkspace.getState().local.preferences.defaultZoom);
+      }
+      needsFit = false;
+      controller.viewer.update();
+    });
+    resize.observe(el);
     const abort = new AbortController();
     let pan: { x: number; y: number; left: number; top: number } | null = null;
     el.addEventListener(
@@ -74,6 +90,7 @@ export function ViewerHost({
       { signal: abort.signal },
     );
     return () => {
+      resize.disconnect();
       abort.abort();
       controller.destroy();
     };

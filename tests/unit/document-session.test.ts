@@ -12,6 +12,7 @@ import type { ViewerController } from "../../src/features/viewer/controller";
 vi.mock("../../src/services/pdf", () => ({ loadPdf: vi.fn() }));
 vi.mock("../../src/services/native", () => ({
   native: false,
+  openRecovery: vi.fn(async () => null),
   localState: vi.fn(async () => ({
     preferences: defaultPreferences,
     recents: [],
@@ -191,4 +192,43 @@ it("R3: updates document name and saved size after Save As", async () => {
     dirty: false,
     document: { id: "previous", name: "renamed.pdf", size: 54321 },
   });
+});
+
+it("keeps candidate bookmarks and an imported document's unsaved guard after open", async () => {
+  const bookmarks = [{ title: "Chapter", destination: "chapter", children: [] }];
+  vi.mocked(loadPdf).mockResolvedValue({
+    promise: Promise.resolve({ numPages: 2, getMetadata: async () => ({ info: {} }) }),
+    destroy: vi.fn(async () => {}),
+  } as unknown as Awaited<ReturnType<typeof loadPdf>>);
+  vi.mocked(controller.attach).mockImplementation(async () => {
+    useWorkspace.getState().set({ bookmarks });
+  });
+  await act(async () => expect(await session.load({ ...next, unsaved: true })).toBe(true));
+  expect(useWorkspace.getState()).toMatchObject({ bookmarks, dirty: true });
+  expect(desktop.markDirty).toHaveBeenCalledWith(true);
+});
+
+it("keeps a committed candidate active when retiring the previous handle fails", async () => {
+  const candidate = {
+    promise: Promise.resolve({ numPages: 2, getMetadata: async () => ({ info: {} }) }),
+    destroy: vi.fn(async () => {}),
+  };
+  vi.mocked(loadPdf).mockResolvedValue(candidate as unknown as Awaited<ReturnType<typeof loadPdf>>);
+  vi.mocked(desktop.releaseDocument).mockRejectedValueOnce(new Error("Cleanup failed"));
+  await act(async () => expect(await session.load(next)).toBe(true));
+  expect(useWorkspace.getState().document).toEqual(next);
+  expect(candidate.destroy).not.toHaveBeenCalled();
+  expect(useWorkspace.getState().busy).toBe(false);
+});
+
+it("retains the recovery file until the recovered copy is saved", async () => {
+  vi.mocked(desktop.openRecovery).mockResolvedValueOnce(next);
+  vi.mocked(loadPdf).mockResolvedValue({
+    promise: Promise.resolve({ numPages: 2, getMetadata: async () => ({ info: {} }) }),
+    destroy: vi.fn(async () => {}),
+  } as unknown as Awaited<ReturnType<typeof loadPdf>>);
+  await act(async () => session.recover());
+  expect(useWorkspace.getState().document).toEqual(next);
+  expect(useWorkspace.getState().dirty).toBe(true);
+  expect(desktop.discardRecovery).not.toHaveBeenCalled();
 });

@@ -79,8 +79,10 @@ export class ViewerController {
       this.bus.on(name, handler, { signal: this.abort.signal });
     on("pagesinit", () => {
       this.setLayout(useWorkspace.getState().layout);
-      this.viewer.currentScaleValue =
-        useWorkspace.getState().local.preferences.defaultZoom;
+      if (this.container.clientWidth > 0 && this.container.clientHeight > 0) {
+        this.viewer.currentScaleValue =
+          useWorkspace.getState().local.preferences.defaultZoom;
+      }
     });
     on("pagechanging", ({ pageNumber }: { pageNumber: number }) => {
       useWorkspace.getState().set({ page: pageNumber });
@@ -241,10 +243,23 @@ export class ViewerController {
   async replaceWithBytes(bytes: Uint8Array, status: string) {
     this.editor?.commitOrRemove();
     const task = loadPdfFromBytes(bytes as Uint8Array<ArrayBuffer>);
-    const loaded = await task.promise;
+    const previousPdf = this.pdf;
+    const previousState = useWorkspace.getState();
     const previousTask = this.revisionTask;
-    await this.attach(loaded);
-    await this.viewer.firstPagePromise;
+    let loaded: PDFDocumentProxy;
+    try {
+      loaded = await task.promise;
+      await this.attach(loaded);
+      await this.viewer.firstPagePromise;
+    } catch (error) {
+      await task.destroy().catch(() => {});
+      if (previousPdf && this.pdf !== previousPdf) {
+        await this.attach(previousPdf);
+        this.goTo(previousState.page);
+      }
+      useWorkspace.getState().set(previousState);
+      throw error;
+    }
     this.revisionTask = task;
     if (previousTask) await previousTask.destroy().catch(() => {});
     const state = useWorkspace.getState();

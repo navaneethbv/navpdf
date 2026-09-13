@@ -5,16 +5,14 @@ import { downloadBlob, REVOKE_DELAY_MS } from "../../src/utils/download";
 describe("downloadBlob", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.stubGlobal("URL", {
-      ...URL,
-      createObjectURL: vi.fn(() => "blob:test-url"),
-      revokeObjectURL: vi.fn(),
-    });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-url");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("triggers a download with the requested filename", () => {

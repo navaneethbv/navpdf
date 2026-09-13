@@ -100,3 +100,31 @@ describe("ViewerHost", () => {
 
 
 });
+
+it("fits the first visible document and preserves later user zoom", () => {
+  let resized = () => {};
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: () => void) { resized = callback; }
+    observe() {}
+    disconnect() {}
+  });
+  const onReady = vi.fn();
+  render(<ViewerHost onReady={onReady} />);
+  const controller = onReady.mock.calls[0][0] as ViewerController;
+  controller.pdf = {} as never;
+  controller.viewer.update = vi.fn();
+  const zoom = vi.spyOn(controller, "zoom");
+  const frame = screen.getByLabelText("PDF document");
+  resized();
+  expect(zoom).not.toHaveBeenCalled();
+  Object.defineProperties(frame, {
+    clientWidth: { value: 800 }, clientHeight: { value: 600 },
+  });
+  resized();
+  expect(zoom).toHaveBeenCalledWith(useWorkspace.getState().local.preferences.defaultZoom);
+  zoom.mockClear();
+  controller.viewer.currentScale = 1.5;
+  resized();
+  expect(zoom).not.toHaveBeenCalled();
+  expect(controller.viewer.update).toHaveBeenCalledTimes(2);
+});

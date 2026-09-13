@@ -12,9 +12,16 @@ const files = new Map<string, File>();
 export async function openDocument(
   file?: File,
 ): Promise<DocumentDescriptor | null> {
-  if (native) return invoke<DocumentDescriptor | null>("open_document");
-  if (!file) return null;
+  if (!file) return native ? invoke<DocumentDescriptor | null>("open_document") : null;
   if (file.size > 1024 ** 3) throw new Error("Choose a PDF smaller than 1 GB.");
+  if (native) {
+    const name = JSON.stringify(file.name).replace(/[^\x20-\x7e]/g, (char) =>
+      `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
+    return invoke<DocumentDescriptor>("import_document", new Uint8Array(await file.arrayBuffer()), {
+      headers: { "x-document-name": name },
+    });
+  }
   const id = crypto.randomUUID();
   files.set(id, file);
   return { id, name: file.name, size: file.size };
@@ -102,4 +109,10 @@ export async function openRecovery() {
 }
 export async function discardRecovery() {
   if (native) await invoke("discard_recovery");
+}
+
+export async function printDocument(bytes: Uint8Array<ArrayBuffer>, pages: number) {
+  return invoke<boolean>("print_document", bytes, {
+    headers: { "x-page-count": String(pages) },
+  });
 }

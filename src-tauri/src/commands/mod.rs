@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{Read, Seek, SeekFrom},
+    io::{Read, Seek, SeekFrom, Write},
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -82,6 +82,7 @@ pub struct AppState {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Descriptor {
+    pub unsaved: bool,
     pub id: String,
     pub name: String,
     pub size: u64,
@@ -149,11 +150,50 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
     }
     logging::record(&state.root, "open_document", false);
     Ok(Descriptor {
+        unsaved: false,
         id,
         name,
         size: length,
     })
 }
+// Generated documents have no user-selected destination. Keep the source
+// private and force the first save through the native Save As picker.
+fn imported(state: &AppState, bytes: &[u8], name: String) -> Result<Descriptor, String> {
+    if bytes.is_empty() || bytes.len() as u64 > filesystem::MAX_FILE_BYTES {
+        return Err("Choose a PDF smaller than 1 GB.".into());
+    }
+    let mut input = NamedTempFile::new().map_err(|_| "Unable to create a private working copy.")?;
+    input
+        .write_all(bytes)
+        .map_err(|_| "Unable to import PDF. Check free disk space.")?;
+    let mut descriptor = opened(state, input.path().to_path_buf(), false)?;
+    let doc = document(state, &descriptor.id)?;
+    let mut source = doc
+        .source
+        .lock()
+        .map_err(|_| "Document state unavailable.")?;
+    source.0 = doc._snapshot.path().to_path_buf();
+    *doc.name.lock().map_err(|_| "Document state unavailable.")? = name.clone();
+    descriptor.name = name;
+    descriptor.unsaved = true;
+    Ok(descriptor)
+}
+
+#[tauri::command]
+pub async fn import_document(app: AppHandle, request: Request<'_>) -> Result<Descriptor, String> {
+    let bytes = payload(&request)?;
+    let name: String = serde_json::from_str(&header(&request, "x-document-name")?)
+        .map_err(|_| "Invalid document name.")?;
+    let name = std::path::Path::new(&name)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Untitled.pdf")
+        .to_owned();
+    tauri::async_runtime::spawn_blocking(move || imported(&app.state::<AppState>(), &bytes, name))
+        .await
+        .map_err(|_| "Importing the PDF failed.")?
+}
+
 #[tauri::command]
 pub async fn open_document(app: AppHandle) -> Result<Option<Descriptor>, String> {
     let Some(file) = rfd::AsyncFileDialog::new()
@@ -234,7 +274,10 @@ fn payload(request: &Request<'_>) -> Result<Vec<u8>, String> {
     }
 }
 #[tauri::command]
-pub async fn save_document(app: AppHandle, request: Request<'_>) -> Result<Option<SaveResult>, String> {
+pub async fn save_document(
+    app: AppHandle,
+    request: Request<'_>,
+) -> Result<Option<SaveResult>, String> {
     let id = header(&request, "x-document-id")?;
     let save_as = header(&request, "x-save-as")? == "true";
     let pages: u32 = header(&request, "x-page-count")?
@@ -261,7 +304,10 @@ pub async fn save_document(app: AppHandle, request: Request<'_>) -> Result<Optio
             .lock()
             .map(|n| n.clone())
             .unwrap_or_else(|_| "Document.pdf".into());
-        let target = if save_as || source == app.state::<AppState>().root.join("recovery.pdf") {
+        let target = if save_as
+            || source == doc._snapshot.path()
+            || source == app.state::<AppState>().root.join("recovery.pdf")
+        {
             let Some(file) = rfd::AsyncFileDialog::new()
                 .add_filter("PDF", &["pdf"])
                 .set_file_name(&current_name)
@@ -430,7 +476,13 @@ pub async fn write_recovery(app: AppHandle, request: Request<'_>) -> Result<(), 
         {
             return Ok(());
         }
-        filesystem::atomic_save(&state.root.join("recovery.pdf"), &bytes, pages, None)?;
+        let recovery_path = state.root.join("recovery.pdf");
+        let previous_hash = if recovery_path.exists() {
+            Some(filesystem::fingerprint(&recovery_path)?)
+        } else {
+            None
+        };
+        filesystem::atomic_save(&recovery_path, &bytes, pages, previous_hash.as_deref())?;
         filesystem::private_json(
             &state.root.join("recovery.json"),
             &Recovery {
@@ -484,4 +536,74 @@ pub fn close_window(window: WebviewWindow, state: State<AppState>) -> Result<(),
 
 pub fn emit_action(app: &AppHandle, action: &str) {
     let _ = app.emit("menu-action", action);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_document_owns_private_snapshot_and_requires_save_as() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState {
+            documents: Mutex::new(HashMap::new()),
+            local: Mutex::new(LocalData::default()),
+            root: root.path().to_path_buf(),
+            dirty: Mutex::new(false),
+            saving: Mutex::new(false),
+        };
+        let bytes = b"%PDF-1.7\nprivate generated data";
+        let descriptor = imported(&state, bytes, "Résumé-日本.pdf".into()).unwrap();
+        assert!(descriptor.unsaved);
+        assert_eq!(descriptor.name, "Résumé-日本.pdf");
+        let doc = document(&state, &descriptor.id).unwrap();
+        assert_eq!(doc.source.lock().unwrap().0, doc._snapshot.path());
+        assert_eq!(fs::read(doc._snapshot.path()).unwrap(), bytes);
+        assert!(state.local.lock().unwrap().recents.is_empty());
+        assert!(imported(&state, b"", "empty.pdf".into()).is_err());
+        assert!(imported(&state, b"not a PDF", "bad.pdf".into()).is_err());
+    }
+}
+
+#[tauri::command]
+pub async fn print_document(app: AppHandle, request: Request<'_>) -> Result<bool, String> {
+    let bytes = payload(&request)?;
+    let pages: u32 = header(&request, "x-page-count")?
+        .parse()
+        .map_err(|_| "Invalid print page count.")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        filesystem::validate_pdf(&bytes, pages)?;
+        #[cfg(target_os = "macos")]
+        {
+            let (send, receive) = std::sync::mpsc::channel();
+            app.run_on_main_thread(move || {
+                let result = (|| {
+                    use objc2::{AnyThread, MainThreadMarker};
+                    use objc2_foundation::NSData;
+                    use objc2_app_kit::NSPrintInfo;
+                    use objc2_pdf_kit::{PDFDocument, PDFPrintScalingMode};
+                    let mtm = MainThreadMarker::new().ok_or("Printing requires the main thread.")?;
+                    let data = NSData::with_bytes(&bytes);
+                    // PDFKit retains its data and the document stays alive for the
+                    // entire modal operation. No source file is written or launched.
+                    let document = unsafe { PDFDocument::initWithData(PDFDocument::alloc(), &data) }
+                        .ok_or("The print copy could not be opened.")?;
+                    let print_info = NSPrintInfo::sharedPrintInfo();
+                    let operation = unsafe {
+                        document.printOperationForPrintInfo_scalingMode_autoRotate(
+                            Some(&print_info), PDFPrintScalingMode::PageScaleDownToFit, true, mtm,
+                        )
+                    }.ok_or("The system print operation could not be created.")?;
+                    Ok(operation.runOperation())
+                })();
+                let _ = send.send(result);
+            }).map_err(|_| "The system print dialog could not be opened.")?;
+            receive.recv().map_err(|_| "The print operation was interrupted.")?
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = app;
+            Err("Native printing is currently supported on macOS. Save a copy and print from your system PDF viewer.".into())
+        }
+    }).await.map_err(|_| "Preparing the print copy failed.")?
 }

@@ -324,3 +324,17 @@ describe("ViewerController tools and navigation", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 });
+
+it("restores the current revision and dirty state after a late mutation failure", async () => {
+  const previous = makePdf(3);
+  await controller.attach(previous as never);
+  useWorkspace.getState().set({ dirty: true, page: 2 });
+  const candidate = makePdf(4);
+  candidate.getOutline.mockRejectedValueOnce(new Error("Outline failed"));
+  const destroy = vi.fn(async () => {});
+  loadPdfFromBytes.mockReturnValue({ promise: Promise.resolve(candidate), destroy });
+  await expect(controller.replaceWithBytes(new Uint8Array([1]), "Changed")).rejects.toThrow("Outline failed");
+  expect(controller.pdf).toBe(previous);
+  expect(useWorkspace.getState()).toMatchObject({ dirty: true, page: 2 });
+  expect(destroy).toHaveBeenCalledOnce();
+});

@@ -1069,9 +1069,9 @@ p {
    ========================================================================== */
 .tool-drawer {
   position: fixed;
-  top: 79px;
+  top: 108px;
   left: 0;
-  right: 0;
+  width: min(420px, 100vw);
   bottom: 27px;
   background: var(--surface);
   z-index: 45;
@@ -1081,7 +1081,6 @@ p {
   overflow-y: auto;
   border-top: 1px solid var(--line);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-  animation: slideDown 0.2s ease-out;
 }
 @keyframes slideDown {
   from {
@@ -1182,12 +1181,12 @@ p {
   justify-content: center;
   flex-shrink: 0;
 }
-.tool-card-content {
+.tool-card-text {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.tool-card-title {
+.tool-card-label {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);

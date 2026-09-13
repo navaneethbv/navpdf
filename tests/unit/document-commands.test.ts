@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
+import sharp from "sharp";
 import {
   createBlankDocument,
   createDocumentFromImage,
@@ -145,7 +146,6 @@ describe("document commands & page operations", () => {
   });
 
   it("embeds JPEG images onto new and existing pages", async () => {
-    const sharp = (await import("sharp")).default;
     const jpeg = await sharp({
       create: {
         width: 4,

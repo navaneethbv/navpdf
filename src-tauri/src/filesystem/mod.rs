@@ -99,6 +99,14 @@ pub fn atomic_save(
     let mut temp = NamedTempFile::new_in(parent).map_err(|_| {
         "Changes could not be saved. Check the destination permissions and free disk space."
     })?;
+    if expected_hash.is_some() {
+        let permissions = fs::metadata(path)
+            .map_err(|_| "Unable to read destination permissions.")?
+            .permissions();
+        temp.as_file()
+            .set_permissions(permissions)
+            .map_err(|_| "Unable to preserve destination permissions.")?;
+    }
     temp.write_all(bytes)
         .map_err(|_| "Changes could not be saved. The original file is unchanged.")?;
     temp.as_file()
@@ -110,8 +118,13 @@ pub fn atomic_save(
             return Err("The original PDF changed while saving. Use Save As.".into());
         }
     }
-    temp.persist(path)
-        .map_err(|_| "Atomic replacement failed. The original file is unchanged.")?;
+    if expected_hash.is_some() {
+        temp.persist(path)
+            .map_err(|_| "Atomic replacement failed. The original file is unchanged.")?;
+    } else {
+        temp.persist_noclobber(path)
+            .map_err(|_| "The destination already exists or cannot be created. Choose another Save As destination.")?;
+    }
     if let Ok(directory) = File::open(parent) {
         let _ = directory.sync_all();
     }
@@ -151,6 +164,34 @@ mod tests {
         doc.save_to(&mut bytes).expect("fixture serialization");
         bytes
     }
+    #[test]
+    fn new_destination_collision_keeps_the_other_writers_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("chosen-destination.pdf");
+        fs::write(&path, b"created by another writer after the picker closed").unwrap();
+        assert!(atomic_save(&path, &fixture(), 1, None).is_err());
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            b"created by another writer after the picker closed"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacement_preserves_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("shared.pdf");
+        fs::write(&path, fixture()).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+        let hash = fingerprint(&path).unwrap();
+        atomic_save(&path, &fixture(), 1, Some(&hash)).unwrap();
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
+
     #[test]
     fn valid_roundtrip() {
         let d = tempfile::tempdir().expect("temp");

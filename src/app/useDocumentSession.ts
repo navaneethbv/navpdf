@@ -40,12 +40,13 @@ export function useDocumentSession(controller: ViewerController | null) {
     useWorkspace.getState().set({ local: await desktop.localState() });
   }, []);
   const load = useCallback(
-    async (descriptor: DocumentDescriptor, initialPage = 1) => {
+    async (descriptor: DocumentDescriptor, initialPage = 1, recovering = false) => {
       if (!controller) return false;
       if (lock.current) {
         await desktop.releaseDocument(descriptor.id);
         return false;
       }
+      const previousState = useWorkspace.getState();
       lock.current = true;
       openingCancelled.current = false;
       useWorkspace
@@ -87,19 +88,15 @@ export function useDocumentSession(controller: ViewerController | null) {
         await controller.attach(loaded);
         await controller.viewer.firstPagePromise;
 
-        // Candidate successfully attached! Commit ownership
-        if (previous && previous.id !== descriptor.id) {
-          await desktop.releaseDocument(previous.id);
-        }
-        // A superseded in-memory mutated revision is retired with the commit.
-        await controller.releaseRevision();
-        if (previousTask && previousTask !== candidate) {
-          await previousTask.destroy();
-        }
+        // Commit before retiring any previous resource. Cleanup errors cannot
+        // roll back to a proxy that has already been destroyed.
+        const bookmarks = useWorkspace.getState().bookmarks;
         task.current = candidate;
         useWorkspace.getState().reset();
         useWorkspace.getState().set({
           document: descriptor,
+          bookmarks,
+          dirty: recovering || !!descriptor.unsaved,
           info: {
             pages: loaded.numPages,
             encrypted,
@@ -111,14 +108,21 @@ export function useDocumentSession(controller: ViewerController | null) {
           busy: false,
         });
         controller.goTo(initialPage);
-        await desktop.markDirty(false);
-        await desktop.discardRecovery();
-        await refreshLocal();
+        await desktop.markDirty(recovering || !!descriptor.unsaved).catch(report);
+        if (!recovering) await desktop.discardRecovery().catch(report);
+        await refreshLocal().catch(report);
+        if (previous && previous.id !== descriptor.id) {
+          await desktop.releaseDocument(previous.id).catch(report);
+        }
+        await controller.releaseRevision().catch(report);
+        if (previousTask && previousTask !== candidate) {
+          await previousTask.destroy().catch(report);
+        }
         return true;
       } catch (error) {
         if (candidate !== task.current) {
-          await candidate?.destroy();
-          await desktop.releaseDocument(descriptor.id);
+          await candidate?.destroy().catch(report);
+          await desktop.releaseDocument(descriptor.id).catch(report);
         }
         // Rollback viewer to previous PDF if available
         if (previousPdf && controller.pdf !== previousPdf) {
@@ -128,6 +132,8 @@ export function useDocumentSession(controller: ViewerController | null) {
             // ignore rollback failure
           }
         }
+        useWorkspace.getState().set(previousState);
+        if (previousPdf) controller.goTo(previousState.page);
         setPassword(null);
         if (!openingCancelled.current) report(error);
         useWorkspace.getState().set({
@@ -180,6 +186,7 @@ export function useDocumentSession(controller: ViewerController | null) {
           status: "PDF saved",
           document: {
             ...state.document,
+            unsaved: false,
             name: result.name,
             size: result.size,
           },
@@ -254,7 +261,7 @@ export function useDocumentSession(controller: ViewerController | null) {
       guard(() => {
         void desktop
           .openRecovery()
-          .then((descriptor) => load(descriptor))
+          .then((descriptor) => load(descriptor, 1, true))
           .then((opened) => {
             if (!opened) return;
             useWorkspace.getState().set({
