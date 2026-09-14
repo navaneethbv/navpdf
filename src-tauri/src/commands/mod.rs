@@ -1,4 +1,9 @@
-use crate::{filesystem, logging, security};
+pub mod engine;
+
+use crate::{
+    filesystem, logging, security,
+    signatures::{SignatureAsset, SignatureStore},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -65,12 +70,44 @@ pub struct SaveResult {
     pub name: String,
     pub size: u64,
 }
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevisionInfo {
+    pub revision_id: String,
+    pub page_count: u32,
+    pub timestamp: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevisionStatus {
+    pub current_revision_id: String,
+    pub saved_revision_id: String,
+    pub page_count: u32,
+    pub is_dirty: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRevisionResult {
+    pub revision_id: String,
+    pub page_count: u32,
+    pub size: u64,
+}
+
 pub struct Opened {
     pub file: Mutex<File>,
     pub _snapshot: NamedTempFile,
+    pub working_file: Mutex<Option<NamedTempFile>>,
     pub source: Mutex<(PathBuf, Vec<u8>)>,
-    pub length: u64,
+    pub length: Mutex<u64>,
     pub name: Mutex<String>,
+    pub current_revision: Mutex<RevisionInfo>,
+    pub saved_revision: Mutex<String>,
+    /// Set after unlocking an encrypted document: no recovery copy or working file is written.
+    pub sensitive: Mutex<bool>,
+    /// Set after redaction or unlocking so a plain Save cannot overwrite the source.
+    pub force_save_as: Mutex<bool>,
 }
 pub struct AppState {
     pub documents: Mutex<HashMap<String, Arc<Opened>>>,
@@ -78,6 +115,7 @@ pub struct AppState {
     pub root: PathBuf,
     pub dirty: Mutex<bool>,
     pub saving: Mutex<bool>,
+    pub engine: engine::EngineState,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +124,7 @@ pub struct Descriptor {
     pub id: String,
     pub name: String,
     pub size: u64,
+    pub revision_id: String,
 }
 fn time() -> u64 {
     SystemTime::now()
@@ -112,12 +151,22 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Document.pdf".into());
     let id = uuid::Uuid::new_v4().to_string();
+    let revision_id = uuid::Uuid::new_v4().to_string();
     let entry = Arc::new(Opened {
         file: Mutex::new(file),
         _snapshot: snapshot,
+        working_file: Mutex::new(None),
         source: Mutex::new((path.clone(), hash)),
-        length,
+        length: Mutex::new(length),
         name: Mutex::new(name.clone()),
+        current_revision: Mutex::new(RevisionInfo {
+            revision_id: revision_id.clone(),
+            page_count: 0,
+            timestamp: time(),
+        }),
+        saved_revision: Mutex::new(revision_id.clone()),
+        sensitive: Mutex::new(false),
+        force_save_as: Mutex::new(false),
     });
     state
         .documents
@@ -154,6 +203,7 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
         id,
         name,
         size: length,
+        revision_id,
     })
 }
 // Generated documents have no user-selected destination. Keep the source
@@ -233,7 +283,8 @@ pub async fn read_range(
     end: u64,
 ) -> Result<Response, String> {
     let doc = document(&app.state::<AppState>(), &id)?;
-    if !security::valid_range(begin, end, doc.length) {
+    let length = *doc.length.lock().map_err(|_| "Document is busy.")?;
+    if !security::valid_range(begin, end, length) {
         return Err("Invalid PDF byte range.".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -304,7 +355,9 @@ pub async fn save_document(
             .lock()
             .map(|n| n.clone())
             .unwrap_or_else(|_| "Document.pdf".into());
+        let force_save_as = doc.force_save_as.lock().map(|flag| *flag).unwrap_or(true);
         let target = if save_as
+            || force_save_as
             || source == doc._snapshot.path()
             || source == app.state::<AppState>().root.join("recovery.pdf")
         {
@@ -340,6 +393,9 @@ pub async fn save_document(
             if let Ok(mut name_guard) = doc.name.lock() {
                 *name_guard = target_name.clone();
             }
+            if let Ok(mut flag) = doc.force_save_as.lock() {
+                *flag = false;
+            }
             let size = bytes.len() as u64;
             let state = worker_app.state::<AppState>();
             if let Ok(mut local) = state.local.lock() {
@@ -367,6 +423,11 @@ pub async fn save_document(
             }
             let _ = fs::remove_file(state.root.join("recovery.pdf"));
             let _ = fs::remove_file(state.root.join("recovery.json"));
+            if let Ok(mut saved_guard) = doc.saved_revision.lock() {
+                if let Ok(rev_guard) = doc.current_revision.lock() {
+                    *saved_guard = rev_guard.revision_id.clone();
+                }
+            }
             logging::record(&state.root, "save_document", false);
             Ok(Some(SaveResult {
                 name: target_name,
@@ -384,6 +445,112 @@ pub async fn save_document(
         logging::record(&app.state::<AppState>().root, "save_document", true);
     }
     result
+}
+
+#[tauri::command]
+pub async fn commit_working_revision(
+    app: AppHandle,
+    request: Request<'_>,
+) -> Result<CommitRevisionResult, String> {
+    let id = header(&request, "x-document-id")?;
+    let base_revision_id = header(&request, "x-base-revision-id")?;
+    let pages: u32 = header(&request, "x-page-count")?
+        .parse()
+        .map_err(|_| "Invalid page count.")?;
+    let bytes = payload(&request)?;
+    let doc = document(&app.state::<AppState>(), &id)?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        {
+            let current = doc
+                .current_revision
+                .lock()
+                .map_err(|_| "Revision state unavailable.")?;
+            if current.revision_id != base_revision_id {
+                return Err(
+                    "Stale base revision. The document has been modified elsewhere.".into(),
+                );
+            }
+        }
+
+        filesystem::validate_pdf(&bytes, pages)?;
+
+        if doc.sensitive.lock().map(|flag| *flag).unwrap_or(true) {
+            // Decrypted working revisions stay in memory; no plaintext temporary file is written.
+            let revision_id = uuid::Uuid::new_v4().to_string();
+            *doc.current_revision
+                .lock()
+                .map_err(|_| "Revision state unavailable.")? = RevisionInfo {
+                revision_id: revision_id.clone(),
+                page_count: pages,
+                timestamp: time(),
+            };
+            if let Ok(mut dirty) = app.state::<AppState>().dirty.lock() {
+                *dirty = true;
+            }
+            return Ok(CommitRevisionResult {
+                revision_id,
+                page_count: pages,
+                size: bytes.len() as u64,
+            });
+        }
+
+        let mut temp = NamedTempFile::new()
+            .map_err(|_| "Unable to create working revision temporary file.")?;
+        temp.write_all(&bytes)
+            .map_err(|_| "Unable to write revision bytes.")?;
+        temp.flush()
+            .map_err(|_| "Unable to flush revision bytes.")?;
+
+        let new_file = temp
+            .reopen()
+            .map_err(|_| "Unable to reopen revision file.")?;
+
+        let new_length = bytes.len() as u64;
+        let new_revision_id = uuid::Uuid::new_v4().to_string();
+
+        *doc.file.lock().map_err(|_| "Document is busy.")? = new_file;
+        *doc.length.lock().map_err(|_| "Document is busy.")? = new_length;
+        *doc.working_file.lock().map_err(|_| "Document is busy.")? = Some(temp);
+        *doc.current_revision
+            .lock()
+            .map_err(|_| "Revision state unavailable.")? = RevisionInfo {
+            revision_id: new_revision_id.clone(),
+            page_count: pages,
+            timestamp: time(),
+        };
+
+        if let Ok(mut dirty) = app.state::<AppState>().dirty.lock() {
+            *dirty = true;
+        }
+
+        Ok(CommitRevisionResult {
+            revision_id: new_revision_id,
+            page_count: pages,
+            size: new_length,
+        })
+    })
+    .await
+    .map_err(|_| "Failed to commit revision.")?
+}
+
+#[tauri::command]
+pub fn get_revision(state: State<AppState>, id: String) -> Result<RevisionStatus, String> {
+    let doc = document(&state, &id)?;
+    let current = doc
+        .current_revision
+        .lock()
+        .map_err(|_| "Revision state unavailable.")?;
+    let saved = doc
+        .saved_revision
+        .lock()
+        .map_err(|_| "Saved revision state unavailable.")?;
+    Ok(RevisionStatus {
+        current_revision_id: current.revision_id.clone(),
+        saved_revision_id: saved.clone(),
+        page_count: current.page_count,
+        is_dirty: current.revision_id != *saved,
+    })
 }
 #[tauri::command]
 pub fn local_state(state: State<AppState>) -> Result<serde_json::Value, String> {
@@ -467,6 +634,12 @@ pub async fn write_recovery(app: AppHandle, request: Request<'_>) -> Result<(), 
         .unwrap_or_else(|_| "Document.pdf".into());
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
+        if doc.sensitive.lock().map(|flag| *flag).unwrap_or(true) {
+            // Never leave decrypted recovery copies of encrypted documents.
+            let _ = fs::remove_file(state.root.join("recovery.pdf"));
+            let _ = fs::remove_file(state.root.join("recovery.json"));
+            return Ok(());
+        }
         if !state
             .local
             .lock()
@@ -534,6 +707,45 @@ pub fn close_window(window: WebviewWindow, state: State<AppState>) -> Result<(),
         .map_err(|_| "Unable to close window.".into())
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveSignatureRequest {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub asset_type: String,
+    pub data_url: String,
+}
+
+#[tauri::command]
+pub fn load_signatures(state: State<AppState>) -> Result<Vec<SignatureAsset>, String> {
+    let store = SignatureStore::new(&state.root)?;
+    store.list()
+}
+
+#[tauri::command]
+pub fn save_signature(
+    state: State<AppState>,
+    request: SaveSignatureRequest,
+) -> Result<SignatureAsset, String> {
+    let store = SignatureStore::new(&state.root)?;
+    store.save(request.name, request.asset_type, request.data_url)
+}
+
+#[tauri::command]
+pub fn delete_signature(state: State<AppState>, id: String) -> Result<(), String> {
+    let store = SignatureStore::new(&state.root)?;
+    store.delete(&id)
+}
+
+#[tauri::command]
+pub fn migrate_signatures(
+    state: State<AppState>,
+    items: Vec<SignatureAsset>,
+) -> Result<Vec<SignatureAsset>, String> {
+    let store = SignatureStore::new(&state.root)?;
+    store.migrate(items)
+}
+
 pub fn emit_action(app: &AppHandle, action: &str) {
     let _ = app.emit("menu-action", action);
 }
@@ -551,6 +763,7 @@ mod tests {
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
             saving: Mutex::new(false),
+            engine: engine::EngineState::default(),
         };
         let bytes = b"%PDF-1.7\nprivate generated data";
         let descriptor = imported(&state, bytes, "Résumé-日本.pdf".into()).unwrap();
@@ -562,6 +775,45 @@ mod tests {
         assert!(state.local.lock().unwrap().recents.is_empty());
         assert!(imported(&state, b"", "empty.pdf".into()).is_err());
         assert!(imported(&state, b"not a PDF", "bad.pdf".into()).is_err());
+    }
+
+    #[test]
+    fn revision_tracking_and_stale_base_rejection() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState {
+            documents: Mutex::new(HashMap::new()),
+            local: Mutex::new(LocalData::default()),
+            root: root.path().to_path_buf(),
+            dirty: Mutex::new(false),
+            saving: Mutex::new(false),
+            engine: engine::EngineState::default(),
+        };
+        let bytes = b"%PDF-1.7\nprivate generated data";
+        let descriptor = imported(&state, bytes, "test.pdf".into()).unwrap();
+        let initial_rev = descriptor.revision_id.clone();
+        assert!(!initial_rev.is_empty());
+
+        let doc = document(&state, &descriptor.id).unwrap();
+        {
+            let rev = doc.current_revision.lock().unwrap();
+            assert_eq!(rev.revision_id, initial_rev);
+            assert_eq!(*doc.saved_revision.lock().unwrap(), initial_rev);
+        }
+
+        let stale_base = "fake-base-revision-uuid";
+        let current_rev_id = doc.current_revision.lock().unwrap().revision_id.clone();
+        assert_ne!(current_rev_id, stale_base);
+
+        let next_rev_id = uuid::Uuid::new_v4().to_string();
+        *doc.current_revision.lock().unwrap() = RevisionInfo {
+            revision_id: next_rev_id.clone(),
+            page_count: 2,
+            timestamp: time(),
+        };
+        assert_ne!(
+            doc.current_revision.lock().unwrap().revision_id,
+            *doc.saved_revision.lock().unwrap()
+        );
     }
 }
 
@@ -606,4 +858,19 @@ pub async fn print_document(app: AppHandle, request: Request<'_>) -> Result<bool
             Err("Native printing is currently supported on macOS. Save a copy and print from your system PDF viewer.".into())
         }
     }).await.map_err(|_| "Preparing the print copy failed.")?
+}
+
+#[tauri::command]
+pub async fn ocr_recognize_page(
+    image_bytes: Vec<u8>,
+    options: crate::ocr::OcrOptions,
+) -> Result<crate::ocr::OcrPageResult, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::ocr::recognize_page(&image_bytes, &options))
+        .await
+        .map_err(|_| "OCR recognition task failed.".to_string())?
+}
+
+#[tauri::command]
+pub fn ocr_get_engine_info() -> Result<crate::ocr::OcrEngineInfo, String> {
+    Ok(crate::ocr::get_engine_info())
 }

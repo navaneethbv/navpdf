@@ -54,11 +54,12 @@ async function mockController(pages = 3) {
   };
 }
 
+const originalCreateElement = Document.prototype.createElement;
+
 function mockCanvas2d() {
-  const createElement = document.createElement.bind(document);
   return vi.spyOn(document, "createElement").mockImplementation(
     ((tag: string, options?: ElementCreationOptions) => {
-      const el = createElement(tag, options);
+      const el = originalCreateElement.call(document, tag, options);
       if (tag === "canvas") {
         el.getContext = vi.fn(() => ({
           beginPath: vi.fn(),
@@ -66,6 +67,7 @@ function mockCanvas2d() {
           lineTo: vi.fn(),
           stroke: vi.fn(),
           clearRect: vi.fn(),
+          fillRect: vi.fn(),
           fillText: vi.fn(),
         }));
         el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
@@ -377,61 +379,42 @@ describe("PrintDialog extras", () => {
   });
 });
 
-describe("CompressDialog presets", () => {
-  it("switches presets and closes after results", async () => {
+describe("CompressDialog outside the desktop app", () => {
+  it("explains the local engine requirement and keeps presets selectable", async () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
     render(
       <CompressDialog controller={controller as never} onClose={onClose} />,
     );
-    fireEvent.click(screen.getByText("High Compression"));
-    fireEvent.click(screen.getByText("Maximum"));
-    fireEvent.click(screen.getByRole("button", { name: "Compress PDF" }));
-    await vi.waitFor(() => {
-      expect(screen.getByText("Original Size:")).toBeTruthy();
-    });
-    fireEvent.click(screen.getByText("Done"));
+    expect(screen.getByText(/runs only in the desktop app/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/Lossless/));
+    expect((screen.getByLabelText(/Lossless/) as HTMLInputElement).checked).toBe(true);
+    const analyze = screen.getByText("Analyze Compression").closest("button") as HTMLButtonElement;
+    expect(analyze.disabled).toBe(true);
+    fireEvent.click(screen.getByText("Close"));
     expect(onClose).toHaveBeenCalled();
-  });
-
-  it("ignores compression without a revision", () => {
-    seedDocument();
-    render(<CompressDialog controller={null} onClose={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: "Compress PDF" }));
+    expect(controller.replaceWithBytes).not.toHaveBeenCalled();
   });
 });
 
 describe("OfficeExport formats", () => {
-  it("exports slides and CSV with honest labels", async () => {
+  it("refuses documents without a text layer instead of exporting empty files", async () => {
     seedDocument(2);
     const controller = textController(["one two", "three four"]);
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
-    const types: string[] = [];
-    const original = URL.createObjectURL;
-    URL.createObjectURL = vi.fn((blob: Blob) => {
-      types.push(blob.type);
-      return "blob:mock";
-    });
     render(
       <OfficeExport controller={controller as never} onClose={() => {}} />,
     );
-    fireEvent.click(screen.getByText(/Slides outline/));
+    fireEvent.click(screen.getByLabelText(/editable text/));
     fireEvent.click(screen.getByText("Export File"));
     await vi.waitFor(() => {
-      expect(click).toHaveBeenCalledTimes(1);
+      expect(useWorkspace.getState().error).toMatch(/no text layer/);
     });
-    fireEvent.click(screen.getByText(/Table data/));
-    fireEvent.click(screen.getByText("Export File"));
-    await vi.waitFor(() => {
-      expect(click).toHaveBeenCalledTimes(2);
-    });
-    expect(types[0]).toContain("ms-powerpoint");
-    expect(types[1]).toContain("text/csv");
+    expect(click).not.toHaveBeenCalled();
     click.mockRestore();
-    URL.createObjectURL = original;
   });
 
   it("does nothing without a revision", () => {
@@ -453,7 +436,7 @@ describe("ExportDialog JPG and failures", () => {
       <ExportDialog controller={controller as never} onClose={() => {}} />,
     );
     fireEvent.click(screen.getByText("JPEG Image"));
-    expect(screen.getByText(/150 DPI/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /150 DPI/i })).toBeTruthy();
     fireEvent.click(screen.getByText("Export"));
     await vi.waitFor(() => {
       expect(click).toHaveBeenCalled();
@@ -479,17 +462,19 @@ describe("ExportDialog JPG and failures", () => {
   });
 });
 
-describe("AssistantPanel spaces tab", () => {
-  it("shows the local workspace card", () => {
+describe("AssistantPanel without a model", () => {
+  it("states that nothing is generated and answers unsupported questions honestly", async () => {
     seedDocument();
     render(
-      <AssistantPanel controller={textController(["x"]) as never} onClose={() => {}} />,
+      <AssistantPanel controller={textController(["alpha beta gamma"]) as never} onClose={() => {}} />,
     );
-    fireEvent.click(screen.getByText("PDF Spaces"));
-    expect(screen.getByText("Default Local Space")).toBeTruthy();
+    expect(screen.getByText(/No local language model is installed/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Words to find"), { target: { value: "quarterly revenue" } });
+    fireEvent.click(screen.getByText("Find Passages"));
+    expect(await screen.findByText(/nothing to cite/)).toBeTruthy();
   });
 
-  it("surfaces indexing failures", async () => {
+  it("surfaces text extraction failures", async () => {
     seedDocument();
     const controller = textController(["x"]);
     (controller.pdf as { getPage: ReturnType<typeof vi.fn> }).getPage.mockRejectedValueOnce(
@@ -498,7 +483,8 @@ describe("AssistantPanel spaces tab", () => {
     render(
       <AssistantPanel controller={controller as never} onClose={() => {}} />,
     );
-    fireEvent.click(screen.getByText("Build Page Index"));
+    fireEvent.change(screen.getByLabelText("Words to find"), { target: { value: "anything here" } });
+    fireEvent.click(screen.getByText("Find Passages"));
     await vi.waitFor(() => {
       expect(useWorkspace.getState().error).toBe("no text");
     });
@@ -532,16 +518,19 @@ describe("AttachmentsDialog download and close", () => {
 });
 
 describe("RedactionTool inputs", () => {
-  it("edits every coordinate field", () => {
+  it("adds a region from every coordinate field", () => {
     seedDocument(4);
-    render(<RedactionTool onClose={() => {}} />);
+    render(<RedactionTool controller={null} onClose={() => {}} />);
     const numbers = document.querySelectorAll('.modal-body input[type="number"]');
     expect(numbers.length).toBe(5);
     numbers.forEach((input, i) => {
       fireEvent.change(input, { target: { value: String(i + 2) } });
     });
-    fireEvent.click(screen.getByText("Mark Region"));
-    expect(screen.getByText(/Page 2:/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Add Region"));
+    expect(screen.getByText(/Page 2: 5×6 pt/)).toBeTruthy();
+    fireEvent.change(numbers[3], { target: { value: "0" } });
+    fireEvent.click(screen.getByText("Add Region"));
+    expect(screen.getByText(/positive width and height/)).toBeTruthy();
   });
 });
 
@@ -549,8 +538,8 @@ describe("ProtectDialog close", () => {
   it("closes from the footer", () => {
     seedDocument();
     const onClose = vi.fn();
-    render(<ProtectDialog onClose={onClose} />);
-    fireEvent.click(screen.getByText("Close"));
+    render(<ProtectDialog controller={null} onClose={onClose} />);
+    fireEvent.click(screen.getByText("Cancel"));
     expect(onClose).toHaveBeenCalled();
   });
 });

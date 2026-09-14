@@ -20,12 +20,31 @@ import type {
   SearchResult,
   Bookmark,
   Comment,
+  ShapeKind,
 } from "../../types/document";
+import type { DocumentRevision } from "../../types/operations";
 import { useWorkspace } from "../../stores/workspace";
 import { positionSearchCursor } from "../search/select-result";
 import { boundedZoom, snippet } from "../../utils/search";
-import { markDirty, rememberPage } from "../../services/native";
+import { commitWorkingRevision, markDirty, native, rememberPage } from "../../services/native";
 import { loadPdfFromBytes } from "../../services/pdf";
+import { RevisionHistory } from "../../services/revision-history";
+import {
+  addStickyNote as addStickyNoteToPdf,
+  addShapeAnnotation,
+  addTextMarkupAnnotations,
+  deleteAnnotation,
+  updateAnnotation,
+  type TextMarkupKind,
+} from "../../services/document-commands";
+import { installHighlightInterop } from "./highlight-interop";
+import { readTextSelectionGeometry } from "./selection-geometry";
+import {
+  createCommentExchange,
+  parseCommentExchange,
+} from "../../services/comment-exchange";
+
+const finite = (value: number) => Number.isFinite(value);
 
 export class ViewerController {
   readonly bus = new EventBus();
@@ -49,6 +68,9 @@ export class ViewerController {
   private contexts = new Map<number, string>();
   private abort = new AbortController();
   private searchGeneration = 0;
+  readonly history = new RevisionHistory();
+  private nativeCanUndo = false;
+  private nativeCanRedo = false;
   constructor(
     readonly container: HTMLDivElement,
     element: HTMLDivElement,
@@ -61,7 +83,7 @@ export class ViewerController {
       linkService: this.links,
       findController: this.find,
       annotationEditorMode: AnnotationEditorType.NONE,
-      annotationMode: AnnotationMode.ENABLE,
+      annotationMode: AnnotationMode.ENABLE_FORMS ?? 2,
       imageResourcesPath: "/pdfjs/web/images/",
       maxCanvasPixels: 8_000_000,
       maxCanvasDim: 8192,
@@ -131,12 +153,24 @@ export class ViewerController {
           hasSomethingToRedo: boolean;
           hasSelectedEditor: boolean;
         };
-      }) =>
-        useWorkspace.getState().set({
-          canUndo: details.hasSomethingToUndo,
-          canRedo: details.hasSomethingToRedo,
+      }) => {
+        this.nativeCanUndo = details.hasSomethingToUndo;
+        this.nativeCanRedo = details.hasSomethingToRedo;
+        const state = useWorkspace.getState();
+        state.set({
+          canUndo: this.nativeCanUndo || this.history.canUndo(),
+          canRedo: this.nativeCanRedo || this.history.canRedo(),
           hasSelection: details.hasSelectedEditor,
-        }),
+        });
+        if (
+          !this.nativeCanUndo &&
+          !this.nativeCanRedo &&
+          this.history.isAtSavedRevision()
+        ) {
+          state.set({ dirty: false, status: "Ready" });
+          void markDirty(false).catch(() => {});
+        }
+      },
     );
     on("switchannotationeditormode", ({ mode }: { mode: number }) => {
       if (
@@ -196,6 +230,7 @@ export class ViewerController {
           }),
       );
     };
+    installHighlightInterop(pdf.annotationStorage);
     try {
       await (
         await pdf.getPage(1)
@@ -219,6 +254,51 @@ export class ViewerController {
           children: n.items ? map(n.items) : [],
         }));
     useWorkspace.getState().set({ bookmarks: outline ? map(outline) : [] });
+
+    // Inspect forms, XFA, scripts, and digital signatures
+    if (pdf.isPureXfa || Boolean(pdf.allXfaHtml)) {
+      useWorkspace.getState().set({
+        formNotice:
+          "XFA forms are not supported. Form elements are read-only or unavailable.",
+      });
+    }
+    try {
+      const js = await pdf.getJSActions();
+      if (js && js.size > 0) {
+        useWorkspace.getState().set({
+          formNotice:
+            "Script-based calculations and actions are disabled for document safety.",
+        });
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      const fieldObjects = await pdf.getFieldObjects();
+      if (fieldObjects) {
+        let hasSig = false;
+        for (const fields of fieldObjects.values()) {
+          for (const f of fields) {
+            const fieldObj = f as { type?: string; subtype?: string };
+            if (
+              fieldObj.type === "signature" ||
+              fieldObj.subtype === "Sig"
+            ) {
+              hasSig = true;
+              break;
+            }
+          }
+          if (hasSig) break;
+        }
+        if (hasSig) {
+          useWorkspace.getState().set({ hasDigitalSignature: true });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    await this.readComments().catch(() => {});
   }
   async detach() {
     this.generation++;
@@ -231,6 +311,13 @@ export class ViewerController {
     this.find.setDocument(null as unknown as PDFDocumentProxy);
     this.editor = null;
     this.pdf = null;
+    this.nativeCanUndo = false;
+    this.nativeCanRedo = false;
+    this.history.seed({
+      bytes: new Uint8Array(),
+      numPages: 0,
+      description: "Empty document",
+    });
     this.contexts.clear();
   }
   /**
@@ -240,9 +327,134 @@ export class ViewerController {
    * Callers must derive `bytes` from `controller.pdf.saveDocument()` so
    * pending annotation edits are serialized into the new revision.
    */
-  async replaceWithBytes(bytes: Uint8Array, status: string) {
+  async replaceWithBytes(
+    bytes: Uint8Array,
+    status: string,
+    options?: {
+      pageMapping?: number[];
+      warnings?: string[];
+      /** Drop earlier revisions, e.g. after redaction or unlocking, so undo cannot restore them. */
+      resetHistory?: boolean;
+    },
+  ) {
     this.editor?.commitOrRemove();
-    const task = loadPdfFromBytes(bytes as Uint8Array<ArrayBuffer>);
+    // PDF.js transfers the candidate buffer to its worker while loading it.
+    // Keep an owned copy for history and later rollback bookkeeping.
+    const candidateBytes = new Uint8Array(bytes);
+    const historyBytes = new Uint8Array(candidateBytes);
+    const previousBytes =
+      !options?.resetHistory && this.pdf && typeof this.pdf.saveDocument === "function"
+        ? await this.pdf.saveDocument()
+        : null;
+    if (previousBytes) {
+      this.history.adopt({
+        bytes: previousBytes,
+        numPages: this.pdf?.numPages ?? 0,
+        description: "Native annotation edit",
+      });
+    }
+    const task = loadPdfFromBytes(candidateBytes as Uint8Array<ArrayBuffer>);
+    const previousPdf = this.pdf;
+    const previousState = useWorkspace.getState();
+    const previousTask = this.revisionTask;
+    let loaded: PDFDocumentProxy;
+    try {
+      loaded = await task.promise;
+      await this.attach(loaded);
+      await this.viewer.firstPagePromise;
+    } catch (error) {
+      await task.destroy().catch(() => {});
+      if (previousPdf && this.pdf !== previousPdf) {
+        await this.attach(previousPdf);
+        this.goTo(previousState.page);
+      }
+      useWorkspace.getState().set(previousState);
+      throw error;
+    }
+    this.revisionTask = task;
+    if (previousTask) await previousTask.destroy().catch(() => {});
+
+    // Commit to native working revision if running in native desktop environment
+    let nativeRevisionId: string | undefined;
+    const docId = previousState.document?.id;
+    if (native && docId) {
+      try {
+        const baseRev =
+          this.history.getCurrent()?.revisionId ??
+          previousState.document?.revisionId ??
+          "";
+        const commitRes = await commitWorkingRevision(
+          docId,
+          baseRev,
+          candidateBytes as Uint8Array<ArrayBuffer>,
+          loaded.numPages,
+        );
+        nativeRevisionId = commitRes.revisionId;
+      } catch (err) {
+        console.warn("Native working revision commit warning:", err);
+      }
+    }
+
+    const state = useWorkspace.getState();
+    if (options?.resetHistory) {
+      this.history.seed({
+        bytes: historyBytes,
+        numPages: loaded.numPages,
+        description: status,
+        revisionId: nativeRevisionId,
+      });
+      this.history.markUnsaved();
+      this.nativeCanUndo = false;
+      this.nativeCanRedo = false;
+    } else {
+      this.history.record({
+        bytes: historyBytes,
+        numPages: loaded.numPages,
+        description: status,
+        revisionId: nativeRevisionId,
+        pageMapping: options?.pageMapping,
+        warnings: options?.warnings,
+      });
+    }
+    this.updateHistoryControls();
+    const info = await this.refreshedInfo(loaded, state.info);
+    state.set({
+      dirty: true,
+      status,
+      info,
+      page: Math.max(1, Math.min(state.page, loaded.numPages)),
+    });
+    this.goTo(useWorkspace.getState().page);
+    await markDirty(true).catch(() =>
+      state.set({
+        error:
+          "Native change tracking is unavailable. Save a copy before closing.",
+      }),
+    );
+  }
+  /** Page count, title and author of a new revision, so removed metadata does not stay on screen. */
+  private async refreshedInfo(
+    loaded: PDFDocumentProxy,
+    previous: ReturnType<typeof useWorkspace.getState>["info"],
+  ) {
+    if (!previous) return previous;
+    const next = { ...previous, pages: loaded.numPages };
+    try {
+      const metadata = await loaded.getMetadata();
+      const values = metadata.info as { Title?: string; Author?: string };
+      return { ...next, title: values.Title || "", author: values.Author || "" };
+    } catch {
+      return next;
+    }
+  }
+  private updateHistoryControls() {
+    useWorkspace.getState().set({
+      canUndo: this.nativeCanUndo || this.history.canUndo(),
+      canRedo: this.nativeCanRedo || this.history.canRedo(),
+    });
+  }
+  private async applyRevision(revision: DocumentRevision, status: string) {
+    const task = loadPdfFromBytes(revision.bytes as Uint8Array<ArrayBuffer>);
     const previousPdf = this.pdf;
     const previousState = useWorkspace.getState();
     const previousTask = this.revisionTask;
@@ -263,19 +475,25 @@ export class ViewerController {
     this.revisionTask = task;
     if (previousTask) await previousTask.destroy().catch(() => {});
     const state = useWorkspace.getState();
+    const dirty = !this.history.isAtSavedRevision();
+    const info = await this.refreshedInfo(loaded, state.info);
     state.set({
-      dirty: true,
+      dirty,
       status,
-      info: state.info ? { ...state.info, pages: loaded.numPages } : state.info,
+      info,
       page: Math.max(1, Math.min(state.page, loaded.numPages)),
     });
-    this.goTo(useWorkspace.getState().page);
-    await markDirty(true).catch(() =>
+    this.goTo(state.page);
+    this.nativeCanUndo = false;
+    this.nativeCanRedo = false;
+    this.updateHistoryControls();
+    await markDirty(dirty).catch(() =>
       state.set({
         error:
           "Native change tracking is unavailable. Save a copy before closing.",
       }),
     );
+    await this.readComments();
   }
   /** Retire the in-memory mutated revision without detaching the viewer. */
   async releaseRevision() {
@@ -315,13 +533,369 @@ export class ViewerController {
     );
     useWorkspace.getState().set({ highlightColor: value });
   }
+  currentPage() {
+    return this.viewer.currentPageNumber;
+  }
+  async addStickyNote(contents: string) {
+    if (!this.pdf) throw new Error("Open a PDF before adding an annotation.");
+    const pageNumber = this.currentPage();
+    const page = await this.pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1 });
+    const hex = useWorkspace.getState().highlightColor;
+    const color: [number, number, number] = [
+      parseInt(hex.slice(1, 3), 16) / 255,
+      parseInt(hex.slice(3, 5), 16) / 255,
+      parseInt(hex.slice(5, 7), 16) / 255,
+    ];
+    const bytes = await this.pdf.saveDocument();
+    const noted = await addStickyNoteToPdf(bytes, {
+      page: pageNumber,
+      x: 48,
+      y: viewport.height - 48,
+      contents,
+      color,
+    });
+    await this.replaceWithBytes(noted, "Sticky note added to document");
+    await this.readComments();
+  }
+  async addShape(
+    kind: ShapeKind,
+    start: [number, number],
+    end: [number, number],
+  ) {
+    if (!this.pdf) throw new Error("Open a PDF before adding a shape.");
+    const state = useWorkspace.getState();
+    const hex = state.inkColor;
+    const color: [number, number, number] = [
+      parseInt(hex.slice(1, 3), 16) / 255,
+      parseInt(hex.slice(3, 5), 16) / 255,
+      parseInt(hex.slice(5, 7), 16) / 255,
+    ];
+    const bytes = await this.pdf.saveDocument();
+    const shaped = await addShapeAnnotation(bytes, {
+      page: this.currentPage(),
+      kind,
+      start,
+      end,
+      color,
+      width: state.inkWidth,
+      opacity: state.inkOpacity,
+    });
+    await this.replaceWithBytes(
+      shaped,
+      `${kind === "Arrow" ? "Arrow" : kind} added to document`,
+    );
+    await this.readComments();
+  }
+  async addTextMarkup(kind: TextMarkupKind) {
+    if (!this.pdf) throw new Error("Open a PDF before adding an annotation.");
+    const selection = await readTextSelectionGeometry(
+      this.container,
+      async (pageNumber) => {
+        const viewport = (await this.pdf!.getPage(pageNumber)).getViewport({
+          scale: 1,
+        });
+        return {
+          width: viewport.width,
+          height: viewport.height,
+          convertToPdfPoint: (x: number, y: number): [number, number] => {
+            const point = viewport.convertToPdfPoint(x, y);
+            return [point[0], point[1]];
+          },
+        };
+      },
+    );
+    if (selection.length === 0)
+      throw new Error("Select text on the page before adding this annotation.");
+    const hex = useWorkspace.getState().highlightColor;
+    const color: [number, number, number] = [
+      parseInt(hex.slice(1, 3), 16) / 255,
+      parseInt(hex.slice(3, 5), 16) / 255,
+      parseInt(hex.slice(5, 7), 16) / 255,
+    ];
+    const bytes = await this.pdf.saveDocument();
+    const marked = await addTextMarkupAnnotations(
+      bytes,
+      kind,
+      selection.map((item) => ({
+        page: item.page,
+        quads: item.quads,
+        contents: item.text,
+        color,
+      })),
+    );
+    await this.replaceWithBytes(
+      marked,
+      kind === "Underline"
+        ? "Underline added to document"
+        : "Strike-through added to document",
+    );
+    window.getSelection()?.removeAllRanges();
+    this.setTool("select");
+    await this.readComments();
+  }
+  exportComments() {
+    const state = useWorkspace.getState();
+    if (!state.document || !this.pdf)
+      throw new Error("Open a PDF before exporting comments.");
+    return JSON.stringify(
+      createCommentExchange(state.document.id, this.pdf.numPages, state.comments),
+      null,
+      2,
+    );
+  }
+  async importComments(source: string) {
+    if (!this.pdf) throw new Error("Open a PDF before importing comments.");
+    const state = useWorkspace.getState();
+    if (!state.document) throw new Error("Open a PDF before importing comments.");
+    const exchange = parseCommentExchange(source, this.pdf.numPages);
+    if (exchange.documentId !== state.document.id)
+      throw new Error("These comments belong to a different document.");
+    const existing = new Set(state.comments.map((comment) => comment.id));
+    const pending = exchange.comments.filter((comment) => !existing.has(comment.id));
+    if (pending.length === 0)
+      throw new Error("Every imported comment is already present.");
+    state.set({ busy: true, status: "Importing comments" });
+    try {
+      let bytes = await this.pdf.saveDocument();
+      let added = 0;
+      for (const comment of pending) {
+        if (!comment.rect) continue;
+        if (comment.type === "Text") {
+          bytes = (await addStickyNoteToPdf(bytes, {
+            page: comment.page,
+            x: comment.rect[0],
+            y: comment.rect[3],
+            size: Math.max(12, Math.min(64, Math.min(
+              Math.abs(comment.rect[2] - comment.rect[0]),
+              Math.abs(comment.rect[3] - comment.rect[1]),
+            ))),
+            contents: comment.text,
+            color: comment.color,
+            id: comment.id,
+          })) as Uint8Array<ArrayBuffer>;
+          added++;
+        } else if (
+          comment.type === "Highlight" ||
+          comment.type === "Underline" ||
+          comment.type === "StrikeOut"
+        ) {
+          bytes = (await addTextMarkupAnnotations(bytes, comment.type, [
+            {
+              page: comment.page,
+              quads: [
+                {
+                  x1: Math.min(comment.rect[0], comment.rect[2]),
+                  y1: Math.min(comment.rect[1], comment.rect[3]),
+                  x2: Math.max(comment.rect[0], comment.rect[2]),
+                  y2: Math.max(comment.rect[1], comment.rect[3]),
+                },
+              ],
+              contents: comment.text,
+              color: comment.color,
+              opacity: comment.opacity,
+              id: comment.id,
+            },
+          ])) as Uint8Array<ArrayBuffer>;
+          added++;
+        } else if (
+          comment.type === "Square" ||
+          comment.type === "Circle" ||
+          comment.type === "Line"
+        ) {
+          const start: [number, number] = comment.line
+            ? [comment.line[0], comment.line[1]]
+            : [comment.rect[0], comment.rect[1]];
+          const end: [number, number] = comment.line
+            ? [comment.line[2], comment.line[3]]
+            : [comment.rect[2], comment.rect[3]];
+          bytes = (await addShapeAnnotation(bytes, {
+            page: comment.page,
+            kind: comment.type,
+            start,
+            end,
+            color: comment.color,
+            width: comment.width,
+            opacity: comment.opacity,
+            id: comment.id,
+          })) as Uint8Array<ArrayBuffer>;
+          added++;
+        }
+      }
+      if (added === 0) throw new Error("The comment file has no importable geometry.");
+      await this.replaceWithBytes(bytes, `${added} comment${added === 1 ? "" : "s"} imported`);
+      await this.readComments();
+      return added;
+    } finally {
+      useWorkspace.getState().set({ busy: false });
+    }
+  }
+  selectAnnotation(id: string) {
+    const comment = useWorkspace.getState().comments.find((item) => item.id === id);
+    if (!comment) return;
+    useWorkspace.getState().set({
+      selectedAnnotationId: id,
+      hasSelection: true,
+      sidebar: "comments",
+      page: comment.page,
+      tool: "select",
+    });
+    this.setTool("select");
+    this.goTo(comment.page);
+  }
+  private async applyAnnotationEdit(
+    input: Parameters<typeof updateAnnotation>[1],
+    status: string,
+  ) {
+    if (!this.pdf) throw new Error("Open a PDF before editing an annotation.");
+    const state = useWorkspace.getState();
+    state.set({ busy: true, status });
+    try {
+      const bytes = await this.pdf.saveDocument();
+      const updated = await updateAnnotation(bytes, input);
+      await this.replaceWithBytes(updated, status);
+      await this.readComments();
+      useWorkspace.getState().set({
+        selectedAnnotationId: input.id,
+        hasSelection: true,
+      });
+    } catch (error) {
+      useWorkspace.getState().set({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      useWorkspace.getState().set({ busy: false });
+    }
+  }
+  async updateSelectedAnnotation(
+    patch: Omit<Parameters<typeof updateAnnotation>[1], "id">,
+  ) {
+    const id = useWorkspace.getState().selectedAnnotationId;
+    if (!id) return;
+    await this.applyAnnotationEdit(
+      { id, ...patch },
+      "Annotation properties updated",
+    );
+  }
+  async moveSelectedAnnotation(dx: number, dy: number) {
+    const selected = useWorkspace
+      .getState()
+      .comments.find((item) => item.id === useWorkspace.getState().selectedAnnotationId);
+    if (!selected?.rect) return;
+    const [x1, y1, x2, y2] = selected.rect;
+    if (selected.line) {
+      const [sx, sy, ex, ey] = selected.line;
+      await this.updateSelectedAnnotation({
+        rect: [x1 + dx, y1 + dy, x2 + dx, y2 + dy],
+        line: [sx + dx, sy + dy, ex + dx, ey + dy],
+      });
+    } else {
+      await this.updateSelectedAnnotation({
+        rect: [x1 + dx, y1 + dy, x2 + dx, y2 + dy],
+      });
+    }
+  }
+  async resizeSelectedAnnotation(dw: number, dh: number) {
+    const selected = useWorkspace
+      .getState()
+      .comments.find((item) => item.id === useWorkspace.getState().selectedAnnotationId);
+    if (!selected?.rect) return;
+    const [x1, y1, x2, y2] = selected.rect;
+    const nextRect: [number, number, number, number] = [x1, y1, x2 + dw, y2 + dh];
+    if (selected.line) {
+      const [sx, sy, ex, ey] = selected.line;
+      const scaleX = x2 === x1 ? 1 : (nextRect[2] - nextRect[0]) / (x2 - x1);
+      const scaleY = y2 === y1 ? 1 : (nextRect[3] - nextRect[1]) / (y2 - y1);
+      await this.updateSelectedAnnotation({
+        rect: nextRect,
+        line: [
+          nextRect[0] + (sx - x1) * scaleX,
+          nextRect[1] + (sy - y1) * scaleY,
+          nextRect[0] + (ex - x1) * scaleX,
+          nextRect[1] + (ey - y1) * scaleY,
+        ],
+      });
+    } else {
+      await this.updateSelectedAnnotation({ rect: nextRect });
+    }
+  }
+  async deleteSelectedAnnotation() {
+    const id = useWorkspace.getState().selectedAnnotationId;
+    if (!id || !this.pdf) return;
+    useWorkspace.getState().set({ busy: true, status: "Deleting annotation" });
+    try {
+      const bytes = await this.pdf.saveDocument();
+      const deleted = await deleteAnnotation(bytes, id);
+      await this.replaceWithBytes(deleted, "Annotation deleted");
+      await this.readComments();
+      useWorkspace.getState().set({
+        selectedAnnotationId: null,
+        hasSelection: false,
+      });
+    } catch (error) {
+      useWorkspace.getState().set({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      useWorkspace.getState().set({ busy: false });
+    }
+  }
   undo() {
-    this.editor?.undo();
+    if (this.nativeCanUndo || (!this.history.canUndo() && this.editor)) {
+      this.editor?.undo();
+      return;
+    }
+    const revision = this.history.undo();
+    if (!revision) return;
+    this.updateHistoryControls();
+    void this.applyRevision(revision, "Undo").catch(() => {
+      this.history.restoreAfterFailedMove("undo");
+      this.updateHistoryControls();
+    });
   }
   redo() {
-    this.editor?.redo();
+    if (this.nativeCanRedo || (!this.history.canRedo() && this.editor)) {
+      this.editor?.redo();
+      return;
+    }
+    const revision = this.history.redo();
+    if (!revision) return;
+    this.updateHistoryControls();
+    void this.applyRevision(revision, "Redo").catch(() => {
+      this.history.restoreAfterFailedMove("redo");
+      this.updateHistoryControls();
+    });
+  }
+  seedRevision(
+    bytes: Uint8Array,
+    numPages: number,
+    description = "Opened PDF",
+    revisionId?: string,
+  ) {
+    this.history.seed({ bytes, numPages, description, revisionId });
+    this.nativeCanUndo = false;
+    this.nativeCanRedo = false;
+    this.updateHistoryControls();
+  }
+  clearRevisionHistory() {
+    this.history.clear();
+    this.nativeCanUndo = false;
+    this.nativeCanRedo = false;
+    this.updateHistoryControls();
+  }
+  markSaved(bytes: Uint8Array, numPages: number) {
+    this.history.adopt({ bytes, numPages, description: "Saved PDF" });
+    this.history.markSaved();
+    this.updateHistoryControls();
+  }
+  markUnsavedRevision() {
+    this.history.markUnsaved();
   }
   deleteSelected() {
+    if (useWorkspace.getState().selectedAnnotationId) {
+      void this.deleteSelectedAnnotation();
+      return;
+    }
     this.editor?.delete();
   }
   zoom(value: number | string) {
@@ -423,20 +997,57 @@ export class ViewerController {
       for (const raw of annotations) {
         const a = raw as {
           id: string;
+          annotationName?: string;
           subtype?: string;
           contentsObj?: { str: string };
+          rect?: number[];
+          lineCoordinates?: number[];
+          color?: ArrayLike<number>;
+          opacity?: number;
+          borderStyle?: { width?: number };
         };
-        if (a.subtype === "Text" || a.subtype === "Highlight")
-          comments.push({
-            id: a.id,
+        if (
+          a.subtype === "Text" ||
+          a.subtype === "Highlight" ||
+          a.subtype === "Underline" ||
+          a.subtype === "StrikeOut" ||
+          a.subtype === "Square" ||
+          a.subtype === "Circle" ||
+          a.subtype === "Line"
+        ) {
+          const comment: Comment = {
+            id: a.annotationName || a.id,
             page: p,
             type: a.subtype,
-            text: a.contentsObj?.str || "Highlight annotation",
-          });
+            text: a.contentsObj?.str || `${a.subtype} annotation`,
+          };
+          if (a.rect?.length === 4 && a.rect.every(finite))
+            comment.rect = [a.rect[0], a.rect[1], a.rect[2], a.rect[3]];
+          if (a.lineCoordinates?.length === 4 && a.lineCoordinates.every(finite))
+            comment.line = [
+              a.lineCoordinates[0],
+              a.lineCoordinates[1],
+              a.lineCoordinates[2],
+              a.lineCoordinates[3],
+            ];
+          if (a.color?.length === 3)
+            comment.color = [a.color[0] / 255, a.color[1] / 255, a.color[2] / 255];
+          if (a.opacity !== undefined && finite(a.opacity)) comment.opacity = a.opacity;
+          if (a.borderStyle?.width !== undefined && finite(a.borderStyle.width))
+            comment.width = a.borderStyle.width;
+          comments.push(comment);
+        }
       }
       if (p % 20 === 0)
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
-    useWorkspace.getState().set({ comments });
+    const state = useWorkspace.getState();
+    state.set({
+      comments,
+      ...(state.selectedAnnotationId &&
+      comments.some((item) => item.id === state.selectedAnnotationId)
+        ? {}
+        : { selectedAnnotationId: null, hasSelection: false }),
+    });
   }
 }

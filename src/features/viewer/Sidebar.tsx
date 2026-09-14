@@ -1,15 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   Bookmark as BookmarkIcon,
   Files,
   MessageSquare,
   Search,
+  Download,
+  Upload,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import { Thumbnails } from "./Thumbnails";
 import { SearchPanel } from "../search/SearchPanel";
 import type { ViewerController } from "./controller";
 import type { Bookmark } from "../../types/document";
+import { downloadBlob, safeFileName } from "../../utils/download";
 const tabs = [
   { id: "pages", label: "Pages", icon: Files },
   { id: "bookmarks", label: "Bookmarks", icon: BookmarkIcon },
@@ -20,7 +23,9 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
   const tab = useWorkspace((s) => s.sidebar),
     bookmarks = useWorkspace((s) => s.bookmarks),
     comments = useWorkspace((s) => s.comments),
+    selectedId = useWorkspace((s) => s.selectedAnnotationId),
     set = useWorkspace((s) => s.set);
+  const importInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (tab === "comments")
       void controller
@@ -53,6 +58,7 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
       </div>
       <h2 className="sidebar-heading">
         {tabs.find((t) => t.id === tab)?.label}
+        {tab === "comments" ? ` (${comments.length})` : ""}
       </h2>
       {tab === "pages" ? (
         <Thumbnails controller={controller} />
@@ -68,12 +74,64 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
         </div>
       ) : (
         <div className="sidebar-scroll">
+          <div className="comment-actions" aria-label="Local comment exchange">
+            <button
+              type="button"
+              className="button"
+              disabled={comments.length === 0}
+              onClick={() => {
+                try {
+                  const source = controller.exportComments();
+                  const name = useWorkspace.getState().document?.name || "document.pdf";
+                  downloadBlob(
+                    new Blob([source], { type: "application/json" }),
+                    safeFileName(`${name.replace(/\.pdf$/i, "")}-comments.json`),
+                  );
+                  set({ status: "Comments exported" });
+                } catch (error) {
+                  set({ error: error instanceof Error ? error.message : String(error) });
+                }
+              }}
+            >
+              <Download size={14} /> Export
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => importInput.current?.click()}
+            >
+              <Upload size={14} /> Import
+            </button>
+            <input
+              ref={importInput}
+              hidden
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                void file
+                  .text()
+                  .then((source) => controller.importComments(source))
+                  .then((count) => set({ status: `${count} comments imported` }))
+                  .catch((error: unknown) =>
+                    set({ error: error instanceof Error ? error.message : String(error) }),
+                  );
+              }}
+            />
+          </div>
           {comments.length ? (
             comments.map((c) => (
               <button
                 className="comment-row"
                 key={`${c.page}-${c.id}`}
-                onClick={() => controller.goTo(c.page)}
+                aria-pressed={selectedId === c.id}
+                onClick={() => {
+                  if (typeof controller.selectAnnotation === "function")
+                    controller.selectAnnotation(c.id);
+                  else controller.goTo(c.page);
+                }}
               >
                 <strong>
                   {c.type} · Page {c.page}

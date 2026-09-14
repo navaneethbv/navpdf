@@ -125,6 +125,39 @@ it("keeps edits in the workspace when saving fails", async () => {
   });
 });
 
+it("restores the dirty guard when a pending editor save fails", async () => {
+  loadedDocument();
+  useWorkspace.getState().set({
+    document: doc,
+    dirty: false,
+    info: {
+      pages: 2,
+      encrypted: false,
+      title: "",
+      author: "",
+      version: "1.7",
+    },
+  });
+  const commitOrRemove = vi.fn();
+  (controller as unknown as { editor: unknown }).editor = { commitOrRemove };
+  (controller as unknown as { pdf: unknown }).pdf = {
+    saveDocument: vi.fn(async () => new Uint8Array([1])),
+    numPages: 2,
+  };
+  vi.mocked(desktop.saveDocument).mockRejectedValueOnce(new Error("disk full"));
+
+  await act(async () => {
+    expect(await session.save()).toBe(false);
+  });
+
+  expect(commitOrRemove).toHaveBeenCalled();
+  expect(useWorkspace.getState()).toMatchObject({
+    dirty: true,
+    status: "Save failed; changes are still in this workspace",
+  });
+  expect(desktop.markDirty).toHaveBeenCalledWith(true);
+});
+
 it("writes recovery copies on the autosave interval", async () => {
   loadedDocument();
   useWorkspace.getState().set({

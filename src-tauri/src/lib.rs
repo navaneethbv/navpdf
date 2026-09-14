@@ -1,7 +1,10 @@
 mod commands;
+pub mod engine;
 mod filesystem;
 mod logging;
+pub mod ocr;
 mod security;
+mod signatures;
 use commands::*;
 use std::{collections::HashMap, fs, sync::Mutex};
 use tauri::{
@@ -30,6 +33,7 @@ pub fn run() {
                 root,
                 dirty: Mutex::new(false),
                 saving: Mutex::new(false),
+                engine: commands::engine::EngineState::default(),
             });
             let file = SubmenuBuilder::new(app, "File")
                 .text("open", "Open PDF...")
@@ -42,7 +46,10 @@ pub fn run() {
                 .text("undo", "Undo")
                 .text("redo", "Redo")
                 .separator()
+                // WebKit text fields only receive Cut and Paste through these responder items.
+                .cut()
                 .copy()
+                .paste()
                 .select_all()
                 .build()?;
             let view = SubmenuBuilder::new(app, "View")
@@ -118,6 +125,8 @@ pub fn run() {
             read_range,
             close_document,
             save_document,
+            commit_working_revision,
+            get_revision,
             local_state,
             save_preferences,
             clear_recents,
@@ -126,7 +135,27 @@ pub fn run() {
             open_recovery,
             discard_recovery,
             mark_dirty,
-            close_window
+            close_window,
+            load_signatures,
+            save_signature,
+            delete_signature,
+            migrate_signatures,
+            ocr_recognize_page,
+            ocr_get_engine_info,
+            commands::engine::engine_stage,
+            commands::engine::engine_take,
+            commands::engine::engine_discard,
+            commands::engine::engine_cancel,
+            commands::engine::engine_redact,
+            commands::engine::engine_compress,
+            commands::engine::engine_inspect_page,
+            commands::engine::engine_edit,
+            commands::engine::engine_save_protected,
+            commands::engine::engine_unlock,
+            commands::engine::engine_choose_certificate,
+            commands::engine::engine_forget_certificate,
+            commands::engine::engine_save_signed,
+            commands::engine::engine_verify_signatures
         ])
         .build(tauri::generate_context!());
     match result {

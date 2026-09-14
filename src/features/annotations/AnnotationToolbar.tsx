@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import type { TextMarkupKind } from "../../services/document-commands";
+import type { ShapeKind } from "../../types/document";
 
 const colors = [
   { label: "Yellow", hex: "#f5cf58" },
@@ -22,9 +24,6 @@ const colors = [
   { label: "Accent", hex: "#25604b" },
   { label: "Red", hex: "#ef4444" },
 ];
-
-const PENDING_M2 =
-  "Not yet available: needs the M2 native annotation adapter. Only highlight, freehand ink, and text boxes are supported right now.";
 
 export function AnnotationToolbar({
   controller,
@@ -36,8 +35,25 @@ export function AnnotationToolbar({
   const s = useWorkspace();
 
   const handleSetTool = (tool: "highlight" | "draw" | "text" | "select") => {
-    s.set({ tool });
+    s.set({ tool, selectedAnnotationId: null, hasSelection: false });
     controller?.setTool(tool);
+  };
+
+  const applyTextMarkup = (kind: TextMarkupKind) => {
+    void controller?.addTextMarkup(kind).catch((error: unknown) => {
+      s.set({ error: error instanceof Error ? error.message : String(error) });
+    });
+  };
+
+  const selectShape = (shapeKind: ShapeKind) => {
+    controller?.setTool("select");
+    s.set({
+      shapeKind,
+      tool: "shape",
+      activeModal: "annotations",
+      selectedAnnotationId: null,
+      hasSelection: false,
+    });
   };
 
   return (
@@ -50,10 +66,18 @@ export function AnnotationToolbar({
         >
           <Highlighter size={16} />
         </button>
-        <button title={`Underline Text. ${PENDING_M2}`} disabled aria-disabled="true">
+        <button
+          title="Underline Text"
+          disabled={!controller || s.busy || !!s.info?.encrypted}
+          onClick={() => applyTextMarkup("Underline")}
+        >
           <Underline size={16} />
         </button>
-        <button title={`Strike-through Text. ${PENDING_M2}`} disabled aria-disabled="true">
+        <button
+          title="Strike-through Text"
+          disabled={!controller || s.busy || !!s.info?.encrypted}
+          onClick={() => applyTextMarkup("StrikeOut")}
+        >
           <Strikethrough size={16} />
         </button>
         <button
@@ -70,7 +94,11 @@ export function AnnotationToolbar({
         >
           <Type size={16} />
         </button>
-        <button title={`Sticky Note / Comment. ${PENDING_M2}`} disabled aria-disabled="true">
+        <button
+          title="Sticky Note / Comment"
+          disabled={!controller || s.busy || !!s.info?.encrypted}
+          onClick={() => s.set({ activeModal: "sticky-note" })}
+        >
           <MessageSquarePlus size={16} />
         </button>
       </div>
@@ -78,16 +106,36 @@ export function AnnotationToolbar({
       <div className="divider-vert" />
 
       <div className="tool-group">
-        <button title={`Rectangle Shape. ${PENDING_M2}`} disabled aria-disabled="true">
+        <button
+          title="Rectangle Shape"
+          disabled={!controller || s.busy || !!s.info?.encrypted}
+          onClick={() => selectShape("Square")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "Square"}
+        >
           <Square size={16} />
         </button>
-        <button title={`Circle / Ellipse. ${PENDING_M2}`} disabled aria-disabled="true">
+        <button
+          title="Circle / Ellipse"
+          disabled={!controller || s.busy || !!s.info?.encrypted}
+          onClick={() => selectShape("Circle")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "Circle"}
+        >
           <Circle size={16} />
         </button>
-        <button title={`Line. ${PENDING_M2}`} disabled aria-disabled="true">
+        <button
+          title="Line"
+          disabled={!controller || s.busy || !!s.info?.encrypted}
+          onClick={() => selectShape("Line")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "Line"}
+        >
           <Minus size={16} />
         </button>
-        <button title={`Arrow. ${PENDING_M2}`} disabled aria-disabled="true">
+        <button
+          title="Arrow"
+          disabled={!controller || s.busy || !!s.info?.encrypted}
+          onClick={() => selectShape("Arrow")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "Arrow"}
+        >
           <ArrowRight size={16} />
         </button>
       </div>

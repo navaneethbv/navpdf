@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { native, printDocument } from "../../services/native";
 import { Printer, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
@@ -17,6 +17,47 @@ export function PrintDialog({
   const [rangeMode, setRangeMode] = useState<RangeMode>("all");
   const [customRange, setCustomRange] = useState("");
   const [printing, setPrinting] = useState(false);
+  const [hasMixedDimensions, setHasMixedDimensions] = useState(false);
+  const [mixedDimensionsNote, setMixedDimensionsNote] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const pdf = controller?.pdf;
+    if (!pdf) return;
+    void (async () => {
+      try {
+        const total = pdf.numPages;
+        if (total <= 1) return;
+        let firstW = 0;
+        let firstH = 0;
+        let isMixed = false;
+        for (let i = 1; i <= Math.min(total, 50); i++) {
+          const p = await pdf.getPage(i);
+          const vp = p.getViewport({ scale: 1 });
+          const w = Math.round(vp.width);
+          const h = Math.round(vp.height);
+          if (i === 1) {
+            firstW = w;
+            firstH = h;
+          } else if (w !== firstW || h !== firstH) {
+            isMixed = true;
+            break;
+          }
+        }
+        if (!cancelled && isMixed) {
+          setHasMixedDimensions(true);
+          setMixedDimensionsNote(
+            "Document contains pages with mixed dimensions or orientations. Each page will print using its respective size.",
+          );
+        }
+      } catch {
+        // Non-fatal dimension check
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [controller]);
 
   const handlePrint = async () => {
     if (!controller?.pdf) return;
@@ -131,6 +172,12 @@ export function PrintDialog({
             Orientation, scale, and destination are chosen in the system print
             dialog that opens next.
           </p>
+
+          {hasMixedDimensions && (
+            <p className="structure-warning" role="status" style={{ marginTop: 12 }}>
+              {mixedDimensionsNote}
+            </p>
+          )}
         </div>
 
         <div className="modal-footer">

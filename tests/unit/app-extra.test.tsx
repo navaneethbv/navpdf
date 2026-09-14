@@ -78,6 +78,20 @@ vi.mock("../../src/services/native", () => ({
   saveDocument: vi.fn(async () => ({ name: "test.pdf", size: 100 })),
   savePreferences: vi.fn(async () => {}),
   clearRecents: vi.fn(async () => {}),
+  ocrRecognizePage: vi.fn(async () => ({
+    pageIndex: 0,
+    language: "en-US",
+    lines: [],
+    fullText: "",
+    meanConfidence: 1.0,
+  })),
+  ocrGetEngineInfo: vi.fn(async () => ({
+    engine: "apple_vision",
+    name: "Apple Vision Framework",
+    supportedLanguages: ["en-US"],
+    isAvailable: true,
+    offlineOnly: true,
+  })),
 }));
 
 vi.mock("../../src/services/pdf", () => ({
@@ -133,6 +147,11 @@ beforeEach(() => {
 });
 
 describe("App keyboard and menus", () => {
+  it("applies the system theme preference", () => {
+    render(<App />);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
   it("handles file shortcuts and navigation keys", () => {
     seedDocument();
     render(<App />);

@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import { ViewerController } from "./controller";
 import { useWorkspace } from "../../stores/workspace";
+import { ShapeTool } from "../annotations/ShapeTool";
+import { AnnotationSelectionLayer } from "../annotations/AnnotationSelectionLayer";
 export function ViewerHost({
   onReady,
+  controller,
 }: {
   onReady: (controller: ViewerController) => void;
+  controller?: ViewerController | null;
 }) {
   const container = useRef<HTMLDivElement>(null),
     pages = useRef<HTMLDivElement>(null);
@@ -106,6 +110,12 @@ export function ViewerHost({
       >
         <div ref={pages} className="pdfViewer" />
       </div>
+      {hasDocument && tool === "shape" && controller && (
+        <ShapeTool controller={controller} />
+      )}
+      {hasDocument && tool === "select" && controller && (
+        <AnnotationSelectionLayer controller={controller} />
+      )}
     </div>
   );
 }

@@ -78,6 +78,20 @@ vi.mock("../../src/services/native", () => ({
   saveDocument: vi.fn(async () => ({ name: "test.pdf", size: 100 })),
   savePreferences: vi.fn(async () => {}),
   clearRecents: vi.fn(async () => {}),
+  ocrRecognizePage: vi.fn(async () => ({
+    pageIndex: 0,
+    language: "en-US",
+    lines: [],
+    fullText: "",
+    meanConfidence: 1.0,
+  })),
+  ocrGetEngineInfo: vi.fn(async () => ({
+    engine: "apple_vision",
+    name: "Apple Vision Framework",
+    supportedLanguages: ["en-US"],
+    isAvailable: true,
+    offlineOnly: true,
+  })),
 }));
 
 vi.mock("../../src/services/pdf", () => ({
@@ -167,14 +181,14 @@ describe("App shell", () => {
       ["attachments", "File Attachments"],
       ["forms", "Prepare Form Fields"],
       ["fill-sign", "Fill & Sign"],
-      ["ocr", "Scan & Text Extraction"],
+      ["ocr", "Optical Character Recognition (OCR)"],
       ["convert", "Export Document"],
       ["office-export", "Export to Office Formats"],
       ["redact", "Redact Sensitive Content"],
       ["compress", "Compress PDF"],
       ["protect", "Password Protect PDF"],
       ["design", "Generate Cover Page"],
-      ["assistant", "Intelligent Document Tools"],
+      ["assistant", "Find and Cite Passages"],
     ];
     for (const [modal, heading] of modals) {
       act(() => {

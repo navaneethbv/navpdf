@@ -1,13 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog } from "../../components/Dialog";
 import { useWorkspace } from "../../stores/workspace";
 import { savePreferences, localState } from "../../services/native";
 import type { Preferences } from "../../types/document";
+import { applyTheme } from "../../services/theme";
 export function Settings() {
   const initial = useWorkspace((s) => s.local.preferences),
+    persistedTheme = useWorkspace((s) => s.local.preferences.theme),
     set = useWorkspace((s) => s.set);
   const [preferences, update] = useState<Preferences>(initial),
     [error, setError] = useState("");
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    applyTheme(preferences.theme, media.matches);
+    return () => applyTheme(persistedTheme, media.matches);
+  }, [preferences.theme, persistedTheme]);
   const patch = (value: Partial<Preferences>) =>
     update({ ...preferences, ...value });
   return (
@@ -29,9 +36,10 @@ export function Settings() {
         }}
       >
         <h3>Appearance</h3>
-        <label>
+        <label htmlFor="settings-theme">
           Theme
           <select
+            id="settings-theme"
             value={preferences.theme}
             onChange={(e) =>
               patch({ theme: e.target.value as Preferences["theme"] })
@@ -41,6 +49,10 @@ export function Settings() {
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>
+          <span className="field-hint">
+            System follows the macOS appearance. Light and dark keep NavPDF
+            consistent regardless of the system setting.
+          </span>
         </label>
         <h3>PDF viewing</h3>
         <div className="form-columns">

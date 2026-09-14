@@ -6,8 +6,9 @@ import {
   PDFString,
   degrees,
 } from "pdf-lib";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
+import sharp from "sharp";
 const target = path.resolve("tests/pdf-fixtures");
 await mkdir(target, { recursive: true });
 for (const count of [5, 100, 500, 1000]) {
@@ -118,6 +119,51 @@ await writeFile(
   path.join(target, "damaged.pdf"),
   "%PDF-1.7\nThis file deliberately has no PDF objects or cross-reference table.",
 );
+
+// Generate OCR evaluation fixture
+const corpusJson = JSON.parse(
+  await readFile(path.join(target, "ocr-evaluation-corpus.json"), "utf8"),
+);
+const ocrDoc = await PDFDocument.create();
+ocrDoc.setTitle("NavPDF OCR evaluation corpus fixture");
+const ocrFont = await ocrDoc.embedFont(StandardFonts.Helvetica);
+
+for (const sample of corpusJson.samples) {
+  const width = sample.pageWidth || 612;
+  const height = sample.pageHeight || 792;
+  const page = ocrDoc.addPage([width, height]);
+  if (sample.rotation) {
+    page.setRotation(degrees(sample.rotation));
+  }
+
+  if (sample.hasExistingText) {
+    page.drawText(sample.digitalText, {
+      x: 54,
+      y: height - 60,
+      size: 16,
+      font: ocrFont,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+  }
+
+  const scanHeight = sample.hasExistingText ? height - 120 : height;
+  const scanSvg = `<svg width="${width}" height="${scanHeight}">
+    <rect width="100%" height="100%" fill="${sample.category === "low-contrast" ? "#e2e2e2" : "#ffffff"}"/>
+    <text x="54" y="60" font-family="sans-serif" font-size="14" fill="${sample.category === "low-contrast" ? "#666666" : "#111111"}">
+      ${sample.referenceText}
+    </text>
+  </svg>`;
+  const pngBuffer = await sharp(Buffer.from(scanSvg)).png().toBuffer();
+  const embeddedImg = await ocrDoc.embedPng(pngBuffer);
+  page.drawImage(embeddedImg, {
+    x: 0,
+    y: 0,
+    width,
+    height: scanHeight,
+  });
+}
+await writeFile(path.join(target, "ocr-scans.pdf"), await ocrDoc.save());
+
 console.log(
-  "Created reader, forms, annotation, rotation, dimension, and damaged fixtures.",
+  "Created reader, forms, annotation, rotation, dimension, damaged, and OCR fixtures.",
 );

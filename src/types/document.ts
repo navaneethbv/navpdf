@@ -7,14 +7,17 @@ export type Tool =
   | "ink"
   | "draw"
   | "text"
+  | "shape"
   | "signature"
   | "snapshot";
+export type ShapeKind = "Square" | "Circle" | "Line" | "Arrow";
 export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "tools";
 export interface DocumentDescriptor {
   unsaved?: boolean;
   id: string;
   name: string;
   size: number;
+  revisionId?: string;
 }
 export interface SaveResult {
   name: string;
@@ -56,10 +59,17 @@ export interface Comment {
   page: number;
   type: string;
   text: string;
+  rect?: [number, number, number, number];
+  line?: [number, number, number, number];
+  color?: [number, number, number];
+  opacity?: number;
+  width?: number;
 }
 export interface DocumentInfo {
   pages: number;
   encrypted: boolean;
+  /** An unlocked working copy of a password-protected file; saving asks how to protect it. */
+  protectedSource?: boolean;
   title: string;
   author: string;
   version: string;

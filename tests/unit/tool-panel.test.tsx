@@ -49,7 +49,7 @@ describe("ToolPanel", () => {
     unmount();
     render(<ToolPanel mode="convert" onClose={() => {}} />);
     expect(screen.queryByText("Add Text")).toBeNull();
-    expect(screen.getByText(/Table Data/)).toBeTruthy();
+    expect(screen.getByText(/Excel Workbook/)).toBeTruthy();
   });
 
   it("runs the tool action and closes the panel", () => {

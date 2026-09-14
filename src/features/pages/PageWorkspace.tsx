@@ -24,6 +24,9 @@ import {
   cropPages,
   splitDocument,
   describeStructureLoss,
+  computeDeleteMapping,
+  computeInsertMapping,
+  computeReorderMapping,
 } from "../../services/document-commands";
 import { downloadBytes } from "../../utils/download";
 import type { ViewerController } from "../viewer/controller";
@@ -37,6 +40,9 @@ export function PageWorkspace({
 }) {
   const s = useWorkspace();
   const [selected, setSelected] = useState<number[]>([s.page - 1]);
+  const [focusedIndex, setFocusedIndex] = useState(Math.max(0, Math.min(s.page - 1, (s.info?.pages || 1) - 1)));
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [cropWidth, setCropWidth] = useState(500);
   const [cropHeight, setCropHeight] = useState(700);
@@ -44,7 +50,12 @@ export function PageWorkspace({
   const [showSplit, setShowSplit] = useState(false);
   const [splitRange, setSplitRange] = useState("1-2, 3-4");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [structureLoss, setStructureLoss] = useState("");
+
+  useEffect(() => {
+    containerRef.current?.focus();
+  }, []);
 
   // Extraction and splitting compose a new document, so the source catalog
   // (bookmarks, form fields) cannot carry over. Say so before the action.
@@ -93,6 +104,7 @@ export function PageWorkspace({
   const mutate = async (
     operation: (bytes: Uint8Array) => Promise<Uint8Array>,
     status: string,
+    options?: { pageMapping?: number[]; warnings?: string[] },
   ) => {
     if (!controller?.pdf) return;
     setBusy(true);
@@ -100,7 +112,7 @@ export function PageWorkspace({
     try {
       const currentBytes = await controller.pdf.saveDocument();
       const newBytes = await operation(currentBytes);
-      await controller.replaceWithBytes(newBytes, status);
+      await controller.replaceWithBytes(newBytes, status, options);
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -123,11 +135,35 @@ export function PageWorkspace({
       s.set({ error: "Cannot delete all pages. At least one page must remain." });
       return;
     }
+    const delSet = new Set(selected);
+    const surviving = pagesList.filter((p) => !delSet.has(p));
+    const nextSelectedIndex = surviving.length > 0
+      ? Math.min(Math.max(0, selected[0]), surviving.length - 1)
+      : 0;
+
     await mutate(
       (bytes) => deletePages(bytes, selected),
       `Deleted ${selected.length} page(s)`,
+      { pageMapping: computeDeleteMapping(totalPages, selected) },
     );
-    setSelected([]);
+    setSelected([nextSelectedIndex]);
+    setFocusedIndex(nextSelectedIndex);
+    s.set({ page: nextSelectedIndex + 1 });
+  };
+
+  const handleDropReorder = async (from: number, to: number) => {
+    if (from === to || from < 0 || from >= totalPages || to < 0 || to >= totalPages) return;
+    const newOrder = [...pagesList];
+    const [moved] = newOrder.splice(from, 1);
+    newOrder.splice(to, 0, moved);
+    await mutate(
+      (bytes) => reorderPages(bytes, newOrder),
+      `Page ${from + 1} moved to position ${to + 1}`,
+      { pageMapping: computeReorderMapping(newOrder) },
+    );
+    setSelected([to]);
+    setFocusedIndex(to);
+    s.set({ page: to + 1 });
   };
 
   const handleMove = async (direction: -1 | 1) => {
@@ -135,11 +171,7 @@ export function PageWorkspace({
     const cur = selected[0];
     const target = cur + direction;
     if (target < 0 || target >= totalPages) return;
-    const newOrder = [...pagesList];
-    newOrder[cur] = target;
-    newOrder[target] = cur;
-    await mutate((bytes) => reorderPages(bytes, newOrder), "Page moved");
-    setSelected([target]);
+    await handleDropReorder(cur, target);
   };
 
   const handleExtract = async () => {
@@ -159,7 +191,14 @@ export function PageWorkspace({
 
   const handleInsertBlank = async () => {
     const at = selected.length > 0 ? selected[0] + 1 : totalPages;
-    await mutate((bytes) => insertBlankPage(bytes, at), "Blank page inserted");
+    await mutate(
+      (bytes) => insertBlankPage(bytes, at),
+      "Blank page inserted",
+      { pageMapping: computeInsertMapping(totalPages, at, 1) },
+    );
+    setSelected([at]);
+    setFocusedIndex(at);
+    s.set({ page: at + 1 });
   };
 
   const handleInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,7 +211,11 @@ export function PageWorkspace({
     await mutate(
       (docBytes) => insertImagePage(docBytes, at, bytes, type),
       "Image page inserted",
+      { pageMapping: computeInsertMapping(totalPages, at, 1) },
     );
+    setSelected([at]);
+    setFocusedIndex(at);
+    s.set({ page: at + 1 });
   };
 
   const handleCrop = async () => {
@@ -212,8 +255,86 @@ export function PageWorkspace({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (busy) return;
+    if (e.key === "Escape") {
+      if (showCrop) setShowCrop(false);
+      else if (showSplit) setShowSplit(false);
+      else onClose();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      selectAll();
+      return;
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.max(0, focusedIndex - 1);
+      setFocusedIndex(next);
+      if (e.shiftKey) {
+        const start = Math.min(focusedIndex, next);
+        const end = Math.max(focusedIndex, next);
+        const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+        setSelected(Array.from(new Set([...selected, ...range])));
+      } else {
+        setSelected([next]);
+      }
+      return;
+    }
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.min(totalPages - 1, focusedIndex + 1);
+      setFocusedIndex(next);
+      if (e.shiftKey) {
+        const start = Math.min(focusedIndex, next);
+        const end = Math.max(focusedIndex, next);
+        const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+        setSelected(Array.from(new Set([...selected, ...range])));
+      } else {
+        setSelected([next]);
+      }
+      return;
+    }
+    if (e.key === " " || e.key === "Spacebar") {
+      e.preventDefault();
+      if (selected.includes(focusedIndex)) {
+        setSelected(selected.filter((i) => i !== focusedIndex));
+      } else {
+        setSelected([...selected, focusedIndex]);
+      }
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      s.set({ page: focusedIndex + 1 });
+      onClose();
+      return;
+    }
+    if (e.key === "Delete" || e.key === "Backspace") {
+      if (selected.length > 0 && selected.length < totalPages) {
+        e.preventDefault();
+        void handleDelete();
+      }
+      return;
+    }
+    if (e.key.toLowerCase() === "r") {
+      e.preventDefault();
+      if (e.shiftKey) void handleRotate(-90);
+      else void handleRotate(90);
+      return;
+    }
+  };
+
   return (
-    <div className="page-workspace-modal">
+    <div
+      className="page-workspace-modal"
+      role="region"
+      aria-label="Page Workspace"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      ref={containerRef}
+    >
       <div className="page-workspace-header">
         <div className="page-workspace-actions">
           <h2>Organize Pages</h2>
@@ -351,14 +472,46 @@ export function PageWorkspace({
         </div>
       )}
 
-      <div className="page-workspace-grid">
+      <div className="page-workspace-grid" role="grid" aria-label="Pages grid">
         {pagesList.map((pageNum) => {
           const isSelected = selected.includes(pageNum);
+          const isFocused = focusedIndex === pageNum;
+          const isDragOver = dragOverIndex === pageNum;
           return (
             <div
               key={pageNum}
-              className={`page-grid-item ${isSelected ? "selected" : ""}`}
-              onClick={(e) => toggleSelect(pageNum, e)}
+              role="gridcell"
+              aria-selected={isSelected}
+              tabIndex={isFocused ? 0 : -1}
+              draggable={!busy}
+              onDragStart={(e) => {
+                setDraggedIndex(pageNum);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", String(pageNum));
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dragOverIndex !== pageNum) setDragOverIndex(pageNum);
+              }}
+              onDragLeave={() => {
+                if (dragOverIndex === pageNum) setDragOverIndex(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverIndex(null);
+                const fromStr = e.dataTransfer.getData("text/plain");
+                const from = fromStr ? parseInt(fromStr, 10) : draggedIndex;
+                if (from !== null && from !== undefined && !isNaN(from)) {
+                  void handleDropReorder(from, pageNum);
+                }
+                setDraggedIndex(null);
+              }}
+              className={`page-grid-item ${isSelected ? "selected" : ""} ${isFocused ? "focused" : ""} ${isDragOver ? "drag-over" : ""}`}
+              onClick={(e) => {
+                setFocusedIndex(pageNum);
+                toggleSelect(pageNum, e);
+              }}
             >
               <div className="page-card-preview">
                 <div className="page-card-placeholder">

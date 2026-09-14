@@ -60,8 +60,10 @@ vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
 }));
 
 vi.mock("../../src/services/native", () => ({
+  native: false,
   markDirty: vi.fn(async () => {}),
   rememberPage: vi.fn(async () => {}),
+  commitWorkingRevision: vi.fn(async () => "rev-mock"),
 }));
 
 vi.mock("../../src/services/pdf", () => ({

@@ -8,17 +8,25 @@ import {
   Minus,
   Trash2,
   Plus,
+  Upload,
+  ShieldCheck,
+  AlertTriangle,
+  Lock,
+  Clock,
 } from "lucide-react";
 import { PDFDocument, rgb } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-
-interface SavedSignature {
-  id: string;
-  dataUrl: string;
-  name: string;
-  type: "signature" | "initials";
-}
+import {
+  fetchSignatureLibrary,
+  persistOrStageSignature,
+  removeSignature,
+  hasLegacyPlaintextSignatures,
+  migrateLegacySignatures,
+  getSessionSignatures,
+  getLegacyPlaintextSignatures,
+} from "../../services/signature-store";
+import type { SavedSignature } from "../../services/native";
 
 export function FillAndSign({
   controller,
@@ -28,32 +36,48 @@ export function FillAndSign({
   onClose: () => void;
 }) {
   const s = useWorkspace();
-  const [tab, setTab] = useState<"library" | "draw" | "type" | "marks">("library");
-  const [signatures, setSignatures] = useState<SavedSignature[]>([]);
+  const [tab, setTab] = useState<"library" | "draw" | "type" | "import" | "marks">("library");
+  const [signatures, setSignatures] = useState<SavedSignature[]>(() => {
+    const sessionList = getSessionSignatures();
+    const legacy = getLegacyPlaintextSignatures();
+    return [...sessionList, ...legacy];
+  });
   const [typedName, setTypedName] = useState("");
   const [targetPage, setTargetPage] = useState(s.page);
   const [selectedSig, setSelectedSig] = useState<SavedSignature | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sessionOnly, setSessionOnly] = useState(false);
+  const [sigType, setSigType] = useState<"signature" | "initials">("signature");
+  const [legacyMigrationPrompt, setLegacyMigrationPrompt] = useState(false);
+  const [storeError, setStoreError] = useState<string | null>(null);
+  const [posX, setPosX] = useState(60);
+  const [posY, setPosY] = useState(150);
+  const [sigWidth, setSigWidth] = useState(160);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isDrawing = useRef(false);
 
+  const refreshLibrary = async () => {
+    const { signatures: list, error } = await fetchSignatureLibrary();
+    setSignatures(list);
+    if (error) setStoreError(error);
+  };
+
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("navpdf-signatures");
-      if (stored) setSignatures(JSON.parse(stored));
-    } catch {
-      // ignore
+    void refreshLibrary();
+    if (hasLegacyPlaintextSignatures()) {
+      setLegacyMigrationPrompt(true);
     }
   }, []);
 
-  const saveToStorage = (sigs: SavedSignature[]) => {
-    setSignatures(sigs);
-    try {
-      localStorage.setItem("navpdf-signatures", JSON.stringify(sigs));
-    } catch {
-      // ignore
+  const handleMigrate = async (confirmed: boolean) => {
+    const result = await migrateLegacySignatures(confirmed);
+    setLegacyMigrationPrompt(false);
+    if (result.error) {
+      s.set({ error: result.error });
     }
+    await refreshLibrary();
   };
 
   // Canvas drawing handlers
@@ -93,22 +117,22 @@ export function FillAndSign({
     ctx?.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  const handleSaveDrawn = () => {
+  const handleSaveDrawn = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dataUrl = canvas.toDataURL("image/png");
-    const newSig: SavedSignature = {
-      id: crypto.randomUUID(),
-      dataUrl,
-      name: `Signature ${signatures.length + 1}`,
-      type: "signature",
-    };
-    saveToStorage([...signatures, newSig]);
-    setSelectedSig(newSig);
+    const name = `${sigType === "initials" ? "Initials" : "Signature"} ${signatures.length + 1}`;
+    const { signature, error } = await persistOrStageSignature(name, sigType, dataUrl, sessionOnly);
+    if (error) {
+      s.set({ error });
+      return;
+    }
+    await refreshLibrary();
+    setSelectedSig(signature);
     setTab("library");
   };
 
-  const handleSaveTyped = () => {
+  const handleSaveTyped = async () => {
     if (!typedName.trim()) return;
     const canvas = document.createElement("canvas");
     canvas.width = 400;
@@ -120,21 +144,51 @@ export function FillAndSign({
       ctx.fillText(typedName, 20, 75);
     }
     const dataUrl = canvas.toDataURL("image/png");
-    const newSig: SavedSignature = {
-      id: crypto.randomUUID(),
-      dataUrl,
-      name: typedName,
-      type: "signature",
-    };
-    saveToStorage([...signatures, newSig]);
-    setSelectedSig(newSig);
+    const { signature, error } = await persistOrStageSignature(typedName, sigType, dataUrl, sessionOnly);
+    if (error) {
+      s.set({ error });
+      return;
+    }
+    await refreshLibrary();
+    setSelectedSig(signature);
     setTab("library");
   };
 
-  const handleDelete = (id: string) => {
-    const next = signatures.filter((s) => s.id !== id);
-    saveToStorage(next);
-    if (selectedSig?.id === id) setSelectedSig(null);
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+        }
+        const dataUrl = canvas.toDataURL("image/png");
+        const name = file.name.replace(/\.[^.]+$/, "");
+        const { signature, error } = await persistOrStageSignature(name, sigType, dataUrl, sessionOnly);
+        if (error) {
+          s.set({ error });
+          return;
+        }
+        await refreshLibrary();
+        setSelectedSig(signature);
+        setTab("library");
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDelete = async (sig: SavedSignature) => {
+    setSignatures((prev) => prev.filter((s) => s.id !== sig.id));
+    if (selectedSig?.id === sig.id) setSelectedSig(null);
+    await removeSignature(sig.id, sig.sessionOnly);
+    await refreshLibrary();
   };
 
   const handlePlaceSignature = async () => {
@@ -152,19 +206,19 @@ export function FillAndSign({
       const page = doc.getPage(pageIndex);
       const { height } = page.getSize();
 
-      const width = 160;
+      const width = sigWidth;
       const aspect = img.height / img.width;
       const sigHeight = width * aspect;
 
       page.drawImage(img, {
-        x: 60,
-        y: height - 200,
+        x: posX,
+        y: Math.max(10, height - posY - sigHeight),
         width,
         height: sigHeight,
       });
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(newBytes, "Signature placed on page");
+      await controller.replaceWithBytes(newBytes, "Signature appearance placed on page");
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -182,42 +236,53 @@ export function FillAndSign({
       const pageIndex = Math.max(0, Math.min(targetPage - 1, doc.getPageCount() - 1));
       const page = doc.getPage(pageIndex);
       const { height } = page.getSize();
+      const y = Math.max(20, height - posY);
+      const x = posX;
 
       if (symbol === "check") {
-        // Vector checkmark (text glyphs outside WinAnsi would throw).
-        const y = height - 120;
         page.drawLine({
-          start: { x: 60, y: y - 6 },
-          end: { x: 68, y: y - 14 },
+          start: { x, y: y - 6 },
+          end: { x: x + 8, y: y - 14 },
           thickness: 2.5,
           color: rgb(0.1, 0.5, 0.2),
         });
         page.drawLine({
-          start: { x: 68, y: y - 14 },
-          end: { x: 84, y },
+          start: { x: x + 8, y: y - 14 },
+          end: { x: x + 24, y },
           thickness: 2.5,
           color: rgb(0.1, 0.5, 0.2),
         });
       } else if (symbol === "cross") {
-        const y = height - 120;
         page.drawLine({
-          start: { x: 60, y },
-          end: { x: 76, y: y - 16 },
+          start: { x, y },
+          end: { x: x + 16, y: y - 16 },
           thickness: 2.5,
           color: rgb(0.8, 0.1, 0.1),
         });
         page.drawLine({
-          start: { x: 60, y: y - 16 },
-          end: { x: 76, y },
+          start: { x, y: y - 16 },
+          end: { x: x + 16, y },
           thickness: 2.5,
           color: rgb(0.8, 0.1, 0.1),
         });
       } else if (symbol === "dot") {
-        page.drawCircle({ x: 60, y: height - 120, size: 5, color: rgb(0.1, 0.1, 0.1) });
+        page.drawCircle({ x: x + 5, y: y - 5, size: 5, color: rgb(0.1, 0.1, 0.1) });
       } else if (symbol === "box") {
-        page.drawRectangle({ x: 60, y: height - 120, width: 20, height: 20, borderColor: rgb(0.1, 0.1, 0.1), borderWidth: 1.5 });
+        page.drawRectangle({
+          x,
+          y: y - 20,
+          width: 20,
+          height: 20,
+          borderColor: rgb(0.1, 0.1, 0.1),
+          borderWidth: 1.5,
+        });
       } else if (symbol === "line") {
-        page.drawLine({ start: { x: 60, y: height - 120 }, end: { x: 180, y: height - 120 }, thickness: 1.5, color: rgb(0.1, 0.1, 0.1) });
+        page.drawLine({
+          start: { x, y },
+          end: { x: x + 120, y },
+          thickness: 1.5,
+          color: rgb(0.1, 0.1, 0.1),
+        });
       }
 
       const newBytes = await doc.save();
@@ -234,7 +299,12 @@ export function FillAndSign({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Fill and Sign">
+    <div
+      className="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Fill and Sign"
+    >
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -246,26 +316,107 @@ export function FillAndSign({
           </button>
         </div>
 
+        {s.hasDigitalSignature && (
+          <div
+            style={{
+              padding: "10px 16px",
+              background: "rgba(220, 100, 30, 0.12)",
+              borderBottom: "1px solid rgba(220, 100, 30, 0.3)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "13px",
+              color: "var(--text-color)",
+            }}
+          >
+            <AlertTriangle size={18} color="#dc641e" />
+            <span>
+              This document contains an existing digital signature. Placing appearances or edits will invalidate it.
+            </span>
+          </div>
+        )}
+
+        {legacyMigrationPrompt && (
+          <div
+            style={{
+              padding: "12px 16px",
+              background: "rgba(37, 96, 75, 0.1)",
+              borderBottom: "1px solid rgba(37, 96, 75, 0.2)",
+              fontSize: "13px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <ShieldCheck size={18} color="#25604b" />
+              <strong>Plaintext signatures detected</strong>
+            </div>
+            <p style={{ margin: "0 0 10px 0" }}>
+              Previous versions stored reusable signatures unencrypted in local storage. Would you like to migrate them to OS-protected encrypted storage?
+            </p>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                className="button-primary"
+                style={{ padding: "4px 10px", fontSize: "12px" }}
+                onClick={() => handleMigrate(true)}
+              >
+                Migrate to Secure Storage
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                style={{ padding: "4px 10px", fontSize: "12px" }}
+                onClick={() => handleMigrate(false)}
+              >
+                Discard Plaintext
+              </button>
+            </div>
+          </div>
+        )}
+
+        {storeError && (
+          <div
+            style={{
+              padding: "8px 16px",
+              background: "rgba(200, 40, 40, 0.1)",
+              color: "var(--color-danger, #d32f2f)",
+              fontSize: "12px",
+            }}
+          >
+            {storeError}
+          </div>
+        )}
+
         <div className="tab-buttons-bar">
           <button
+            type="button"
             className={tab === "library" ? "active" : ""}
             onClick={() => setTab("library")}
           >
             Saved Signatures
           </button>
           <button
+            type="button"
             className={tab === "draw" ? "active" : ""}
             onClick={() => setTab("draw")}
           >
             Draw
           </button>
           <button
+            type="button"
             className={tab === "type" ? "active" : ""}
             onClick={() => setTab("type")}
           >
             Type
           </button>
           <button
+            type="button"
+            className={tab === "import" ? "active" : ""}
+            onClick={() => setTab("import")}
+          >
+            Import
+          </button>
+          <button
+            type="button"
             className={tab === "marks" ? "active" : ""}
             onClick={() => setTab("marks")}
           >
@@ -279,9 +430,22 @@ export function FillAndSign({
               {signatures.length === 0 ? (
                 <div className="empty-message-box">
                   <p>No signatures saved yet.</p>
-                  <button className="button-secondary" onClick={() => setTab("draw")}>
-                    <Plus size={16} /> Create Signature
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => setTab("draw")}
+                    >
+                      <Plus size={16} /> Draw Signature
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => setTab("type")}
+                    >
+                      <Plus size={16} /> Type Signature
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="sig-list">
@@ -293,13 +457,49 @@ export function FillAndSign({
                     >
                       <img src={sig.dataUrl} alt={sig.name} />
                       <div className="sig-meta">
-                        <span>{sig.name}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span>{sig.name}</span>
+                          {sig.sessionOnly ? (
+                            <span
+                              title="Session-only (in memory)"
+                              style={{
+                                fontSize: "10px",
+                                padding: "1px 4px",
+                                borderRadius: "3px",
+                                background: "rgba(100, 100, 100, 0.15)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "2px",
+                              }}
+                            >
+                              <Clock size={10} /> Session
+                            </span>
+                          ) : (
+                            <span
+                              title="Encrypted in OS storage"
+                              style={{
+                                fontSize: "10px",
+                                padding: "1px 4px",
+                                borderRadius: "3px",
+                                background: "rgba(37, 96, 75, 0.15)",
+                                color: "var(--color-primary, #25604b)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "2px",
+                              }}
+                            >
+                              <Lock size={10} /> Protected
+                            </span>
+                          )}
+                        </div>
                         <button
+                          type="button"
                           className="icon-button danger"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDelete(sig.id);
+                            void handleDelete(sig);
                           }}
+                          aria-label={`Delete ${sig.name}`}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -308,6 +508,45 @@ export function FillAndSign({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {(tab === "draw" || tab === "type" || tab === "import") && (
+            <div style={{ marginBottom: "12px", display: "flex", gap: "20px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+                <input
+                  type="radio"
+                  name="sigType"
+                  checked={sigType === "signature"}
+                  onChange={() => setSigType("signature")}
+                />
+                Signature
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+                <input
+                  type="radio"
+                  name="sigType"
+                  checked={sigType === "initials"}
+                  onChange={() => setSigType("initials")}
+                />
+                Initials
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontSize: "13px",
+                  marginLeft: "auto",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={sessionOnly}
+                  onChange={(e) => setSessionOnly(e.target.checked)}
+                />
+                Session only (do not persist)
+              </label>
             </div>
           )}
 
@@ -324,10 +563,10 @@ export function FillAndSign({
                 onMouseLeave={stopDrawing}
               />
               <div className="pad-toolbar">
-                <button className="button-secondary" onClick={clearCanvas}>
+                <button type="button" className="button-secondary" onClick={clearCanvas}>
                   Clear
                 </button>
-                <button className="button-primary" onClick={handleSaveDrawn}>
+                <button type="button" className="button-primary" onClick={handleSaveDrawn}>
                   Save Signature
                 </button>
               </div>
@@ -345,12 +584,18 @@ export function FillAndSign({
               />
               {typedName && (
                 <div className="type-preview">
-                  <span style={{ fontFamily: "'Brush Script MT', cursive, sans-serif", fontSize: "36px" }}>
+                  <span
+                    style={{
+                      fontFamily: "'Brush Script MT', cursive, sans-serif",
+                      fontSize: "36px",
+                    }}
+                  >
                     {typedName}
                   </span>
                 </div>
               )}
               <button
+                type="button"
                 className="button-primary"
                 onClick={handleSaveTyped}
                 disabled={!typedName.trim()}
@@ -360,52 +605,129 @@ export function FillAndSign({
             </div>
           )}
 
+          {tab === "import" && (
+            <div style={{ textAlign: "center", padding: "24px 16px" }}>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/png,image/jpeg,image/svg+xml"
+                style={{ display: "none" }}
+                onChange={handleFileImport}
+              />
+              <button
+                type="button"
+                className="button-primary"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={16} /> Choose Image File...
+              </button>
+              <p style={{ marginTop: "10px", fontSize: "12px", opacity: 0.7 }}>
+                Supported formats: PNG, JPEG, SVG.
+              </p>
+            </div>
+          )}
+
           {tab === "marks" && (
             <div className="quick-marks-grid">
-              <button className="mark-card" onClick={() => handlePlaceMark("check")}>
+              <button type="button" className="mark-card" onClick={() => handlePlaceMark("check")}>
                 <Check size={24} />
                 <span>Checkmark</span>
               </button>
-              <button className="mark-card" onClick={() => handlePlaceMark("cross")}>
+              <button type="button" className="mark-card" onClick={() => handlePlaceMark("cross")}>
                 <XIcon size={24} />
                 <span>Cross</span>
               </button>
-              <button className="mark-card" onClick={() => handlePlaceMark("dot")}>
+              <button type="button" className="mark-card" onClick={() => handlePlaceMark("dot")}>
                 <Circle size={20} />
                 <span>Dot</span>
               </button>
-              <button className="mark-card" onClick={() => handlePlaceMark("box")}>
+              <button type="button" className="mark-card" onClick={() => handlePlaceMark("box")}>
                 <Square size={20} />
                 <span>Box</span>
               </button>
-              <button className="mark-card" onClick={() => handlePlaceMark("line")}>
+              <button type="button" className="mark-card" onClick={() => handlePlaceMark("line")}>
                 <Minus size={24} />
                 <span>Line</span>
               </button>
             </div>
           )}
 
-          {tab === "library" && selectedSig && (
-            <div className="setting-group" style={{ marginTop: "16px" }}>
-              <label className="setting-title">Place on Page</label>
-              <input
-                type="number"
-                min={1}
-                max={s.info?.pages || 1}
-                value={targetPage}
-                onChange={(e) => setTargetPage(Number(e.target.value))}
-                className="text-input"
-              />
+          {((tab === "library" && selectedSig) || tab === "marks") && (
+            <div
+              style={{
+                marginTop: "16px",
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                gap: "12px",
+                padding: "12px",
+                background: "rgba(0,0,0,0.03)",
+                borderRadius: "6px",
+              }}
+            >
+              <div>
+                <label className="setting-title">Page</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={s.info?.pages || 1}
+                  value={targetPage}
+                  onChange={(e) => setTargetPage(Number(e.target.value))}
+                  className="text-input"
+                />
+              </div>
+              <div>
+                <label className="setting-title">X (pt)</label>
+                <input
+                  type="number"
+                  value={posX}
+                  onChange={(e) => setPosX(Number(e.target.value))}
+                  className="text-input"
+                />
+              </div>
+              <div>
+                <label className="setting-title">Y From Top (pt)</label>
+                <input
+                  type="number"
+                  value={posY}
+                  onChange={(e) => setPosY(Number(e.target.value))}
+                  className="text-input"
+                />
+              </div>
+              {tab === "library" && (
+                <div>
+                  <label className="setting-title">Width (pt)</label>
+                  <input
+                    type="number"
+                    min={40}
+                    max={400}
+                    value={sigWidth}
+                    onChange={(e) => setSigWidth(Number(e.target.value))}
+                    className="text-input"
+                  />
+                </div>
+              )}
             </div>
           )}
+
+          <div
+            style={{
+              marginTop: "12px",
+              fontSize: "11px",
+              opacity: 0.65,
+              lineHeight: 1.4,
+            }}
+          >
+            Notice: Signature appearances placed on the document are graphical representations, not cryptographic X.509 digital certificate signatures.
+          </div>
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           {tab === "library" && selectedSig && (
             <button
+              type="button"
               onClick={handlePlaceSignature}
               disabled={saving}
               className="button-primary"

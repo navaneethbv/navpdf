@@ -9,11 +9,23 @@ import { Settings } from "../../src/features/settings/Settings";
 import { useWorkspace } from "../../src/stores/workspace";
 import { defaultPreferences } from "../../src/types/document";
 
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  value: vi.fn(() => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })),
+  writable: true,
+});
+
 beforeEach(() => {
   useWorkspace.getState().reset();
   useWorkspace.getState().set({
     local: { preferences: defaultPreferences, recents: [], recovery: null },
   });
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.style.colorScheme = "";
   vi.clearAllMocks();
 });
 
@@ -46,16 +58,99 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByText("Intro"));
     expect(controller.links.goToDestination).toHaveBeenCalled();
     fireEvent.click(screen.getByLabelText("Comments"));
+    expect(screen.getByText("Comments (1)")).toBeTruthy();
     fireEvent.click(screen.getByText("great"));
     expect(controller.goTo).toHaveBeenCalledWith(2);
     fireEvent.click(screen.getByLabelText("Search"));
     expect(screen.getByLabelText("Search document")).toBeTruthy();
   });
 
+  it("selects annotations when selectAnnotation is supported", () => {
+    const withSelect = {
+      ...controller,
+      selectAnnotation: vi.fn(),
+    };
+    useWorkspace.getState().set({
+      sidebar: "comments",
+      comments: [{ id: "c2", page: 1, type: "Square", text: "box" }],
+    });
+    render(<Sidebar controller={withSelect as never} />);
+    fireEvent.click(screen.getByText("box"));
+    expect(withSelect.selectAnnotation).toHaveBeenCalledWith("c2");
+  });
+
+  it("exports and imports comments through the sidebar", async () => {
+    const withExchange = {
+      ...controller,
+      exportComments: vi.fn(() => '{"schema":"navpdf-comments"}'),
+      importComments: vi.fn(async () => 3),
+    };
+    useWorkspace.getState().set({
+      sidebar: "comments",
+      document: { id: "doc-1", name: "report.pdf", size: 100 },
+      comments: [{ id: "c1", page: 1, type: "Text", text: "note" }],
+    });
+    render(<Sidebar controller={withExchange as never} />);
+
+    const exportBtn = screen.getByRole("button", { name: /Export/ });
+    fireEvent.click(exportBtn);
+    expect(withExchange.exportComments).toHaveBeenCalled();
+    expect(useWorkspace.getState().status).toBe("Comments exported");
+
+    const importBtn = screen.getByRole("button", { name: /Import/ });
+    const file = new File(['{"schema":"navpdf-comments"}'], "comments.json", {
+      type: "application/json",
+    });
+    file.text = vi.fn(async () => '{"schema":"navpdf-comments"}');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.click(importBtn);
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(withExchange.importComments).toHaveBeenCalledWith('{"schema":"navpdf-comments"}');
+      expect(useWorkspace.getState().status).toBe("3 comments imported");
+    });
+  });
+
+  it("handles export and import errors gracefully", async () => {
+    const withFailingExchange = {
+      ...controller,
+      exportComments: vi.fn(() => {
+        throw new Error("Export failed");
+      }),
+      importComments: vi.fn(async () => {
+        throw new Error("Import failed");
+      }),
+    };
+    useWorkspace.getState().set({
+      sidebar: "comments",
+      comments: [{ id: "c1", page: 1, type: "Text", text: "note" }],
+    });
+    render(<Sidebar controller={withFailingExchange as never} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Export/ }));
+    expect(useWorkspace.getState().error).toBe("Export failed");
+
+    const file = new File(['bad'], "comments.json");
+    file.text = vi.fn(async () => 'bad');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(useWorkspace.getState().error).toBe("Import failed");
+    });
+  });
+
   it("shows empty states for bookmarks and comments", () => {
     useWorkspace.getState().set({ sidebar: "bookmarks" });
-    render(<Sidebar controller={controller as never} />);
+    const { rerender } = render(<Sidebar controller={controller as never} />);
     expect(screen.getByText("This PDF has no bookmarks.")).toBeTruthy();
+
+    useWorkspace.getState().set({ sidebar: "comments", comments: [] });
+    rerender(<Sidebar controller={controller as never} />);
+    expect(
+      screen.getByText(/No saved comments or highlights found/),
+    ).toBeTruthy();
   });
 });
 
@@ -170,6 +265,7 @@ describe("Settings", () => {
     fireEvent.change(screen.getByLabelText(/Theme/), {
       target: { value: "dark" },
     });
+    expect(document.documentElement.dataset.theme).toBe("dark");
     fireEvent.click(screen.getByText("Save settings"));
     await vi.waitFor(() => {
       expect(useWorkspace.getState().settingsOpen).toBe(false);
@@ -182,5 +278,24 @@ describe("Settings", () => {
     render(<Settings />);
     fireEvent.click(screen.getByText("Cancel"));
     expect(useWorkspace.getState().settingsOpen).toBe(false);
+  });
+
+  it("restores the persisted theme when a preview is canceled", () => {
+    useWorkspace.getState().set({
+      local: {
+        preferences: { ...defaultPreferences, theme: "light" },
+        recents: [],
+        recovery: null,
+      },
+      settingsOpen: true,
+    });
+    const view = render(<Settings />);
+    fireEvent.change(screen.getByLabelText(/Theme/), {
+      target: { value: "dark" },
+    });
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    fireEvent.click(screen.getByText("Cancel"));
+    view.unmount();
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 });

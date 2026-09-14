@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   AnnotationEditorType: { NONE: 0, HIGHLIGHT: 1, FREETEXT: 2, INK: 3 },
-  AnnotationMode: { ENABLE: 1 },
+  AnnotationMode: { ENABLE: 1, ENABLE_FORMS: 2 },
   AnnotationEditorParamsType: { HIGHLIGHT_COLOR: 7 },
 }));
 
@@ -65,8 +65,10 @@ vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
 }));
 
 vi.mock("../../src/services/native", () => ({
+  native: false,
   markDirty: vi.fn(async () => {}),
   rememberPage: vi.fn(async () => {}),
+  commitWorkingRevision: vi.fn(async () => "rev-mock"),
 }));
 
 const loadPdfFromBytes = vi.fn();
@@ -83,6 +85,7 @@ function makePdf(numPages = 3, outline: unknown = null) {
   return {
     numPages,
     annotationStorage: {} as Record<string, () => void>,
+    saveDocument: vi.fn(async () => new Uint8Array([numPages])),
     getPage: vi.fn(async () => ({
       getTextContent: vi.fn(async () => ({ items: [] })),
       getAnnotations: vi.fn(async () => []),
@@ -95,6 +98,7 @@ let controller: ViewerController;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  loadPdfFromBytes.mockReset();
   busHandlers.clear();
   useWorkspace.getState().reset();
   const container = document.createElement("div");
@@ -154,6 +158,86 @@ describe("ViewerController lifecycle", () => {
     });
     expect(markDirty).toHaveBeenCalledWith(true);
     expect(loadPdfFromBytes).toHaveBeenCalled();
+  });
+
+  it("undoes and redoes an adapter revision through the staged proxy boundary", async () => {
+    const first = makePdf(2);
+    first.saveDocument.mockResolvedValue(new Uint8Array([0]));
+    await controller.attach(first as never);
+    controller.seedRevision(new Uint8Array([0]), 2);
+    const changed = makePdf(2);
+    const undone = makePdf(2);
+    const redone = makePdf(2);
+    undone.getPage = vi.fn(async (pageNumber: number) => ({
+      getTextContent: vi.fn(async () => ({ items: [] })),
+      getAnnotations: vi.fn(async () =>
+        pageNumber === 1
+          ? [{ id: "restored-note", subtype: "Text", contentsObj: { str: "restored" } }]
+          : [],
+      ),
+    }));
+    vi.mocked(loadPdfFromBytes)
+      .mockImplementationOnce((bytes) => {
+        const transferred = bytes as Uint8Array<ArrayBuffer>;
+        structuredClone(transferred.buffer, { transfer: [transferred.buffer] });
+        return {
+          promise: Promise.resolve(changed),
+          destroy: vi.fn(async () => {}),
+        } as never;
+      })
+      .mockReturnValueOnce({
+        promise: Promise.resolve(undone),
+        destroy: vi.fn(async () => {}),
+      } as never)
+      .mockReturnValueOnce({
+        promise: Promise.resolve(redone),
+        destroy: vi.fn(async () => {}),
+      } as never);
+
+    await controller.replaceWithBytes(new Uint8Array([1]), "Adapter edit");
+    expect(useWorkspace.getState().canUndo).toBe(true);
+    controller.undo();
+    await vi.waitFor(() => expect(controller.pdf).toBe(undone));
+    expect(useWorkspace.getState().dirty).toBe(false);
+    await vi.waitFor(() =>
+      expect(useWorkspace.getState().comments).toEqual([
+        { id: "restored-note", page: 1, type: "Text", text: "restored" },
+      ]),
+    );
+    controller.redo();
+    await vi.waitFor(() => expect(controller.pdf).toBe(redone));
+    expect(useWorkspace.getState().dirty).toBe(true);
+    await vi.waitFor(() => expect(useWorkspace.getState().comments).toEqual([]));
+  });
+
+  it("refreshes the title and author from the replacement revision's metadata", async () => {
+    useWorkspace.getState().set({
+      info: {
+        pages: 2,
+        encrypted: false,
+        title: "Sanitized title",
+        author: "Sanitized author",
+        version: "1.7",
+      },
+    });
+    const sanitized = { ...makePdf(2), getMetadata: vi.fn(async () => ({ info: {} })) };
+    loadPdfFromBytes.mockReturnValue({
+      promise: Promise.resolve(sanitized),
+      destroy: vi.fn(async () => {}),
+    });
+    await controller.replaceWithBytes(new Uint8Array([1]), "Redactions applied", { resetHistory: true });
+    expect(useWorkspace.getState().info).toMatchObject({ pages: 2, title: "", author: "", version: "1.7" });
+
+    const unreadable = { ...makePdf(3), getMetadata: vi.fn(async () => { throw new Error("no metadata"); }) };
+    useWorkspace.getState().set({
+      info: { pages: 2, encrypted: false, title: "Kept", author: "Kept", version: "1.7" },
+    });
+    loadPdfFromBytes.mockReturnValue({
+      promise: Promise.resolve(unreadable),
+      destroy: vi.fn(async () => {}),
+    });
+    await controller.replaceWithBytes(new Uint8Array([2]), "Pages updated");
+    expect(useWorkspace.getState().info).toMatchObject({ pages: 3, title: "Kept", author: "Kept" });
   });
 
   it("updates page counts and clamps the current page on replace", async () => {
@@ -299,6 +383,8 @@ describe("ViewerController tools and navigation", () => {
           ? [
               { id: "a1", subtype: "Text", contentsObj: { str: "note" } },
               { id: "a2", subtype: "Highlight", contentsObj: { str: "" } },
+              { id: "a4", subtype: "Underline", contentsObj: { str: "under" } },
+              { id: "a5", subtype: "StrikeOut", contentsObj: { str: "strike" } },
               { id: "a3", subtype: "Link" },
             ]
           : [],
@@ -306,10 +392,11 @@ describe("ViewerController tools and navigation", () => {
     }));
     await controller.attach(pdf as never);
     await controller.readComments();
-    expect(useWorkspace.getState().comments).toHaveLength(2);
+    expect(useWorkspace.getState().comments).toHaveLength(4);
     expect(useWorkspace.getState().comments[1].text).toBe(
       "Highlight annotation",
     );
+    expect(useWorkspace.getState().comments[2].type).toBe("Underline");
   });
 
   it("blocks external links in the capture phase", async () => {

@@ -1,0 +1,91 @@
+{
+  "corpusVersion": "1.0",
+  "createdDate": "2026-09-13",
+  "targetHardware": "Apple Silicon / Standard CPU",
+  "acceptanceThresholds": {
+    "cleanScanMaxWer": 0.08,
+    "cleanScanMaxCer": 0.03,
+    "degradedScanMaxWer": 0.20,
+    "degradedScanMaxCer": 0.08
+  },
+  "samples": [
+    {
+      "id": "sample-01-clean",
+      "category": "single-column",
+      "pageIndex": 0,
+      "pageWidth": 612,
+      "pageHeight": 792,
+      "referenceText": "NavPDF provides a quiet and private workspace for reading and editing PDF documents. All processing stays strictly local on your machine.",
+      "wordCount": 21,
+      "expectedBoxes": [
+        { "text": "NavPDF", "bbox": [54, 700, 60, 16] },
+        { "text": "workspace", "bbox": [210, 700, 75, 16] }
+      ]
+    },
+    {
+      "id": "sample-02-columns",
+      "category": "multi-column",
+      "pageIndex": 1,
+      "pageWidth": 612,
+      "pageHeight": 792,
+      "referenceText": "Architecture section defines native file ownership. Storage layer ensures safe atomic replacement.",
+      "wordCount": 13,
+      "expectedBoxes": [
+        { "text": "Architecture", "bbox": [54, 700, 85, 16] },
+        { "text": "Storage", "bbox": [320, 700, 55, 16] }
+      ]
+    },
+    {
+      "id": "sample-03-table",
+      "category": "table",
+      "pageIndex": 2,
+      "pageWidth": 612,
+      "pageHeight": 792,
+      "referenceText": "Line Item Description Quantity Unit Price Subtotal 01 Consulting Hours 40 150.00 6000.00",
+      "wordCount": 12,
+      "expectedBoxes": [
+        { "text": "Item", "bbox": [90, 700, 30, 16] },
+        { "text": "Consulting", "bbox": [120, 660, 75, 16] }
+      ]
+    },
+    {
+      "id": "sample-04-rotated",
+      "category": "rotated-skewed",
+      "pageIndex": 3,
+      "pageWidth": 792,
+      "pageHeight": 612,
+      "rotation": 90,
+      "referenceText": "Landscape scan document with rotated orientation and legal disclaimer notice.",
+      "wordCount": 10,
+      "expectedBoxes": [
+        { "text": "Landscape", "bbox": [60, 520, 80, 16] }
+      ]
+    },
+    {
+      "id": "sample-05-low-contrast",
+      "category": "low-contrast",
+      "pageIndex": 4,
+      "pageWidth": 612,
+      "pageHeight": 792,
+      "referenceText": "Faded thermal print receipt record with background noise.",
+      "wordCount": 8,
+      "expectedBoxes": [
+        { "text": "Faded", "bbox": [54, 700, 45, 16] }
+      ]
+    },
+    {
+      "id": "sample-06-mixed",
+      "category": "mixed",
+      "pageIndex": 5,
+      "pageWidth": 612,
+      "pageHeight": 792,
+      "hasExistingText": true,
+      "digitalText": "DIGITAL HEADER SECTION",
+      "referenceText": "Scanned image attachment beneath the digital header.",
+      "wordCount": 7,
+      "expectedBoxes": [
+        { "text": "Scanned", "bbox": [54, 500, 60, 16] }
+      ]
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   Presentation,
   Shield,
+  BadgeCheck,
   EyeOff,
   Sparkles,
   Search,
@@ -28,6 +29,8 @@ import {
   Hash,
   Scan,
   Printer,
+  Link as LinkIcon,
+  Replace,
   X,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
@@ -138,6 +141,15 @@ export function ToolPanel({
       disabled: !hasDoc,
     },
     {
+      id: "edit-existing",
+      label: "Edit Existing Content",
+      description: "Replace or delete existing text runs and images on a page",
+      category: "edit",
+      icon: Replace,
+      action: () => s.set({ activeModal: "edit-objects" }),
+      disabled: !hasDoc,
+    },
+    {
       id: "header-footer",
       label: "Header & Footer",
       description: "Add page numbers, dates, titles, and custom slots",
@@ -173,6 +185,15 @@ export function ToolPanel({
       action: () => s.set({ activeModal: "attachments" }),
       disabled: !hasDoc,
     },
+    {
+      id: "add-link",
+      label: "Link Annotation",
+      description: "Create internal page jump or external web link",
+      category: "edit",
+      icon: LinkIcon,
+      action: () => s.set({ activeModal: "add-link" }),
+      disabled: !hasDoc,
+    },
     // Review
     {
       id: "highlight-text",
@@ -186,7 +207,7 @@ export function ToolPanel({
     {
       id: "drawing-markup",
       label: "Freehand Ink & Text Boxes",
-      description: "Pencil ink and text-box annotations (shapes pending M2)",
+      description: "Freehand ink, text boxes, and standard shape annotations",
       category: "review",
       icon: PenTool,
       action: () => s.set({ tool: "draw", activeModal: "annotations" }),
@@ -204,8 +225,8 @@ export function ToolPanel({
     // Convert
     {
       id: "export-docx",
-      label: "Microsoft Word (.doc HTML)",
-      description: "Export page text as a Word-compatible outline (not editable DOCX)",
+      label: "Microsoft Word (.docx)",
+      description: "Editable paragraphs and headings from the PDF text layer",
       category: "convert",
       icon: FileText,
       action: () => s.set({ activeModal: "office-export" }),
@@ -213,8 +234,8 @@ export function ToolPanel({
     },
     {
       id: "export-pptx",
-      label: "Slides Outline (.ppt HTML)",
-      description: "One outline slide per page (not an editable PPTX)",
+      label: "PowerPoint (.pptx)",
+      description: "Editable text slides or page-picture slides",
       category: "convert",
       icon: Presentation,
       action: () => s.set({ activeModal: "office-export" }),
@@ -222,8 +243,8 @@ export function ToolPanel({
     },
     {
       id: "export-xlsx",
-      label: "Table Data (.csv)",
-      description: "Extract page text as CSV with formula-safe quoting",
+      label: "Excel Workbook (.xlsx)",
+      description: "Page text aligned into typed cells; formulas are never created",
       category: "convert",
       icon: FileSpreadsheet,
       action: () => s.set({ activeModal: "office-export" }),
@@ -232,7 +253,7 @@ export function ToolPanel({
     {
       id: "ocr-text",
       label: "Extract Page Text",
-      description: "Read embedded page text; scanned-image OCR engine pending",
+      description: "Recognize scanned pages locally or extract embedded page text",
       category: "convert",
       icon: Scan,
       action: () => s.set({ activeModal: "ocr" }),
@@ -250,7 +271,7 @@ export function ToolPanel({
     {
       id: "compress-pdf",
       label: "Compress PDF",
-      description: "Reduce file size with structural optimization",
+      description: "Measured structural and image compression with fidelity checks",
       category: "convert",
       icon: Download,
       action: () => s.set({ activeModal: "compress" }),
@@ -287,7 +308,7 @@ export function ToolPanel({
     {
       id: "protect-pdf",
       label: "Password Protect",
-      description: "Real encryption needs the M6 engine; dialog explains status",
+      description: "Save an AES-256 protected copy or unlock a protected PDF",
       category: "protect",
       icon: Shield,
       action: () => s.set({ activeModal: "protect" }),
@@ -296,10 +317,19 @@ export function ToolPanel({
     {
       id: "redact-pdf",
       label: "Redact PDF",
-      description: "Mark regions for removal; secure apply engine pending",
+      description: "Permanently remove marked text, image pixels and hidden data",
       category: "protect",
       icon: EyeOff,
       action: () => s.set({ activeModal: "redact" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "certificate-sign",
+      label: "Certificate Signature",
+      description: "Sign a copy with a .p12 certificate and check existing signatures",
+      category: "protect",
+      icon: BadgeCheck,
+      action: () => s.set({ activeModal: "certificate-sign" }),
       disabled: !hasDoc,
     },
     // Intelligent Tools & Creation
@@ -313,8 +343,8 @@ export function ToolPanel({
     },
     {
       id: "ai-summary",
-      label: "Page Index & Citations",
-      description: "Extractive first-sentence index; abstractive summary pending M7",
+      label: "Find and Cite Passages",
+      description: "Find passages containing your words and jump to cited pages",
       category: "ai",
       icon: Sparkles,
       action: () => s.set({ activeModal: "assistant" }),

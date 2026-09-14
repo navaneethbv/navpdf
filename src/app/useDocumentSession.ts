@@ -87,6 +87,22 @@ export function useDocumentSession(controller: ViewerController | null) {
         // Stage and validate candidate attachment BEFORE destroying previous document
         await controller.attach(loaded);
         await controller.viewer.firstPagePromise;
+        if (encrypted) {
+          controller.clearRevisionHistory?.();
+        } else {
+          try {
+            controller.seedRevision?.(
+              await loaded.saveDocument(),
+              loaded.numPages,
+              "Opened PDF",
+              descriptor.revisionId,
+            );
+          } catch {
+            controller.clearRevisionHistory?.();
+          }
+        }
+        if (recovering || descriptor.unsaved)
+          controller.markUnsavedRevision?.();
 
         // Commit before retiring any previous resource. Cleanup errors cannot
         // roll back to a proxy that has already been destroyed.
@@ -151,15 +167,23 @@ export function useDocumentSession(controller: ViewerController | null) {
     [controller, refreshLocal, report],
   );
   const save = useCallback(
-    async (saveAs = false) => {
+    async (saveAs = false, unprotected = false) => {
       const state = useWorkspace.getState();
       const pdf = controller?.pdf ?? null;
       if (!controller || !pdf || !state.document || lock.current)
         return false;
       if (state.info?.encrypted) {
         report(
-          "Saving password-protected PDFs is deferred until encryption-preserving editing is verified. Your original is unchanged.",
+          "This password-protected PDF opens read-only. Unlock it from Password Protect before editing or saving. Your original is unchanged.",
         );
+        return false;
+      }
+      if (state.info?.protectedSource && !unprotected) {
+        // An unlocked working copy is never written back without an explicit protection choice.
+        state.set({
+          activeModal: "protect",
+          status: "Choose how to save this password-protected document.",
+        });
         return false;
       }
       lock.current = true;
@@ -190,15 +214,21 @@ export function useDocumentSession(controller: ViewerController | null) {
             name: result.name,
             size: result.size,
           },
+          ...(unprotected && state.info
+            ? { info: { ...state.info, protectedSource: false } }
+            : {}),
         });
+        controller.markSaved?.(bytes, pdf.numPages);
         await desktop.markDirty(false);
         await refreshLocal();
         return true;
       } catch (error) {
         report(error);
         state.set({
+          dirty: true,
           status: "Save failed; changes are still in this workspace",
         });
+        void desktop.markDirty(true).catch(report);
         return false;
       } finally {
         lock.current = false;
@@ -268,11 +298,12 @@ export function useDocumentSession(controller: ViewerController | null) {
               dirty: true,
               status: "Recovery opened. Use Save As to keep this copy.",
             });
+            controller?.markUnsavedRevision?.();
             void desktop.markDirty(true);
           })
           .catch(report);
       }),
-    [guard, load, report],
+    [controller, guard, load, report],
   );
   useEffect(() => {
     if (!desktop.native) return;
@@ -282,6 +313,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         !state.dirty ||
         !state.local.preferences.autosave ||
         state.info?.encrypted ||
+        state.info?.protectedSource ||
         !state.document ||
         !controller?.pdf ||
         lock.current

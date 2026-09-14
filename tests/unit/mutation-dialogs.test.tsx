@@ -353,25 +353,41 @@ describe("CreatePdfDialog", () => {
       },
     });
     expect(await screen.findByText("1. a.pdf")).toBeTruthy();
+    expect(screen.getByText("2. b.pdf")).toBeTruthy();
+
+    // Reorder: move b.pdf up to position 1
+    const moveUpButtons = screen.getAllByLabelText("Move file up");
+    expect((moveUpButtons[0] as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(moveUpButtons[1]); // Move second item up
+
+    expect(screen.getByText("1. b.pdf")).toBeTruthy();
+    expect(screen.getByText("2. a.pdf")).toBeTruthy();
+
+    // Set page range on b.pdf (now index 0)
+    const rangeInputs = screen.getAllByPlaceholderText(/All pages, or e\.g\./);
+    fireEvent.change(rangeInputs[0], { target: { value: "1" } }); // page 1 of b.pdf (1 of 2 pages)
+
     fireEvent.click(screen.getByText("Combine & Open"));
     await vi.waitFor(() => {
       expect(onLoad).toHaveBeenCalled();
     });
+    const combinedFile = onLoad.mock.calls[0][0] as File;
+    const combinedDoc = await PDFDocument.load(new Uint8Array(await combinedFile.arrayBuffer()));
+    // b.pdf contributed 1 page (page 1), a.pdf contributed 1 page (all pages) = 2 pages
+    expect(combinedDoc.getPageCount()).toBe(2);
   });
 });
 
 describe("CompressDialog", () => {
-  it("measures before/after sizes honestly", async () => {
+  it("never reports a reduction without the native engine", async () => {
     seedDocument();
     const controller = await mockController();
     render(
       <CompressDialog controller={controller as never} onClose={() => {}} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Compress PDF" }));
-    await vi.waitFor(() => {
-      expect(screen.getByText("Original Size:")).toBeTruthy();
-    });
-    expect(screen.getByText("Optimized Size:")).toBeTruthy();
+    fireEvent.click(screen.getByText("Analyze Compression"));
+    expect(screen.queryByText("Compressed size")).toBeNull();
+    expect(screen.getByText(/runs only in the desktop app/)).toBeTruthy();
   });
 });
 
