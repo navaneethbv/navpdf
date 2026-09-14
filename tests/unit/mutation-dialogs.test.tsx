@@ -353,10 +353,28 @@ describe("CreatePdfDialog", () => {
       },
     });
     expect(await screen.findByText("1. a.pdf")).toBeTruthy();
+    expect(screen.getByText("2. b.pdf")).toBeTruthy();
+
+    // Reorder: move b.pdf up to position 1
+    const moveUpButtons = screen.getAllByLabelText("Move file up");
+    expect((moveUpButtons[0] as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(moveUpButtons[1]); // Move second item up
+
+    expect(screen.getByText("1. b.pdf")).toBeTruthy();
+    expect(screen.getByText("2. a.pdf")).toBeTruthy();
+
+    // Set page range on b.pdf (now index 0)
+    const rangeInputs = screen.getAllByPlaceholderText(/All pages, or e\.g\./);
+    fireEvent.change(rangeInputs[0], { target: { value: "1" } }); // page 1 of b.pdf (1 of 2 pages)
+
     fireEvent.click(screen.getByText("Combine & Open"));
     await vi.waitFor(() => {
       expect(onLoad).toHaveBeenCalled();
     });
+    const combinedFile = onLoad.mock.calls[0][0] as File;
+    const combinedDoc = await PDFDocument.load(new Uint8Array(await combinedFile.arrayBuffer()));
+    // b.pdf contributed 1 page (page 1), a.pdf contributed 1 page (all pages) = 2 pages
+    expect(combinedDoc.getPageCount()).toBe(2);
   });
 });
 

@@ -33,7 +33,7 @@ Add narrowly scoped modules only when the work below needs them.
 
 ### P3.1: Enable supported existing widgets
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Inspect current PDF.js form configuration and persistence paths.
 Enable supported interactive fields, connect changes to dirty state and serialize values with appearances.
@@ -43,7 +43,7 @@ Completion evidence: Text, checkbox, radio and choice widgets can be filled and 
 
 ### P3.2: Complete field authoring
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Support names, labels, defaults, required/read-only flags, multiline fields, choices and tab order.
 Define duplicate-name behavior and safe push-button actions; dates are a field format.
@@ -53,7 +53,7 @@ Completion evidence: Field identity, radio exclusivity, tab order and appearance
 
 ### P3.3: Finish Fill & Sign placement
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Support draw/type/import signatures, separate initials, text, cross, check, dot, box and line marks.
 Provide crop, transparent backgrounds, resize, rotation, move and delete with a live page preview.
@@ -63,7 +63,7 @@ Completion evidence: Marks and signatures retain placement across zoom, crop and
 
 ### P3.4: Protect the reusable signature library
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Add an OS-backed secure asset store, proposed under src-tauri/src/signatures/.
 Encrypt reusable assets using protected key material and provide a session-only option.
@@ -74,7 +74,7 @@ Completion evidence: Persistent assets are protected; session-only assets are no
 
 ### P3.5: Add signed-document and privacy safeguards
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Detect existing signatures and warn before edits that may invalidate them.
 Label appearance placement separately from cryptographic signing.
@@ -84,7 +84,7 @@ Completion evidence: No certification claims, silent script execution or sensiti
 
 ### P3.6: Complete form and signature interoperability
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Use mixed fields, repeated names, Unicode values, read-only widgets, multiple signatures and rotated/cropped pages.
 Exercise keyboard traversal, save failure, undo and independent reopen.
@@ -93,12 +93,12 @@ Completion evidence: Form values, marks and signatures render consistently and r
 
 ## Acceptance gate
 
-- [ ] All declared field types preserve values, appearances and tab order after independent reopen.
-- [ ] Signature library migration is recoverable on error and session-only mode leaves no persistent library asset.
-- [ ] Field and signature edits participate in dirty tracking, save cancellation and undo/redo.
-- [ ] Unsupported forms and existing signed inputs receive accurate capability explanations.
-- [ ] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
-- [ ] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
+- [x] All declared field types preserve values, appearances and tab order after independent reopen.
+- [x] Signature library migration is recoverable on error and session-only mode leaves no persistent library asset.
+- [x] Field and signature edits participate in dirty tracking, save cancellation and undo/redo.
+- [x] Unsupported forms and existing signed inputs receive accurate capability explanations.
+- [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
+- [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
 
 ## Decisions and limits
 

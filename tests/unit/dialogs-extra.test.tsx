@@ -54,11 +54,12 @@ async function mockController(pages = 3) {
   };
 }
 
+const originalCreateElement = Document.prototype.createElement;
+
 function mockCanvas2d() {
-  const createElement = document.createElement.bind(document);
   return vi.spyOn(document, "createElement").mockImplementation(
     ((tag: string, options?: ElementCreationOptions) => {
-      const el = createElement(tag, options);
+      const el = originalCreateElement.call(document, tag, options);
       if (tag === "canvas") {
         el.getContext = vi.fn(() => ({
           beginPath: vi.fn(),
@@ -66,6 +67,7 @@ function mockCanvas2d() {
           lineTo: vi.fn(),
           stroke: vi.fn(),
           clearRect: vi.fn(),
+          fillRect: vi.fn(),
           fillText: vi.fn(),
         }));
         el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
@@ -453,7 +455,7 @@ describe("ExportDialog JPG and failures", () => {
       <ExportDialog controller={controller as never} onClose={() => {}} />,
     );
     fireEvent.click(screen.getByText("JPEG Image"));
-    expect(screen.getByText(/150 DPI/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /150 DPI/i })).toBeTruthy();
     fireEvent.click(screen.getByText("Export"));
     await vi.waitFor(() => {
       expect(click).toHaveBeenCalled();

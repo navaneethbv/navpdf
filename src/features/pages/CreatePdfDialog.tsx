@@ -1,11 +1,20 @@
 import { useState, useRef, useEffect } from "react";
-import { FilePlus, Combine, Check, X } from "lucide-react";
+import { FilePlus, Combine, Check, X, ArrowUp, ArrowDown } from "lucide-react";
+import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import {
   createBlankDocument,
   describeStructureLoss,
   mergeDocuments,
 } from "../../services/document-commands";
+import { parsePageRange } from "./print-range";
+import type { MergeInputItem } from "../../types/operations";
+
+export interface CombineEntry {
+  id: string;
+  file: File;
+  range: string;
+}
 
 export function CreatePdfDialog({
   onLoad,
@@ -19,7 +28,7 @@ export function CreatePdfDialog({
   const [pageCount, setPageCount] = useState(1);
   const [pageSize, setPageSize] = useState<"a4" | "letter">("a4");
   const [creating, setCreating] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [items, setItems] = useState<CombineEntry[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [structureLoss, setStructureLoss] = useState("");
 
@@ -27,14 +36,14 @@ export function CreatePdfDialog({
   // fields cannot carry over. Report that before the user commits.
   useEffect(() => {
     let cancelled = false;
-    if (files.length === 0) {
+    if (items.length === 0) {
       setStructureLoss("");
       return;
     }
     void (async () => {
       try {
         const buffers = await Promise.all(
-          files.map(async (f) => new Uint8Array(await f.arrayBuffer())),
+          items.map(async (item) => new Uint8Array(await item.file.arrayBuffer())),
         );
         const warning = await describeStructureLoss(buffers);
         if (!cancelled) setStructureLoss(warning);
@@ -45,7 +54,7 @@ export function CreatePdfDialog({
     return () => {
       cancelled = true;
     };
-  }, [files]);
+  }, [items]);
 
   const handleCreateBlank = async () => {
     setCreating(true);
@@ -67,18 +76,34 @@ export function CreatePdfDialog({
   };
 
   const handleCombineFiles = async () => {
-    if (files.length === 0) return;
+    if (items.length === 0) return;
     setCreating(true);
     try {
-      const buffers = await Promise.all(
-        files.map(async (f) => new Uint8Array(await f.arrayBuffer())),
-      );
-      const mergedBytes = await mergeDocuments(buffers);
+      const mergeInputs: MergeInputItem[] = [];
+      const manifestSummary: string[] = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const buffer = new Uint8Array(await item.file.arrayBuffer());
+        const rawRange = item.range.trim();
+        if (rawRange) {
+          const doc = await PDFDocument.load(buffer);
+          const totalPages = doc.getPageCount();
+          const parsed = parsePageRange("custom", rawRange, 1, totalPages);
+          mergeInputs.push({ name: item.file.name, bytes: buffer, ranges: parsed });
+          manifestSummary.push(`${item.file.name} (${parsed.length} of ${totalPages} pages)`);
+        } else {
+          mergeInputs.push({ name: item.file.name, bytes: buffer });
+          manifestSummary.push(`${item.file.name} (all pages)`);
+        }
+      }
+
+      const mergedBytes = await mergeDocuments(mergeInputs);
       const file = new File([mergedBytes as unknown as BlobPart], `Combined-${Date.now()}.pdf`, {
         type: "application/pdf",
       });
       onLoad(file);
-      s.set({ status: `Combined ${files.length} files into new document` });
+      s.set({ status: `Combined ${items.length} file(s): ${manifestSummary.join(", ")}` });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -89,8 +114,36 @@ export function CreatePdfDialog({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+      const newItems: CombineEntry[] = Array.from(e.target.files).map((f) => ({
+        id: `${f.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        file: f,
+        range: "",
+      }));
+      setItems((prev) => [...prev, ...newItems]);
     }
+  };
+
+  const moveItem = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+    setItems((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(target, 0, moved);
+      return next;
+    });
+  };
+
+  const removeItem = (index: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateRange = (index: number, range: string) => {
+    setItems((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], range };
+      return next;
+    });
   };
 
   return (
@@ -108,13 +161,13 @@ export function CreatePdfDialog({
 
         <div className="tab-buttons-bar">
           <button
-            className={tab === "blank" ? "active" : ""}
+            className={`tab-button ${tab === "blank" ? "active" : ""}`}
             onClick={() => setTab("blank")}
           >
             <FilePlus size={15} /> Blank Document
           </button>
           <button
-            className={tab === "combine" ? "active" : ""}
+            className={`tab-button ${tab === "combine" ? "active" : ""}`}
             onClick={() => setTab("combine")}
           >
             <Combine size={15} /> Combine Multiple Files
@@ -165,17 +218,49 @@ export function CreatePdfDialog({
                 onChange={handleFileChange}
               />
 
-              {files.length > 0 && (
+              {items.length > 0 && (
                 <div className="combine-file-list">
-                  {files.map((f, i) => (
-                    <div key={i} className="combine-file-item">
-                      <span>{i + 1}. {f.name}</span>
-                      <button
-                        className="icon-button danger"
-                        onClick={() => setFiles(files.filter((_, idx) => idx !== i))}
-                      >
-                        <X size={14} />
-                      </button>
+                  {items.map((item, i) => (
+                    <div key={item.id} className="combine-file-item">
+                      <div className="combine-file-info">
+                        <span className="combine-file-name">{i + 1}. {item.file.name}</span>
+                        <input
+                          type="text"
+                          placeholder="All pages, or e.g. 1-3, 5"
+                          value={item.range}
+                          onChange={(e) => updateRange(i, e.target.value)}
+                          className="combine-range-input"
+                          aria-label={`Page range for ${item.file.name}`}
+                        />
+                      </div>
+                      <div className="combine-file-actions">
+                        <button
+                          className="icon-button"
+                          onClick={() => moveItem(i, -1)}
+                          disabled={i === 0}
+                          title="Move file up"
+                          aria-label="Move file up"
+                        >
+                          <ArrowUp size={14} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          onClick={() => moveItem(i, 1)}
+                          disabled={i === items.length - 1}
+                          title="Move file down"
+                          aria-label="Move file down"
+                        >
+                          <ArrowDown size={14} />
+                        </button>
+                        <button
+                          className="icon-button danger"
+                          onClick={() => removeItem(i)}
+                          title="Remove file"
+                          aria-label="Remove file"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -196,7 +281,7 @@ export function CreatePdfDialog({
           </button>
           <button
             onClick={tab === "blank" ? handleCreateBlank : handleCombineFiles}
-            disabled={creating || (tab === "combine" && files.length === 0)}
+            disabled={creating || (tab === "combine" && items.length === 0)}
             className="button-primary"
           >
             <Check size={16} /> {creating ? "Creating..." : tab === "blank" ? "Create PDF" : "Combine & Open"}

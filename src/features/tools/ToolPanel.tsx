@@ -28,6 +28,7 @@ import {
   Hash,
   Scan,
   Printer,
+  Link as LinkIcon,
   X,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
@@ -173,6 +174,15 @@ export function ToolPanel({
       action: () => s.set({ activeModal: "attachments" }),
       disabled: !hasDoc,
     },
+    {
+      id: "add-link",
+      label: "Link Annotation",
+      description: "Create internal page jump or external web link",
+      category: "edit",
+      icon: LinkIcon,
+      action: () => s.set({ activeModal: "add-link" }),
+      disabled: !hasDoc,
+    },
     // Review
     {
       id: "highlight-text",
@@ -186,7 +196,7 @@ export function ToolPanel({
     {
       id: "drawing-markup",
       label: "Freehand Ink & Text Boxes",
-      description: "Pencil ink and text-box annotations (shapes pending M2)",
+      description: "Freehand ink, text boxes, and standard shape annotations",
       category: "review",
       icon: PenTool,
       action: () => s.set({ tool: "draw", activeModal: "annotations" }),

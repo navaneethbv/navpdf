@@ -161,6 +161,11 @@ pub fn atomic_save(
             "The destination already exists or cannot be created. Choose another Save As destination.".into()
         });
     }
+    // Opening a destination directory for fsync blocks indefinitely in the
+    // packaged macOS WebKit sandbox after a user-selected Save As path has
+    // been persisted. The temporary file is already flushed before the
+    // atomic rename, which is the durability boundary available here.
+    #[cfg(not(target_os = "macos"))]
     if let Ok(directory) = File::open(parent) {
         let _ = directory.sync_all();
     }

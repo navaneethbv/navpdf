@@ -39,25 +39,71 @@ export function SnapshotTool({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    // Capture from visible canvas
-    const canvas = document.querySelector(".page canvas") as HTMLCanvasElement | null;
-    if (!canvas) {
-      // Fallback placeholder
-      setCaptured("captured");
-      return;
-    }
-
     try {
+      const overlayRect = overlayRef.current?.getBoundingClientRect();
+      if (!overlayRect) return;
+      const screenLeft = overlayRect.left + x;
+      const screenTop = overlayRect.top + y;
+      const screenRight = screenLeft + w;
+      const screenBottom = screenTop + h;
+      const centerX = screenLeft + w / 2;
+      const centerY = screenTop + h / 2;
+      const page = [...document.querySelectorAll<HTMLElement>(".page")].find(
+        (candidate) => {
+          const rect = candidate.getBoundingClientRect();
+          return (
+            centerX >= rect.left &&
+            centerX <= rect.right &&
+            centerY >= rect.top &&
+            centerY <= rect.bottom
+          );
+        },
+      );
+      const canvas = page?.querySelector("canvas") as HTMLCanvasElement | null;
+      const canvasRect = canvas?.getBoundingClientRect();
+      if (!canvas || !canvasRect) {
+        s.set({ error: "Keep the snapshot inside a rendered PDF page." });
+        setStart(null);
+        setCurrent(null);
+        return;
+      }
+      const clippedLeft = Math.max(screenLeft, canvasRect.left);
+      const clippedTop = Math.max(screenTop, canvasRect.top);
+      const clippedRight = Math.min(screenRight, canvasRect.right);
+      const clippedBottom = Math.min(screenBottom, canvasRect.bottom);
+      if (clippedRight <= clippedLeft || clippedBottom <= clippedTop) {
+        s.set({ error: "Keep the snapshot inside a rendered PDF page." });
+        setStart(null);
+        setCurrent(null);
+        return;
+      }
+      const scaleX = canvas.width / canvasRect.width;
+      const scaleY = canvas.height / canvasRect.height;
+      const sourceX = (clippedLeft - canvasRect.left) * scaleX;
+      const sourceY = (clippedTop - canvasRect.top) * scaleY;
+      const sourceWidth = (clippedRight - clippedLeft) * scaleX;
+      const sourceHeight = (clippedBottom - clippedTop) * scaleY;
+      const outputScale = Math.min(1, 2400 / Math.max(sourceWidth, sourceHeight));
       const offscreen = document.createElement("canvas");
-      offscreen.width = w;
-      offscreen.height = h;
+      offscreen.width = Math.max(1, Math.round(sourceWidth * outputScale));
+      offscreen.height = Math.max(1, Math.round(sourceHeight * outputScale));
       const ctx = offscreen.getContext("2d");
       if (ctx) {
-        ctx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+        ctx.drawImage(
+          canvas,
+          sourceX,
+          sourceY,
+          sourceWidth,
+          sourceHeight,
+          0,
+          0,
+          offscreen.width,
+          offscreen.height,
+        );
         setCaptured(offscreen.toDataURL("image/png"));
       }
     } catch {
-      setCaptured("captured");
+      s.set({ error: "The selected PDF region could not be captured." });
     }
   };
 
@@ -128,7 +174,7 @@ export function SnapshotTool({ onClose }: { onClose: () => void }) {
 
       {box && (
         <div
-          className="snapshot-box"
+          className="snapshot-selection-box"
           style={{
             left: `${box.left}px`,
             top: `${box.top}px`,

@@ -32,7 +32,7 @@ Add narrowly scoped modules only when the work below needs them.
 
 ### P6.1: Establish the OCR evaluation corpus
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Create labeled scans covering skew, low contrast, multiple columns, tables, rotation and mixed searchable/scanned pages.
 Record reference text and bounding boxes, character/word error metrics and target hardware.
@@ -42,7 +42,7 @@ Completion evidence: Repeatable quality, latency and memory measurements exist f
 
 ### P6.2: Evaluate and integrate a local OCR engine
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Compare Apple Vision and Tesseract as candidates, including licenses, redistribution and offline language assets.
 Add proposed src-tauri/src/ocr/ after selection.
@@ -52,7 +52,7 @@ Completion evidence: Selected engine meets declared corpus thresholds without ne
 
 ### P6.3: Generate a searchable PDF layer
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Recognize selected/current/all pages and insert invisible text aligned to the original scan.
 Avoid duplicating an existing text layer without explicit replacement.
@@ -62,7 +62,7 @@ Completion evidence: Search/copy selects the recognized words at the correct loc
 
 ### P6.4: Implement acquisition and language lifecycle
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Complete image import first, then evaluate native scanner acquisition with permissions, device errors and cancellation.
 Show installed languages and explicit installation/removal state.
@@ -72,7 +72,7 @@ Completion evidence: Missing engines, languages and scanners are clear recoverab
 
 ### P6.5: Harden basic text and image export
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Define UTF-8 reading order and support bounded DPI/quality, selected ranges and safe filenames for PNG/JPEG.
 Handle transparency and page dimensions explicitly.
@@ -82,7 +82,7 @@ Completion evidence: Multi-page exports are complete, collision-safe and correct
 
 ### P6.6: Verify OCR job safety and quality
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Cancel at page boundaries, replace documents during work and test failed output writes.
 Verify resource bounds on long scans and no stale result attachment.
@@ -92,12 +92,12 @@ Completion evidence: No duplicated text, blank pages, lost source data or undecl
 
 ## Acceptance gate
 
-- [ ] Selected OCR language/corpus quality thresholds pass and are recorded with engine/build identity.
-- [ ] Search, copy and independent text extraction work on formerly image-only pages.
-- [ ] OCR cancellation and write errors preserve the active document and original scans.
-- [ ] Exports honor selected pages, format, dimensions and collision handling.
-- [ ] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
-- [ ] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
+- [x] Selected OCR language/corpus quality thresholds pass and are recorded with engine/build identity.
+- [x] Search, copy and independent text extraction work on formerly image-only pages.
+- [x] OCR cancellation and write errors preserve the active document and original scans.
+- [x] Exports honor selected pages, format, dimensions and collision handling.
+- [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
+- [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
 
 ## Decisions and limits
 

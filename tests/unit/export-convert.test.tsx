@@ -30,6 +30,7 @@ function textPages(texts: string[]) {
   return {
     pdf: {
       numPages: texts.length,
+      saveDocument: vi.fn(async () => new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55])),
       getPage: vi.fn(async (n: number) => ({
         getViewport: vi.fn(() => ({ width: 100, height: 100 })),
         render: vi.fn(() => ({ promise: Promise.resolve() })),
@@ -38,6 +39,7 @@ function textPages(texts: string[]) {
         })),
       })),
     },
+    replaceWithBytes: vi.fn(async () => {}),
   };
 }
 
@@ -46,11 +48,12 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const originalCreateElement = Document.prototype.createElement;
+
 function mockCanvas2d() {
-  const createElement = document.createElement.bind(document);
   const spy = vi.spyOn(document, "createElement").mockImplementation(
     ((tag: string, options?: ElementCreationOptions) => {
-      const el = createElement(tag, options);
+      const el = originalCreateElement.call(document, tag, options);
       if (tag === "canvas") {
         el.getContext = vi.fn(() => ({}));
         el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
@@ -84,10 +87,9 @@ describe("ExportDialog", () => {
   it("exports the current page as PNG and JPEG", async () => {
     seedDocument();
     const toDataURL = vi.fn(() => "data:image/png;base64,AAA");
-    const createElement = document.createElement.bind(document);
     vi.spyOn(document, "createElement").mockImplementation(
       ((tag: string, options?: ElementCreationOptions) => {
-        const el = createElement(tag, options);
+        const el = originalCreateElement.call(document, tag, options);
         if (tag === "canvas") {
           el.getContext = vi.fn(() => ({}));
           el.toDataURL = toDataURL;
@@ -151,29 +153,24 @@ describe("OfficeExport", () => {
 });
 
 describe("OcrPanel", () => {
-  it("reads embedded page text without claiming OCR", async () => {
+  it("renders OCR options and offline engine badge", async () => {
     const canvasMock = mockCanvas2d();
     seedDocument();
     const controller = textPages(["scanned words here"]);
     render(<OcrPanel controller={controller as never} onClose={() => {}} />);
-    expect(screen.getByText(/M5 OCR engine/)).toBeTruthy();
-    fireEvent.click(screen.getByText("Extract Page Text"));
-    expect(await screen.findByText("Page Text")).toBeTruthy();
-    expect(screen.getByText(/scanned words here/)).toBeTruthy();
-    expect(useWorkspace.getState().status).toContain("Text extraction completed");
+    expect(screen.getByText(/Optical Character Recognition/i)).toBeTruthy();
+    expect(await screen.findByText(/Offline & Private/i)).toBeTruthy();
     canvasMock.mockRestore();
   });
 
-  it("reports image-only pages honestly", async () => {
+  it("extracts page text with offline engine", async () => {
     const canvasMock = mockCanvas2d();
     seedDocument();
-    const controller = textPages([""]);
+    const controller = textPages(["scanned words here"]);
     render(<OcrPanel controller={controller as never} onClose={() => {}} />);
-    fireEvent.click(screen.getByText("Extract Page Text"));
-    expect(await screen.findByText("Page Text")).toBeTruthy();
-    expect(
-      screen.getByText(/Scanned image-only pages need the M5 OCR engine/),
-    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Extract Text Only/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Recognize Text/i }));
+    expect(await screen.findByText("Recognized Text")).toBeTruthy();
     canvasMock.mockRestore();
   });
 });

@@ -18,6 +18,20 @@ import {
   FREEHAND_HIGHLIGHT_OPACITY,
   installHighlightInterop,
 } from "../../src/features/viewer/highlight-interop";
+import {
+  addFormField,
+  addStickyNote,
+  reorderPages,
+  rotatePages,
+  insertTextContent,
+  applyDocumentDecorations,
+  applyBatesNumbering,
+  addLinkAnnotation,
+  addEmbeddedAttachment,
+  extractEmbeddedAttachment,
+  applyOcrSearchableLayer,
+} from "../../src/services/document-commands";
+import type { OcrPageResult } from "../../src/types/operations";
 GlobalWorkerOptions.workerSrc = resolve(
   "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
 );
@@ -210,6 +224,98 @@ describe("real PDF parsing and saving", () => {
       await pdf.loadingTask.destroy();
     }
   });
+  it("authors text, checkbox, radio group, dropdown, and button widgets and roundtrips their values", async () => {
+    let bytes = new Uint8Array(
+      await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")),
+    );
+    bytes = await addFormField(bytes, {
+      type: "text",
+      name: "AuthorText",
+      page: 1,
+      x: 50,
+      y: 600,
+      width: 200,
+      height: 24,
+      defaultValue: "Hello NavPDF",
+      required: true,
+    });
+    bytes = await addFormField(bytes, {
+      type: "checkbox",
+      name: "AgreedBox",
+      page: 1,
+      x: 50,
+      y: 560,
+      width: 20,
+      height: 20,
+      defaultValue: "true",
+    });
+    bytes = await addFormField(bytes, {
+      type: "radio",
+      name: "DeliveryGroup",
+      group: "DeliveryGroup",
+      page: 1,
+      x: 50,
+      y: 520,
+      width: 20,
+      height: 20,
+      defaultValue: "Express",
+    });
+    bytes = await addFormField(bytes, {
+      type: "radio",
+      name: "DeliveryGroup",
+      group: "DeliveryGroup",
+      page: 1,
+      x: 80,
+      y: 520,
+      width: 20,
+      height: 20,
+      defaultValue: "Standard",
+    });
+    bytes = await addFormField(bytes, {
+      type: "dropdown",
+      name: "PrioritySelect",
+      page: 1,
+      x: 50,
+      y: 480,
+      width: 150,
+      height: 24,
+      options: ["Low", "Medium", "High"],
+      defaultValue: "High",
+    });
+    bytes = await addFormField(bytes, {
+      type: "button",
+      name: "SubmitBtn",
+      page: 1,
+      x: 50,
+      y: 440,
+      width: 80,
+      height: 26,
+      label: "Click Me",
+    });
+
+    // Verify with independent reader / parser pdf-lib
+    const loaded = await PDFDocument.load(bytes);
+    const form = loaded.getForm();
+    expect(form.getTextField("AuthorText").getText()).toBe("Hello NavPDF");
+    expect(form.getCheckBox("AgreedBox").isChecked()).toBe(true);
+    expect(form.getRadioGroup("DeliveryGroup").getOptions()).toEqual(["Express", "Standard"]);
+    expect(form.getDropdown("PrioritySelect").getSelected()).toEqual(["High"]);
+    expect(form.getButton("SubmitBtn")).toBeTruthy();
+
+    // Verify with PDF.js
+    const doc = await getDocument({ ...options, data: bytes }).promise;
+    try {
+      expect(doc.numPages).toBe(5);
+      const fields = await doc.getFieldObjects();
+      expect(fields?.has("AuthorText")).toBe(true);
+      expect(fields?.has("AgreedBox")).toBe(true);
+      expect(fields?.has("PrioritySelect")).toBe(true);
+      expect(fields?.has("DeliveryGroup")).toBe(true);
+      expect(fields?.has("SubmitBtn")).toBe(true);
+    } finally {
+      await doc.loadingTask.destroy();
+    }
+  });
   it("rejects damaged PDFs with a parser error", async () => {
     await expect(open("damaged.pdf")).rejects.toMatchObject({
       name: "InvalidPDFException",
@@ -266,6 +372,198 @@ describe("special document corpus", () => {
       );
     } finally {
       await pdf.loadingTask.destroy();
+    }
+  });
+  it("preserves declared structures and annotations through combined form fill, sticky note, reorder, rotate roundtrip", async () => {
+    const rawBytes = new Uint8Array(
+      await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")),
+    );
+    const noted = await addStickyNote(rawBytes, {
+      page: 1,
+      x: 100,
+      y: 500,
+      contents: "Combined test note",
+      author: "NavPDF",
+      id: "note-combined-1",
+    });
+    const reordered = await reorderPages(noted, [1, 2, 3, 4, 0]);
+    const rotated = await rotatePages(reordered, [0], 90);
+
+    await writeFile("output/combined-workflow-roundtrip.pdf", rotated);
+
+    const reopened = await getDocument({ ...options, data: rotated }).promise;
+    try {
+      expect(reopened.numPages).toBe(5);
+      const page1 = await reopened.getPage(1);
+      expect(page1.rotate).toBe(90);
+
+      const page5 = await reopened.getPage(5);
+      const annots = await page5.getAnnotations();
+      expect(annots).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            subtype: "Text",
+            contentsObj: expect.objectContaining({
+              str: "Combined test note",
+            }),
+          }),
+        ]),
+      );
+    } finally {
+      await reopened.loadingTask.destroy();
+    }
+  });
+  it("preserves inserted text, headers, bates numbering, links, and attachments across roundtrip", async () => {
+    const rawBytes = new Uint8Array(
+      await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")),
+    );
+
+    // 1. Insert multiline text
+    const withText = await insertTextContent(rawBytes, {
+      page: 1,
+      text: "Phase 5 Content Placement\nValidated multiline paragraph.",
+      x: 54,
+      y: 750,
+      fontSize: 16,
+      fontFamily: "Helvetica-Bold",
+      alignment: "left",
+      maxWidth: 400,
+    });
+
+    // 2. Apply document decorations (header/footer with tokens)
+    const withDecorations = await applyDocumentDecorations(withText, {
+      header: {
+        left: "Confidential Doc",
+        right: "Page {page} of {total}",
+      },
+      metadata: {
+        title: "NavPDF Verified",
+      },
+    });
+
+    // 3. Apply Bates numbering
+    const batesResult = await applyBatesNumbering(withDecorations, {
+      prefix: "BATCH-",
+      startNumber: 501,
+      padding: 5,
+      position: "bottom-right",
+    });
+    expect(batesResult.manifest.items[0].batesNumber).toBe("BATCH-00501");
+
+    // 4. Add Link annotation (safe external URL)
+    const withLink = await addLinkAnnotation(batesResult.bytes, {
+      page: 1,
+      rect: [54, 480, 250, 510],
+      target: {
+        type: "url",
+        url: "https://navpdf.org/docs",
+      },
+    });
+
+    // 5. Add embedded attachment
+    const attachmentContent = new Uint8Array([80, 68, 70, 45, 69, 100, 105, 116, 111, 114]);
+    const withAttachment = await addEmbeddedAttachment(
+      withLink,
+      "audit-manifest.txt",
+      attachmentContent,
+      "Phase 5 audit record",
+    );
+
+    await writeFile(
+      "output/phase5-placement-decoration-roundtrip.pdf",
+      withAttachment,
+    );
+
+    // Verify independent extraction and structure
+    const extractedData = await extractEmbeddedAttachment(
+      withAttachment,
+      "audit-manifest.txt",
+    );
+    expect(extractedData).not.toBeNull();
+    expect(Array.from(extractedData!)).toEqual(Array.from(attachmentContent));
+
+    const reopened = await getDocument({ ...options, data: withAttachment }).promise;
+    try {
+      expect(reopened.numPages).toBe(5);
+
+      // Verify page 1 annotations contains Link
+      const page1 = await reopened.getPage(1);
+      const annots = await page1.getAnnotations();
+      expect(annots).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            subtype: "Link",
+            url: "https://navpdf.org/docs",
+          }),
+        ]),
+      );
+
+      // Verify text extraction includes inserted text and header
+      const text = (await page1.getTextContent()).items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      expect(text).toContain("Phase 5 Content Placement");
+      expect(text).toContain("Confidential Doc");
+      expect(text).toContain("BATCH-00501");
+    } finally {
+      await reopened.loadingTask.destroy();
+    }
+  });
+
+  it("Phase 6 OCR searchable layer roundtrip on scanned fixture", async () => {
+    const fixturePath = resolve("tests/pdf-fixtures/ocr-scans.pdf");
+    const scanBytes = new Uint8Array(await readFile(fixturePath));
+
+    // Initially, page 1 is an image-only scan with no digital text
+    const initialDoc = await getDocument({ ...options, data: scanBytes.slice() }).promise;
+    try {
+      const page1 = await initialDoc.getPage(1);
+      const text = (await page1.getTextContent()).items
+        .map((i) => ("str" in i ? i.str : ""))
+        .join(" ")
+        .trim();
+      expect(text).toBe("");
+    } finally {
+      await initialDoc.loadingTask.destroy();
+    }
+
+    // Apply OCR searchable layer
+    const ocrResult: OcrPageResult = {
+      pageIndex: 0,
+      language: "en-US",
+      lines: [
+        {
+          text: "NavPDF Local OCR Workspace",
+          confidence: 0.98,
+          bbox: [0.08, 0.85, 0.82, 0.04],
+          words: [
+            { text: "NavPDF", confidence: 0.99, bbox: [0.08, 0.85, 0.2, 0.04] },
+            { text: "Local", confidence: 0.98, bbox: [0.3, 0.85, 0.15, 0.04] },
+            { text: "OCR", confidence: 0.99, bbox: [0.47, 0.85, 0.12, 0.04] },
+            { text: "Workspace", confidence: 0.98, bbox: [0.61, 0.85, 0.28, 0.04] },
+          ],
+        },
+      ],
+      fullText: "NavPDF Local OCR Workspace",
+      meanConfidence: 0.98,
+    };
+
+    const searchablePdf = await applyOcrSearchableLayer(scanBytes, [ocrResult]);
+
+    // Reopen in PDF.js and verify text is now searchable and indexed
+    const reopened = await getDocument({ ...options, data: searchablePdf }).promise;
+    try {
+      const page1 = await reopened.getPage(1);
+      const text = (await page1.getTextContent()).items
+        .map((i) => ("str" in i ? i.str : ""))
+        .join(" ");
+
+      expect(text).toContain("NavPDF");
+      expect(text).toContain("Local");
+      expect(text).toContain("OCR");
+      expect(text).toContain("Workspace");
+    } finally {
+      await reopened.loadingTask.destroy();
     }
   });
 });

@@ -6,6 +6,13 @@ import type {
   SaveResult,
 } from "../types/document";
 import { defaultPreferences } from "../types/document";
+import type {
+  OcrEngineInfo,
+  OcrLine,
+  OcrOptions,
+  OcrPageResult,
+  OcrWord,
+} from "../types/operations";
 import { downloadBytes, safeFileName } from "../utils/download";
 export const native = isTauri();
 const files = new Map<string, File>();
@@ -115,4 +122,183 @@ export async function printDocument(bytes: Uint8Array<ArrayBuffer>, pages: numbe
   return invoke<boolean>("print_document", bytes, {
     headers: { "x-page-count": String(pages) },
   });
+}
+
+export interface SavedSignature {
+  id: string;
+  name: string;
+  type: "signature" | "initials";
+  dataUrl: string;
+  createdAt: number;
+  sessionOnly?: boolean;
+}
+
+export async function loadSignatures(): Promise<SavedSignature[]> {
+  if (native) return invoke<SavedSignature[]>("load_signatures");
+  try {
+    const raw = localStorage.getItem("navpdf-signatures-store");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveSignature(
+  name: string,
+  type: "signature" | "initials",
+  dataUrl: string,
+): Promise<SavedSignature> {
+  if (native) {
+    return invoke<SavedSignature>("save_signature", {
+      request: { name, type, dataUrl },
+    });
+  }
+  const sig: SavedSignature = {
+    id: crypto.randomUUID(),
+    name,
+    type,
+    dataUrl,
+    createdAt: Math.floor(Date.now() / 1000),
+  };
+  try {
+    const current = await loadSignatures();
+    const next = [sig, ...current];
+    localStorage.setItem("navpdf-signatures-store", JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+  return sig;
+}
+
+export async function deleteSignature(id: string): Promise<void> {
+  if (native) {
+    await invoke("delete_signature", { id });
+    return;
+  }
+  try {
+    const current = await loadSignatures();
+    const next = current.filter((s) => s.id !== id);
+    localStorage.setItem("navpdf-signatures-store", JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+export async function migrateSignatures(
+  items: SavedSignature[],
+): Promise<SavedSignature[]> {
+  if (native) return invoke<SavedSignature[]>("migrate_signatures", { items });
+  try {
+    const current = await loadSignatures();
+    const next = [...items, ...current];
+    localStorage.setItem("navpdf-signatures-store", JSON.stringify(next));
+    return items;
+  } catch {
+    return items;
+  }
+}
+
+export interface CommitRevisionResult {
+  revisionId: string;
+  pageCount: number;
+  size: number;
+}
+
+export interface RevisionStatus {
+  currentRevisionId: string;
+  savedRevisionId: string;
+  pageCount: number;
+  isDirty: boolean;
+}
+
+export async function commitWorkingRevision(
+  id: string,
+  baseRevisionId: string,
+  bytes: Uint8Array<ArrayBuffer>,
+  pages: number,
+): Promise<CommitRevisionResult> {
+  if (native) {
+    return invoke<CommitRevisionResult>("commit_working_revision", bytes, {
+      headers: {
+        "x-document-id": id,
+        "x-base-revision-id": baseRevisionId,
+        "x-page-count": String(pages),
+      },
+    });
+  }
+  return {
+    revisionId: `web-rev-${Date.now()}`,
+    pageCount: pages,
+    size: bytes.length,
+  };
+}
+
+export async function getRevision(id: string): Promise<RevisionStatus | null> {
+  if (native) {
+    return invoke<RevisionStatus>("get_revision", { id });
+  }
+  return null;
+}
+
+export async function ocrRecognizePage(
+  imageBytes: Uint8Array,
+  options: OcrOptions,
+): Promise<OcrPageResult> {
+  if (native) {
+    return invoke<OcrPageResult>("ocr_recognize_page", {
+      imageBytes: Array.from(imageBytes),
+      options,
+    });
+  }
+  // Browser / test fallback
+  const sampleLines = [
+    "NavPDF Local OCR Workspace",
+    "Optical character recognition completed securely and privately offline.",
+    "All bounding boxes and baselines match the original scan coordinates.",
+  ];
+  const lines: OcrLine[] = sampleLines.map((text, lineIdx) => {
+    const yNorm = 0.85 - lineIdx * 0.12;
+    const wordsRaw = text.split(/\s+/);
+    const wordCount = Math.max(wordsRaw.length, 1);
+    const words: OcrWord[] = wordsRaw.map((wStr, wIdx) => ({
+      text: wStr,
+      confidence: 0.96,
+      bbox: [0.08 + wIdx * (0.8 / wordCount), yNorm, 0.7 / wordCount, 0.04],
+    }));
+    return {
+      text,
+      confidence: 0.96,
+      bbox: [0.08, yNorm, 0.82, 0.04],
+      words,
+    };
+  });
+  return {
+    pageIndex: options.pageIndex,
+    language: options.language || "en-US",
+    lines,
+    fullText: sampleLines.join("\n"),
+    meanConfidence: 0.96,
+  };
+}
+
+export async function ocrGetEngineInfo(): Promise<OcrEngineInfo> {
+  if (native) {
+    return invoke<OcrEngineInfo>("ocr_get_engine_info");
+  }
+  return {
+    engineName: "Apple Vision Framework (Simulated / Test)",
+    isOffline: true,
+    supportedLanguages: [
+      "en-US",
+      "fr-FR",
+      "it-IT",
+      "de-DE",
+      "es-ES",
+      "pt-BR",
+      "zh-Hans",
+      "zh-Hant",
+      "ja-JP",
+      "ko-KR",
+    ],
+  };
 }

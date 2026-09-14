@@ -1,7 +1,9 @@
 mod commands;
 mod filesystem;
 mod logging;
+pub mod ocr;
 mod security;
+mod signatures;
 use commands::*;
 use std::{collections::HashMap, fs, sync::Mutex};
 use tauri::{
@@ -118,6 +120,8 @@ pub fn run() {
             read_range,
             close_document,
             save_document,
+            commit_working_revision,
+            get_revision,
             local_state,
             save_preferences,
             clear_recents,
@@ -126,7 +130,13 @@ pub fn run() {
             open_recovery,
             discard_recovery,
             mark_dirty,
-            close_window
+            close_window,
+            load_signatures,
+            save_signature,
+            delete_signature,
+            migrate_signatures,
+            ocr_recognize_page,
+            ocr_get_engine_info
         ])
         .build(tauri::generate_context!());
     match result {

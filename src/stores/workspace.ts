@@ -3,6 +3,7 @@ import type {
   DocumentDescriptor,
   DocumentInfo,
   Layout,
+  ShapeKind,
   SidebarTab,
   Tool,
   ToolMode,
@@ -37,16 +38,21 @@ interface Workspace {
   results: SearchResult[];
   bookmarks: Bookmark[];
   comments: Comment[];
+  selectedAnnotationId: string | null;
   renderedPages: number;
   firstRenderMs: number | null;
   highlightColor: string;
   inkColor: string;
   inkWidth: number;
+  inkOpacity: number;
+  shapeKind: ShapeKind;
   toolMode: ToolMode | null;
   activeModal: string | null;
   quickRailVisible: boolean;
   selectedPages: number[];
   activeSnapshot: boolean;
+  hasDigitalSignature: boolean;
+  formNotice: string | null;
   set: (patch: Partial<Omit<Workspace, "set" | "reset">>) => void;
   reset: () => void;
 }
@@ -54,12 +60,15 @@ const cleanDocument = {
   document: null,
   info: null,
   page: 1,
+  hasDigitalSignature: false,
+  formNotice: null,
   dirty: false,
   canUndo: false,
   canRedo: false,
   hasSelection: false,
   bookmarks: [],
   comments: [],
+  selectedAnnotationId: null,
   results: [],
   searchCount: 0,
   searchPending: false,
@@ -85,6 +94,8 @@ export const useWorkspace = create<Workspace>((set) => ({
   highlightColor: "#f5cf58",
   inkColor: "#25604b",
   inkWidth: 2,
+  inkOpacity: 1,
+  shapeKind: "Square",
   toolMode: null,
   activeModal: null,
   quickRailVisible: true,

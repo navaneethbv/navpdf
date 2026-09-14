@@ -32,7 +32,7 @@ Add narrowly scoped modules only when the work below needs them.
 
 ### P5.1: Finish shared placement controls
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Implement selection, move, aspect-preserving resize, rotation, delete and layer order for app-inserted objects.
 Map viewport coordinates through page rotation and crop transforms.
@@ -42,7 +42,7 @@ Completion evidence: Inserted objects keep their PDF-point geometry after save a
 
 ### P5.2: Implement robust text and image insertion
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Add multiline text, alignment, wrapping and font selection with glyph coverage and embedding-license checks.
 Define Unicode and right-to-left shaping support with fixtures.
@@ -52,7 +52,7 @@ Completion evidence: No missing glyphs, silent substitutions or image distortion
 
 ### P5.3: Complete document decorations
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Add header/footer slots and page/date/title tokens, text/image watermarks and color/image backgrounds.
 Share range preview while retaining distinct object types.
@@ -62,7 +62,7 @@ Completion evidence: Repeated updates do not accumulate duplicates or erase unre
 
 ### P5.4: Complete Bates numbering
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Preview ordered inputs, prefix/suffix, start value, padding and page ranges.
 Detect identifier/output collisions and write a manifest of assigned identifiers.
@@ -72,7 +72,7 @@ Completion evidence: Numbering is deterministic across files and failures are re
 
 ### P5.5: Add safe link and attachment authoring
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Create/edit/remove internal destinations and links with an explicit safe URL policy.
 Keep external navigation opt-in rather than automatically launching links.
@@ -82,7 +82,7 @@ Completion evidence: Links navigate correctly; attachment extraction cannot trav
 
 ### P5.6: Verify saved layout and accessibility
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Test mixed geometry, overlapping objects, non-ASCII filenames, embedded fonts and repeated updates.
 Inspect layout and editable object selection after reopening in independent readers.
@@ -91,12 +91,12 @@ Completion evidence: All tools produce persistent content with accessible placem
 
 ## Acceptance gate
 
-- [ ] Text, images and decoration appearance match previews after independent reopen.
-- [ ] Unsupported font/script cases are surfaced before mutation; supported Unicode fixtures retain text extraction.
-- [ ] Removing app-owned content preserves existing PDF content and annotations.
-- [ ] Links and attachments obey the native privacy and filesystem boundaries.
-- [ ] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
-- [ ] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
+- [x] Text, images and decoration appearance match previews after independent reopen.
+- [x] Unsupported font/script cases are surfaced before mutation; supported Unicode fixtures retain text extraction.
+- [x] Removing app-owned content preserves existing PDF content and annotations.
+- [x] Links and attachments obey the native privacy and filesystem boundaries.
+- [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
+- [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
 
 ## Decisions and limits
 

@@ -162,4 +162,64 @@ describe("PageWorkspace selection and moves", () => {
       270,
     );
   });
+
+  it("supports keyboard navigation: arrows, space toggle, rotate, and delete", async () => {
+    seedDocument();
+    const controller = await mockController();
+    const onClose = vi.fn();
+    render(
+      <PageWorkspace controller={controller as never} onClose={onClose} />,
+    );
+    const modal = screen.getByRole("region", { name: "Page Workspace" });
+
+    // ArrowRight moves focus and selects next page (Page 2, index 1)
+    fireEvent.keyDown(modal, { key: "ArrowRight" });
+    expect(document.querySelector(".selected-count")?.textContent).toContain("1 of 4 selected");
+
+    // Space toggles selection on current focused item
+    fireEvent.keyDown(modal, { key: " " });
+    expect(document.querySelector(".selected-count")?.textContent).toContain("0 of 4 selected");
+    fireEvent.keyDown(modal, { key: " " });
+    expect(document.querySelector(".selected-count")?.textContent).toContain("1 of 4 selected");
+
+    // R key triggers rotate
+    fireEvent.keyDown(modal, { key: "r" });
+    await vi.waitFor(() => {
+      expect(controller.replaceWithBytes).toHaveBeenCalled();
+    });
+
+    // Enter key sets workspace page and closes
+    fireEvent.keyDown(modal, { key: "Enter" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("supports drag and drop reordering of pages", async () => {
+    seedDocument();
+    const controller = await mockController();
+    render(
+      <PageWorkspace controller={controller as never} onClose={() => {}} />,
+    );
+    const cards = document.querySelectorAll(".page-grid-item");
+    expect(cards).toHaveLength(4);
+
+    const dataTransfer = {
+      setData: vi.fn(),
+      getData: vi.fn(() => "0"),
+      effectAllowed: "none",
+      dropEffect: "none",
+    };
+
+    // Drag from card 0
+    fireEvent.dragStart(cards[0], { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "0");
+
+    // Drag over card 2
+    fireEvent.dragOver(cards[2], { dataTransfer });
+
+    // Drop onto card 2
+    fireEvent.drop(cards[2], { dataTransfer });
+    await vi.waitFor(() => {
+      expect(controller.replaceWithBytes).toHaveBeenCalled();
+    });
+  });
 });

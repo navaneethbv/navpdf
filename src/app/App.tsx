@@ -17,8 +17,10 @@ import { PageWorkspace } from "../features/pages/PageWorkspace";
 import { PrintDialog } from "../features/pages/PrintDialog";
 import { CreatePdfDialog } from "../features/pages/CreatePdfDialog";
 import { AnnotationToolbar } from "../features/annotations/AnnotationToolbar";
+import { AnnotationNoteDialog } from "../features/annotations/AnnotationNoteDialog";
 import { SnapshotTool } from "../features/annotations/SnapshotTool";
 import { ContentEditor } from "../features/editor/ContentEditor";
+import { LinkDialog } from "../features/editor/LinkDialog";
 import { DecorationsDialog } from "../features/decorations/DecorationsDialog";
 import { AttachmentsDialog } from "../features/attachments/AttachmentsDialog";
 import { FormManager } from "../features/forms/FormManager";
@@ -31,6 +33,7 @@ import { CompressDialog } from "../features/compress/CompressDialog";
 import { ProtectDialog } from "../features/protect/ProtectDialog";
 import { DesignTools } from "../features/design/DesignTools";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
+import { applyTheme } from "../services/theme";
 export default function App() {
   const [controller, setController] = useState<ViewerController | null>(null),
     [passwordValue, setPasswordValue] = useState("");
@@ -46,14 +49,9 @@ export default function App() {
     else input.current?.click();
   }, [session]);
   useEffect(() => {
-    const media = matchMedia("(prefers-color-scheme: dark)");
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () =>
-      (document.documentElement.dataset.theme =
-        s.local.preferences.theme === "system"
-          ? media.matches
-            ? "dark"
-            : "light"
-          : s.local.preferences.theme);
+      applyTheme(s.local.preferences.theme, media.matches);
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
@@ -87,8 +85,21 @@ export default function App() {
           if (action === "-") controller?.zoom(s.zoom / 100 / 1.15);
         }
       }
-      if (!editable && event.key === "Escape" && !s.busy)
+      if (
+        !editable &&
+        (event.key === "Delete" || event.key === "Backspace") &&
+        s.selectedAnnotationId
+      ) {
+        event.preventDefault();
+        void controller?.deleteSelectedAnnotation();
+        return;
+      }
+      if (!editable && event.key === "Escape" && !s.busy) {
+        if (s.selectedAnnotationId) {
+          s.set({ selectedAnnotationId: null, hasSelection: false });
+        }
         controller?.setTool("select");
+      }
     }
     window.addEventListener("keydown", key, true);
     function warn(event: BeforeUnloadEvent) {
@@ -187,7 +198,7 @@ export default function App() {
         inert={s.busy}
       >
         {s.document && controller && <Sidebar controller={controller} />}
-        <ViewerHost onReady={ready} />
+        <ViewerHost controller={controller} onReady={ready} />
         {s.document && controller && <Properties controller={controller} />}
       </div>
       {!s.document && (
@@ -292,7 +303,8 @@ export default function App() {
         (s.document &&
           (s.tool === "highlight" ||
             s.tool === "draw" ||
-            s.tool === "text"))) && (
+            s.tool === "text" ||
+            s.tool === "shape"))) && (
         <AnnotationToolbar
           controller={controller}
           onClose={() => {
@@ -300,7 +312,8 @@ export default function App() {
             if (
               s.tool === "highlight" ||
               s.tool === "draw" ||
-              s.tool === "text"
+              s.tool === "text" ||
+              s.tool === "shape"
             ) {
               s.set({ tool: "select" });
               controller?.setTool("select");
@@ -337,6 +350,18 @@ export default function App() {
         <ContentEditor
           controller={controller}
           type="image"
+          onClose={() => s.set({ activeModal: null })}
+        />
+      )}
+      {s.activeModal === "add-link" && (
+        <LinkDialog
+          controller={controller}
+          onClose={() => s.set({ activeModal: null })}
+        />
+      )}
+      {s.activeModal === "sticky-note" && controller && (
+        <AnnotationNoteDialog
+          controller={controller}
           onClose={() => s.set({ activeModal: null })}
         />
       )}

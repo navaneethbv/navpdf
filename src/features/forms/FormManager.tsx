@@ -1,8 +1,16 @@
 import { useState } from "react";
-import { CheckSquare, Type, MousePointerClick, Plus, X } from "lucide-react";
-import { PDFDocument } from "pdf-lib";
+import {
+  CheckSquare,
+  Type,
+  MousePointerClick,
+  Plus,
+  X,
+  List,
+  CircleDot,
+} from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import { addFormField, type FormFieldDefinition } from "../../services/document-commands";
 
 export function FormManager({
   controller,
@@ -12,9 +20,16 @@ export function FormManager({
   onClose: () => void;
 }) {
   const s = useWorkspace();
-  const [fieldType, setFieldType] = useState<"text" | "checkbox" | "button">("text");
+  const [fieldType, setFieldType] = useState<
+    "text" | "checkbox" | "radio" | "dropdown" | "button"
+  >("text");
   const [fieldName, setFieldName] = useState("");
   const [defaultValue, setDefaultValue] = useState("");
+  const [optionsText, setOptionsText] = useState("Option 1, Option 2, Option 3");
+  const [groupName, setGroupName] = useState("");
+  const [multiline, setMultiline] = useState(false);
+  const [required, setRequired] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const [targetPage, setTargetPage] = useState(s.page);
   const [saving, setSaving] = useState(false);
 
@@ -23,32 +38,43 @@ export function FormManager({
     setSaving(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const doc = await PDFDocument.load(currentBytes);
-      const form = doc.getForm();
-      const pageIndex = Math.max(0, Math.min(targetPage - 1, doc.getPageCount() - 1));
-      const page = doc.getPage(pageIndex);
-      const { height } = page.getSize();
+      const page = Math.max(1, Math.min(targetPage, s.info?.pages || 1));
 
-      const uniqueName = `${fieldName}_${Date.now()}`;
-      if (fieldType === "text") {
-        const tf = form.createTextField(uniqueName);
-        if (defaultValue) tf.setText(defaultValue);
-        tf.addToPage(page, { x: 50, y: height - 120, width: 200, height: 24 });
-      } else if (fieldType === "checkbox") {
-        const cb = form.createCheckBox(uniqueName);
-        if (defaultValue === "true") cb.check();
-        cb.addToPage(page, { x: 50, y: height - 120, width: 18, height: 18 });
+      let width = 200;
+      let height = 24;
+      if (fieldType === "checkbox" || fieldType === "radio") {
+        width = 20;
+        height = 20;
       } else if (fieldType === "button") {
-        const btn = form.createButton(uniqueName);
-        btn.addToPage(defaultValue || "Submit", page, {
-          x: 50,
-          y: height - 120,
-          width: 80,
-          height: 28,
-        });
+        width = 90;
+        height = 28;
+      } else if (fieldType === "text" && multiline) {
+        height = 60;
       }
 
-      const newBytes = await doc.save();
+      const definition: FormFieldDefinition = {
+        type: fieldType,
+        name: fieldName.trim(),
+        page,
+        x: 50,
+        y: 650,
+        width,
+        height,
+        defaultValue: defaultValue.trim() || undefined,
+        required,
+        readOnly,
+        multiline: fieldType === "text" ? multiline : undefined,
+        group: fieldType === "radio" ? (groupName.trim() || fieldName.trim()) : undefined,
+        options:
+          fieldType === "dropdown"
+            ? optionsText
+                .split(",")
+                .map((o) => o.trim())
+                .filter(Boolean)
+            : undefined,
+      };
+
+      const newBytes = await addFormField(currentBytes, definition);
       await controller.replaceWithBytes(
         newBytes,
         `Form field "${fieldName}" created`,
@@ -62,7 +88,12 @@ export function FormManager({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Prepare Form Fields">
+    <div
+      className="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Prepare Form Fields"
+    >
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -79,18 +110,35 @@ export function FormManager({
             <label className="setting-title">Field Type</label>
             <div className="tab-buttons-bar">
               <button
+                type="button"
                 className={fieldType === "text" ? "active" : ""}
                 onClick={() => setFieldType("text")}
               >
                 <Type size={15} /> Text Input
               </button>
               <button
+                type="button"
                 className={fieldType === "checkbox" ? "active" : ""}
                 onClick={() => setFieldType("checkbox")}
               >
                 <CheckSquare size={15} /> Checkbox
               </button>
               <button
+                type="button"
+                className={fieldType === "radio" ? "active" : ""}
+                onClick={() => setFieldType("radio")}
+              >
+                <CircleDot size={15} /> Radio
+              </button>
+              <button
+                type="button"
+                className={fieldType === "dropdown" ? "active" : ""}
+                onClick={() => setFieldType("dropdown")}
+              >
+                <List size={15} /> Dropdown
+              </button>
+              <button
+                type="button"
                 className={fieldType === "button" ? "active" : ""}
                 onClick={() => setFieldType("button")}
               >
@@ -110,13 +158,52 @@ export function FormManager({
             />
           </div>
 
+          {fieldType === "radio" && (
+            <div className="setting-group">
+              <label className="setting-title">Radio Group Name</label>
+              <input
+                type="text"
+                placeholder="e.g. PaymentMethod, DeliveryChoice"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                className="text-input"
+              />
+              <span className="setting-desc">
+                Options in the same group are mutually exclusive.
+              </span>
+            </div>
+          )}
+
+          {fieldType === "dropdown" && (
+            <div className="setting-group">
+              <label className="setting-title">Dropdown Options</label>
+              <input
+                type="text"
+                placeholder="Comma separated: Red, Green, Blue"
+                value={optionsText}
+                onChange={(e) => setOptionsText(e.target.value)}
+                className="text-input"
+              />
+            </div>
+          )}
+
           <div className="setting-group">
             <label className="setting-title">
-              {fieldType === "button" ? "Button Label" : "Default Value"}
+              {fieldType === "button"
+                ? "Button Label"
+                : fieldType === "radio"
+                  ? "Option Value"
+                  : "Default Value"}
             </label>
             <input
               type="text"
-              placeholder={fieldType === "button" ? "e.g. Click Here" : "Optional default value"}
+              placeholder={
+                fieldType === "button"
+                  ? "e.g. Submit"
+                  : fieldType === "radio"
+                    ? "e.g. Yes"
+                    : "Optional default value"
+              }
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
               className="text-input"
@@ -134,13 +221,50 @@ export function FormManager({
               className="text-input"
             />
           </div>
+
+          <div className="setting-group">
+            <label className="setting-title">Field Properties</label>
+            <div style={{ display: "flex", gap: "16px", marginTop: "6px" }}>
+              {fieldType === "text" && (
+                <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <input
+                    type="checkbox"
+                    checked={multiline}
+                    onChange={(e) => setMultiline(e.target.checked)}
+                  />
+                  Multiline
+                </label>
+              )}
+              {fieldType !== "button" && (
+                <>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <input
+                      type="checkbox"
+                      checked={required}
+                      onChange={(e) => setRequired(e.target.checked)}
+                    />
+                    Required
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <input
+                      type="checkbox"
+                      checked={readOnly}
+                      onChange={(e) => setReadOnly(e.target.checked)}
+                    />
+                    Read-Only
+                  </label>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleAddField}
             disabled={saving || !fieldName.trim()}
             className="button-primary"
