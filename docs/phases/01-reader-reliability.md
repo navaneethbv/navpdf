@@ -35,7 +35,7 @@ Add narrowly scoped modules only when the work below needs them.
 
 ### P1.1: Resolve P1-01 first
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Repeat the native reproduction with both text-selection and freehand highlights; inspect annotation subtype, opacity and appearance resources in saved bytes.
 Compare Preview and NavPDF rendering before choosing an output fix; the root cause is not yet established.
@@ -46,7 +46,7 @@ Completion evidence: Readable highlights in both consumers; object inspection id
 
 ### P1.2: Verify session replacement and cancellation
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Exercise dirty A, Open B, Discard, then cancel the picker or choose a damaged file.
 Exercise parser failure, late viewer attachment failure and cleanup failure separately.
@@ -56,7 +56,7 @@ Completion evidence: A remains recoverable after failure; successful replacement
 
 ### P1.3: Complete Save and Save As acceptance
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Verify cancellation, new destination, existing destination, renamed display metadata, actual saved size, recent entry and remembered page.
 Test external modification before save and a competing new destination created after selection.
@@ -66,7 +66,7 @@ Completion evidence: Original data survives rejected saves; successful outputs r
 
 ### P1.4: Complete close, quit and recovery acceptance
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Test Cancel, Save and Discard from both close and quit.
 Use synthetic dirty edits, wait for a completed recovery write, interrupt the test process and relaunch.
@@ -76,7 +76,7 @@ Completion evidence: No silent loss of edits; recovery belongs to the correct do
 
 ### P1.5: Add bounded filesystem failure coverage
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Start with native reproduction on a disposable constrained destination when available.
 Add a narrowly scoped test seam for write, flush and persistence errors; inject disk-full behavior without filling the user's drive.
@@ -86,7 +86,7 @@ Completion evidence: Failure leaves no partial destination and retains unsaved/r
 
 ### P1.6: Rebuild and reconcile evidence
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Rebuild and relaunch the exact app bundle after fixes.
 Record source revision, executable hash, synthetic inputs, screenshots and output hashes.
@@ -96,12 +96,12 @@ Completion evidence: Tracker and verification ledger agree; no outstanding Phase
 
 ## Acceptance gate
 
-- [ ] 500-page search, highlight, Save As, close and reopen succeed in NavPDF and Preview; use Acrobat as an additional compatibility check when available.
-- [ ] Each cancellation, recovery and failed-save case retains the expected document, dirty state and bytes.
-- [ ] No unencrypted recovery is produced from encrypted inputs, which remain read-only.
-- [ ] The corrected toolbar renders without overlap at supported window sizes and with keyboard navigation.
-- [ ] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
-- [ ] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
+- [x] 500-page search, highlight, Save As, close and reopen succeed in NavPDF and Preview; use Acrobat as an additional compatibility check when available.
+- [x] Each cancellation, recovery and failed-save case retains the expected document, dirty state and bytes.
+- [x] No unencrypted recovery is produced from encrypted inputs, which remain read-only.
+- [x] The corrected toolbar renders without overlap at supported window sizes and with keyboard navigation.
+- [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
+- [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
 
 ## Decisions and limits
 

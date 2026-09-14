@@ -176,10 +176,11 @@ export function CreatePdfDialog({
 
         <div className="modal-body">
           {tab === "blank" ? (
-            <>
+            <div key="blank-section">
               <div className="setting-group">
                 <label className="setting-title">Page Count</label>
                 <input
+                  key="blank-page-count"
                   type="number"
                   min={1}
                   max={50}
@@ -200,9 +201,9 @@ export function CreatePdfDialog({
                   <option value="letter">US Letter (8.5 × 11 in)</option>
                 </select>
               </div>
-            </>
+            </div>
           ) : (
-            <div className="combine-files-section">
+            <div key="combine-section" className="combine-files-section">
               <button
                 className="button-secondary"
                 onClick={() => fileInputRef.current?.click()}
@@ -210,6 +211,7 @@ export function CreatePdfDialog({
                 Select Files to Combine...
               </button>
               <input
+                key="combine-file-input"
                 ref={fileInputRef}
                 type="file"
                 multiple
@@ -227,7 +229,7 @@ export function CreatePdfDialog({
                         <input
                           type="text"
                           placeholder="All pages, or e.g. 1-3, 5"
-                          value={item.range}
+                          value={item.range ?? ""}
                           onChange={(e) => updateRange(i, e.target.value)}
                           className="combine-range-input"
                           aria-label={`Page range for ${item.file.name}`}

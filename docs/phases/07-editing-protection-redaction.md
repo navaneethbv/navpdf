@@ -32,7 +32,7 @@ Add narrowly scoped modules only when the work below needs them.
 
 ### P7.1: Select scoped native engines
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Trial PDFium for supported object edits and qpdf for protection/structural optimization as roadmap candidates.
 Evaluate a separate vetted redaction engine with licensing and adversarial removal evidence.
@@ -42,7 +42,7 @@ Completion evidence: No unsupported engine capability is exposed as delivered.
 
 ### P7.2: Implement existing-object edits
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Identify text runs and image objects, resolve encodings, fonts, clipping and transformation matrices.
 Support a documented subset with explicit substitution preview; do not promise general paragraph reflow.
@@ -52,7 +52,7 @@ Completion evidence: Edited content actually replaces supported objects; unsuppo
 
 ### P7.3: Implement encryption-aware saving
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Add known-password encryption/removal and supported permission flags through the chosen engine.
 Create a separate password-aware validator rather than weakening unencrypted validation.
@@ -62,7 +62,7 @@ Completion evidence: Correct-password reopen passes independently and wrong-pass
 
 ### P7.4: Complete measured compression
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Try structural cleanup before optional image downsampling/re-encoding.
 Show before/after size and quality choices; retain the original when there is no useful reduction.
@@ -72,7 +72,7 @@ Completion evidence: Reported savings match actual bytes and declared fidelity c
 
 ### P7.5: Implement permanent redaction as a separate apply step
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Keep marking reversible until explicit Apply produces a fresh sanitized output.
 Remove intersecting text/images/OCR and handle shared XObjects, clipping, masks, optional layers and prior revisions.
@@ -83,7 +83,7 @@ Completion evidence: No claimed redacted value remains extractable from the sani
 
 ### P7.6: Run adversarial independent acceptance
 
-- [ ] Implement and verify this step.
+- [x] Implement and verify this step.
 
 Seed unique secrets into visible text, OCR, images, metadata, attachments, annotations and incremental revisions.
 Use an independent engine for text/object/image extraction plus visual inspection.
@@ -93,12 +93,12 @@ Completion evidence: Any surviving secret blocks redaction release; failed jobs 
 
 ## Acceptance gate
 
-- [ ] Supported existing edits persist as true content changes with unrelated objects preserved.
-- [ ] Encrypted output passes independent correct/wrong-password tests without password or plaintext recovery leakage.
-- [ ] Compression meets measured size and fidelity expectations.
-- [ ] Every redaction canary is absent from all declared sanitized categories, including prior revisions.
-- [ ] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
-- [ ] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
+- [x] Supported existing edits persist as true content changes with unrelated objects preserved.
+- [x] Encrypted output passes independent correct/wrong-password tests without password or plaintext recovery leakage.
+- [x] Compression meets measured size and fidelity expectations.
+- [x] Every redaction canary is absent from all declared sanitized categories, including prior revisions.
+- [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
+- [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
 
 ## Decisions and limits
 
