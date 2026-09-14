@@ -43,7 +43,7 @@ Completion evidence: Text, checkbox, radio and choice widgets can be filled and 
 
 ### P3.2: Complete field authoring
 
-- [x] Implement and verify this step.
+- [ ] Implement and verify this step.
 
 Support names, labels, defaults, required/read-only flags, multiline fields, choices and tab order.
 Define duplicate-name behavior and safe push-button actions; dates are a field format.
@@ -63,7 +63,7 @@ Completion evidence: Marks and signatures retain placement across zoom, crop and
 
 ### P3.4: Protect the reusable signature library
 
-- [x] Implement and verify this step.
+- [ ] Implement and verify this step.
 
 Add an OS-backed secure asset store, proposed under src-tauri/src/signatures/.
 Encrypt reusable assets using protected key material and provide a session-only option.
@@ -84,7 +84,7 @@ Completion evidence: No certification claims, silent script execution or sensiti
 
 ### P3.6: Complete form and signature interoperability
 
-- [x] Implement and verify this step.
+- [ ] Implement and verify this step.
 
 Use mixed fields, repeated names, Unicode values, read-only widgets, multiple signatures and rotated/cropped pages.
 Exercise keyboard traversal, save failure, undo and independent reopen.

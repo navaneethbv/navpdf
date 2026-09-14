@@ -189,24 +189,26 @@ describe("OfficeExport", () => {
 });
 
 describe("OcrPanel", () => {
-  it("renders OCR options and offline engine badge", async () => {
+  it("explains the native OCR requirement in browser preview", async () => {
     const canvasMock = mockCanvas2d();
     seedDocument();
     const controller = textPages(["scanned words here"]);
     render(<OcrPanel controller={controller as never} onClose={() => {}} />);
     expect(screen.getByText(/Optical Character Recognition/i)).toBeTruthy();
-    expect(await screen.findByText(/Offline & Private/i)).toBeTruthy();
+    expect(await screen.findByText(/OCR requires the native macOS application/i)).toBeTruthy();
+    expect(screen.queryByText(/Offline & Private/i)).toBeNull();
     canvasMock.mockRestore();
   });
 
-  it("extracts page text with offline engine", async () => {
+  it("disables recognition without a real browser engine", async () => {
     const canvasMock = mockCanvas2d();
     seedDocument();
     const controller = textPages(["scanned words here"]);
     render(<OcrPanel controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Extract Text Only/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Recognize Text/i }));
-    expect(await screen.findByText("Recognized Text")).toBeTruthy();
+    await screen.findByText(/OCR requires the native macOS application/i);
+    expect(screen.getByRole("button", { name: /Recognize Text/i }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByText("Recognized Text")).toBeNull();
     canvasMock.mockRestore();
   });
 });

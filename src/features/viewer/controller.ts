@@ -71,6 +71,7 @@ export class ViewerController {
   readonly history = new RevisionHistory();
   private nativeCanUndo = false;
   private nativeCanRedo = false;
+  private committedRevisionId: string | undefined;
   constructor(
     readonly container: HTMLDivElement,
     element: HTMLDivElement,
@@ -358,10 +359,12 @@ export class ViewerController {
     const previousState = useWorkspace.getState();
     const previousTask = this.revisionTask;
     let loaded: PDFDocumentProxy;
+    let nativeRevisionId: string | undefined;
     try {
       loaded = await task.promise;
       await this.attach(loaded);
       await this.viewer.firstPagePromise;
+      nativeRevisionId = await this.commitNativeRevision(historyBytes, loaded.numPages, previousState.document);
     } catch (error) {
       await task.destroy().catch(() => {});
       if (previousPdf && this.pdf !== previousPdf) {
@@ -373,27 +376,6 @@ export class ViewerController {
     }
     this.revisionTask = task;
     if (previousTask) await previousTask.destroy().catch(() => {});
-
-    // Commit to native working revision if running in native desktop environment
-    let nativeRevisionId: string | undefined;
-    const docId = previousState.document?.id;
-    if (native && docId) {
-      try {
-        const baseRev =
-          this.history.getCurrent()?.revisionId ??
-          previousState.document?.revisionId ??
-          "";
-        const commitRes = await commitWorkingRevision(
-          docId,
-          baseRev,
-          candidateBytes as Uint8Array<ArrayBuffer>,
-          loaded.numPages,
-        );
-        nativeRevisionId = commitRes.revisionId;
-      } catch (err) {
-        console.warn("Native working revision commit warning:", err);
-      }
-    }
 
     const state = useWorkspace.getState();
     if (options?.resetHistory) {
@@ -454,7 +436,7 @@ export class ViewerController {
     });
   }
   private async applyRevision(revision: DocumentRevision, status: string) {
-    const task = loadPdfFromBytes(revision.bytes as Uint8Array<ArrayBuffer>);
+    const task = loadPdfFromBytes(new Uint8Array(revision.bytes));
     const previousPdf = this.pdf;
     const previousState = useWorkspace.getState();
     const previousTask = this.revisionTask;
@@ -463,6 +445,7 @@ export class ViewerController {
       loaded = await task.promise;
       await this.attach(loaded);
       await this.viewer.firstPagePromise;
+      await this.commitNativeRevision(revision.bytes, loaded.numPages, previousState.document);
     } catch (error) {
       await task.destroy().catch(() => {});
       if (previousPdf && this.pdf !== previousPdf) {
@@ -494,6 +477,21 @@ export class ViewerController {
       }),
     );
     await this.readComments();
+  }
+  private async commitNativeRevision(
+    bytes: Uint8Array,
+    pages: number,
+    document: import("../../types/document").DocumentDescriptor | null,
+  ) {
+    if (!native || !document) return undefined;
+    const result = await commitWorkingRevision(
+      document.id,
+      this.committedRevisionId ?? document.revisionId ?? "",
+      new Uint8Array(bytes),
+      pages,
+    );
+    this.committedRevisionId = result.revisionId;
+    return result.revisionId;
   }
   /** Retire the in-memory mutated revision without detaching the viewer. */
   async releaseRevision() {
@@ -873,12 +871,14 @@ export class ViewerController {
     revisionId?: string,
   ) {
     this.history.seed({ bytes, numPages, description, revisionId });
+    this.committedRevisionId = revisionId;
     this.nativeCanUndo = false;
     this.nativeCanRedo = false;
     this.updateHistoryControls();
   }
   clearRevisionHistory() {
     this.history.clear();
+    this.committedRevisionId = undefined;
     this.nativeCanUndo = false;
     this.nativeCanRedo = false;
     this.updateHistoryControls();

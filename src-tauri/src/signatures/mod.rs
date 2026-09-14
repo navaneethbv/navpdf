@@ -1,3 +1,7 @@
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -22,35 +26,43 @@ pub struct SignatureAsset {
 pub struct SignatureStore {
     dir: PathBuf,
     key: [u8; 32],
+    legacy_key: [u8; 32],
 }
 
 impl SignatureStore {
     pub fn new(root: &Path) -> Result<Self, String> {
+        Self::with_key(root, protected_key(root)?)
+    }
+
+    fn with_key(root: &Path, key: [u8; 32]) -> Result<Self, String> {
         let dir = root.join("signatures");
         if !dir.exists() {
             fs::create_dir_all(&dir).map_err(|_| "Unable to create secure signature directory.")?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
-            }
         }
-        let key = derive_key(root);
-        Ok(Self { dir, key })
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+                .map_err(|_| "Unable to protect the signature directory.")?;
+        }
+        Ok(Self {
+            dir,
+            key,
+            legacy_key: derive_key(root),
+        })
     }
 
     pub fn list(&self) -> Result<Vec<SignatureAsset>, String> {
         let mut results = Vec::new();
         let entries = match fs::read_dir(&self.dir) {
             Ok(iter) => iter,
-            Err(_) => return Ok(results),
+            Err(_) => return Err("Unable to read the signature library.".into()),
         };
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = entry.map_err(|_| "Unable to read a signature library entry.")?;
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("sig") {
-                if let Ok(asset) = self.read_asset(&path) {
-                    results.push(asset);
-                }
+                results.push(self.read_asset(&path)?);
             }
         }
         results.sort_by_key(|b| std::cmp::Reverse(b.created_at));
@@ -66,7 +78,7 @@ impl SignatureStore {
         if name.trim().is_empty() {
             return Err("Signature name cannot be empty.".into());
         }
-        if !data_url.starts_with("data:image/png;base64,") {
+        if data_url.len() > 8 * 1024 * 1024 || !data_url.starts_with("data:image/png;base64,") {
             return Err("Invalid signature image format.".into());
         }
         let now = SystemTime::now()
@@ -87,9 +99,7 @@ impl SignatureStore {
     }
 
     pub fn delete(&self, id: &str) -> Result<(), String> {
-        if id.contains('/') || id.contains('\\') || id.contains("..") {
-            return Err("Invalid signature identifier.".into());
-        }
+        validate_id(id)?;
         let target = self.dir.join(format!("{id}.sig"));
         if target.exists() {
             fs::remove_file(&target).map_err(|_| "Failed to delete signature asset.")?;
@@ -98,6 +108,15 @@ impl SignatureStore {
     }
 
     pub fn migrate(&self, items: Vec<SignatureAsset>) -> Result<Vec<SignatureAsset>, String> {
+        // Validate the whole batch before writing any destination.
+        for item in &items {
+            validate_id(&item.id)?;
+            if item.data_url.len() > 8 * 1024 * 1024
+                || !item.data_url.starts_with("data:image/png;base64,")
+            {
+                return Err("Invalid signature image.".into());
+            }
+        }
         let mut migrated = Vec::new();
         for item in items {
             let target = self.dir.join(format!("{}.sig", item.id));
@@ -111,7 +130,7 @@ impl SignatureStore {
 
     fn write_asset(&self, path: &Path, asset: &SignatureAsset) -> Result<(), String> {
         let serialized = serde_json::to_vec(asset).map_err(|_| "Serialization error.")?;
-        let encrypted = encrypt_payload(&self.key, &serialized);
+        let encrypted = seal_payload(&self.key, &serialized)?;
 
         let parent = path.parent().ok_or("Invalid directory.")?;
         let mut temp =
@@ -125,28 +144,116 @@ impl SignatureStore {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o600));
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o600))
+                .map_err(|_| "Unable to protect the signature file.")?;
         }
 
         temp.persist(path)
             .map_err(|_| "Failed to persist signature asset.")?;
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
-        }
         Ok(())
     }
 
     fn read_asset(&self, path: &Path) -> Result<SignatureAsset, String> {
         let mut file = File::open(path).map_err(|_| "Unable to open asset.")?;
+        if file
+            .metadata()
+            .map_err(|_| "Unable to inspect asset.")?
+            .len()
+            > 9 * 1024 * 1024
+        {
+            return Err("Signature asset exceeds the size limit.".into());
+        }
         let mut encrypted = Vec::new();
         file.read_to_end(&mut encrypted)
             .map_err(|_| "Unable to read asset.")?;
-        let decrypted = decrypt_payload(&self.key, &encrypted)?;
-        serde_json::from_slice(&decrypted).map_err(|_| "Invalid asset format.".into())
+        let legacy = !encrypted.starts_with(b"NAVSIG2\0");
+        let decrypted = if !legacy {
+            open_payload(&self.key, &encrypted)?
+        } else {
+            decrypt_payload(&self.legacy_key, &encrypted)?
+        };
+        let asset: SignatureAsset =
+            serde_json::from_slice(&decrypted).map_err(|_| "Invalid asset format.")?;
+        if legacy {
+            // Upgrade with the same atomic writer; failed migration retains the old file.
+            self.write_asset(path, &asset)?;
+            return self.read_asset(path);
+        }
+        Ok(asset)
     }
+}
+
+fn validate_id(id: &str) -> Result<(), String> {
+    if id.is_empty()
+        || id.len() > 128
+        || !id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err("Invalid signature identifier.".into());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn protected_key(root: &Path) -> Result<[u8; 32], String> {
+    use security_framework::{os::macos::keychain::SecKeychain, passwords::get_generic_password};
+    // Serialize first-use creation within the native process.
+    static KEY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = KEY_LOCK
+        .lock()
+        .map_err(|_| "Secure signature storage is busy.")?;
+    let account = format!("{:x}", Sha256::digest(root.to_string_lossy().as_bytes()));
+    let service = "local.navpdf.reader.signature-key-v2";
+    match get_generic_password(service, &account) {
+        Ok(bytes) => bytes
+            .try_into()
+            .map_err(|_| "Invalid signature key in Keychain.".into()),
+        Err(error) if error.code() == -25300 => {
+            let mut key = [0; 32];
+            getrandom::fill(&mut key).map_err(|_| "Unable to generate signature key.")?;
+            let keychain = SecKeychain::default()
+                .map_err(|_| "Keychain is unavailable. Use session-only signatures.")?;
+            match keychain.add_generic_password(service, &account, &key) {
+                Ok(()) => Ok(key),
+                Err(error) if error.code() == -25299 => get_generic_password(service, &account)
+                    .map_err(|_| "Unable to read signature key.")?
+                    .try_into()
+                    .map_err(|_| "Invalid signature key in Keychain.".into()),
+                Err(_) => Err("Keychain is unavailable. Use session-only signatures.".into()),
+            }
+        }
+        Err(_) => Err("Keychain is unavailable. Use session-only signatures.".into()),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn protected_key(_root: &Path) -> Result<[u8; 32], String> {
+    Err("Protected storage is unavailable. Use session-only signatures.".into())
+}
+
+fn seal_payload(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    let mut nonce = [0; 12];
+    getrandom::fill(&mut nonce).map_err(|_| "Unable to generate signature nonce.")?;
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Invalid signature key.")?;
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), plaintext)
+        .map_err(|_| "Signature encryption failed.")?;
+    let mut output = b"NAVSIG2\0".to_vec();
+    output.extend_from_slice(&nonce);
+    output.extend_from_slice(&ciphertext);
+    Ok(output)
+}
+
+fn open_payload(key: &[u8; 32], payload: &[u8]) -> Result<Vec<u8>, String> {
+    if payload.len() < 36 {
+        return Err("Asset payload too short.".into());
+    }
+    Aes256Gcm::new_from_slice(key)
+        .map_err(|_| "Invalid signature key.")?
+        .decrypt(Nonce::from_slice(&payload[8..20]), &payload[20..])
+        .map_err(|_| "Signature asset failed integrity check.".into())
 }
 
 fn derive_key(root: &Path) -> [u8; 32] {
@@ -160,8 +267,9 @@ fn derive_key(root: &Path) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// Encrypts plaintext using SHA-256 in counter mode with a 16-byte nonce and HMAC authentication tag.
-/// Format: [16 bytes nonce] [N bytes ciphertext] [32 bytes auth tag]
+/// Legacy v1 test fixture encoder. The custom keyed digest was not HMAC.
+/// Production writes use AES-GCM; this exists only to test migration of old files.
+#[cfg(test)]
 fn encrypt_payload(key: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
     let mut nonce = [0_u8; 16];
     let uuid_bytes = uuid::Uuid::new_v4();
@@ -236,6 +344,62 @@ mod tests {
     use super::*;
 
     #[test]
+    fn protected_assets_require_secret_key_and_authenticate_ciphertext() {
+        let payload = seal_payload(&[42; 32], b"synthetic asset").unwrap();
+        assert_eq!(
+            open_payload(&[42; 32], &payload).unwrap(),
+            b"synthetic asset"
+        );
+        assert!(open_payload(&[41; 32], &payload).is_err());
+        let mut tampered = payload.clone();
+        tampered[21] ^= 1;
+        assert!(open_payload(&[42; 32], &tampered).is_err());
+        assert_ne!(
+            seal_payload(&[42; 32], b"synthetic asset").unwrap(),
+            payload
+        );
+    }
+
+    #[test]
+    fn legacy_assets_upgrade_to_authenticated_encryption_without_losing_content() {
+        let root = tempfile::tempdir().unwrap();
+        let store = SignatureStore::with_key(root.path(), [17; 32]).unwrap();
+        let asset = SignatureAsset {
+            id: "old".into(),
+            name: "Synthetic".into(),
+            asset_type: "signature".into(),
+            data_url: "data:image/png;base64,AA==".into(),
+            created_at: 1,
+        };
+        let path = store.dir.join("old.sig");
+        let old = encrypt_payload(
+            &derive_key(root.path()),
+            &serde_json::to_vec(&asset).unwrap(),
+        );
+        fs::write(&path, old).unwrap();
+        assert_eq!(store.list().unwrap(), vec![asset.clone()]);
+        let upgraded = fs::read(&path).unwrap();
+        assert!(upgraded.starts_with(b"NAVSIG2\0"));
+        assert!(open_payload(&derive_key(root.path()), &upgraded).is_err());
+        assert_eq!(store.list().unwrap(), vec![asset]);
+    }
+
+    #[test]
+    fn migration_rejects_path_escape_before_writing() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+        let result = store.migrate(vec![SignatureAsset {
+            id: "../escaped".into(),
+            name: "Synthetic".into(),
+            asset_type: "signature".into(),
+            data_url: "data:image/png;base64,AA==".into(),
+            created_at: 0,
+        }]);
+        assert!(result.is_err());
+        assert!(!temp.path().join("escaped.sig").exists());
+    }
+
+    #[test]
     fn encryption_roundtrip_and_tamper_detection() {
         let key = [42_u8; 32];
         let original = b"Sample signature PNG data and metadata payload";
@@ -255,7 +419,7 @@ mod tests {
     #[test]
     fn signature_store_crud_and_permissions() {
         let temp = tempfile::tempdir().unwrap();
-        let store = SignatureStore::new(temp.path()).unwrap();
+        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
 
         assert_eq!(store.list().unwrap().len(), 0);
 
@@ -276,7 +440,10 @@ mod tests {
         assert_eq!(list[0].name, "My Signature");
 
         // Verify file on disk is encrypted
-        let file_path = temp.path().join("signatures").join(format!("{}.sig", saved.id));
+        let file_path = temp
+            .path()
+            .join("signatures")
+            .join(format!("{}.sig", saved.id));
         let raw_bytes = fs::read(&file_path).unwrap();
         assert_ne!(raw_bytes, saved.data_url.as_bytes());
 
@@ -296,7 +463,7 @@ mod tests {
     #[test]
     fn signature_migration_verifies_saved_copy() {
         let temp = tempfile::tempdir().unwrap();
-        let store = SignatureStore::new(temp.path()).unwrap();
+        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
 
         let legacy = vec![
             SignatureAsset {

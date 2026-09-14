@@ -1,6 +1,15 @@
 # NavPDF handoff
 
-Checkpoint: September 14, 2026, PR #2 phase alignment review.
+Current corrective review: see [PR-2-REVIEW.md](PR-2-REVIEW.md).
+The completion statements and hashes below predate corrections to signature storage, native revisions and real OCR.
+Phases 3, 4 and 6 are reopened in the delivery tracker; Phase 9 remains partial.
+Native UI acceptance is blocked by unreliable computer-use input after a service restart; the rebuilt app launches, but file selection and clipboard input do not reliably complete.
+The corrected app and DMG both built, and `hdiutil verify` passed.
+Current executable SHA-256: `c57407acafaf6bc29628ace8c0a8a63cdd0b7ed5dbcc984069da3f46c76c504b`.
+Current DMG SHA-256: `bc20c3648f1b59713553655afe98530c9502ae4b7c5570b6294fb462cb06d27a`.
+The corrections are prepared on `fix/native-ocr-signature-revisions`, based on merged PR #2 at `f229114`.
+
+Historical checkpoint: September 14, 2026, PR #2 phase alignment review, before the corrective follow-up.
 The working tree is on `delivery/phases-1-10` with approved local implementations for Phases 1 through 8 and Phase 10, plus a verified unsigned local macOS package for Phase 9.
 Phase 9 clean-account installation, distribution signing/notarization, physical printing, and non-macOS native acceptance remain open.
 

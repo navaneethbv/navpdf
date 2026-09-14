@@ -32,6 +32,7 @@ export function OcrPanel({
 }) {
   const s = useWorkspace();
   const [engineInfo, setEngineInfo] = useState<OcrEngineInfo | null>(null);
+  const [engineError, setEngineError] = useState<string | null>(null);
   const [targetScope, setTargetScope] = useState<"current" | "all" | "range">("current");
   const [customRange, setCustomRange] = useState("");
   const [selectedLang, setSelectedLang] = useState("en-US");
@@ -54,7 +55,8 @@ export function OcrPanel({
       if (info.supportedLanguages.length > 0) {
         setSelectedLang(info.supportedLanguages[0]);
       }
-    });
+    }).catch((err: unknown) => setEngineError(err instanceof Error ? err.message : String(err)));
+    return () => { cancelledRef.current = true; };
   }, []);
 
   const getTargetPages = (): number[] => {
@@ -68,7 +70,15 @@ export function OcrPanel({
   };
 
   const handleStartOcr = async () => {
-    if (!controller?.pdf) return;
+    if (!controller?.pdf || !engineInfo) return;
+    const sourcePdf = controller.pdf;
+    const sourceId = useWorkspace.getState().document?.id;
+    const ensureCurrent = () => {
+      if (cancelledRef.current) throw new Error("OCR cancelled. Document unchanged.");
+      if (controller.pdf !== sourcePdf || useWorkspace.getState().document?.id !== sourceId) {
+        throw new Error("Document changed during OCR. Result discarded.");
+      }
+    };
     cancelledRef.current = false;
     setRunning(true);
     setProgress(5);
@@ -82,7 +92,8 @@ export function OcrPanel({
         throw new Error("No valid pages selected for OCR.");
       }
 
-      const pdfBytes = await controller.pdf.saveDocument();
+      const pdfBytes = await sourcePdf.saveDocument();
+      ensureCurrent();
 
       // Check for existing text if not already confirmed
       if (!replaceExisting && mode === "searchable") {
@@ -111,50 +122,48 @@ export function OcrPanel({
         setProgress(pct);
         setStatusText(`Recognizing page ${pageNum} of ${totalPages}...`);
 
-        const page = await controller.pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 }); // 150 DPI rendering
+        const page = await sourcePdf.getPage(pageNum);
+        // Use unrotated crop coordinates so OCR boxes map back into PDF space.
+        const viewport = page.getViewport({ scale: 2.0, rotation: 0 });
+        if (viewport.width <= 0 || viewport.height <= 0 || !Number.isFinite(viewport.width * viewport.height) || viewport.width > 8192 || viewport.height > 8192 || viewport.width * viewport.height > 16_000_000) {
+          throw new Error("This page exceeds the OCR image size limit.");
+        }
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext("2d");
 
         let imageBytes: Uint8Array;
-        if (ctx) {
-          // @ts-expect-error PDF.js render context
-          await page.render({ canvasContext: ctx, viewport }).promise;
-          try {
-            const dataUrl = canvas.toDataURL("image/png");
-            const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-            const binaryStr = base64Data ? atob(base64Data) : "";
-            if (binaryStr.length > 0) {
-              imageBytes = new Uint8Array(binaryStr.length);
-              for (let b = 0; b < binaryStr.length; b++) {
-                imageBytes[b] = binaryStr.charCodeAt(b);
-              }
-            } else {
-              imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-            }
-          } catch {
-            imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-          }
-        } else {
-          imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        try {
+          if (!ctx) throw new Error("Unable to render the OCR page.");
+          await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+          ensureCurrent();
+          const dataUrl = canvas.toDataURL("image/png");
+          const encoded = dataUrl.split(",")[1];
+          if (!encoded) throw new Error("Unable to encode the OCR page.");
+          imageBytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+        } finally {
+          canvas.width = 0;
+          canvas.height = 0;
         }
 
         const pageResult = await ocrRecognizePage(imageBytes, {
           pageIndex,
           language: selectedLang,
         });
+        ensureCurrent();
 
         results.push(pageResult);
         textAccumulator.push(`--- Page ${pageNum} ---\n${pageResult.fullText}`);
       }
 
       setProgress(90);
+      ensureCurrent();
       setStatusText("Applying searchable text layer...");
 
       if (mode === "searchable") {
         const updatedBytes = await applyOcrSearchableLayer(pdfBytes, results);
+        ensureCurrent();
         await controller.replaceWithBytes(
           updatedBytes,
           `OCR Searchable Layer (${results.length} pages)`,
@@ -207,6 +216,7 @@ export function OcrPanel({
         </div>
 
         <div className="modal-body">
+          {engineError && <p role="alert">{engineError}</p>}
           {engineInfo && (
             <div
               style={{
@@ -245,8 +255,8 @@ export function OcrPanel({
                 <span>Existing digital text detected</span>
               </div>
               <p style={{ marginTop: "4px" }}>
-                Target pages already contain digital text. Creating an OCR layer will replace the
-                existing text layer.
+                Target pages already contain digital text. Original text stays in the PDF and may
+                appear twice in search results. Only a previous NavPDF OCR layer is replaced.
               </p>
               <label style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px" }}>
                 <input
@@ -254,7 +264,7 @@ export function OcrPanel({
                   checked={replaceExisting}
                   onChange={(e) => setReplaceExisting(e.target.checked)}
                 />
-                <span>Replace existing text layer with OCR</span>
+                <span>Add OCR alongside original text</span>
               </label>
             </div>
           )}
@@ -406,11 +416,11 @@ export function OcrPanel({
               {!recognizedText && (
                 <button
                   onClick={handleStartOcr}
-                  disabled={running || (hasExistingWarning && !replaceExisting)}
+                  disabled={running || !engineInfo || (hasExistingWarning && !replaceExisting)}
                   className="button-primary"
                 >
                   {hasExistingWarning && replaceExisting
-                    ? "Replace & Start OCR"
+                    ? "Continue & Start OCR"
                     : mode === "searchable"
                       ? "Apply Searchable Layer"
                       : "Recognize Text"}

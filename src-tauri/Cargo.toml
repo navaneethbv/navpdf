@@ -24,6 +24,7 @@ rfd = "0.15"
 jpeg-encoder = "0.7"
 zune-jpeg = "0.5"
 getrandom = "0.4"
+aes-gcm = "0.10"
 cms = { version = "0.2.3", features = ["builder"] }
 const-oid = { version = "0.9", features = ["db"] }
 der = { version = "0.7", features = ["alloc", "derive", "oid"] }
@@ -47,3 +48,5 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPrintInfo", "NSPrintOperation"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }
 objc2-pdf-kit = { version = "0.3.2", default-features = false, features = ["std", "PDFDocument", "objc2-app-kit"] }
+objc2-vision = { version = "0.3.2", default-features = false, features = ["std", "VNRecognizeTextRequest", "VNRequest", "VNObservation", "VNRequestHandler", "VNTypes", "objc2-core-foundation"] }
+security-framework = "3"
