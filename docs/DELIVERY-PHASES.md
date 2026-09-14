@@ -7,6 +7,16 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 14 PR 2 corrective review
+
+This review supersedes the earlier blanket completion claims below.
+Source inspection found fabricated OCR output, predictable signature encryption keys, unchecked migration paths, and broken native revision publication at `e00e46a`.
+The corrective working tree implements real Apple Vision recognition, Keychain-protected random AES-GCM keys, migration validation, and immutable source range snapshots with transactional revision publication.
+Phases 3, 4, and 6 are reopened pending the checks and native acceptance recorded in [PR-2-REVIEW.md](PR-2-REVIEW.md).
+Historical test counts and package hashes below do not establish acceptance of these corrections.
+Phase 6's previous corpus accuracy claim is withdrawn: its tests compared hard-coded identical strings and its runtime returned sample text.
+Full completion of all ten phases is not established.
+
 ## Working agreement
 
 Work through phases in order and record evidence before marking a phase complete.
@@ -23,10 +33,10 @@ Optional remote services require a separate architecture decision; no uploads or
 | --- | --- | --- | --- |
 | 1 | [Reader reliability and file safety (M0)](phases/01-reader-reliability.md) | Native save, Save As, discard/cancel, failed replacement, quit, recovery, external modification, destination collision, and filesystem failure matrix passes; current highlight toolbar and 500-page round trip verified. | Complete |
 | 2 | [Complete local annotations (M2)](phases/02-local-annotations.md) | Underline, strike-through, sticky notes, ink, free text, shapes and arrows persist with properties, deletion, undo/redo and synchronized comments; keyboard and independent-reader checks pass. | Complete |
-| 3 | [Forms and local Fill & Sign (M4)](phases/03-forms-fill-sign.md) | Standard forms preserve values and appearances; Fill & Sign marks persist accurately; reusable signatures use OS-backed protected storage or explicit session isolation. | Complete |
-| 4 | [Page mutations and navigation foundation (M3/M5)](phases/04-pages-mutations.md) | Standard page operations retain PDF integrity, links and page-level metadata; outline/thumbnail/bookmark navigation handles mixed rotations and dimensions. | Complete |
+| 3 | [Forms and local Fill & Sign (M4)](phases/03-forms-fill-sign.md) | Standard forms preserve values and appearances; Fill & Sign marks persist accurately; reusable signatures use OS-backed protected storage or explicit session isolation. | Reopened: storage correction and form-placement gaps |
+| 4 | [Page mutations and navigation foundation (M3/M5)](phases/04-pages-mutations.md) | Standard page operations retain PDF integrity, links and page-level metadata; outline/thumbnail/bookmark navigation handles mixed rotations and dimensions. | Reopened: native revision correction needs packaged acceptance |
 | 5 | [Content placement and decoration (M3)](phases/05-content-decoration.md) | Text/images, links, attachments, headers/footers, watermarks, backgrounds and Bates numbering have usable placement controls, Unicode/font handling and independently verified output. | Complete |
-| 6 | [OCR and basic exports (M5)](phases/06-ocr-exports.md) | Measured local OCR engine produces aligned searchable scans; language availability, rotation, cancellation and export memory bounds verified. | Complete |
+| 6 | [OCR and basic exports (M5)](phases/06-ocr-exports.md) | Measured local OCR engine produces aligned searchable scans; language availability, rotation, cancellation and export memory bounds verified. | Reopened: real OCR implemented; full corpus/native acceptance pending |
 | 7 | [Existing editing, protection and redaction (M6)](phases/07-editing-protection-redaction.md) | Selected engines support scoped existing-object editing, encryption-aware validation, measured compression and independently audited irreversible redaction. | Complete |
 | 8 | [Office conversion and local intelligent tools (M7)](phases/08-conversion-intelligent-tools.md) | Genuine Office output passes a fidelity corpus; supported local generation/translation produces valid artifacts with references, cancellation and explicit model availability. | Complete for approved local scope (AI deferred) |
 | 9 | [Distribution and platform acceptance](phases/09-distribution-platforms.md) | Current DMG builds and installs in a clean account; signing/notarization and supported-platform accessibility, performance, print and interoperability acceptance complete. | Partial: unsigned local macOS package; release gates open |

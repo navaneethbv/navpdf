@@ -8,10 +8,8 @@ import type {
 import { defaultPreferences } from "../types/document";
 import type {
   OcrEngineInfo,
-  OcrLine,
   OcrOptions,
   OcrPageResult,
-  OcrWord,
 } from "../types/operations";
 import { downloadBytes, safeFileName } from "../utils/download";
 export const native = isTauri();
@@ -250,55 +248,10 @@ export async function ocrRecognizePage(
       options,
     });
   }
-  // Browser / test fallback
-  const sampleLines = [
-    "NavPDF Local OCR Workspace",
-    "Optical character recognition completed securely and privately offline.",
-    "All bounding boxes and baselines match the original scan coordinates.",
-  ];
-  const lines: OcrLine[] = sampleLines.map((text, lineIdx) => {
-    const yNorm = 0.85 - lineIdx * 0.12;
-    const wordsRaw = text.split(/\s+/);
-    const wordCount = Math.max(wordsRaw.length, 1);
-    const words: OcrWord[] = wordsRaw.map((wStr, wIdx) => ({
-      text: wStr,
-      confidence: 0.96,
-      bbox: [0.08 + wIdx * (0.8 / wordCount), yNorm, 0.7 / wordCount, 0.04],
-    }));
-    return {
-      text,
-      confidence: 0.96,
-      bbox: [0.08, yNorm, 0.82, 0.04],
-      words,
-    };
-  });
-  return {
-    pageIndex: options.pageIndex,
-    language: options.language || "en-US",
-    lines,
-    fullText: sampleLines.join("\n"),
-    meanConfidence: 0.96,
-  };
+  throw new Error("OCR requires the native macOS application.");
 }
 
 export async function ocrGetEngineInfo(): Promise<OcrEngineInfo> {
-  if (native) {
-    return invoke<OcrEngineInfo>("ocr_get_engine_info");
-  }
-  return {
-    engineName: "Apple Vision Framework (Simulated / Test)",
-    isOffline: true,
-    supportedLanguages: [
-      "en-US",
-      "fr-FR",
-      "it-IT",
-      "de-DE",
-      "es-ES",
-      "pt-BR",
-      "zh-Hans",
-      "zh-Hant",
-      "ja-JP",
-      "ko-KR",
-    ],
-  };
+  if (native) return invoke<OcrEngineInfo>("ocr_get_engine_info");
+  throw new Error("OCR requires the native macOS application.");
 }

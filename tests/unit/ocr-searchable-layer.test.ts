@@ -12,6 +12,7 @@ import {
   GlobalWorkerOptions,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { OcrPageResult } from "../../src/types/operations";
+import { PDFDocument, degrees } from "pdf-lib";
 
 GlobalWorkerOptions.workerSrc = resolve(
   "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
@@ -27,6 +28,38 @@ describe("Searchable PDF Layer and Integrity (P6.3)", () => {
 
   beforeEach(async () => {
     samplePdf = await createBlankDocument(2, 600, 800);
+  });
+
+  it("preserves accented OCR text and maps the layer to an offset rotated crop box", async () => {
+    const source = await PDFDocument.load(samplePdf);
+    source.getPage(0).setCropBox(50, 100, 400, 500);
+    source.getPage(0).setRotation(degrees(90));
+    const word = { text: "Café résumé", confidence: 1, bbox: [0.1, 0.2, 0.5, 0.04] as [number, number, number, number] };
+    const bytes = await applyOcrSearchableLayer(await source.save(), [{
+      pageIndex: 0, language: "fr-FR", fullText: word.text, meanConfidence: 1,
+      lines: [{ ...word, words: [word] }],
+    }]);
+    const pdf = await getDocument({ ...pdfOptions, data: bytes }).promise;
+    try {
+      const page = await pdf.getPage(1);
+      const content = await page.getTextContent();
+      const text = content.items.find((item) => "str" in item && item.str === word.text);
+      expect(text).toBeDefined();
+      if (text && "transform" in text) {
+        expect(text.transform[4]).toBeCloseTo(90);
+        expect(text.transform[5]).toBeCloseTo(200);
+        expect(text.width).toBeCloseTo(200, 2);
+      }
+      expect(page.rotate).toBe(90);
+    } finally { await pdf.loadingTask.destroy(); }
+  });
+
+  it("rejects unsupported OCR glyphs instead of corrupting saved text", async () => {
+    const word = { text: "日本語", confidence: 1, bbox: [0.1, 0.2, 0.5, 0.04] as [number, number, number, number] };
+    await expect(applyOcrSearchableLayer(samplePdf, [{
+      pageIndex: 0, language: "ja-JP", fullText: word.text, meanConfidence: 1,
+      lines: [{ ...word, words: [word] }],
+    }])).rejects.toThrow("Extract Text Only");
   });
 
   const mockOcrResult: OcrPageResult = {

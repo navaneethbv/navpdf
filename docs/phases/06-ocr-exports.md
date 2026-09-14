@@ -3,6 +3,8 @@
 Plan date: September 13, 2026.
 Historical milestone: M5.
 Execution status is maintained in [the delivery tracker](../DELIVERY-PHASES.md).
+The September 14 corrective review reopened this phase after finding simulated runtime output and invalid quality evidence.
+The checked historical steps below are not current acceptance; see [PR-2-REVIEW.md](../PR-2-REVIEW.md).
 Read the [shared implementation and verification contract](README.md) before starting this phase.
 
 ## Entry gate

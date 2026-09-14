@@ -65,10 +65,10 @@ vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
 }));
 
 vi.mock("../../src/services/native", () => ({
-  native: false,
+  native: true,
   markDirty: vi.fn(async () => {}),
   rememberPage: vi.fn(async () => {}),
-  commitWorkingRevision: vi.fn(async () => "rev-mock"),
+  commitWorkingRevision: vi.fn(async () => ({ revisionId: "rev-mock", pageCount: 2, size: 1 })),
 }));
 
 const loadPdfFromBytes = vi.fn();
@@ -79,7 +79,7 @@ vi.mock("../../src/services/pdf", () => ({
 
 import { ViewerController } from "../../src/features/viewer/controller";
 import { useWorkspace } from "../../src/stores/workspace";
-import { markDirty } from "../../src/services/native";
+import { markDirty, commitWorkingRevision } from "../../src/services/native";
 
 function makePdf(numPages = 3, outline: unknown = null) {
   return {
@@ -161,6 +161,7 @@ describe("ViewerController lifecycle", () => {
   });
 
   it("undoes and redoes an adapter revision through the staged proxy boundary", async () => {
+    useWorkspace.getState().set({ document: { id: "test", name: "test.pdf", size: 1, revisionId: "base" } });
     const first = makePdf(2);
     first.saveDocument.mockResolvedValue(new Uint8Array([0]));
     await controller.attach(first as never);
@@ -195,6 +196,7 @@ describe("ViewerController lifecycle", () => {
       } as never);
 
     await controller.replaceWithBytes(new Uint8Array([1]), "Adapter edit");
+    expect(commitWorkingRevision).toHaveBeenCalledWith("test", "base", new Uint8Array([1]), 2);
     expect(useWorkspace.getState().canUndo).toBe(true);
     controller.undo();
     await vi.waitFor(() => expect(controller.pdf).toBe(undone));
@@ -206,8 +208,23 @@ describe("ViewerController lifecycle", () => {
     );
     controller.redo();
     await vi.waitFor(() => expect(controller.pdf).toBe(redone));
+    await vi.waitFor(() => expect(commitWorkingRevision).toHaveBeenCalledTimes(3));
     expect(useWorkspace.getState().dirty).toBe(true);
     await vi.waitFor(() => expect(useWorkspace.getState().comments).toEqual([]));
+  });
+
+  it("restores the active document when native revision publication fails", async () => {
+    const original = makePdf(2);
+    await controller.attach(original as never);
+    useWorkspace.getState().set({ document: { id: "test", name: "test.pdf", size: 1, revisionId: "base" } });
+    const candidate = makePdf(3);
+    const destroy = vi.fn(async () => {});
+    loadPdfFromBytes.mockReturnValue({ promise: Promise.resolve(candidate), destroy });
+    vi.mocked(commitWorkingRevision).mockRejectedValueOnce(new Error("Native write failed"));
+    await expect(controller.replaceWithBytes(new Uint8Array([3]), "Edit")).rejects.toThrow("Native write failed");
+    expect(controller.pdf).toBe(original);
+    expect(useWorkspace.getState().dirty).toBe(false);
+    expect(destroy).toHaveBeenCalled();
   });
 
   it("refreshes the title and author from the replacement revision's metadata", async () => {

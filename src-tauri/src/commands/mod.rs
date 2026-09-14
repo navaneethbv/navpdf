@@ -461,77 +461,62 @@ pub async fn commit_working_revision(
     let doc = document(&app.state::<AppState>(), &id)?;
 
     tauri::async_runtime::spawn_blocking(move || {
-        {
-            let current = doc
-                .current_revision
-                .lock()
-                .map_err(|_| "Revision state unavailable.")?;
-            if current.revision_id != base_revision_id {
-                return Err(
-                    "Stale base revision. The document has been modified elsewhere.".into(),
-                );
-            }
-        }
-
-        filesystem::validate_pdf(&bytes, pages)?;
-
-        if doc.sensitive.lock().map(|flag| *flag).unwrap_or(true) {
-            // Decrypted working revisions stay in memory; no plaintext temporary file is written.
-            let revision_id = uuid::Uuid::new_v4().to_string();
-            *doc.current_revision
-                .lock()
-                .map_err(|_| "Revision state unavailable.")? = RevisionInfo {
-                revision_id: revision_id.clone(),
-                page_count: pages,
-                timestamp: time(),
-            };
-            if let Ok(mut dirty) = app.state::<AppState>().dirty.lock() {
-                *dirty = true;
-            }
-            return Ok(CommitRevisionResult {
-                revision_id,
-                page_count: pages,
-                size: bytes.len() as u64,
-            });
-        }
-
-        let mut temp = NamedTempFile::new()
-            .map_err(|_| "Unable to create working revision temporary file.")?;
-        temp.write_all(&bytes)
-            .map_err(|_| "Unable to write revision bytes.")?;
-        temp.flush()
-            .map_err(|_| "Unable to flush revision bytes.")?;
-
-        let new_file = temp
-            .reopen()
-            .map_err(|_| "Unable to reopen revision file.")?;
-
-        let new_length = bytes.len() as u64;
-        let new_revision_id = uuid::Uuid::new_v4().to_string();
-
-        *doc.file.lock().map_err(|_| "Document is busy.")? = new_file;
-        *doc.length.lock().map_err(|_| "Document is busy.")? = new_length;
-        *doc.working_file.lock().map_err(|_| "Document is busy.")? = Some(temp);
-        *doc.current_revision
+        let result = commit_revision(&doc, &base_revision_id, &bytes, pages)?;
+        *app.state::<AppState>()
+            .dirty
             .lock()
-            .map_err(|_| "Revision state unavailable.")? = RevisionInfo {
-            revision_id: new_revision_id.clone(),
-            page_count: pages,
-            timestamp: time(),
-        };
-
-        if let Ok(mut dirty) = app.state::<AppState>().dirty.lock() {
-            *dirty = true;
-        }
-
-        Ok(CommitRevisionResult {
-            revision_id: new_revision_id,
-            page_count: pages,
-            size: new_length,
-        })
+            .map_err(|_| "Document state unavailable.")? = true;
+        Ok(result)
     })
     .await
     .map_err(|_| "Failed to commit revision.")?
+}
+
+fn commit_revision(
+    doc: &Opened,
+    base_revision_id: &str,
+    bytes: &[u8],
+    pages: u32,
+) -> Result<CommitRevisionResult, String> {
+    // Keep the base check and publication under one lock so competing commits cannot both succeed.
+    let mut current = doc
+        .current_revision
+        .lock()
+        .map_err(|_| "Revision state unavailable.")?;
+    if current.revision_id != base_revision_id {
+        return Err("Stale base revision. The document has been modified elsewhere.".into());
+    }
+    filesystem::validate_pdf(bytes, pages)?;
+    let sensitive = *doc
+        .sensitive
+        .lock()
+        .map_err(|_| "Document state unavailable.")?;
+    let mut working = doc.working_file.lock().map_err(|_| "Document is busy.")?;
+    let candidate = if sensitive {
+        None
+    } else {
+        let mut temp = NamedTempFile::new()
+            .map_err(|_| "Unable to create working revision temporary file.")?;
+        temp.write_all(bytes)
+            .map_err(|_| "Unable to write revision bytes.")?;
+        temp.as_file()
+            .sync_all()
+            .map_err(|_| "Unable to flush revision bytes.")?;
+        Some(temp)
+    };
+    let revision_id = uuid::Uuid::new_v4().to_string();
+    *working = candidate;
+    *current = RevisionInfo {
+        revision_id: revision_id.clone(),
+        page_count: pages,
+        timestamp: time(),
+    };
+    // doc.file and doc.length belong to the immutable source range transport.
+    Ok(CommitRevisionResult {
+        revision_id,
+        page_count: pages,
+        size: bytes.len() as u64,
+    })
 }
 
 #[tauri::command]
@@ -753,6 +738,7 @@ pub fn emit_action(app: &AppHandle, action: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lopdf::dictionary;
 
     #[test]
     fn generated_document_owns_private_snapshot_and_requires_save_as() {
@@ -814,6 +800,46 @@ mod tests {
             doc.current_revision.lock().unwrap().revision_id,
             *doc.saved_revision.lock().unwrap()
         );
+
+        // Cargo tests must not depend on fixtures generated by npm's pretest hook.
+        let mut pdf = lopdf::Document::with_version("1.7");
+        let pages_id = pdf.new_object_id();
+        let mut kids = Vec::new();
+        for _ in 0..5 {
+            let page_id = pdf.add_object(lopdf::dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+            });
+            kids.push(lopdf::Object::Reference(page_id));
+        }
+        pdf.objects.insert(
+            pages_id,
+            lopdf::dictionary! {
+                "Type" => "Pages", "Kids" => kids, "Count" => 5,
+            }
+            .into(),
+        );
+        let catalog_id = pdf.add_object(lopdf::dictionary! {
+            "Type" => "Catalog", "Pages" => pages_id,
+        });
+        pdf.trailer.set("Root", catalog_id);
+        let mut candidate = Vec::new();
+        pdf.save_to(&mut candidate).unwrap();
+        assert!(commit_revision(&doc, stale_base, &candidate, 5).is_err());
+        let committed = commit_revision(&doc, &next_rev_id, &candidate, 5).unwrap();
+        assert_eq!(committed.page_count, 5);
+        assert_eq!(*doc.length.lock().unwrap(), bytes.len() as u64);
+        let mut source_bytes = Vec::new();
+        let mut file = doc.file.lock().unwrap();
+        file.seek(SeekFrom::Start(0)).unwrap();
+        file.read_to_end(&mut source_bytes).unwrap();
+        assert_eq!(source_bytes, bytes);
+        assert_eq!(
+            fs::read(doc.working_file.lock().unwrap().as_ref().unwrap().path()).unwrap(),
+            candidate
+        );
+        assert!(commit_revision(&doc, &next_rev_id, &candidate, 5).is_err());
     }
 }
 
@@ -872,5 +898,5 @@ pub async fn ocr_recognize_page(
 
 #[tauri::command]
 pub fn ocr_get_engine_info() -> Result<crate::ocr::OcrEngineInfo, String> {
-    Ok(crate::ocr::get_engine_info())
+    crate::ocr::get_engine_info()
 }

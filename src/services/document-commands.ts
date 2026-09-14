@@ -1882,8 +1882,7 @@ export async function applyOcrSearchableLayer(
   for (const pageRes of results) {
     if (pageRes.pageIndex < 0 || pageRes.pageIndex >= totalPages) continue;
     const page = doc.getPage(pageRes.pageIndex);
-    const width = page.getWidth();
-    const height = page.getHeight();
+    const { x: cropX, y: cropY, width, height } = page.getCropBox();
 
     // Register font in page resources
     const fontKey = page.node.newFontDictionary(font.name, font.ref);
@@ -1898,17 +1897,23 @@ export async function applyOcrSearchableLayer(
     for (const line of pageRes.lines) {
       for (const word of line.words) {
         if (!word.text || !word.text.trim()) continue;
-        const [xNorm, yNorm, , hNorm] = word.bbox;
-        const x = (xNorm * width).toFixed(2);
-        const y = (yNorm * height).toFixed(2);
-        const fontSize = Math.max(hNorm * height * 0.85, 4).toFixed(2);
-        const safeText = word.text
-          .replace(/\\/g, "\\\\")
-          .replace(/\(/g, "\\(")
-          .replace(/\)/g, "\\)");
+        const [xNorm, yNorm, wNorm, hNorm] = word.bbox;
+        if (!word.bbox.every(Number.isFinite) || xNorm < 0 || yNorm < 0 || wNorm <= 0 || hNorm <= 0 || xNorm + wNorm > 1.01 || yNorm + hNorm > 1.01) {
+          throw new Error("OCR returned an invalid text rectangle.");
+        }
+        const x = (cropX + xNorm * width).toFixed(2);
+        const y = (cropY + yNorm * height).toFixed(2);
+        const fontSize = Math.max(hNorm * height * 0.85, 4);
+        // Encode through the PDF font so accented text is not corrupted by raw UTF-8.
+        let encodedText: string;
+        try { encodedText = font.encodeText(word.text).toString(); }
+        catch { throw new Error("This OCR text needs a font not supported by searchable export. Use Extract Text Only."); }
+        // Tj does not emit kerning adjustments, so measure the individual glyph advances.
+        const advance = [...word.text].reduce((sum, glyph) => sum + font.widthOfTextAtSize(glyph, fontSize), 0);
+        const horizontalScale = wNorm * width / advance;
         ops.push(`/${fontKey.asString().slice(1)} ${fontSize} Tf`);
-        ops.push(`1 0 0 1 ${x} ${y} Tm`);
-        ops.push(`(${safeText}) Tj`);
+        ops.push(`${horizontalScale.toFixed(6)} 0 0 1 ${x} ${y} Tm`);
+        ops.push(`${encodedText} Tj`);
       }
     }
     ops.push("0 Tr", "ET");

@@ -32,7 +32,10 @@ Encrypted documents remain read-only until the user explicitly unlocks them for 
 Unlocked sessions do not write unencrypted recovery files, and saving requires an explicit protection choice.
 The limit is 1 GB per source PDF.
 Search results show the first 250 entries, while Next/Previous match can navigate the entire result set.
-Image-only scans display normally, but require an existing OCR text layer for search.
+Image-only scans display normally and can use local Apple Vision OCR on macOS to add searchable text.
+Browser preview and other platforms report OCR unavailable.
+Searchable export supports standard-font characters; other recognized text can be extracted without modifying the PDF.
+See [the PR 2 corrective review](docs/PR-2-REVIEW.md) for reopened acceptance gates and remaining capability gaps.
 
 ## Run locally
 

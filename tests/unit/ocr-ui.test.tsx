@@ -4,11 +4,21 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { OcrPanel } from "../../src/features/ocr/OcrPanel";
 import { createBlankDocument, insertTextContent } from "../../src/services/document-commands";
 import type { ViewerController } from "../../src/features/viewer/controller";
+import { ocrGetEngineInfo, ocrRecognizePage } from "../../src/services/native";
+
+vi.mock("../../src/services/native", () => ({
+  ocrGetEngineInfo: vi.fn(),
+  ocrRecognizePage: vi.fn(),
+}));
 
 describe("OcrPanel UI Component (P6.4)", () => {
   let samplePdf: Uint8Array;
 
   beforeEach(async () => {
+    vi.mocked(ocrGetEngineInfo).mockResolvedValue({ engineName: "Test adapter", isOffline: true, supportedLanguages: ["en-US"] });
+    vi.mocked(ocrRecognizePage).mockResolvedValue({ pageIndex: 0, language: "en-US", lines: [], fullText: "Synthetic adapter result", meanConfidence: 0 });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,AA==");
     samplePdf = await createBlankDocument(3, 600, 800);
   });
 
@@ -53,6 +63,41 @@ describe("OcrPanel UI Component (P6.4)", () => {
     fireEvent.change(input, { target: { value: "1-2" } });
   });
 
+  it("disables recognition when the native engine is unavailable", async () => {
+    vi.mocked(ocrGetEngineInfo).mockRejectedValueOnce(new Error("OCR unavailable"));
+    render(<OcrPanel controller={createMockController(samplePdf)} onClose={vi.fn()} />);
+    await screen.findByText("OCR unavailable");
+    expect(screen.getByRole("button", { name: /Apply Searchable Layer/i }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("does not apply the final page after cancellation", async () => {
+    let finish!: (value: Awaited<ReturnType<typeof ocrRecognizePage>>) => void;
+    vi.mocked(ocrRecognizePage).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const controller = createMockController(samplePdf);
+    render(<OcrPanel controller={controller} onClose={vi.fn()} />);
+    const button = screen.getByRole("button", { name: /Apply Searchable Layer/i });
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(finish).toBeDefined());
+    fireEvent.click(screen.getByRole("button", { name: "Cancel OCR" }));
+    finish({ pageIndex: 0, language: "en-US", lines: [], fullText: "cancelled", meanConfidence: 0 });
+    await waitFor(() => expect(screen.queryByText("Cancel OCR")).toBeNull());
+    expect(controller.replaceWithBytes).not.toHaveBeenCalled();
+  });
+
+  it("does not call recognition when canvas encoding fails", async () => {
+    vi.mocked(HTMLCanvasElement.prototype.toDataURL).mockImplementationOnce(() => { throw new Error("Canvas failed"); });
+    const controller = createMockController(samplePdf);
+    vi.mocked(ocrRecognizePage).mockClear();
+    render(<OcrPanel controller={controller} onClose={vi.fn()} />);
+    const button = screen.getByRole("button", { name: /Apply Searchable Layer/i });
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByText("Cancel OCR")).toBeNull());
+    expect(ocrRecognizePage).not.toHaveBeenCalled();
+    expect(controller.replaceWithBytes).not.toHaveBeenCalled();
+  });
+
   it("warns when target page contains existing digital text", async () => {
     // PDF with digital text
     const withText = await insertTextContent(samplePdf, {
@@ -66,6 +111,7 @@ describe("OcrPanel UI Component (P6.4)", () => {
     render(<OcrPanel controller={mockController} onClose={vi.fn()} />);
 
     const applyBtn = screen.getByRole("button", { name: /Apply Searchable Layer/i });
+    await waitFor(() => expect(applyBtn.hasAttribute("disabled")).toBe(false));
     fireEvent.click(applyBtn);
 
     await waitFor(() => {
@@ -78,7 +124,7 @@ describe("OcrPanel UI Component (P6.4)", () => {
     fireEvent.click(checkbox);
 
     // Button should now read "Replace & Start OCR"
-    const replaceBtn = screen.getByRole("button", { name: /Replace & Start OCR/i });
+    const replaceBtn = screen.getByRole("button", { name: /Continue & Start OCR/i });
     expect(replaceBtn).toBeDefined();
   });
 
@@ -88,6 +134,7 @@ describe("OcrPanel UI Component (P6.4)", () => {
     render(<OcrPanel controller={mockController} onClose={onClose} />);
 
     const applyBtn = screen.getByRole("button", { name: /Apply Searchable Layer/i });
+    await waitFor(() => expect(applyBtn.hasAttribute("disabled")).toBe(false));
     fireEvent.click(applyBtn);
 
     await waitFor(() => {
@@ -107,6 +154,7 @@ describe("OcrPanel UI Component (P6.4)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Extract Text Only/i }));
 
     const recognizeBtn = screen.getByRole("button", { name: /Recognize Text/i });
+    await waitFor(() => expect(recognizeBtn.hasAttribute("disabled")).toBe(false));
     fireEvent.click(recognizeBtn);
 
     await waitFor(() => {
