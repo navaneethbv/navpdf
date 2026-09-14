@@ -341,7 +341,7 @@ impl<'a> Scanner<'a, '_> {
                 "m" | "l" | "c" | "v" | "y" => {
                     path_start.get_or_insert(index);
                     let values: Vec<f64> = args.iter().filter_map(number).collect();
-                    for pair in values.chunks_exact(2) {
+                    for pair in values.as_chunks::<2>().0 {
                         path_points.push(gs.ctm.apply(pair[0], pair[1]));
                     }
                 }

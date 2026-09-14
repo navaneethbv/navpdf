@@ -68,7 +68,9 @@ pub fn decode(doc: &Document, stream: &Stream) -> Result<Raster, &'static str> {
         decode.as_array().is_ok_and(|values| {
             values.len() == components * 2
                 && values
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .all(|pair| number(&pair[0]) == Some(0.0) && number(&pair[1]) == Some(1.0))
         })
     });

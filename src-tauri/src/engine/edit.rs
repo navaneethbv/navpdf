@@ -415,10 +415,17 @@ pub fn apply(
                 return Err("The replacement image is empty, too large or malformed.".into());
             }
             let rgb: Vec<u8> = rgba
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .flat_map(|pixel| [pixel[0], pixel[1], pixel[2]])
                 .collect();
-            let alpha: Vec<u8> = rgba.chunks_exact(4).map(|pixel| pixel[3]).collect();
+            let alpha: Vec<u8> = rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|pixel| pixel[3])
+                .collect();
             let raster = |components, pixels| Raster {
                 width,
                 height,

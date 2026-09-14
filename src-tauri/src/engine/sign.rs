@@ -1013,7 +1013,9 @@ fn decode_text(bytes: &[u8]) -> String {
     match bytes.strip_prefix(&[0xFE, 0xFF]) {
         Some(rest) => String::from_utf16_lossy(
             &rest
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
                 .collect::<Vec<_>>(),
         ),
