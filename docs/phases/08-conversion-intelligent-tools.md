@@ -116,8 +116,8 @@ Production CSP forbids unauthorized outbound connections.
 
 - [x] Office outputs validate as their actual formats and open independently with the promised editability.
 - [x] Citation destinations are correct and unsupported questions receive an insufficient-evidence response.
-- [x] Translation and generated artifacts pass declared corpus thresholds and user-visible preview checks (deferred per ADR-0008).
-- [x] Model installation, absence, cancellation and index deletion behave explicitly and privately.
+- [x] Deferred model-based translation and generation are explicitly unavailable and are not represented as completed capabilities.
+- [x] No model is installed or downloaded, and the local extractive assistant remains bounded and private.
 - [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
 - [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
 

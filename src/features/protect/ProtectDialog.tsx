@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { AlertTriangle, Lock, Shield, Unlock, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-import { markDirty, native } from "../../services/native";
+import { discardRecovery, markDirty, native } from "../../services/native";
 import {
   ENGINE_UNAVAILABLE,
   saveProtectedCopy,
@@ -110,6 +110,7 @@ export function ProtectDialog({
       await controller.replaceWithBytes(bytes, "Unlocked for editing", {
         resetHistory: true,
       });
+      await discardRecovery().catch(() => {});
       const state = useWorkspace.getState();
       state.set({
         dirty: false,
@@ -166,9 +167,13 @@ export function ProtectDialog({
           document: state.document
             ? { ...state.document, unsaved: false, size: result.size }
             : state.document,
+          info: state.info
+            ? { ...state.info, encrypted: false, protectedSource: true }
+            : state.info,
         });
         controller.markSaved(bytes, pdf.numPages);
         await markDirty(false).catch(() => {});
+        await discardRecovery().catch(() => {});
       }
       state.set({
         status: result.replacedSource

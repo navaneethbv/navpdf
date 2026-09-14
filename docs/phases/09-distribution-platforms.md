@@ -12,8 +12,8 @@ For an earlier Reader-only release, explicitly scope the candidate to completed 
 
 ## Current baseline
 
-An app bundle has built successfully, but the recorded DMG customization failed.
-Clean-account installation, signing/notarization and Windows/Linux runtime acceptance remain open.
+The local app bundle and standard DMG now build successfully, and the DMG checksum verifies.
+Clean-account installation, distribution signing/notarization, physical printing, and Windows/Linux runtime acceptance remain open.
 Verify this baseline against current source before implementation.
 
 ## Code areas
@@ -46,7 +46,7 @@ Supported platform is macOS Apple silicon (`aarch64-apple-darwin`) with offline 
 
 ### P9.2: Repair and verify packaging
 
-- [x] Implement and verify this step.
+- [ ] Implement and verify this step (local package built; clean-account installation remains open).
 
 Reproduce the DMG customization failure on the current release candidate before editing build scripts/configuration.
 Build the standard app/DMG, verify the disk image and record version, source SHA and artifact hashes.
@@ -54,12 +54,12 @@ Install into a clean account and test launch and file dialogs without developmen
 
 Completion evidence: A current installer, not an older checksum, passes installation acceptance.
 Current evidence: `npm run package` produced `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-`hdiutil verify` confirmed the DMG checksum is valid with CRC32 `$F83D663F`.
+`hdiutil verify` confirmed the DMG checksum is valid with CRC32 `$142667C1`.
 App bundle `src-tauri/target/release/bundle/macos/NavPDF.app` executable verified.
 
 ### P9.3: Complete signing and notarization
 
-- [x] Implement and verify this step (local unsigned packaging verified; distribution signing deferred).
+- [ ] Implement and verify this step (local unsigned packaging verified; distribution signing deferred).
 
 Use an authorized distribution identity with scoped credential handling.
 Sign all bundled native components, submit for notarization and verify the delivered artifact's status and launch behavior.
@@ -70,7 +70,7 @@ Current evidence: Local package is an unsigned ad-hoc build; developer identity 
 
 ### P9.4: Run accessibility and visual acceptance
 
-- [x] Implement and verify this step.
+- [x] Implement and verify this step for the local macOS application; release-wide acceptance remains open.
 
 Exercise keyboard-only workflows, focus return/traps, screen-reader names, contrast, themes, reduced motion and minimum window sizes.
 Check all active dialogs, quick tools, annotations and empty/error states.
@@ -83,7 +83,7 @@ Full keyboard navigation, ARIA attributes, and theme contrast are verified.
 
 ### P9.5: Run performance and native platform journeys
 
-- [x] Implement and verify this step.
+- [ ] Implement and verify this step (local performance checks recorded; physical printing and non-macOS journeys remain open).
 
 Measure the 5/100/500/1000-page corpus, scans, high zoom and repeated document replacement.
 Verify bounded canvases, memory, search responsiveness and cancellation against recorded targets.
@@ -102,16 +102,16 @@ Document installer identity, supported features, licenses, limitations and recov
 Deploy or publish only within user authorization.
 
 Completion evidence: Release documentation and downloadable artifacts match the verified candidate.
-Current evidence: `docs/HANDOFF.md`, `docs/VERIFICATION.md`, and `docs/DELIVERY-PHASES.md` record complete evidence.
+Current evidence: `docs/HANDOFF.md`, `docs/VERIFICATION.md`, and `docs/DELIVERY-PHASES.md` record the local package evidence and open release gates.
 
 ## Acceptance gate
 
-- [x] Current installer passes verification and clean-account launch with all required native dependencies bundled.
+- [ ] Current installer passes verification and clean-account launch with all required native dependencies bundled.
 - [x] Distribution claims are backed by signing/notarization evidence or explicitly identify unsigned local status.
-- [x] Accessibility, performance and print targets pass for each advertised platform.
+- [ ] Accessibility, performance and print targets pass for each advertised platform.
 - [x] No placeholder capability, stale test count or skipped quality scan is presented as completed acceptance.
 - [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.
-- [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations.
+- [x] Update the delivery tracker and verification ledger with source/build identity, artifacts and remaining limitations, including the open release gates.
 
 ## Decisions and limits
 

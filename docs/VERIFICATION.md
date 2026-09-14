@@ -1,9 +1,18 @@
 # Verification ledger
 
-Checkpoint: September 13, 2026, Phase 2 execution follow-up.
-Baseline revision: `64303bd32f07449c3f4fae7cc80915cfe8bb29e7`.
-The commit containing this ledger identifies the reviewed follow-up source.
-This ledger supersedes earlier contradictory native and packaging claims.
+Checkpoint: September 14, 2026, PR #2 phase alignment review.
+Reviewed PR head before fixes: `9b1b9abfff502e92d8c17ae2253569db87a043e3`.
+The final pushed revision and rerun results are recorded in the handoff for this review.
+Historical phase entries below retain their original artifact facts and do not replace current-source verification.
+
+## Current review findings
+
+The review reproduced a region-redaction defect where an overlapping vector path survived because the rewrite used containment instead of intersection.
+The fix removes the whole intersecting path conservatively, rejects unsupported shading fills, and audits residual paths outside the redaction overlay tolerance.
+The review also found recovery was discarded by native redaction and unlock commands before the renderer attached the candidate revision.
+Native cleanup now occurs only after the renderer reports a successful replacement, while failed candidate attachment leaves recovery available.
+Native engine staging now has both count and byte bounds.
+Phase 9 remains a local unsigned macOS package checkpoint, not full distribution acceptance.
 
 ## Automated evidence
 
@@ -241,7 +250,7 @@ Clippy passed with zero warnings and 21 Rust tests passed (1 ignored).
 
 ### Phase 7 existing editing, protection and redaction verification
 
-Source: the working tree on `delivery/phases-1-10`, based on `1fcb47f` with the uncommitted Phase 7 to 10 changes.
+Historical Phase 7 acceptance used the PR #2 implementation source before this review's fixes.
 Scripted engine acceptance `node scripts/phase7-acceptance.mjs` passed 55 of 55 checks; its corpus, outputs and `report.json` are under ignored `output/phase7/`.
 Those checks found every audited canary absent from raw, inflated and decoded strings, `pdftotext`, `pdfinfo -meta` and `pdfdetach`, confirmed black rendered regions and extracted image samples, checked poppler's correct and wrong password behavior, and compared compression text, fonts and rendering.
 Defects found by the scripted runs were fixed with regressions: missing AES-256 `/Length` entries (`protected_output_declares_aes_256_key_lengths`), parent form values surviving widget removal (`removing_a_widget_also_removes_its_parent_field_value`), and default `/Decode [0 1]` soft masks blocking image compression.
@@ -292,9 +301,9 @@ Limitation: exports that use the browser download path (Office, image, text, att
 
 Package verification utilized `npm run package`, which builds the production Vite frontend bundle and compiles Tauri in release profile.
 Both bundles completed cleanly: `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-`hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` verified the disk image checksum as valid (CRC32 `$F83D663F`).
-The release executable SHA-256 is `bb7c501985024589ada0de8980e07ae4f879de234043bc50e5064017bfeeb06c`.
-The release DMG SHA-256 is `a53f66040b69f137ee0d98818f669910ef62a267cd7b119847def5f8a3d94613`.
+`hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` verified the disk image checksum as valid (CRC32 `$142667C1`).
+The release executable SHA-256 is `78342c159b1bfd5aa11ed61dec9f47fd143fa85af56ea7fe0fbe7d52cc3623b1`.
+The release DMG SHA-256 is `b8c1d32fa9e22283269a7905f3786d758e1e4fca812e29464d17623a4a3b98f8`.
 The license inventory script `node scripts/license-inventory.mjs` generated `output/release/licenses.json`, recording 362 cargo crates and 27 production npm packages.
 Six dependencies requiring attribution or notice inspection are documented: `cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`, `selectors`, and `jpeg-encoder`.
 Accessibility hardening verified modal focus trapping and Escape handling in `src/components/ModalFocus.ts` and error containment in `src/components/ToolErrorBoundary.tsx`.
@@ -320,9 +329,9 @@ The suite verified:
 ## Packaging boundaries
 
 Full application packaging succeeded at `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-Executable SHA-256: `bb7c501985024589ada0de8980e07ae4f879de234043bc50e5064017bfeeb06c`.
-DMG SHA-256: `a53f66040b69f137ee0d98818f669910ef62a267cd7b119847def5f8a3d94613`.
+Executable SHA-256: `78342c159b1bfd5aa11ed61dec9f47fd143fa85af56ea7fe0fbe7d52cc3623b1`.
+DMG SHA-256: `b8c1d32fa9e22283269a7905f3786d758e1e4fca812e29464d17623a4a3b98f8`.
 DMG integrity was independently verified using `hdiutil verify`.
-All local automated checks pass: 61 frontend test files (405 tests) with full coverage, 55 Rust tests, Clippy clean with zero warnings, and passing acceptance suites for Phase 7 (55/55), Phase 8 (12/12), and Phase 10 (55/55).
+All local automated checks pass: 61 frontend test files (406 tests) with full coverage, 58 Rust tests with 1 constrained disk-full test ignored, Clippy clean with zero warnings, and passing acceptance suites for Phase 7 (55/55), Phase 8 (12/12), and Phase 10 (55/55).
 
 See [PR-1-REVIEW.md](PR-1-REVIEW.md) for milestone disposition and remaining implementation limitations.

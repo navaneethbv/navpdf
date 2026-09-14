@@ -16,12 +16,16 @@ use tauri::{AppHandle, Manager, State};
 
 /// Staged buffers kept at once; the oldest is dropped when a new one arrives.
 const MAX_STAGED_BUFFERS: usize = 8;
+/// A document plus one bounded decoded image may be staged without allowing unbounded renderer
+/// requests to retain multiple gigabytes of native memory.
+const MAX_STAGED_BYTES: u64 = filesystem::MAX_FILE_BYTES + 256 * 1024 * 1024;
 const STATE_UNAVAILABLE: &str = "The local engine state is unavailable.";
 
 #[derive(Default)]
 struct Buffers {
     entries: HashMap<String, Arc<Vec<u8>>>,
     order: VecDeque<String>,
+    bytes: u64,
 }
 
 #[derive(Default)]
@@ -34,25 +38,41 @@ pub struct EngineState {
 
 impl EngineState {
     fn stage(&self, bytes: Vec<u8>) -> Result<String, String> {
+        self.stage_with_budget(bytes, MAX_STAGED_BYTES)
+    }
+
+    fn stage_with_budget(&self, bytes: Vec<u8>, budget: u64) -> Result<String, String> {
+        let size = bytes.len() as u64;
+        if size > budget {
+            return Err("The local engine has reached its staged data limit. Try again after the current operation finishes.".into());
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let mut buffers = self.buffers.lock().map_err(|_| STATE_UNAVAILABLE)?;
-        buffers.entries.insert(id.clone(), Arc::new(bytes));
-        buffers.order.push_back(id.clone());
-        while buffers.order.len() > MAX_STAGED_BUFFERS {
+        while (buffers.order.len() >= MAX_STAGED_BUFFERS
+            || buffers.bytes.saturating_add(size) > budget)
+            && !buffers.order.is_empty()
+        {
             if let Some(oldest) = buffers.order.pop_front() {
-                buffers.entries.remove(&oldest);
+                if let Some(removed) = buffers.entries.remove(&oldest) {
+                    buffers.bytes = buffers.bytes.saturating_sub(removed.len() as u64);
+                }
             }
         }
+        buffers.entries.insert(id.clone(), Arc::new(bytes));
+        buffers.order.push_back(id.clone());
+        buffers.bytes = buffers.bytes.saturating_add(size);
         Ok(id)
     }
 
     fn take(&self, id: &str) -> Result<Arc<Vec<u8>>, String> {
         let mut buffers = self.buffers.lock().map_err(|_| STATE_UNAVAILABLE)?;
         buffers.order.retain(|entry| entry != id);
-        buffers
+        let bytes = buffers
             .entries
             .remove(id)
-            .ok_or_else(|| "The staged document data is no longer available. Try again.".into())
+            .ok_or("The staged document data is no longer available. Try again.")?;
+        buffers.bytes = buffers.bytes.saturating_sub(bytes.len() as u64);
+        Ok(bytes)
     }
 
     fn job(&self, id: &str) -> Result<Arc<AtomicBool>, String> {
@@ -97,13 +117,6 @@ pub struct ProtectedSave {
 pub struct SignedSave {
     pub name: String,
     pub size: u64,
-}
-
-/// Removes recovery files that could still hold content a sensitive operation replaced.
-fn discard_recovery(root: &Path) {
-    for name in ["recovery.pdf", "recovery.json"] {
-        let _ = fs::remove_file(root.join(name));
-    }
 }
 
 async fn run_job<T: Send + 'static>(
@@ -183,8 +196,8 @@ pub async fn engine_redact(
     .await;
     logging::record(&state.root, "engine_redact", result.is_err());
     let (output, report) = result?;
-    // Neither the recovery copy nor a plain Save may overwrite the source implicitly.
-    discard_recovery(&state.root);
+    // Neither a plain Save nor an implicit recovery cleanup may happen until the renderer has
+    // attached this candidate and the replacement save has committed successfully.
     *doc.force_save_as.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
     Ok(EngineOutcome {
         output_id: Some(state.engine.stage(output)?),
@@ -285,6 +298,10 @@ pub async fn engine_save_protected(
         })?;
         if replaced_source {
             *worker_doc.source.lock().map_err(|_| STATE_UNAVAILABLE)? = (target.clone(), hash);
+            *worker_doc
+                .force_save_as
+                .lock()
+                .map_err(|_| STATE_UNAVAILABLE)? = true;
         }
         Ok::<_, String>(ProtectedSave {
             name: file_name(&target),
@@ -319,7 +336,6 @@ pub async fn engine_unlock(
     let output = output?;
     *doc.sensitive.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
     *doc.force_save_as.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
-    discard_recovery(&state.root);
     state.engine.stage(output)
 }
 
@@ -471,5 +487,16 @@ mod tests {
         assert!(flag.load(Ordering::Relaxed));
         engine.finish("job");
         engine.cancel("job");
+    }
+
+    #[test]
+    fn staged_buffers_are_bounded_by_bytes_and_evict_oldest_first() {
+        let engine = EngineState::default();
+        let first = engine.stage_with_budget(vec![1, 2], 3).unwrap();
+        let second = engine.stage_with_budget(vec![3, 4], 3).unwrap();
+
+        assert!(engine.take(&first).is_err());
+        assert_eq!(*engine.take(&second).unwrap(), vec![3, 4]);
+        assert!(engine.stage_with_budget(vec![0; 4], 3).is_err());
     }
 }

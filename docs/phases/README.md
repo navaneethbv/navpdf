@@ -3,6 +3,7 @@
 Created: September 13, 2026.
 These plans expand the ordered phases in [the active delivery tracker](../DELIVERY-PHASES.md).
 They describe remaining implementation work; writing a plan does not complete a feature.
+The Current baseline section in each plan records the entry state when the plan was written and is not a substitute for current-source status.
 The tracker owns current phase status and the [verification ledger](../VERIFICATION.md) records acceptance evidence.
 The [original roadmap](../IMPLEMENTATION-ROADMAP-2026-09-12.md) retains the broader screenshot inventory and engine rationale.
 
@@ -23,7 +24,7 @@ The [original roadmap](../IMPLEMENTATION-ROADMAP-2026-09-12.md) retains the broa
 
 ## Sequence and shared prerequisites
 
-Execute phases in the tracker order; all 10 phases are completed and verified.
+Execute phases in the tracker order; the tracker records which approved scopes are complete and which release gates remain open.
 The delivery-phase numbers intentionally differ from the historical M0-M8 numbers.
 Phase 2 introduces the minimum revision guards, bounded annotation history and coordinate transforms required for safe annotation extensions.
 Phase 3 extends those same foundations for form and signature placement.

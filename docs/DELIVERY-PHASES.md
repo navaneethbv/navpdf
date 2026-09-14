@@ -28,9 +28,9 @@ Optional remote services require a separate architecture decision; no uploads or
 | 5 | [Content placement and decoration (M3)](phases/05-content-decoration.md) | Text/images, links, attachments, headers/footers, watermarks, backgrounds and Bates numbering have usable placement controls, Unicode/font handling and independently verified output. | Complete |
 | 6 | [OCR and basic exports (M5)](phases/06-ocr-exports.md) | Measured local OCR engine produces aligned searchable scans; language availability, rotation, cancellation and export memory bounds verified. | Complete |
 | 7 | [Existing editing, protection and redaction (M6)](phases/07-editing-protection-redaction.md) | Selected engines support scoped existing-object editing, encryption-aware validation, measured compression and independently audited irreversible redaction. | Complete |
-| 8 | [Office conversion and local intelligent tools (M7)](phases/08-conversion-intelligent-tools.md) | Genuine Office output passes a fidelity corpus; supported local generation/translation produces valid artifacts with references, cancellation and explicit model availability. | Complete (deferred AI scope) |
-| 9 | [Distribution and platform acceptance](phases/09-distribution-platforms.md) | Current DMG builds and installs in a clean account; signing/notarization and supported-platform accessibility, performance, print and interoperability acceptance complete. | Complete (local unsigned package) |
-| 10 | [Optional services and specialist compatibility (M8)](phases/10-optional-integrations.md) | Separately scoped collaboration, remote signing, certification and media integrations pass privacy, trust and interoperability gates. | Complete (local certificates; remote declined) |
+| 8 | [Office conversion and local intelligent tools (M7)](phases/08-conversion-intelligent-tools.md) | Genuine Office output passes a fidelity corpus; supported local generation/translation produces valid artifacts with references, cancellation and explicit model availability. | Complete for approved local scope (AI deferred) |
+| 9 | [Distribution and platform acceptance](phases/09-distribution-platforms.md) | Current DMG builds and installs in a clean account; signing/notarization and supported-platform accessibility, performance, print and interoperability acceptance complete. | Partial: unsigned local macOS package; release gates open |
+| 10 | [Optional services and specialist compatibility (M8)](phases/10-optional-integrations.md) | Separately scoped collaboration, remote signing, certification and media integrations pass privacy, trust and interoperability gates. | Complete for approved local scope (remote declined) |
 
 Phases 2 and 3 prioritize free Reader gaps over extending existing editor features.
 Their required mutation and placement support must be implemented within those phases before claiming completion; the broader foundation audit remains Phase 4.
@@ -254,20 +254,21 @@ Office import is not delivered.
 P8.3 to P8.6 (collections, generated answers and summaries, translation, generated presentations and podcasts) are deferred by ADR 0008, not complete, and not offered in the interface.
 P8.7: no model is bundled or downloaded, the assistant panel is the extractive "Find and Cite Passages" tool, and the production CSP limits connections to the application.
 Known limit: download-based exports write to `~/Downloads` without a save dialog after macOS Downloads folder consent.
-Phase 9 (Distribution and platform acceptance) is complete for the local macOS release package.
+Phase 9 local packaging is verified for the macOS Apple silicon scope, but the full distribution and platform acceptance gate remains open.
 
 ## Phase 9 execution checkpoint
 
-Phase 9 is complete for the local macOS release package.
+The local macOS packaging subset is complete.
 P9.1 defines the supported release matrix for macOS on Apple silicon (`aarch64-apple-darwin`) with offline privacy and local file ownership.
 `node scripts/license-inventory.mjs` generated the complete license inventory in `output/release/licenses.json`, tracking 362 resolved crates and 27 production npm packages with 6 license notices documented.
-P9.2 repaired and verified packaging: `npm run package` produced both `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-`hdiutil verify` confirmed the DMG checksum is valid (CRC32 `$F83D663F`).
-The release executable SHA-256 is `bb7c501985024589ada0de8980e07ae4f879de234043bc50e5064017bfeeb06c` and the DMG SHA-256 is `a53f66040b69f137ee0d98818f669910ef62a267cd7b119847def5f8a3d94613`.
-P9.3 accurately records that distribution code signing and Apple notarization are not configured in this local environment; local packages remain unsigned ad-hoc builds.
+P9.2 repaired and verified local packaging: `npm run package` produced both `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+`hdiutil verify` confirmed the DMG checksum is valid (CRC32 `$142667C1`).
+The release executable SHA-256 is `78342c159b1bfd5aa11ed61dec9f47fd143fa85af56ea7fe0fbe7d52cc3623b1` and the DMG SHA-256 is `b8c1d32fa9e22283269a7905f3786d758e1e4fca812e29464d17623a4a3b98f8`.
+P9.3 records that distribution code signing and Apple notarization are not configured in this local environment; local packages remain unsigned ad-hoc builds, so this release gate remains open.
 P9.4 verified accessibility and visual ergonomics across dialogs and tool views: modal focus traps and Escape restoration (`ModalFocus.ts`), error boundary containment (`ToolErrorBoundary.tsx`), ARIA attributes, full keyboard navigation and light/dark theme contrast.
-P9.5 confirmed performance and boundary protection: rendering uses bounded canvases and virtualized viewports, raster exports enforce dimensions below 8192px, and image compression resamples within memory limits.
-P9.6 provides an audited, reviewable release handoff with verified artifacts and documented limitations.
+P9.5 confirmed local performance and boundary protection: rendering uses bounded canvases and virtualized viewports, raster exports enforce dimensions below 8192px, and image compression resamples within memory limits.
+Clean-account installation, physical printing, and non-macOS native journeys remain unverified.
+P9.6 provides an audited, reviewable local handoff with verified artifacts and documented open gates.
 Phase 10 (Optional services and specialist compatibility) is complete for the approved scope.
 
 ## Phase 10 execution checkpoint

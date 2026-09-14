@@ -6,11 +6,11 @@ There is no account, server backend, upload, analytics, or telemetry.
 
 ## Current milestone
 
-The current implementation includes the desktop reader, persisted highlights/ink/free text, initial page operations, content insertion, basic form authoring and signature appearance placement.
-The full editor and Reader-parity acceptance are not yet complete.
-Follow [the active delivery phases](docs/DELIVERY-PHASES.md) for the ordered remaining work and completion gates.
-Phase 1, reader reliability and file safety, is in progress.
-See [the implementation review](docs/PR-1-REVIEW.md) for limitations of the initial editing tools.
+The current implementation covers the approved local scope across Phases 1 through 8 and local certificate signatures in Phase 10.
+Phase 9 has a verified unsigned macOS Apple silicon package, but clean-account installation, distribution signing/notarization, physical printing, and non-macOS acceptance remain open release gates.
+Phase 8 model-based generation and translation, Office import, and the hosted and remote integrations considered in Phase 10 are explicitly deferred or declined by their ADRs.
+Follow [the active delivery phases](docs/DELIVERY-PHASES.md) for the ordered scope, evidence, and remaining gates.
+See [the implementation review](docs/PR-1-REVIEW.md) for historical limitations of the initial editing tools.
 
 Available features:
 
@@ -22,12 +22,14 @@ Available features:
 - Whole-document search with case and whole-word options, context, match counts, and occurrence navigation.
 - Bookmarks and inspection of saved notes/highlights.
 - Standard highlight annotations, colors, deletion, undo, and redo.
+- Underline, strike-through, sticky notes, ink, free text, shapes, arrows, comments, page operations, forms, Fill & Sign, content placement, decorations, links, and attachments.
+- Offline OCR, searchable text layers, plain-text/image exports, DOCX/XLSX/PPTX/RTF exports, existing-object editing, AES-256 protection, measured compression, permanent redaction, and local certificate signatures.
 - Password prompts for reading encrypted PDFs.
 - Light, dark, and system themes, viewing preferences, and optional local recent history.
 - Validated atomic saves, external-change detection, private recovery copies, and unsaved-change prompts.
 
-Encrypted documents are read-only in this milestone.
-The app does not silently decrypt or resave them.
+Encrypted documents remain read-only until the user explicitly unlocks them for editing.
+Unlocked sessions do not write unencrypted recovery files, and saving requires an explicit protection choice.
 The limit is 1 GB per source PDF.
 Search results show the first 250 entries, while Next/Previous match can navigate the entire result set.
 Image-only scans display normally, but require an existing OCR text layer for search.
@@ -115,5 +117,4 @@ See [verification evidence](docs/VERIFICATION.md) for actual UI checks and remai
 [ADR 0001](docs/adr/0001-tauri-pdfjs-foundation.md) records the foundation choice.
 The original Electron/Python prototype is preserved in Git history at `40dbac6`.
 
-Initial page operations and macOS printing exist, with complete native interoperability acceptance still pending.
-The active delivery sequence starts with file safety, then closes annotation and interactive-form gaps before completing the remaining editor capabilities.
+macOS printing and local interoperability checks exist, while the Phase 9 clean-account, distribution-signing, physical-printing, and non-macOS acceptance gates remain open.

@@ -151,6 +151,7 @@ pub fn apply(
         }
         if !page_regions.is_empty() {
             reject_tiling_pattern_content(&doc, page_id, number)?;
+            reject_shading_content(&doc, page_id, number)?;
         }
         redact_page(
             &mut doc,
@@ -431,12 +432,7 @@ impl<'a> Rewriter<'a, '_> {
                     if *clip {
                         continue;
                     }
-                    if hidden
-                        || self
-                            .regions
-                            .iter()
-                            .any(|region| region.contains(&item.bbox))
-                    {
+                    if hidden || self.overlaps(&item.bbox) {
                         dropped[*start..=item.op].fill(true);
                         self.report.removed_paths += 1;
                     }
@@ -776,6 +772,31 @@ fn reject_tiling_pattern_content(
                 "Page {number} paints text or objects through a tiling pattern, which redaction does not support. The document is unchanged."
             ));
         }
+    }
+    Ok(())
+}
+
+fn reject_shading_content(doc: &Document, page_id: ObjectId, number: u32) -> Result<(), String> {
+    let ops = super::page_operations(doc, page_id)?;
+    let resources = Resources::for_page(doc, page_id);
+    let mut found = false;
+    content::walk(
+        doc,
+        &ops,
+        &resources,
+        Matrix::IDENTITY,
+        &HashSet::new(),
+        0,
+        &mut |item| {
+            if matches!(item.kind, ItemKind::Shading) {
+                found = true;
+            }
+        },
+    )?;
+    if found {
+        return Err(format!(
+            "Page {number} paints a shading fill, which redaction does not support safely. The document is unchanged."
+        ));
     }
     Ok(())
 }
@@ -1132,6 +1153,14 @@ pub fn audit(
                         images_to_check.push((*id, *ctm, item.bbox));
                     }
                     ItemKind::Image { id: None, .. } if in_region => residual += 1,
+                    ItemKind::Path { clip: false, .. }
+                        if in_region
+                            && !rects
+                                .iter()
+                                .any(|rect| rect.inflate(0.01).contains(&item.bbox)) =>
+                    {
+                        residual += 1
+                    }
                     _ => {}
                 }
             },
@@ -1407,6 +1436,41 @@ mod tests {
             &AtomicBool::new(false)
         )
         .is_err());
+    }
+
+    #[test]
+    fn overlapping_vector_paths_are_removed_before_the_redaction_overlay_is_added() {
+        let (mut doc, _) = page_document("0 0 m 200 0 l 200 100 l 0 100 l h f", dictionary! {});
+        let source = crate::engine::save(&mut doc).unwrap();
+        let (output, report) = apply(
+            &source,
+            &request(vec![region(1, Rect::new(80.0, 20.0, 120.0, 80.0))], &[]),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+
+        assert_eq!(report.removed_paths, 1);
+        assert!(report.audit.passed);
+        let mut paths = 0;
+        visit(&output, 1, &mut |_, item| {
+            if matches!(item.kind, ItemKind::Path { clip: false, .. }) {
+                paths += 1;
+            }
+        });
+        assert_eq!(paths, 1, "only the black redaction overlay should remain");
+    }
+
+    #[test]
+    fn shading_content_is_rejected_for_region_redaction() {
+        let (mut doc, _) = page_document("/Sh1 sh", dictionary! {});
+        let source = crate::engine::save(&mut doc).unwrap();
+        let error = apply(
+            &source,
+            &request(vec![region(1, Rect::new(80.0, 20.0, 120.0, 80.0))], &[]),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+        assert!(error.contains("shading") && error.contains("unchanged"));
     }
 
     #[test]

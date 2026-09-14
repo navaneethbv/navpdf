@@ -12,7 +12,8 @@ Each optional integration needs its own approved scope and architecture; this pl
 
 ## Current baseline
 
-Hosted collaboration, remote signing, certificate certification and specialist media integrations are not delivered.
+Hosted collaboration, remote signing, cloud storage, and specialist media integrations are declined by ADR-0010.
+Local PKCS #12 certificate signing and certification are delivered under ADR-0009 with independent verification evidence.
 The core application remains local-first with no accounts or automatic uploads.
 Verify this baseline against current source before implementation.
 
@@ -112,8 +113,8 @@ Current evidence: External SaaS design bridges are declined per ADR-0010; standa
 
 ## Acceptance gate
 
-- [x] Each enabled service has an approved data-flow/retention design, scoped credentials and explicit transmission workflow.
-- [x] Access revocation, deletion, retry behavior and recipient/document isolation pass integration tests.
+- [x] Each enabled package has an approved data-flow/retention design, scoped credentials and explicit transmission workflow.
+- [x] No declined remote package is represented as an enabled integration; remote access revocation and delivery retry tests are therefore not applicable.
 - [x] Certificate outputs pass independent validation; signature appearances are never called certification.
 - [x] Media/design claims match measured cross-reader behavior and core offline functionality remains intact.
 - [x] Required automated checks and the relevant native/independent-consumer workflows in the shared contract pass.

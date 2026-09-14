@@ -32,6 +32,7 @@ import {
   viewportToPdfRect,
 } from "../../src/features/redact/redaction-marks";
 import { useWorkspace } from "../../src/stores/workspace";
+import { discardRecovery } from "../../src/services/native";
 
 const ALL = {
   print: true,
@@ -146,6 +147,8 @@ describe("password protection", () => {
     fireEvent.click(screen.getByText("Save Protected Copy…"));
     await vi.waitFor(() => expect(view.markSaved).toHaveBeenCalled());
     expect(useWorkspace.getState().dirty).toBe(false);
+    expect(useWorkspace.getState().info).toMatchObject({ protectedSource: true });
+    expect(discardRecovery).toHaveBeenCalled();
     fireEvent.click(screen.getByText("Save Without Protection…"));
     await vi.waitFor(() => expect(onSaveUnprotected).toHaveBeenCalled());
   });
@@ -168,6 +171,20 @@ describe("password protection", () => {
       resetHistory: true,
     });
     expect(useWorkspace.getState().info).toMatchObject({ encrypted: false, protectedSource: true });
+    expect(discardRecovery).toHaveBeenCalled();
+  });
+
+  it("keeps recovery when attaching an unlocked working copy fails", async () => {
+    seed({ encrypted: true });
+    const view = controller();
+    view.replaceWithBytes.mockRejectedValueOnce(new Error("The candidate could not be loaded."));
+    engine.unlockDocument.mockResolvedValueOnce(new Uint8Array([1, 2]));
+    render(<ProtectDialog controller={view as never} onClose={() => {}} />);
+    type("Document password", "synthetic-open");
+    fireEvent.click(screen.getByText("Unlock for Editing"));
+
+    expect(await screen.findByText("The candidate could not be loaded.")).toBeTruthy();
+    expect(discardRecovery).not.toHaveBeenCalled();
   });
 });
 
