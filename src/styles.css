@@ -13,7 +13,7 @@
   --surface-2: #f1f3ef;
   --canvas: #dfe5e0;
   --ink: #26332e;
-  --muted: #66756d;
+  --muted: #59685f;
   --line: #d4ddd7;
   --accent: #2c7257;
   --accent-strong: #205b45;
@@ -1919,6 +1919,144 @@ p {
 }
 
 /* ==========================================================================
+   Redaction, Protection, Compression and Existing-Content Editing
+   ========================================================================== */
+.redaction-panel {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  bottom: 40px;
+  width: min(380px, calc(100vw - 32px));
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px var(--shadow-color);
+  overflow: hidden;
+}
+.redaction-mark,
+.object-edit-box {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+}
+.redaction-mark {
+  border: 2px solid var(--danger-ink);
+  background: var(--danger-surface);
+  opacity: 0.75;
+}
+.redaction-mark.drawing {
+  border-style: dashed;
+}
+.object-edit-box {
+  border: 2px solid var(--accent);
+  background: var(--selection-fill);
+}
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.permission-grid,
+.preset-list {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.preset-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.preset-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.check-list li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.check-list li.passed svg {
+  color: var(--accent);
+}
+.check-list li.failed {
+  color: var(--danger-ink);
+}
+.inline-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.inline-field .text-input {
+  flex: 1;
+  min-width: 0;
+}
+.object-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 280px;
+}
+.object-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 50vh;
+}
+.object-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
+.object-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.object-row.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.object-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+@media (max-width: 720px) {
+  .object-editor-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
    Fill & Sign, Citations, and Security Boxes
    ========================================================================== */
 .signature-canvas-container {
@@ -1990,6 +2128,30 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.certificate-summary {
+  justify-content: flex-start;
+  gap: 12px;
+}
+.certificate-summary p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.signature-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.signature-row {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
 }
 
 

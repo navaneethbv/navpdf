@@ -167,15 +167,23 @@ export function useDocumentSession(controller: ViewerController | null) {
     [controller, refreshLocal, report],
   );
   const save = useCallback(
-    async (saveAs = false) => {
+    async (saveAs = false, unprotected = false) => {
       const state = useWorkspace.getState();
       const pdf = controller?.pdf ?? null;
       if (!controller || !pdf || !state.document || lock.current)
         return false;
       if (state.info?.encrypted) {
         report(
-          "Saving password-protected PDFs is deferred until encryption-preserving editing is verified. Your original is unchanged.",
+          "This password-protected PDF opens read-only. Unlock it from Password Protect before editing or saving. Your original is unchanged.",
         );
+        return false;
+      }
+      if (state.info?.protectedSource && !unprotected) {
+        // An unlocked working copy is never written back without an explicit protection choice.
+        state.set({
+          activeModal: "protect",
+          status: "Choose how to save this password-protected document.",
+        });
         return false;
       }
       lock.current = true;
@@ -206,6 +214,9 @@ export function useDocumentSession(controller: ViewerController | null) {
             name: result.name,
             size: result.size,
           },
+          ...(unprotected && state.info
+            ? { info: { ...state.info, protectedSource: false } }
+            : {}),
         });
         controller.markSaved?.(bytes, pdf.numPages);
         await desktop.markDirty(false);
@@ -302,6 +313,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         !state.dirty ||
         !state.local.preferences.autosave ||
         state.info?.encrypted ||
+        state.info?.protectedSource ||
         !state.document ||
         !controller?.pdf ||
         lock.current

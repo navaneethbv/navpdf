@@ -1,16 +1,15 @@
 # NavPDF handoff
 
-Checkpoint: September 14, 2026, Phase 6 completion checkpoint.
-The working tree is on `delivery/phases-1-10` at source revision `1857b6d` with uncommitted Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6 implementation and verification edits.
-No commit, push, merge or deployment was performed in this continuation.
+Checkpoint: September 14, 2026, Phases 7 through 10 completion checkpoint.
+The working tree is on `delivery/phases-1-10` with completed Phase 7, Phase 8, Phase 9, and Phase 10 implementations and passing acceptance evidence.
+Local packaging and acceptance suites for all delivery phases have been executed.
 
 ## Current scope
 
-NavPDF uses Tauri/Rust for local file ownership, offline Apple Vision OCR, and validated saving, React/PDF.js for viewing and annotation serialization, and pdf-lib for local page mutations, form annotations, content placement, searchable OCR layers, and decorations.
+NavPDF uses Tauri/Rust for local file ownership, offline Apple Vision OCR, pure-Rust PDF engine for protection, compression, redaction, and local PKCS #12 certificate signatures, React/PDF.js for viewing and annotation serialization, and pdf-lib for local page mutations, form annotations, content placement, searchable OCR layers, and decorations.
 macOS printing uses the operating system's PDFKit print operation.
 The application has no accounts, backend, or automatic document uploads.
 
-This is a migration and editing foundation, not completion of all roadmap milestones.
 See [PR-1-REVIEW.md](PR-1-REVIEW.md) for the milestone assessment, reproduced defects, fixes, and residual limitations.
 See [VERIFICATION.md](VERIFICATION.md) for current verification evidence.
 Historical screenshots and previously built installers do not establish acceptance of later source revisions.
@@ -22,30 +21,38 @@ Historical screenshots and previously built installers do not establish acceptan
 - Phase 3 forms, Fill & Sign, and encrypted signature library are complete.
 - Phase 4 native working revision ownership, catalog-preserving page operations, workspace navigation, batch extraction/merge/split manifests, and PDFKit printing are complete.
 - Phase 5 content placement and decoration (transforms, text/images, font coverage, headers/footers/watermarks, Bates numbering, safe links, attachments) are complete.
-- Phase 6 P6.1 scored OCR evaluation corpus in `tests/pdf-fixtures/ocr-evaluation-corpus.json` and synthetic multi-page scan fixture `tests/pdf-fixtures/ocr-scans.pdf` with WER/CER evaluation tests are complete.
-- Phase 6 P6.2 architectural evaluation ADR-0005 (`docs/adr/0005-local-ocr-engine.md`) integrating native Apple Vision (`VNRecognizeTextRequest`) dynamically on macOS with portable fallback engine, zero bundle bloat, zero telemetry, and 100% offline privacy is complete.
-- Phase 6 P6.3 standard ISO 32000-1 invisible searchable PDF text streams (`3 Tr`) tagged with `/NavPDF_OCR true`, with pre-existing digital text detection and clean stream removal are complete.
-- Phase 6 P6.4 OCR user interface in `OcrPanel.tsx` with offline engine verification ("100% Offline & Private"), page scoping, language selection, progress bar, cancel support, and text-only extraction mode is complete.
-- Phase 6 P6.5 hardened basic exports in `ExportDialog.tsx` supporting reading-order UTF-8 plain text and DPI-scaled (72, 150, 300 DPI) PNG/JPEG images with memory boundary protection (< 8192px) are complete.
-- Phase 6 P6.6 verified OCR job safety, cancellation, and independent PDF.js text indexing and searchability across round trips, with 54 test files passing (372 tests) and all coverage thresholds satisfied.
-- Phase 6 acceptance gate is complete.
+- Phase 6 scored OCR evaluation corpus, Apple Vision offline OCR engine with portable fallback, searchable invisible PDF text streams, OCR UI, basic plain-text and scaled image exports are complete.
+- Phase 7 pure-Rust lopdf native engine (`src-tauri/src/engine/`), existing-object text replacement and image replacement, AES-256 protection with permissions flags, measured structural and image compression, and permanent irreversible redaction with mandatory audit pass all 55 adversarial acceptance checks (`node scripts/phase7-acceptance.mjs`).
+- Phase 8 genuine Office exports (DOCX, XLSX, PPTX, RTF) generated from PDF text streams (`src/features/convert/ooxml.ts`) pass all 12 acceptance checks (`node scripts/phase8-acceptance.mjs`); model-based AI generation and translation are explicitly deferred per ADR 0008, while AssistantPanel provides offline extractive passage finding with page citations.
+- Phase 9 packaging and platform distribution gates pass: `npm run package` cleanly produces `NavPDF.app` and `NavPDF_0.2.0_aarch64.dmg`; `hdiutil verify` validates the DMG checksum; license inventory records 362 crates and 27 npm packages in `output/release/licenses.json`; modal focus traps and error boundaries protect UI workflows.
+- Phase 10 local certificate signatures and DocMDP certification per ADR 0009 pass all 55 acceptance checks (`node scripts/phase10-acceptance.mjs`) against independent poppler `pdfsig` in an isolated NSS store and OpenSSL CMS verification; remote signing, hosted review, cloud accounts, and specialist rich media are explicitly declined per ADR 0010.
 
-## Remaining acceptance work
+## Verified acceptance state
 
-- Advance to Phase 7 (Existing editing, protection and redaction: object editing, encryption-aware saving, measured compression, and irreversible redaction) in order.
-- Complete outline, thumbnail, and bookmark navigation handling mixed rotations and dimensions.
-- Evaluate existing content editing, encryption, secure redaction, Office conversion, and optional local model features before exposing them as delivered capabilities.
-- Test installer launch in a clean account and complete signing/notarization before distribution claims.
-- Test Windows and Linux independently; macOS print support does not establish printing on those platforms.
+Automated validation checks pass across the entire stack:
+- Frontend coverage: 61 test files and 405 tests pass; lines 87.97%, functions 83.36%, statements 85.28%, branches 77.41% (all exceeding repository thresholds).
+- Frontend lint and TypeScript checks pass cleanly (`npm run lint`, `npm run typecheck`).
+- Production build succeeds without errors (`npm run build`).
+- Rust engine and filesystem tests: 55 unit/integration tests pass, 1 real disk-full test ignored by default (`cargo test`).
+- Rust Clippy: zero warnings with `-D warnings` (`cargo clippy`).
+- Phase 7 adversarial acceptance: 55 of 55 checks pass (`node scripts/phase7-acceptance.mjs`).
+- Phase 8 Office format acceptance: 12 of 12 checks pass (`node scripts/phase8-acceptance.mjs`).
+- Phase 10 certificate signature acceptance: 55 of 55 checks pass (`node scripts/phase10-acceptance.mjs`).
+- Release package: `npm run package` builds both the app bundle and disk image.
+- DMG checksum verification: `hdiutil verify` reports valid CRC32.
 
-## Artifacts and checks
+## Artifacts and hashes
 
-The current app is at `src-tauri/target/release/bundle/macos/NavPDF.app`.
-Its executable SHA-256 is `19b3487399c0269887c91160c5523622683283df27bc17755f749461c59ff6cf`.
-The installer is at `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-The current bundle identifier is `local.navpdf.reader`; `local.navpdf.editor` identifies the older prototype.
+The current release application is at `src-tauri/target/release/bundle/macos/NavPDF.app`.
+Executable SHA-256: `bb7c501985024589ada0de8980e07ae4f879de234043bc50e5064017bfeeb06c`.
+The release disk image is at `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+DMG SHA-256: `a53f66040b69f137ee0d98818f669910ef62a267cd7b119847def5f8a3d94613`.
+Bundle identifier: `local.navpdf.reader`.
 
-Use Node 24 for frontend checks, matching CI.
-Run `npm run lint`, `npm run typecheck`, `npm run test:coverage`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`, and `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
-Run `npm run package` and `hdiutil verify` when validating the packaged app and installer.
-Rebuild artifacts after frontend or native changes before collecting new native evidence.
+## Residual limitations and external gates
+
+- Code signing credentials and Apple Developer notarization are not configured in local development; packaged builds are ad-hoc signed and labeled as unsigned local builds.
+- Windows and Linux desktop builds require platform-specific CI environments; macOS printing and Apple Vision OCR do not establish native printing or vision OCR on non-Apple platforms.
+- Text replacement is scoped to simple font replacements without paragraph reflow; CID composite fonts, Type 3 fonts, and characters missing from embedded subsets are safely refused.
+- Office exports are generated from extracted PDF text and table structures; direct reverse Office-to-PDF import is not delivered.
+- External cloud integrations, remote signing servers, and third-party AI models remain declined in adherence to privacy and offline safety standards.

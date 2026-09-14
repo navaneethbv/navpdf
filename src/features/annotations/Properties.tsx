@@ -262,8 +262,8 @@ export function Properties({ controller }: { controller: ViewerController }) {
           </dl>
           {s.info?.encrypted && (
             <p className="tip">
-              <LockKeyhole size={16} /> This file is open for reading. Saving
-              encrypted PDFs is not available in this milestone.
+              <LockKeyhole size={16} /> This file is open for reading. Unlock
+              it from Password Protect to edit it or save a copy.
             </p>
           )}
           {!s.info?.encrypted && (

@@ -188,7 +188,7 @@ describe("App shell", () => {
       ["compress", "Compress PDF"],
       ["protect", "Password Protect PDF"],
       ["design", "Generate Cover Page"],
-      ["assistant", "Intelligent Document Tools"],
+      ["assistant", "Find and Cite Passages"],
     ];
     for (const [modal, heading] of modals) {
       act(() => {

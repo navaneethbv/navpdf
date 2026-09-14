@@ -114,7 +114,20 @@ pub fn atomic_save(
     expected_pages: u32,
     expected_hash: Option<&[u8]>,
 ) -> Result<Vec<u8>, String> {
-    validate_pdf(bytes, expected_pages)?;
+    atomic_save_with(path, bytes, expected_hash, |candidate| {
+        validate_pdf(candidate, expected_pages)
+    })
+}
+
+/// Atomic replacement with a caller-supplied validator, for outputs such as encrypted
+/// copies that the unencrypted validator must keep rejecting.
+pub fn atomic_save_with(
+    path: &Path,
+    bytes: &[u8],
+    expected_hash: Option<&[u8]>,
+    validate: impl FnOnce(&[u8]) -> Result<(), String>,
+) -> Result<Vec<u8>, String> {
+    validate(bytes)?;
     let parent = path.parent().ok_or("Invalid save destination.")?;
     if let Some(expected) = expected_hash {
         if fingerprint(path)? != expected {
@@ -378,6 +391,17 @@ mod tests {
         let bytes = fixture();
         atomic_save(&p, &bytes, 1, None).expect("save");
         assert_eq!(fs::read(p).expect("read"), bytes);
+    }
+    #[test]
+    fn custom_validators_gate_the_write_and_default_validation_rejects_encryption() {
+        let d = tempfile::tempdir().expect("temp");
+        let p = d.path().join("protected.pdf");
+        let rejected = atomic_save_with(&p, b"%PDF-1.7 encrypted", None, |_| Err("invalid".into()));
+        assert_eq!(rejected.unwrap_err(), "invalid");
+        assert!(!p.exists());
+        atomic_save_with(&p, b"%PDF-1.7 encrypted", None, |_| Ok(())).expect("save");
+        assert_eq!(fs::read(&p).expect("read"), b"%PDF-1.7 encrypted");
+        assert!(validate_pdf(b"%PDF-1.7 encrypted", 1).is_err());
     }
     #[test]
     fn corrupt_output_never_overwrites() {

@@ -1,8 +1,92 @@
-import { useState } from "react";
-import { FileText, Presentation, FileSpreadsheet, Download, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, FileText, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-import { downloadBlob } from "../../utils/download";
+import { downloadBlob, safeFileName } from "../../utils/download";
+import {
+  buildDocx,
+  buildPptx,
+  buildRtf,
+  buildXlsx,
+  layoutPage,
+  tableRows,
+  type PageLayout,
+  type Slide,
+  type TextItem,
+} from "./ooxml";
+
+type Format = "docx" | "xlsx" | "pptx-text" | "pptx-images" | "rtf";
+
+const PRESENTATION = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const FORMATS: { id: Format; label: string; extension: string; mime: string; description: string }[] = [
+  {
+    id: "docx",
+    label: "Word document (.docx)",
+    extension: "docx",
+    mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    description: "Editable paragraphs and headings rebuilt from the PDF text layer, with a page break per page.",
+  },
+  {
+    id: "xlsx",
+    label: "Excel workbook (.xlsx)",
+    extension: "xlsx",
+    mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    description: "One sheet per page with text aligned into columns. Numbers and ISO dates become typed cells; formulas are never created.",
+  },
+  {
+    id: "pptx-text",
+    label: "PowerPoint, editable text (.pptx)",
+    extension: "pptx",
+    mime: PRESENTATION,
+    description: "One slide per page with each text line as an editable text box. Images and drawings are not carried over.",
+  },
+  {
+    id: "pptx-images",
+    label: "PowerPoint, page pictures (.pptx)",
+    extension: "pptx",
+    mime: PRESENTATION,
+    description: "One slide per page showing a 150 dpi picture of the page. Appearance is kept; text is not editable.",
+  },
+  {
+    id: "rtf",
+    label: "Rich Text (.rtf)",
+    extension: "rtf",
+    mime: "application/rtf",
+    description: "Paragraphs and headings for any word processor.",
+  },
+];
+
+const MAX_PICTURE_SLIDES = 200;
+const PICTURE_DPI = 150;
+const MAX_PICTURE_EDGE = 4096;
+
+interface PageProxy {
+  getViewport(options: { scale: number }): { width: number; height: number };
+  getTextContent(): Promise<{ items: unknown[] }>;
+  render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): { promise: Promise<void> };
+}
+
+function isTextItem(item: unknown): item is TextItem {
+  const candidate = item as Partial<TextItem>;
+  return typeof candidate?.str === "string" && Array.isArray(candidate.transform) && typeof candidate.width === "number";
+}
+
+async function pagePicture(page: PageProxy): Promise<{ width: number; height: number; image: Uint8Array }> {
+  const base = page.getViewport({ scale: 1 });
+  const scale = Math.min(PICTURE_DPI / 72, MAX_PICTURE_EDGE / Math.max(base.width, base.height));
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("A page picture could not be rendered.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: context, viewport }).promise;
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("A page picture could not be encoded.");
+  return { width: base.width, height: base.height, image: new Uint8Array(await blob.arrayBuffer()) };
+}
 
 export function OfficeExport({
   controller,
@@ -12,87 +96,93 @@ export function OfficeExport({
   onClose: () => void;
 }) {
   const s = useWorkspace();
-  const [format, setFormat] = useState<"docx" | "pptx" | "xlsx">("docx");
-  const [converting, setConverting] = useState(false);
+  const [format, setFormat] = useState<Format>("docx");
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [preview, setPreview] = useState<string[][] | null>(null);
+  const cancelled = useRef(false);
+  const selected = FORMATS.find((item) => item.id === format) ?? FORMATS[0];
+  const baseName = safeFileName((s.document?.name ?? "document").replace(/\.pdf$/i, ""), "document");
 
-  const handleExport = async () => {
-    if (!controller?.pdf) return;
-    setConverting(true);
+  const layouts = async (limit?: number): Promise<PageLayout[] | null> => {
+    const pdf = controller?.pdf;
+    if (!pdf) return null;
+    const count = Math.min(pdf.numPages, limit ?? pdf.numPages);
+    const result: PageLayout[] = [];
+    for (let number = 1; number <= count; number++) {
+      if (cancelled.current) return null;
+      setProgress(`Reading page ${number} of ${count}…`);
+      const page = (await pdf.getPage(number)) as unknown as PageProxy;
+      const { width, height } = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      result.push(layoutPage(number, content.items.filter(isTextItem), width, height));
+    }
+    return result;
+  };
+
+  const run = async (work: () => Promise<void>) => {
+    cancelled.current = false;
+    setRunning(true);
     try {
-      const total = controller.pdf.numPages;
-      const pagesText: string[] = [];
-
-      for (let i = 1; i <= total; i++) {
-        const page = await controller.pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        // @ts-expect-error item str
-        const lines = textContent.items.map((it) => it.str || "").join(" ");
-        pagesText.push(lines);
-      }
-
-      let blob: Blob;
-      let ext: string;
-
-      if (format === "docx") {
-        // Word-compatible HTML: opens in Word, but it is NOT editable OOXML.
-        // True DOCX reconstruction needs the M7 conversion engine trial.
-        const docHtml = `
-          <!DOCTYPE html>
-          <html>
-            <head><meta charset="utf-8"><title>${s.document?.name || "Document"}</title></head>
-            <body>
-              ${pagesText
-                .map(
-                  (text, idx) =>
-                    `<h2>Page ${idx + 1}</h2><p style="margin-bottom: 24px;">${text}</p>`,
-                )
-                .join("")}
-            </body>
-          </html>
-        `;
-        blob = new Blob([docHtml], { type: "application/msword" });
-        ext = "doc";
-      } else if (format === "pptx") {
-        // Slide-per-page HTML outline, not an editable PPTX. See M7 note above.
-        const presHtml = `
-          <!DOCTYPE html>
-          <html>
-            <head><meta charset="utf-8"><title>${s.document?.name || "Slides"}</title></head>
-            <body>
-              ${pagesText
-                .map(
-                  (text, idx) =>
-                    `<div style="page-break-after: always; padding: 40px;"><h1>Slide ${idx + 1}</h1><p>${text}</p></div>`,
-                )
-                .join("")}
-            </body>
-          </html>
-        `;
-        blob = new Blob([presHtml], { type: "application/vnd.ms-powerpoint" });
-        ext = "ppt";
-      } else {
-        // Extract CSV / spreadsheet data
-        const rows = pagesText.map((p, idx) => `Page ${idx + 1},"${p.replace(/"/g, '""')}"`);
-        const csv = `Page,Extracted Content\n${rows.join("\n")}`;
-        blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        ext = "csv";
-      }
-
-      downloadBlob(
-        blob,
-        `${(s.document?.name || "document").replace(/\.pdf$/i, "")}.${ext}`,
-      );
-      s.set({ status: `Exported to ${format.toUpperCase()}` });
-      onClose();
-    } catch (err) {
-      s.set({ error: err instanceof Error ? err.message : String(err) });
+      await work();
+    } catch (error) {
+      s.set({ error: error instanceof Error ? error.message : String(error) });
     } finally {
-      setConverting(false);
+      setRunning(false);
+      setProgress("");
     }
   };
 
+  const exportFile = () =>
+    run(async () => {
+      const pdf = controller?.pdf;
+      if (!pdf) return;
+      let bytes: Uint8Array<ArrayBuffer> | string;
+      if (format === "pptx-images") {
+        if (pdf.numPages > MAX_PICTURE_SLIDES)
+          throw new Error(`Picture slides are limited to ${MAX_PICTURE_SLIDES} pages. Export a page range first.`);
+        const slides: Slide[] = [];
+        for (let number = 1; number <= pdf.numPages; number++) {
+          if (cancelled.current) return;
+          setProgress(`Rendering page ${number} of ${pdf.numPages}…`);
+          slides.push(await pagePicture((await pdf.getPage(number)) as unknown as PageProxy));
+        }
+        bytes = buildPptx(slides, baseName);
+      } else {
+        const pages = await layouts();
+        if (!pages) return;
+        if (!pages.some((page) => page.lines.length))
+          throw new Error("This PDF has no text layer to convert. Run OCR first, or export page pictures.");
+        bytes =
+          format === "docx"
+            ? buildDocx(pages, baseName)
+            : format === "xlsx"
+              ? buildXlsx(pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) })))
+              : format === "pptx-text"
+                ? buildPptx(
+                    pages.map((page) => ({
+                      width: page.width,
+                      height: page.height,
+                      boxes: page.lines.map((line) => ({ x: line.x, y: line.y, size: line.size, text: line.text })),
+                    })),
+                    baseName,
+                  )
+                : buildRtf(pages);
+      }
+      if (cancelled.current) return;
+      downloadBlob(new Blob([bytes], { type: selected.mime }), `${baseName}.${selected.extension}`);
+      s.set({ status: `Exported ${selected.label}` });
+      onClose();
+    });
+
+  const previewCells = () =>
+    run(async () => {
+      const pages = await layouts(1);
+      if (pages) setPreview(tableRows(pages[0]).slice(0, 8));
+    });
+
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Convert to Office Formats">
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Export to Office Formats">
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -105,46 +195,76 @@ export function OfficeExport({
         </div>
 
         <div className="modal-body">
-          <div className="tab-buttons-bar">
-              <button
-                className={format === "docx" ? "active" : ""}
-                onClick={() => setFormat("docx")}
-              >
-                <FileText size={15} /> Word-compatible (.doc HTML)
-              </button>
-              <button
-                className={format === "pptx" ? "active" : ""}
-                onClick={() => setFormat("pptx")}
-              >
-                <Presentation size={15} /> Slides outline (.ppt HTML)
-              </button>
-              <button
-                className={format === "xlsx" ? "active" : ""}
-                onClick={() => setFormat("xlsx")}
-              >
-                <FileSpreadsheet size={15} /> Table data (.csv)
-              </button>
-          </div>
-
-          <p className="field-hint" style={{ marginTop: "14px" }}>
-            Fidelity limits: Word and slide exports are HTML outlines of the
-            extracted text (not editable .docx/.pptx), and table export is
-            plain CSV with all values quoted as text so spreadsheet apps never
-            interpret them as formulas. High-fidelity Office conversion needs
-            the M7 engine trial.
+          <fieldset className="preset-list" disabled={running}>
+            <legend className="setting-title">Format</legend>
+            {FORMATS.map((item) => (
+              <label key={item.id} className="preset-option">
+                <input
+                  type="radio"
+                  name="office-format"
+                  checked={format === item.id}
+                  onChange={() => {
+                    setFormat(item.id);
+                    setPreview(null);
+                  }}
+                />
+                <span>
+                  <strong>{item.label}</strong>
+                  <span className="field-hint">{item.description}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <p className="field-hint">
+            Editable formats are rebuilt from the PDF text layer: fonts, images,
+            vector drawings and exact positions are not carried over, and scanned
+            pages need OCR first. Files are created on this device.
           </p>
+          {format === "xlsx" && (
+            <button className="button-secondary" onClick={() => void previewCells()} disabled={running}>
+              <FileText size={15} /> Preview Page 1 Cells
+            </button>
+          )}
+          {preview && (
+            <div className="table-preview" role="region" aria-label="Cell preview">
+              <table>
+                <tbody>
+                  {preview.map((row, r) => (
+                    <tr key={r}>
+                      {row.map((cell, c) => (
+                        <td key={c}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {progress && (
+            <p className="field-hint" aria-live="polite">
+              {progress}
+            </p>
+          )}
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
-            Cancel
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={converting}
-            className="button-primary"
-          >
-            {converting ? "Exporting..." : "Export File"}
+          {running ? (
+            <button
+              onClick={() => {
+                cancelled.current = true;
+                s.set({ status: "Export cancelled" });
+              }}
+              className="button-secondary"
+            >
+              Cancel Export
+            </button>
+          ) : (
+            <button onClick={onClose} className="button-secondary">
+              Close
+            </button>
+          )}
+          <button onClick={() => void exportFile()} disabled={running || !controller?.pdf} className="button-primary">
+            {running ? "Exporting…" : "Export File"}
           </button>
         </div>
       </div>

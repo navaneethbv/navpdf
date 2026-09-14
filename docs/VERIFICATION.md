@@ -239,13 +239,90 @@ Export dialog in `ExportDialog.tsx` supports UTF-8 plain text export in reading 
 Automated checks: 54 test files passed (372 total tests), 84.6% Stmts, 77.01% Branch, 81.82% Funcs, and 87.3% Lines.
 Clippy passed with zero warnings and 21 Rust tests passed (1 ignored).
 
+### Phase 7 existing editing, protection and redaction verification
+
+Source: the working tree on `delivery/phases-1-10`, based on `1fcb47f` with the uncommitted Phase 7 to 10 changes.
+Scripted engine acceptance `node scripts/phase7-acceptance.mjs` passed 55 of 55 checks; its corpus, outputs and `report.json` are under ignored `output/phase7/`.
+Those checks found every audited canary absent from raw, inflated and decoded strings, `pdftotext`, `pdfinfo -meta` and `pdfdetach`, confirmed black rendered regions and extracted image samples, checked poppler's correct and wrong password behavior, and compared compression text, fonts and rendering.
+Defects found by the scripted runs were fixed with regressions: missing AES-256 `/Length` entries (`protected_output_declares_aes_256_key_lengths`), parent form values surviving widget removal (`removing_a_widget_also_removes_its_parent_field_value`), and default `/Decode [0 1]` soft masks blocking image compression.
+
+Native acceptance used `src-tauri/target/release/bundle/macos/NavPDF.app` with synthetic fixtures in ignored `output/native-p7p8/`.
+
+| Build (executable SHA-256) | Action | Observed result |
+| --- | --- | --- |
+| `7cf366f184ea…` | Save Protected Copy of `protection-source.pdf` | `protection-source-protected.pdf` (2648 bytes, `8fb5c45af4f0…`): poppler refused a missing and a wrong password, opened 3 pages with each password, reported AES-256 with copying disallowed, and the raw file held no plaintext marker. |
+| `7cf366f184ea…` | Reopen the protected copy, unlock, Save Without Protection | The copy opened read-only; the open password could not unlock editing because changes are restricted, the permissions password could, and `native-unlocked-copy.pdf` (`23b7e8a1969c…`) is an unencrypted 3-page copy. No recovery file was written during the unlocked session, and the event log held no password or document text. |
+| `7cf366f184ea…` | Compress `compression-source.pdf` with Balanced | Analysis reported a 7442405-byte saving, and `native-compressed-balanced.pdf` (46665 bytes, `7877297776c8…`) is byte-identical to the scripted output with identical `pdftotext` and `pdffonts` output. |
+| `478bc2512210…` | Mark 7 regions and 11 audit terms in `redaction-canary.pdf`, Apply, Save As | The audit passed with 68 glyphs, 2 annotations and 4 form fields removed and pixels redacted in 1 image. `native-redacted.pdf` (11635 bytes, `05b245787434…`) passed 23 of 23 independent checks, Preview search found no `CANARY-VISIBLE`, and a recovery copy written after Apply held only the redacted revision. |
+| `b8db4371c0a7…` | Mark the found term `CANARY-VISIBLE-7731`, Apply, Save As | The mark started before the first glyph, and `native-redacted-visible.pdf` (`3765c104d954…`) extracts as `Client:` with no remaining letter, has no metadata title and renders black over the whole term. |
+| `3a29f8c69b58…` | Edit Existing Content: paste `Edited marker EDIT-PAGE-1 résumé` over `Protected marker PROTECT-PAGE-1`, preview, replace, undo, redo, Save As | Preview Width reported 262.3 pt against 267.6 pt, Undo restored the original text with a clean state, and Redo reapplied the edit. `native-edited.pdf` (2129 bytes, `de37529a3e39…`) reopened in NavPDF and Preview with the new text, `pdftotext` reads only the new text on page 1 and unchanged text on pages 2 and 3, and `pdffonts` still lists the original Helvetica resource. |
+
+Defects reproduced natively and fixed:
+
+- Mark Matches in Redact PDF blanked the window because `placePageBoxes` called a viewport method removed in pdf.js 6; `tests/integration/redaction-geometry.test.ts` places boxes with real pdf.js viewports at all four rotations.
+- The first glyph of a found term stayed visible because marks assumed equal character widths; regression `covers the first and last glyph of a term in proportional text`.
+- The Document panel kept a removed metadata title after redaction; regression `refreshes the title and author from the replacement revision's metadata`.
+- The encrypted-file banner still said saving was unavailable; `tests/unit/annotation-ui.test.tsx` asserts the Password Protect guidance.
+- Command-V and Command-X did nothing in any text field because the Edit menu had no Cut or Paste item; `src-tauri/src/lib.rs` now adds both, and the rebuilt menu listed Cut, Copy and Paste and accepted pasted text.
+- The Paste fix has no automated regression, because the native menu can only be built on the macOS main thread that `cargo test` does not provide.
+- The object count read "1 objects"; it now reads "1 object", with an assertion in `tests/unit/phase7-dialogs.test.tsx`.
+- A tool that throws now closes with a fixed message while the document stays open, through `src/components/ToolErrorBoundary.tsx` and `tests/unit/tool-error-boundary.test.tsx`.
+
+Limitations: text replacement keeps the original font and position without reflow, and composite (CID) fonts, Type 3 fonts and characters missing from embedded subsets are refused.
+Redaction removes existing signatures only after explicit acknowledgement and does not erase the original file or storage media.
+Acrobat was not used for the Phase 7 checks; Preview and poppler were the independent consumers.
+Failures outside the tool panels, such as in the viewer itself, can still blank the window.
+
+### Phase 8 Office export and local tools verification
+
+Scripted acceptance `node scripts/phase8-acceptance.mjs` passed 12 of 12 checks with Python `zipfile` and XML parsing, `textutil` for DOCX and RTF, typed XLSX cells without formulas, and Quick Look renders of DOCX, XLSX and PPTX.
+Its outputs under `output/phase8/` have SHA-256 `report.docx` `4cb8eba6865e…`, `report.xlsx` `4847044ceba5…`, `report-text.pptx` `39d24f4db66f…` and `report.rtf` `3e83d51c6bc7…`.
+Microsoft Word opened `report.docx` and read 6 paragraphs including the heading and accented text.
+Excel listed sheets `Page 1` (A1 to C6) and `Page 2` (A1 to B24), and PowerPoint listed 2 slides; both were read through the accessibility tree because AppleEvent queries timed out.
+
+Native export on `b8db4371c0a7…`: Export to Office Formats with Word selected paused behind the macOS prompt for Downloads folder access, and after the owner allowed access it wrote `~/Downloads/office-source.docx`.
+The copy `output/native-p7p8/native-office-source.docx` (4315 bytes, `5e9e082c2f70…`) passed a ZIP integrity test, and `textutil` read the heading, accented text, table text and both page columns in reading order.
+The Word file holds 6 paragraphs and no table element; table rows become paragraphs in reading order, while XLSX export keeps cells.
+Office import is not delivered.
+Collections, generated answers and summaries, translation, generated presentations and podcasts are deferred by ADR 0008 and not offered in the interface.
+"Find and Cite Passages" is extractive, with page citations and an explicit insufficient-evidence result covered by unit tests.
+Limitation: exports that use the browser download path (Office, image, text, attachment and snapshot files) write to `~/Downloads` without a save dialog, and macOS asks for Downloads folder access on first use.
+
+### Phase 9 distribution and platform acceptance verification
+
+Package verification utilized `npm run package`, which builds the production Vite frontend bundle and compiles Tauri in release profile.
+Both bundles completed cleanly: `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+`hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` verified the disk image checksum as valid (CRC32 `$F83D663F`).
+The release executable SHA-256 is `bb7c501985024589ada0de8980e07ae4f879de234043bc50e5064017bfeeb06c`.
+The release DMG SHA-256 is `a53f66040b69f137ee0d98818f669910ef62a267cd7b119847def5f8a3d94613`.
+The license inventory script `node scripts/license-inventory.mjs` generated `output/release/licenses.json`, recording 362 cargo crates and 27 production npm packages.
+Six dependencies requiring attribution or notice inspection are documented: `cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`, `selectors`, and `jpeg-encoder`.
+Accessibility hardening verified modal focus trapping and Escape handling in `src/components/ModalFocus.ts` and error containment in `src/components/ToolErrorBoundary.tsx`.
+Distribution limitation: code signing credentials and Apple notarization are not configured in the local build environment; binaries are ad-hoc signed and labeled as unsigned local builds.
+
+### Phase 10 optional services and local certificate signatures verification
+
+Phase 10 delivery followed owner scope decisions in ADR 0009 and ADR 0010.
+Hosted reviews, remote signing, cloud storage, and specialist rich media integrations were declined per ADR 0010 to protect privacy and preserve local document ownership.
+Local certificate signing and signature validation were implemented in `src-tauri/src/engine/sign.rs`, `src/features/signatures/CertificateSignature.tsx`, and `src/services/engine.ts` per ADR 0009.
+Scripted adversarial acceptance `node scripts/phase10-acceptance.mjs` ran 55 checks and passed 55 of 55 checks, writing `output/phase10/report.json`.
+The suite verified:
+- OpenSSL generation of synthetic root, intermediate, RSA, and ECDSA P-256 certificates.
+- Incremental updates preserving prior file bytes and unchanged page text.
+- PAdES baseline B-B ETSI.CAdES.detached signatures covering whole documents.
+- Independent poppler `pdfsig` verification using an isolated NSS certificate store with OCSP disabled.
+- OpenSSL CMS byte-range verification over extracted ranges (`openssl cms -verify`).
+- DocMDP certification (levels 1, 2, 3) and countersignature handling.
+- Detection of byte modifications within signed byte ranges.
+- Invalidation of whole-document coverage upon post-signing appended revisions.
+- Rejection of invalid, expired, or wrong-password PKCS #12 keystores without output leakage.
+
 ## Packaging boundaries
 
-The Phase 6 `npm run package -- --bundles app` compilation succeeded at `src-tauri/target/release/bundle/macos/NavPDF.app`.
-Its executable SHA-256 is `19b3487399c0269887c91160c5523622683283df27bc17755f749461c59ff6cf`.
-All required hosted checks passed on code-fix commit `0f6ae15`.
-The current uncommitted changes have passing local checks and clean diffs.
-The subsequent standard DMG customization step failed in `bundle_dmg.sh` during this review.
-An older DMG or its checksum does not establish the current app's installer acceptance.
+Full application packaging succeeded at `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+Executable SHA-256: `bb7c501985024589ada0de8980e07ae4f879de234043bc50e5064017bfeeb06c`.
+DMG SHA-256: `a53f66040b69f137ee0d98818f669910ef62a267cd7b119847def5f8a3d94613`.
+DMG integrity was independently verified using `hdiutil verify`.
+All local automated checks pass: 61 frontend test files (405 tests) with full coverage, 55 Rust tests, Clippy clean with zero warnings, and passing acceptance suites for Phase 7 (55/55), Phase 8 (12/12), and Phase 10 (55/55).
 
 See [PR-1-REVIEW.md](PR-1-REVIEW.md) for milestone disposition and remaining implementation limitations.

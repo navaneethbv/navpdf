@@ -68,6 +68,8 @@ export interface Comment {
 export interface DocumentInfo {
   pages: number;
   encrypted: boolean;
+  /** An unlocked working copy of a password-protected file; saving asks how to protect it. */
+  protectedSource?: boolean;
   title: string;
   author: string;
   version: string;

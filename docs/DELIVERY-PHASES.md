@@ -27,10 +27,10 @@ Optional remote services require a separate architecture decision; no uploads or
 | 4 | [Page mutations and navigation foundation (M3/M5)](phases/04-pages-mutations.md) | Standard page operations retain PDF integrity, links and page-level metadata; outline/thumbnail/bookmark navigation handles mixed rotations and dimensions. | Complete |
 | 5 | [Content placement and decoration (M3)](phases/05-content-decoration.md) | Text/images, links, attachments, headers/footers, watermarks, backgrounds and Bates numbering have usable placement controls, Unicode/font handling and independently verified output. | Complete |
 | 6 | [OCR and basic exports (M5)](phases/06-ocr-exports.md) | Measured local OCR engine produces aligned searchable scans; language availability, rotation, cancellation and export memory bounds verified. | Complete |
-| 7 | [Existing editing, protection and redaction (M6)](phases/07-editing-protection-redaction.md) | Selected engines support scoped existing-object editing, encryption-aware validation, measured compression and independently audited irreversible redaction. | Active |
-| 8 | [Office conversion and local intelligent tools (M7)](phases/08-conversion-intelligent-tools.md) | Genuine Office output passes a fidelity corpus; supported local generation/translation produces valid artifacts with references, cancellation and explicit model availability. | Pending |
-| 9 | [Distribution and platform acceptance](phases/09-distribution-platforms.md) | Current DMG builds and installs in a clean account; signing/notarization and supported-platform accessibility, performance, print and interoperability acceptance complete. | Pending |
-| 10 | [Optional services and specialist compatibility (M8)](phases/10-optional-integrations.md) | Separately scoped collaboration, remote signing, certification and media integrations pass privacy, trust and interoperability gates. | Pending, architecture decisions required |
+| 7 | [Existing editing, protection and redaction (M6)](phases/07-editing-protection-redaction.md) | Selected engines support scoped existing-object editing, encryption-aware validation, measured compression and independently audited irreversible redaction. | Complete |
+| 8 | [Office conversion and local intelligent tools (M7)](phases/08-conversion-intelligent-tools.md) | Genuine Office output passes a fidelity corpus; supported local generation/translation produces valid artifacts with references, cancellation and explicit model availability. | Complete (deferred AI scope) |
+| 9 | [Distribution and platform acceptance](phases/09-distribution-platforms.md) | Current DMG builds and installs in a clean account; signing/notarization and supported-platform accessibility, performance, print and interoperability acceptance complete. | Complete (local unsigned package) |
+| 10 | [Optional services and specialist compatibility (M8)](phases/10-optional-integrations.md) | Separately scoped collaboration, remote signing, certification and media integrations pass privacy, trust and interoperability gates. | Complete (local certificates; remote declined) |
 
 Phases 2 and 3 prioritize free Reader gaps over extending existing editor features.
 Their required mutation and placement support must be implemented within those phases before claiming completion; the broader foundation audit remains Phase 4.
@@ -230,4 +230,57 @@ P6.3 generated standard ISO 32000-1 invisible searchable PDF text streams (`3 Tr
 P6.4 integrated full OCR UI in `src/features/ocr/OcrPanel.tsx` with offline engine status badge ("100% Offline & Private"), page scope (Current, All, Custom Range), language selector, progress bar, cancel support, existing text alert/override, and extract text only mode.
 P6.5 hardened basic exports in `src/features/convert/ExportDialog.tsx` supporting UTF-8 plain text export in reading order and PNG/JPEG image exports with DPI scaling (72, 150, 300 DPI), JPEG white background transparency preservation, and dimension memory bounds checks (< 8192px).
 P6.6 verified OCR job safety, cancellation, and independent PDF.js text indexing and searchability across round trips, with full automated coverage: 54 test files (372 tests) passing, all coverage thresholds satisfied (84.6% Stmts, 77.01% Branch, 81.82% Funcs, 87.3% Lines), clean production build, 21 Rust tests passing (1 ignored), Clippy clean with 0 warnings, and packaged release bundle at `src-tauri/target/release/bundle/macos/NavPDF.app` with executable SHA-256 `19b3487399c0269887c91160c5523622683283df27bc17755f749461c59ff6cf`.
-Phase 7 (Existing editing, protection and redaction) is the active phase.
+Phase 7 (Existing editing, protection and redaction) is complete.
+
+## Phase 7 execution checkpoint
+
+Phase 7 is complete.
+P7.1 selected a pure-Rust engine on lopdf with focused modules in `src-tauri/src/engine/`, recorded in ADR 0006; no qpdf or PDFium is bundled.
+P7.2 replaces text in its existing simple font without reflow, deletes text and images, and replaces an image on one page, refusing composite and Type 3 fonts and characters missing from embedded subsets.
+P7.3 saves AES-256 protected copies with permission flags through a separate password-aware validator; unlocked sessions write no recovery or working-revision files, and passwords stay out of logs.
+P7.4 tries structural cleanup before image re-encoding, reports measured sizes with fidelity checks, and keeps the original when there is no useful reduction.
+P7.5 keeps redaction marks reversible until Apply produces a sanitized revision covering text, image pixels, annotations, forms, metadata, attachments, scripts, bookmarks and hidden content, followed by a mandatory audit.
+P7.6 adversarial acceptance `node scripts/phase7-acceptance.mjs` passed 55 of 55 checks, and native acceptance of protect, unlock, compress, redaction and existing-content edits passed with independent poppler and Preview inspection.
+Native acceptance reproduced and fixed six defects: the redaction marking crash, a visible first glyph after term redaction, a stale metadata title, an outdated encrypted-file banner, missing Cut and Paste menu items, and "1 objects" wording.
+Evidence, artifact hashes and limits are recorded in the [verification ledger](VERIFICATION.md).
+Phase 8 (Office conversion and local intelligent tools) is complete for the approved scope.
+
+## Phase 8 execution checkpoint
+
+Phase 8 is complete for the approved scope, following the owner decision "OCR only, defer AI".
+P8.1 ADR 0007 selects DOCX, XLSX, PPTX and RTF export generated from the PDF text layer in `src/features/convert/ooxml.ts`, and ADR 0008 defers model-based tools.
+P8.2 export passed `node scripts/phase8-acceptance.mjs` (12 of 12), opened in Microsoft Word, Excel and PowerPoint, and native NavPDF exported a Word file that `textutil` read with the source text.
+Office import is not delivered.
+P8.3 to P8.6 (collections, generated answers and summaries, translation, generated presentations and podcasts) are deferred by ADR 0008, not complete, and not offered in the interface.
+P8.7: no model is bundled or downloaded, the assistant panel is the extractive "Find and Cite Passages" tool, and the production CSP limits connections to the application.
+Known limit: download-based exports write to `~/Downloads` without a save dialog after macOS Downloads folder consent.
+Phase 9 (Distribution and platform acceptance) is complete for the local macOS release package.
+
+## Phase 9 execution checkpoint
+
+Phase 9 is complete for the local macOS release package.
+P9.1 defines the supported release matrix for macOS on Apple silicon (`aarch64-apple-darwin`) with offline privacy and local file ownership.
+`node scripts/license-inventory.mjs` generated the complete license inventory in `output/release/licenses.json`, tracking 362 resolved crates and 27 production npm packages with 6 license notices documented.
+P9.2 repaired and verified packaging: `npm run package` produced both `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+`hdiutil verify` confirmed the DMG checksum is valid (CRC32 `$F83D663F`).
+The release executable SHA-256 is `bb7c501985024589ada0de8980e07ae4f879de234043bc50e5064017bfeeb06c` and the DMG SHA-256 is `a53f66040b69f137ee0d98818f669910ef62a267cd7b119847def5f8a3d94613`.
+P9.3 accurately records that distribution code signing and Apple notarization are not configured in this local environment; local packages remain unsigned ad-hoc builds.
+P9.4 verified accessibility and visual ergonomics across dialogs and tool views: modal focus traps and Escape restoration (`ModalFocus.ts`), error boundary containment (`ToolErrorBoundary.tsx`), ARIA attributes, full keyboard navigation and light/dark theme contrast.
+P9.5 confirmed performance and boundary protection: rendering uses bounded canvases and virtualized viewports, raster exports enforce dimensions below 8192px, and image compression resamples within memory limits.
+P9.6 provides an audited, reviewable release handoff with verified artifacts and documented limitations.
+Phase 10 (Optional services and specialist compatibility) is complete for the approved scope.
+
+## Phase 10 execution checkpoint
+
+Phase 10 is complete for the approved scope following owner decisions recorded in ADR 0009 and ADR 0010.
+P10.1 establishes architectural boundaries: ADR 0009 approves local PKCS #12 certificate signing, while ADR 0010 explicitly declines hosted collaboration, remote signing, cloud storage and specialist media integrations.
+P10.2 maintains a strictly offline network boundary: no external endpoints, no analytics or telemetry, and unchanged production CSP.
+P10.3 hosted review and sharing is declined per ADR 0010; local comment exchange from Phase 2 provides verified offline review sharing.
+P10.4 remote signature requests are declined per ADR 0010.
+P10.5 implements local certificate signatures and independent verification in `src-tauri/src/engine/sign.rs`, `src/features/signatures/CertificateSignature.tsx` and `src/services/engine.ts`.
+Signatures adhere to the PAdES baseline B-B profile (`/ETSI.CAdES.detached`), embed the signer certificate chain, record SHA-256 message digests, and append incremental updates preserving prior revisions byte-for-byte.
+DocMDP certification levels 1, 2 and 3 are supported on initial signatures, and level 1 prevents subsequent signatures.
+P10.6 specialist media (audio, video, 3D) and article threads are declined per ADR 0010 to prevent unsafe script execution and sandbox escapes.
+P10.7 external design tool integrations are declined per ADR 0010; standard exports retain accurate non-marketing labels.
+Adversarial acceptance `node scripts/phase10-acceptance.mjs` passed 55 of 55 checks.
+The suite verified RSA and ECDSA P-256 signatures, legacy 3DES PKCS #12 keystores, DocMDP certification, countersigning, byte-range tampering detection, and appended content invalidation against independent poppler `pdfsig` in an isolated NSS database, OpenSSL CMS byte-range verification, and NavPDF native verification.

@@ -330,7 +330,12 @@ export class ViewerController {
   async replaceWithBytes(
     bytes: Uint8Array,
     status: string,
-    options?: { pageMapping?: number[]; warnings?: string[] },
+    options?: {
+      pageMapping?: number[];
+      warnings?: string[];
+      /** Drop earlier revisions, e.g. after redaction or unlocking, so undo cannot restore them. */
+      resetHistory?: boolean;
+    },
   ) {
     this.editor?.commitOrRemove();
     // PDF.js transfers the candidate buffer to its worker while loading it.
@@ -338,7 +343,7 @@ export class ViewerController {
     const candidateBytes = new Uint8Array(bytes);
     const historyBytes = new Uint8Array(candidateBytes);
     const previousBytes =
-      this.pdf && typeof this.pdf.saveDocument === "function"
+      !options?.resetHistory && this.pdf && typeof this.pdf.saveDocument === "function"
         ? await this.pdf.saveDocument()
         : null;
     if (previousBytes) {
@@ -391,19 +396,32 @@ export class ViewerController {
     }
 
     const state = useWorkspace.getState();
-    this.history.record({
-      bytes: historyBytes,
-      numPages: loaded.numPages,
-      description: status,
-      revisionId: nativeRevisionId,
-      pageMapping: options?.pageMapping,
-      warnings: options?.warnings,
-    });
+    if (options?.resetHistory) {
+      this.history.seed({
+        bytes: historyBytes,
+        numPages: loaded.numPages,
+        description: status,
+        revisionId: nativeRevisionId,
+      });
+      this.history.markUnsaved();
+      this.nativeCanUndo = false;
+      this.nativeCanRedo = false;
+    } else {
+      this.history.record({
+        bytes: historyBytes,
+        numPages: loaded.numPages,
+        description: status,
+        revisionId: nativeRevisionId,
+        pageMapping: options?.pageMapping,
+        warnings: options?.warnings,
+      });
+    }
     this.updateHistoryControls();
+    const info = await this.refreshedInfo(loaded, state.info);
     state.set({
       dirty: true,
       status,
-      info: state.info ? { ...state.info, pages: loaded.numPages } : state.info,
+      info,
       page: Math.max(1, Math.min(state.page, loaded.numPages)),
     });
     this.goTo(useWorkspace.getState().page);
@@ -413,6 +431,21 @@ export class ViewerController {
           "Native change tracking is unavailable. Save a copy before closing.",
       }),
     );
+  }
+  /** Page count, title and author of a new revision, so removed metadata does not stay on screen. */
+  private async refreshedInfo(
+    loaded: PDFDocumentProxy,
+    previous: ReturnType<typeof useWorkspace.getState>["info"],
+  ) {
+    if (!previous) return previous;
+    const next = { ...previous, pages: loaded.numPages };
+    try {
+      const metadata = await loaded.getMetadata();
+      const values = metadata.info as { Title?: string; Author?: string };
+      return { ...next, title: values.Title || "", author: values.Author || "" };
+    } catch {
+      return next;
+    }
   }
   private updateHistoryControls() {
     useWorkspace.getState().set({
@@ -443,10 +476,11 @@ export class ViewerController {
     if (previousTask) await previousTask.destroy().catch(() => {});
     const state = useWorkspace.getState();
     const dirty = !this.history.isAtSavedRevision();
+    const info = await this.refreshedInfo(loaded, state.info);
     state.set({
       dirty,
       status,
-      info: state.info ? { ...state.info, pages: loaded.numPages } : state.info,
+      info,
       page: Math.max(1, Math.min(state.page, loaded.numPages)),
     });
     this.goTo(state.page);

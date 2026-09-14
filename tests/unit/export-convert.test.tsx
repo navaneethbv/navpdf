@@ -115,40 +115,76 @@ describe("ExportDialog", () => {
   });
 });
 
+function layoutPages(lines: string[][]) {
+  return {
+    pdf: {
+      numPages: lines.length,
+      getPage: vi.fn(async (n: number) => ({
+        getViewport: vi.fn(() => ({ width: 612, height: 792 })),
+        render: vi.fn(() => ({ promise: Promise.resolve() })),
+        getTextContent: vi.fn(async () => ({
+          items: lines[n - 1].map((str, index) => ({
+            str,
+            transform: [12, 0, 0, 12, index % 2 ? 300 : 72, 700 - Math.floor(index / 2) * 16],
+            width: str.length * 6,
+            height: 12,
+          })),
+        })),
+      })),
+    },
+  };
+}
+
 describe("OfficeExport", () => {
-  it("exports honest HTML outlines and formula-safe CSV", async () => {
+  it("exports genuine DOCX and XLSX packages with previewed cells", async () => {
     seedDocument(2);
-    const controller = textPages(["alpha =1+1", "beta"]);
+    const controller = layoutPages([["Name", "Amount", "Alpha", "=1+1"], ["Second page"]]);
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
-    const created: string[] = [];
+    const created: Blob[] = [];
     const original = URL.createObjectURL;
     URL.createObjectURL = vi.fn((blob: Blob) => {
-      created.push(blob.type);
+      created.push(blob);
       return "blob:mock";
     });
-    render(
-      <OfficeExport controller={controller as never} onClose={() => {}} />,
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <OfficeExport controller={controller as never} onClose={onClose} />,
     );
     fireEvent.click(screen.getByText("Export File"));
-    await vi.waitFor(() => {
-      expect(click).toHaveBeenCalled();
-    });
-    expect(created[0]).toContain("msword");
-    expect(screen.getByText(/Fidelity limits/)).toBeTruthy();
+    await vi.waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect(created[0].type).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    const bytes = new Uint8Array(await created[0].arrayBuffer());
+    expect([...bytes.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+    expect(useWorkspace.getState().status).toBe("Exported Word document (.docx)");
+    unmount();
+
+    render(<OfficeExport controller={controller as never} onClose={() => {}} />);
+    fireEvent.click(screen.getByLabelText(/Excel workbook/));
+    fireEvent.click(screen.getByText("Preview Page 1 Cells"));
+    expect(await screen.findByText("=1+1")).toBeTruthy();
+    fireEvent.click(screen.getByText("Export File"));
+    await vi.waitFor(() => expect(click).toHaveBeenCalledTimes(2));
+    expect(created[1].type).toContain("spreadsheetml.sheet");
     click.mockRestore();
     URL.createObjectURL = original;
   });
 
-  it("switches between office formats", () => {
+  it("exports RTF and explains the conversion limits", async () => {
     seedDocument();
-    render(
-      <OfficeExport controller={textPages(["x"]) as never} onClose={() => {}} />,
-    );
-    fireEvent.click(screen.getByText(/Table data/));
-    fireEvent.click(screen.getByText(/Slides outline/));
-    expect(screen.getByText(/Fidelity limits/)).toBeTruthy();
+    const controller = layoutPages([["Only line"]]);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    render(<OfficeExport controller={controller as never} onClose={() => {}} />);
+    expect(screen.getByText(/Editable formats are rebuilt from the PDF text layer/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/Rich Text/));
+    fireEvent.click(screen.getByText("Export File"));
+    await vi.waitFor(() => expect(click).toHaveBeenCalled());
+    click.mockRestore();
   });
 });
 
@@ -176,53 +212,75 @@ describe("OcrPanel", () => {
 });
 
 describe("AssistantPanel", () => {
-  it("builds a cited extractive page index", async () => {
+  it("cites the page of a matching passage and navigates to it", async () => {
     seedDocument(2);
-    const controller = { ...textPages(["First claim here. More detail.", ""]), goTo: vi.fn() };
+    const controller = {
+      ...textPages([
+        "Introduction text without the words.",
+        "The renewal notice period is ninety days before the end of the term.",
+      ]),
+      goTo: vi.fn(),
+    };
     const onClose = vi.fn();
     render(
       <AssistantPanel controller={controller as never} onClose={onClose} />,
     );
-    fireEvent.click(screen.getByText("Build Page Index"));
-    expect(await screen.findByText("Page 1")).toBeTruthy();
-    expect(screen.getByText("First claim here.")).toBeTruthy();
-    fireEvent.click(screen.getByText("First claim here."));
-    expect(controller.goTo).toHaveBeenCalledWith(1);
+    fireEvent.change(screen.getByLabelText("Words to find"), {
+      target: { value: "renewal notice period" },
+    });
+    fireEvent.click(screen.getByText("Find Passages"));
+    expect(await screen.findByText("Page 2")).toBeTruthy();
+    fireEvent.click(screen.getByText(/ninety days/));
+    expect(controller.goTo).toHaveBeenCalledWith(2);
     expect(onClose).toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Slide Outline"));
-    expect(screen.getByText(/M7 decision/)).toBeTruthy();
+  });
+
+  it("ranks passages by matched terms and ignores empty queries", async () => {
+    const { rankPassages } = await import("../../src/features/assistant/AssistantPanel");
+    const pages = [
+      { page: 1, text: "Payment is due in thirty days. Shipping is free for every order placed." },
+      { page: 2, text: "Interest on late payment accrues monthly after the due date passes." },
+      { page: 3, text: "Late payment adds interest, and repeated late payment adds a late fee." },
+    ];
+    const ranked = rankPassages(pages, "late payment interest");
+    expect(ranked.map((passage) => passage.page)).toEqual([3, 2]);
+    expect(rankPassages(pages, "!")).toEqual([]);
+    expect(rankPassages(pages, "shipping warranty refund")).toEqual([]);
   });
 });
 
 describe("RedactionTool", () => {
-  it("marks regions without modifying the document", () => {
+  it("keeps marks reversible and requires the desktop engine to apply", () => {
     seedDocument();
     const onClose = vi.fn();
-    render(<RedactionTool onClose={onClose} />);
-    expect(screen.getByText(/never claims the content is gone/)).toBeTruthy();
-    fireEvent.click(screen.getByText("Mark Region"));
-    expect(screen.getByText(/Marked regions \(1\)/)).toBeTruthy();
-    expect(screen.getByText(/Page 1: 200x30 pt/)).toBeTruthy();
+    render(<RedactionTool controller={null} onClose={onClose} />);
+    expect(screen.getByText(/Marks are reversible/)).toBeTruthy();
+    expect(screen.getByText(/runs only in the desktop app/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Add Region"));
+    expect(screen.getByText("Marked regions (1)")).toBeTruthy();
+    expect(screen.getByText(/Page 1: 200×24 pt/)).toBeTruthy();
+    const apply = screen.getByText("Review and Apply…").closest("button") as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
     fireEvent.click(screen.getByTitle("Remove mark"));
-    expect(screen.queryByText(/Marked regions \(\d+\)/)).toBeNull();
-    fireEvent.click(screen.getByText("Done"));
+    expect(screen.getByText("Marked regions (0)")).toBeTruthy();
+    fireEvent.click(screen.getByText("Close"));
     expect(onClose).toHaveBeenCalled();
   });
 });
 
 describe("ProtectDialog", () => {
-  it("keeps password fields disabled pending the M6 engine", () => {
+  it("disables password fields outside the desktop app", () => {
     seedDocument();
-    render(<ProtectDialog onClose={() => {}} />);
+    render(<ProtectDialog controller={null} onClose={() => {}} />);
     const inputs = document.querySelectorAll('input[type="password"]');
-    expect(inputs).toHaveLength(2);
+    expect(inputs).toHaveLength(4);
     for (const input of inputs) {
       expect((input as HTMLInputElement).disabled).toBe(true);
     }
-    expect(screen.getByText(/M6 protection engine/)).toBeTruthy();
+    expect(screen.getByText(/runs only in the desktop app/)).toBeTruthy();
   });
 
-  it("explains read-only status for encrypted documents", () => {
+  it("offers unlocking for encrypted documents", () => {
     act(() => {
       useWorkspace.getState().set({
         document: { id: "d", name: "locked.pdf", size: 100 },
@@ -235,8 +293,9 @@ describe("ProtectDialog", () => {
         },
       });
     });
-    render(<ProtectDialog onClose={() => {}} />);
-    expect(screen.getByText(/read-only in NavPDF/)).toBeTruthy();
+    render(<ProtectDialog controller={null} onClose={() => {}} />);
+    expect(screen.getByText("Unlock Protected PDF")).toBeTruthy();
+    expect(screen.getByText(/opens read-only/)).toBeTruthy();
   });
 });
 

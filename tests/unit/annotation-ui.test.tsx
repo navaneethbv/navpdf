@@ -225,6 +225,7 @@ describe("Properties", () => {
     });
     render(<Properties controller={controller as never} />);
     expect(screen.getByText("Password protected")).toBeTruthy();
+    expect(screen.getByText(/Unlock it from Password Protect/)).toBeTruthy();
     expect(screen.getByText("d.pdf")).toBeTruthy();
   });
 });

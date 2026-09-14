@@ -210,6 +210,36 @@ describe("ViewerController lifecycle", () => {
     await vi.waitFor(() => expect(useWorkspace.getState().comments).toEqual([]));
   });
 
+  it("refreshes the title and author from the replacement revision's metadata", async () => {
+    useWorkspace.getState().set({
+      info: {
+        pages: 2,
+        encrypted: false,
+        title: "Sanitized title",
+        author: "Sanitized author",
+        version: "1.7",
+      },
+    });
+    const sanitized = { ...makePdf(2), getMetadata: vi.fn(async () => ({ info: {} })) };
+    loadPdfFromBytes.mockReturnValue({
+      promise: Promise.resolve(sanitized),
+      destroy: vi.fn(async () => {}),
+    });
+    await controller.replaceWithBytes(new Uint8Array([1]), "Redactions applied", { resetHistory: true });
+    expect(useWorkspace.getState().info).toMatchObject({ pages: 2, title: "", author: "", version: "1.7" });
+
+    const unreadable = { ...makePdf(3), getMetadata: vi.fn(async () => { throw new Error("no metadata"); }) };
+    useWorkspace.getState().set({
+      info: { pages: 2, encrypted: false, title: "Kept", author: "Kept", version: "1.7" },
+    });
+    loadPdfFromBytes.mockReturnValue({
+      promise: Promise.resolve(unreadable),
+      destroy: vi.fn(async () => {}),
+    });
+    await controller.replaceWithBytes(new Uint8Array([2]), "Pages updated");
+    expect(useWorkspace.getState().info).toMatchObject({ pages: 3, title: "Kept", author: "Kept" });
+  });
+
   it("updates page counts and clamps the current page on replace", async () => {
     useWorkspace.getState().set({
       info: {

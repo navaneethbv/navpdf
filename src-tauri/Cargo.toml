@@ -21,6 +21,26 @@ sha2 = "0.10"
 tempfile = "3"
 lopdf = { version = "0.45", default-features = false }
 rfd = "0.15"
+jpeg-encoder = "0.7"
+zune-jpeg = "0.5"
+getrandom = "0.4"
+cms = { version = "0.2.3", features = ["builder"] }
+const-oid = { version = "0.9", features = ["db"] }
+der = { version = "0.7", features = ["alloc", "derive", "oid"] }
+p12-keystore = "0.1.5"
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
+rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
+x509-cert = "0.2.5"
+
+[dev-dependencies]
+x509-cert = { version = "0.2.5", features = ["builder"] }
+
+# Key generation in the signing tests is impractically slow without optimized big integers.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
+[profile.dev.package.rsa]
+opt-level = 3
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

@@ -9,6 +9,7 @@ import { Properties } from "../features/annotations/Properties";
 import { Home } from "../features/home/Home";
 import { Settings } from "../features/settings/Settings";
 import { Dialog } from "../components/Dialog";
+import { ToolErrorBoundary } from "../components/ToolErrorBoundary";
 import { native } from "../services/native";
 import { Toolbar, Statusbar } from "./Toolbar";
 import { useDocumentSession } from "./useDocumentSession";
@@ -21,6 +22,7 @@ import { AnnotationNoteDialog } from "../features/annotations/AnnotationNoteDial
 import { SnapshotTool } from "../features/annotations/SnapshotTool";
 import { ContentEditor } from "../features/editor/ContentEditor";
 import { LinkDialog } from "../features/editor/LinkDialog";
+import { ObjectEditor } from "../features/editor/ObjectEditor";
 import { DecorationsDialog } from "../features/decorations/DecorationsDialog";
 import { AttachmentsDialog } from "../features/attachments/AttachmentsDialog";
 import { FormManager } from "../features/forms/FormManager";
@@ -31,6 +33,7 @@ import { OfficeExport } from "../features/convert/OfficeExport";
 import { RedactionTool } from "../features/redact/RedactionTool";
 import { CompressDialog } from "../features/compress/CompressDialog";
 import { ProtectDialog } from "../features/protect/ProtectDialog";
+import { CertificateSignature } from "../features/signatures/CertificateSignature";
 import { DesignTools } from "../features/design/DesignTools";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
 import { applyTheme } from "../services/theme";
@@ -290,6 +293,18 @@ export default function App() {
           </div>
         </Dialog>
       )}
+      <ToolErrorBoundary
+        resetKey={s.activeModal ?? s.toolMode ?? ""}
+        onError={() =>
+          s.set({
+            activeModal: null,
+            toolMode: null,
+            activeSnapshot: false,
+            error:
+              "That tool stopped unexpectedly and was closed. The open document and its unsaved changes are kept.",
+          })
+        }
+      >
       {s.toolMode && (
         <ToolPanel
           mode={s.toolMode}
@@ -408,7 +423,16 @@ export default function App() {
         />
       )}
       {s.activeModal === "redact" && (
-        <RedactionTool onClose={() => s.set({ activeModal: null })} />
+        <RedactionTool
+          controller={controller}
+          onClose={() => s.set({ activeModal: null })}
+        />
+      )}
+      {s.activeModal === "edit-objects" && (
+        <ObjectEditor
+          controller={controller}
+          onClose={() => s.set({ activeModal: null })}
+        />
       )}
       {s.activeModal === "compress" && (
         <CompressDialog
@@ -417,7 +441,17 @@ export default function App() {
         />
       )}
       {s.activeModal === "protect" && (
-        <ProtectDialog onClose={() => s.set({ activeModal: null })} />
+        <ProtectDialog
+          controller={controller}
+          onClose={() => s.set({ activeModal: null })}
+          onSaveUnprotected={() => session.save(true, true)}
+        />
+      )}
+      {s.activeModal === "certificate-sign" && (
+        <CertificateSignature
+          controller={controller}
+          onClose={() => s.set({ activeModal: null })}
+        />
       )}
       {s.activeModal === "design" && (
         <DesignTools
@@ -431,6 +465,7 @@ export default function App() {
           onClose={() => s.set({ activeModal: null })}
         />
       )}
+      </ToolErrorBoundary>
     </div>
   );
 }

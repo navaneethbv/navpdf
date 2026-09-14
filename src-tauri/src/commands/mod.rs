@@ -1,3 +1,5 @@
+pub mod engine;
+
 use crate::{
     filesystem, logging, security,
     signatures::{SignatureAsset, SignatureStore},
@@ -102,6 +104,10 @@ pub struct Opened {
     pub name: Mutex<String>,
     pub current_revision: Mutex<RevisionInfo>,
     pub saved_revision: Mutex<String>,
+    /// Set after unlocking an encrypted document: no recovery copy or working file is written.
+    pub sensitive: Mutex<bool>,
+    /// Set after redaction or unlocking so a plain Save cannot overwrite the source.
+    pub force_save_as: Mutex<bool>,
 }
 pub struct AppState {
     pub documents: Mutex<HashMap<String, Arc<Opened>>>,
@@ -109,6 +115,7 @@ pub struct AppState {
     pub root: PathBuf,
     pub dirty: Mutex<bool>,
     pub saving: Mutex<bool>,
+    pub engine: engine::EngineState,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -158,6 +165,8 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
             timestamp: time(),
         }),
         saved_revision: Mutex::new(revision_id.clone()),
+        sensitive: Mutex::new(false),
+        force_save_as: Mutex::new(false),
     });
     state
         .documents
@@ -346,7 +355,9 @@ pub async fn save_document(
             .lock()
             .map(|n| n.clone())
             .unwrap_or_else(|_| "Document.pdf".into());
+        let force_save_as = doc.force_save_as.lock().map(|flag| *flag).unwrap_or(true);
         let target = if save_as
+            || force_save_as
             || source == doc._snapshot.path()
             || source == app.state::<AppState>().root.join("recovery.pdf")
         {
@@ -381,6 +392,9 @@ pub async fn save_document(
                 .unwrap_or_else(|| "Document.pdf".into());
             if let Ok(mut name_guard) = doc.name.lock() {
                 *name_guard = target_name.clone();
+            }
+            if let Ok(mut flag) = doc.force_save_as.lock() {
+                *flag = false;
             }
             let size = bytes.len() as u64;
             let state = worker_app.state::<AppState>();
@@ -453,11 +467,33 @@ pub async fn commit_working_revision(
                 .lock()
                 .map_err(|_| "Revision state unavailable.")?;
             if current.revision_id != base_revision_id {
-                return Err("Stale base revision. The document has been modified elsewhere.".into());
+                return Err(
+                    "Stale base revision. The document has been modified elsewhere.".into(),
+                );
             }
         }
 
         filesystem::validate_pdf(&bytes, pages)?;
+
+        if doc.sensitive.lock().map(|flag| *flag).unwrap_or(true) {
+            // Decrypted working revisions stay in memory; no plaintext temporary file is written.
+            let revision_id = uuid::Uuid::new_v4().to_string();
+            *doc.current_revision
+                .lock()
+                .map_err(|_| "Revision state unavailable.")? = RevisionInfo {
+                revision_id: revision_id.clone(),
+                page_count: pages,
+                timestamp: time(),
+            };
+            if let Ok(mut dirty) = app.state::<AppState>().dirty.lock() {
+                *dirty = true;
+            }
+            return Ok(CommitRevisionResult {
+                revision_id,
+                page_count: pages,
+                size: bytes.len() as u64,
+            });
+        }
 
         let mut temp = NamedTempFile::new()
             .map_err(|_| "Unable to create working revision temporary file.")?;
@@ -476,7 +512,9 @@ pub async fn commit_working_revision(
         *doc.file.lock().map_err(|_| "Document is busy.")? = new_file;
         *doc.length.lock().map_err(|_| "Document is busy.")? = new_length;
         *doc.working_file.lock().map_err(|_| "Document is busy.")? = Some(temp);
-        *doc.current_revision.lock().map_err(|_| "Revision state unavailable.")? = RevisionInfo {
+        *doc.current_revision
+            .lock()
+            .map_err(|_| "Revision state unavailable.")? = RevisionInfo {
             revision_id: new_revision_id.clone(),
             page_count: pages,
             timestamp: time(),
@@ -596,6 +634,12 @@ pub async fn write_recovery(app: AppHandle, request: Request<'_>) -> Result<(), 
         .unwrap_or_else(|_| "Document.pdf".into());
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
+        if doc.sensitive.lock().map(|flag| *flag).unwrap_or(true) {
+            // Never leave decrypted recovery copies of encrypted documents.
+            let _ = fs::remove_file(state.root.join("recovery.pdf"));
+            let _ = fs::remove_file(state.root.join("recovery.json"));
+            return Ok(());
+        }
         if !state
             .local
             .lock()
@@ -719,6 +763,7 @@ mod tests {
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
             saving: Mutex::new(false),
+            engine: engine::EngineState::default(),
         };
         let bytes = b"%PDF-1.7\nprivate generated data";
         let descriptor = imported(&state, bytes, "Résumé-日本.pdf".into()).unwrap();
@@ -741,6 +786,7 @@ mod tests {
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
             saving: Mutex::new(false),
+            engine: engine::EngineState::default(),
         };
         let bytes = b"%PDF-1.7\nprivate generated data";
         let descriptor = imported(&state, bytes, "test.pdf".into()).unwrap();
@@ -819,11 +865,9 @@ pub async fn ocr_recognize_page(
     image_bytes: Vec<u8>,
     options: crate::ocr::OcrOptions,
 ) -> Result<crate::ocr::OcrPageResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::ocr::recognize_page(&image_bytes, &options)
-    })
-    .await
-    .map_err(|_| "OCR recognition task failed.".to_string())?
+    tauri::async_runtime::spawn_blocking(move || crate::ocr::recognize_page(&image_bytes, &options))
+        .await
+        .map_err(|_| "OCR recognition task failed.".to_string())?
 }
 
 #[tauri::command]

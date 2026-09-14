@@ -379,17 +379,15 @@ describe("CreatePdfDialog", () => {
 });
 
 describe("CompressDialog", () => {
-  it("measures before/after sizes honestly", async () => {
+  it("never reports a reduction without the native engine", async () => {
     seedDocument();
     const controller = await mockController();
     render(
       <CompressDialog controller={controller as never} onClose={() => {}} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Compress PDF" }));
-    await vi.waitFor(() => {
-      expect(screen.getByText("Original Size:")).toBeTruthy();
-    });
-    expect(screen.getByText("Optimized Size:")).toBeTruthy();
+    fireEvent.click(screen.getByText("Analyze Compression"));
+    expect(screen.queryByText("Compressed size")).toBeNull();
+    expect(screen.getByText(/runs only in the desktop app/)).toBeTruthy();
   });
 });
 
