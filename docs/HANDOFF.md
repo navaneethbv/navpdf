@@ -125,4 +125,7 @@ It also failed native acceptance because the job did not generate the ignored `r
 The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
 The hosted recheck for this follow-up is pending.
 
+The hosted Phase 10 failure exposed OpenSSL version drift because the runner did not recognize `req -noenc`.
+The acceptance script now uses the compatible `req -nodes` form, and local Phase 10 acceptance passes 55 of 55 checks.
+
 The root planning files DELIVERY-PHASES.md, IMPLEMENTATION-PLAN-2026-09-14.md, and REVIEW-2026-09-14.md remain untracked source material and must not be included in the commit.
