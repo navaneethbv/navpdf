@@ -76,7 +76,7 @@ jobs:
       # Enforces the 80% coverage gate configured in vite.config.ts and
       # writes coverage/lcov.info for the Sonar analysis job.
       - run: npm run test:coverage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
