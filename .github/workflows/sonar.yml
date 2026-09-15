@@ -28,7 +28,7 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.guard.outputs.configured == 'true'
         with:
           # Sonar needs full history to assign blame and compute new-code periods.
