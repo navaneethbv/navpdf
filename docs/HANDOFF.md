@@ -1,22 +1,21 @@
 # NavPDF handoff
 
-## Current September 14 worktree
+## Current September 15 worktree
 
-The active worktree is `fix/september-14-review-corrections` at `bf187654ec26d1e0e164e954570f1b7b4937a53a` with uncommitted implementation changes.
+The active worktree is `fix/september-14-review-corrections` at `d83f6d8271dd77c973df799f63dfecff14152128`.
+Only the three untracked root planning files remain outside the pushed tree.
 Tranches 0 through 3 are implemented in source and Tranche 4 is in progress.
 Tranche 5 is in progress, Tranche 6 is pending, and Tranches 7 and 8 are partial.
 
-Current checks are 498 frontend unit tests passed across 79 files with 83.42% statement, 75.03% branch, 81.24% function and 86.26% line coverage, TypeScript passed, ESLint passed, formatting checks passed, 78 Rust tests passed with one constrained-volume test ignored, and Clippy passed with warnings denied.
+Current checks are 504 frontend unit tests passed across 80 files with 83.39% statement, 75.01% branch, 81.18% function and 86.20% line coverage, TypeScript passed, ESLint passed, formatting checks passed, 80 Rust tests passed with one constrained-volume test ignored, and Clippy passed with warnings denied.
 The current worktree also adds metadata editing, preferences, menus and shortcuts, page operations, tokenized OS open-with and drag-drop, XFDF exchange, comment threads, stamps, context-menu redaction, corpus-driven OCR WER/CER reporting, explicit fixture guards, acceptance command aliases, independent-tool discovery and a macOS acceptance workflow.
-PR #4's hosted run for the current pushed head passed every listed check except Cargo Deny.
-Cargo Deny failed before analysis because that run used the repository root `./Cargo.toml` instead of `src-tauri/Cargo.toml`.
-The local workflow correction is present but unpushed, so the hosted result has not been rerun.
+Hosted run `35012242904` passed every listed CI and native acceptance check, including Cargo Deny, Rust MSRV, both Rust test and Clippy jobs, Phase 7, Phase 8, Phase 10 and OCR.
 Native dialog, save/recovery, Preview and Acrobat checks for this source revision remain open.
-The current packaged app loads document metadata but leaves page rendering on a persistent spinner.
+The current packaged app renders the visible page and thumbnails without the previous persistent spinner.
 The current package contains both the app and DMG, and `hdiutil verify` passed.
-The rebuilt executable SHA-256 is `f653c59f63585b775dccf4318ec669ca8dc973a57b57d26184d859618c010e4b`.
-The DMG SHA-256 is `19a191ef48a94cc21a8e335426c862ca6f9c0034fe7f6eeeb43c12f6ff8bb695`.
-The DMG verification CRC32 is `$8D90D7F1`.
+The rebuilt executable SHA-256 is `9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4`.
+The DMG SHA-256 is `2904b2a5bcbbf680aff64ec8284e5e7553afdc0c579379818eb68e8f9f27c0a82`.
+The DMG verification CRC32 is `$B4992B9A`.
 The remainder of this file is historical evidence from earlier builds and does not override the current checkpoint above.
 
 Current corrective review: see [PR-2-REVIEW.md](PR-2-REVIEW.md).
@@ -123,7 +122,7 @@ Hosted run `35009656343` passed the normal frontend, Rust, SonarCloud and commit
 It failed Cargo Deny on six transitive unmaintained advisories with no safe upgrade reported by the advisory database.
 It also failed native acceptance because the job did not generate the ignored `reader-100.pdf` fixture before Phase 7.
 The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
-The hosted recheck for this follow-up is pending.
+Hosted run `35012242904` passed all listed CI and native acceptance checks for this follow-up.
 
 The hosted Phase 10 checks then exposed more OpenSSL version drift because the runner rejected `x509 -not_before` and used different successful CMS output text.
 The script now uses the compatible `req -nodes` and `x509 -days 0` forms and checks the CMS process exit status.
