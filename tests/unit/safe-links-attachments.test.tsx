@@ -126,8 +126,12 @@ describe("Safe links and attachments", () => {
     });
 
     it("strips bidirectional override and isolate characters that disguise extensions", () => {
-      expect(sanitizeAttachmentFilename("invoice‮txt.exe")).toBe("invoicetxt.exe");
-      expect(sanitizeAttachmentFilename("⁦report⁩.pdf")).toBe("report.pdf");
+      // Built from code points so no invisible control character appears in this source file.
+      const [override, isolate, popIsolate] = [0x202e, 0x2066, 0x2069].map((code) =>
+        String.fromCharCode(code),
+      );
+      expect(sanitizeAttachmentFilename(`invoice${override}txt.exe`)).toBe("invoicetxt.exe");
+      expect(sanitizeAttachmentFilename(`${isolate}report${popIsolate}.pdf`)).toBe("report.pdf");
     });
   });
 
