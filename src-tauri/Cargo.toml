@@ -31,7 +31,7 @@ zeroize = { version = "1", features = ["serde"] }
 url = "2"
 aes-gcm = "0.10"
 cms = { version = "0.2.3", features = ["builder"] }
-const-oid = { version = "0.9", features = ["db"] }
+const-oid = { version = "0.10", features = ["db"] }
 der = { version = "0.7", features = ["alloc", "derive", "oid"] }
 p12-keystore = "0.1.5"
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }

@@ -2451,7 +2451,7 @@ dependencies = [
  "aes-gcm",
  "cc",
  "cms",
- "const-oid 0.9.6",
+ "const-oid 0.10.2",
  "der",
  "getrandom 0.4.3",
  "jpeg-encoder",
