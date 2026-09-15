@@ -1,0 +1,27 @@
+# cargo-deny configuration for NavPDF
+[advisories]
+# RUSTSEC-2023-0071: rsa crate Marvin timing side-channel.
+# NavPDF signs locally with randomized, blinded signing and exposes no network-reachable signing/decryption (see docs/adr/0009-local-certificate-signatures.md).
+ignore = [
+    "RUSTSEC-2023-0071",
+]
+
+[licenses]
+unlicensed = "deny"
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
