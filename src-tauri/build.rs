@@ -41,7 +41,6 @@ fn main() {
             "swiftQuartzCore",
             "swiftUniformTypeIdentifiers",
             "swiftXPC",
-            "swift_Builtin_float",
             "swiftos",
             "swiftsimd",
         ] {

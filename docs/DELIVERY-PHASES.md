@@ -376,18 +376,20 @@ Phase 7 acceptance passed 55 of 55 checks, Phase 8 acceptance passed 12 of 12 ch
 
 The final local package contains src-tauri/target/release/bundle/macos/NavPDF.app and src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg.
 
-The executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
+The executable SHA-256 is 9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4.
 
-The DMG SHA-256 is d222b60865446a935e3a66611c2f3f6f69352771a86c7894469cd1a34cd5e211.
+The DMG SHA-256 is 2904b2a5bcbbf680aff64c8284e5e7553afdc0c579379818eb68e8f9f27c0a82.
 
-hdiutil verify reports a valid DMG with CRC32 $C4C2E61F.
+hdiutil verify reports a valid DMG with CRC32 $B4992B9A.
 
 Preview and Acrobat reopen checks for this final source revision remain open.
 
 Full Tranche 6 domain refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
 
-The hosted run for commit 1d1a6c8 confirmed that Cargo Deny now receives src-tauri/Cargo.toml, but it rejected the removed unlicensed configuration key and the macOS Rust job could not find the Swift runtime library path.
+The hosted run for commit 74974c9 confirmed that Cargo Deny now receives src-tauri/Cargo.toml, but it rejected unallowed transitive license terms and the macOS Rust job could not find the synthetic swift_Builtin_float link entry.
 
-The follow-up removes the obsolete Cargo Deny key and discovers Swift runtime and SDK search paths from the active toolchain and Xcode selection.
+The follow-up adds the explicit transitive license allowances and JPEG IJG clarification, marks the private native package unpublished, and removes the redundant Swift runtime link entry.
+
+The local cargo-deny 0.18.4 full license check passes.
 
 The hosted recheck for this follow-up remains pending.

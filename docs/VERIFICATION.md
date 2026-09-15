@@ -493,16 +493,18 @@ The native rendering check used the exact app bundle at src-tauri/target/release
 
 Preview and Acrobat reopen verification for this final source revision was not completed.
 
-The final package executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
+The final package executable SHA-256 is 9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4.
 
-The final package DMG SHA-256 is d222b60865446a935e3a66611c2f3f6f69352771a86c7894469cd1a34cd5e211.
+The final package DMG SHA-256 is 2904b2a5bcbbf680aff64c8284e5e7553afdc0c579379818eb68e8f9f27c0a82.
 
-hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg reported a valid checksum with CRC32 $C4C2E61F.
+hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg reported a valid checksum with CRC32 $B4992B9A.
 
-The hosted run for commit 1d1a6c8 confirmed the manifest path correction, then failed Cargo Deny because the current configuration still used the removed unlicensed key.
+The hosted run for commit 74974c9 confirmed the manifest path correction, then failed Cargo Deny on unallowed transitive license terms.
 
-The same hosted run failed the macOS Rust job because the Swift runtime search path omitted the active Xcode SDK path.
+The same hosted run failed the macOS Rust job because the linker could not resolve the synthetic swift_Builtin_float entry.
 
-The follow-up removes the obsolete Cargo Deny key and discovers Swift runtime and SDK search paths from the active toolchain and Xcode selection.
+The follow-up adds explicit transitive license allowances and a versioned JPEG IJG clarification, marks the private native package unpublished, and removes the redundant Swift runtime link entry.
+
+The local cargo-deny 0.18.4 full license check passes.
 
 The hosted recheck for this follow-up remains pending.

@@ -101,11 +101,11 @@ The final local app executable is src-tauri/target/release/bundle/macos/NavPDF.a
 
 The final local DMG is src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg.
 
-The executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
+The executable SHA-256 is 9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4.
 
-The DMG SHA-256 is d222b60865446a935e3a66611c2f3f6f69352771a86c7894469cd1a34cd5e211.
+The DMG SHA-256 is 2904b2a5bcbbf680aff64c8284e5e7553afdc0c579379818eb68e8f9f27c0a82.
 
-The DMG passed hdiutil verify with CRC32 $C4C2E61F.
+The DMG passed hdiutil verify with CRC32 $B4992B9A.
 
 Local tests and acceptance suites pass as recorded in docs/VERIFICATION.md.
 
@@ -113,9 +113,11 @@ Preview and Acrobat reopen checks for the final source revision remain unverifie
 
 Full Tranche 6 structural refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
 
-The hosted run for commit 1d1a6c8 confirmed the Cargo Deny manifest path correction, then exposed an obsolete configuration key and a missing Swift runtime SDK search path on macOS.
+The hosted run for commit 74974c9 confirmed the Cargo Deny manifest path correction, then exposed unallowed transitive license terms and a redundant Swift runtime link entry on macOS.
 
-The follow-up removes the obsolete Cargo Deny key and discovers Swift runtime and SDK search paths from the active toolchain and Xcode selection.
+The follow-up adds explicit license allowances and a versioned JPEG IJG clarification, marks the private native package unpublished, and removes the redundant Swift runtime link entry.
+
+The local cargo-deny 0.18.4 full license check passes.
 
 The hosted recheck for this follow-up remains pending.
 

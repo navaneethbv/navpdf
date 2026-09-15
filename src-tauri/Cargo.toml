@@ -3,6 +3,7 @@ name = "navpdf"
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.89"
+publish = false
 description = "Private local PDF reader and editor"
 
 [lib]
