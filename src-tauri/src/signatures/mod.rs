@@ -288,7 +288,7 @@ fn seal_payload(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, String> {
     getrandom::fill(&mut nonce).map_err(|_| "Unable to generate signature nonce.")?;
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Invalid signature key.")?;
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), plaintext)
+        .encrypt(&Nonce::from(nonce), plaintext)
         .map_err(|_| "Signature encryption failed.")?;
     let mut output = b"NAVSIG2\0".to_vec();
     output.extend_from_slice(&nonce);
@@ -300,9 +300,11 @@ fn open_payload(key: &[u8; 32], payload: &[u8]) -> Result<Vec<u8>, String> {
     if payload.len() < 36 {
         return Err("Asset payload too short.".into());
     }
+    let nonce =
+        Nonce::try_from(&payload[8..20]).map_err(|_| "Signature asset failed integrity check.")?;
     Aes256Gcm::new_from_slice(key)
         .map_err(|_| "Invalid signature key.")?
-        .decrypt(Nonce::from_slice(&payload[8..20]), &payload[20..])
+        .decrypt(&nonce, &payload[20..])
         .map_err(|_| "Signature asset failed integrity check.".into())
 }
 
