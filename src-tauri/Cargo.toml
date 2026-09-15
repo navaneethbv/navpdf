@@ -29,7 +29,7 @@ getrandom = "0.4"
 libc = "0.2"
 zeroize = { version = "1", features = ["serde"] }
 url = "2"
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 cms = { version = "0.2.3", features = ["builder"] }
 const-oid = { version = "0.9", features = ["db"] }
 der = { version = "0.7", features = ["alloc", "derive", "oid"] }
