@@ -28,13 +28,13 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.guard.outputs.configured == 'true'
         with:
           # Sonar needs full history to assign blame and compute new-code periods.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.guard.outputs.configured == 'true'
         with:
           node-version: 24
@@ -50,6 +50,6 @@ jobs:
 
       - name: SonarCloud scan
         if: steps.guard.outputs.configured == 'true'
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
