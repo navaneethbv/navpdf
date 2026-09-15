@@ -36,7 +36,8 @@ export function ContentEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const coverage = useMemo(
-    () => (text.trim() ? validateStandardFontCoverage(text) : { valid: true, unsupportedChars: [] }),
+    () =>
+      text.trim() ? validateStandardFontCoverage(text) : { valid: true, unsupportedChars: [] },
     [text],
   );
 
@@ -277,9 +278,7 @@ export function ContentEditor({
               </div>
 
               <div className="setting-group">
-                <label className="setting-title">
-                  Opacity ({Math.round(imageOpacity * 100)}%)
-                </label>
+                <label className="setting-title">Opacity ({Math.round(imageOpacity * 100)}%)</label>
                 <input
                   type="range"
                   min="0.1"

@@ -76,11 +76,7 @@ export function nudgePoint(
 /**
  * Clamp a rectangle so it stays fully inside the visible page boundaries.
  */
-export function clampRectToPage(
-  rect: PdfRect,
-  pageWidth: number,
-  pageHeight: number,
-): PdfRect {
+export function clampRectToPage(rect: PdfRect, pageWidth: number, pageHeight: number): PdfRect {
   const width = Math.min(Math.max(1, rect.width), pageWidth);
   const height = Math.min(Math.max(1, rect.height), pageHeight);
   const x = Math.min(Math.max(0, rect.x), pageWidth - width);

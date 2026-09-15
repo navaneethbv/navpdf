@@ -75,18 +75,12 @@ export async function persistOrStageSignature(
         createdAt: 0,
         storage: "session",
       },
-      error:
-        err instanceof Error
-          ? err.message
-          : "Failed to persist signature in secure storage.",
+      error: err instanceof Error ? err.message : "Failed to persist signature in secure storage.",
     };
   }
 }
 
-export async function removeSignature(
-  id: string,
-  sessionOnly?: boolean,
-): Promise<void> {
+export async function removeSignature(id: string, sessionOnly?: boolean): Promise<void> {
   if (sessionOnly || sessionSignatures.has(id)) {
     sessionSignatures.delete(id);
     return;

@@ -63,7 +63,9 @@ export function crc32(bytes: Uint8Array) {
 }
 
 /** A ZIP archive with stored (uncompressed) entries and UTF-8 names. */
-export function createZip(entries: { name: string; data: Uint8Array | string }[]): Uint8Array<ArrayBuffer> {
+export function createZip(
+  entries: { name: string; data: Uint8Array | string }[],
+): Uint8Array<ArrayBuffer> {
   const parts: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
@@ -120,7 +122,12 @@ export function createZip(entries: { name: string; data: Uint8Array | string }[]
 /** XML 1.0 allows tab, line feed and carriage return but no other control characters. */
 function isXmlCharacter(char: string) {
   const code = char.codePointAt(0) ?? 0;
-  return code === 0x09 || code === 0x0a || code === 0x0d || (code >= 0x20 && code !== 0xfffe && code !== 0xffff);
+  return (
+    code === 0x09 ||
+    code === 0x0a ||
+    code === 0x0d ||
+    (code >= 0x20 && code !== 0xfffe && code !== 0xffff)
+  );
 }
 
 export function escapeXml(text: string) {
@@ -163,7 +170,12 @@ function splitColumns(words: Word[], pageWidth: number): Word[][] {
 }
 
 /** Groups text items into reading-order lines, table cells and paragraphs. */
-export function layoutPage(page: number, items: TextItem[], width: number, height: number): PageLayout {
+export function layoutPage(
+  page: number,
+  items: TextItem[],
+  width: number,
+  height: number,
+): PageLayout {
   const words: Word[] = items
     .filter((item) => item.str.trim())
     .map((item) => ({
@@ -182,13 +194,21 @@ export function layoutPage(page: number, items: TextItem[], width: number, heigh
     const sorted = [...column].sort((a, b) => b.y - a.y || a.x - b.x);
     const columnLines: Line[] = [];
     for (const word of sorted) {
-      const line = columnLines.find((candidate) => Math.abs(candidate.y - word.y) <= Math.max(candidate.size, word.size) * 0.5);
+      const line = columnLines.find(
+        (candidate) => Math.abs(candidate.y - word.y) <= Math.max(candidate.size, word.size) * 0.5,
+      );
       if (line) {
         line.cells.push({ x: word.x, text: word.text });
         line.size = Math.max(line.size, word.size);
         line.x = Math.min(line.x, word.x);
       } else {
-        columnLines.push({ x: word.x, y: word.y, size: word.size, cells: [{ x: word.x, text: word.text }], text: "" });
+        columnLines.push({
+          x: word.x,
+          y: word.y,
+          size: word.size,
+          cells: [{ x: word.x, text: word.text }],
+          text: "",
+        });
       }
     }
     for (const line of columnLines) {
@@ -243,8 +263,12 @@ const CORE = (title: string) =>
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const PACKAGE_RELS = (main: string, type: string) =>
   `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${main}"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`;
-const OVERRIDE = (part: string, type: string) => `<Override PartName="/${part}" ContentType="${type}"/>`;
-const CORE_TYPE = OVERRIDE("docProps/core.xml", "application/vnd.openxmlformats-package.core-properties+xml");
+const OVERRIDE = (part: string, type: string) =>
+  `<Override PartName="/${part}" ContentType="${type}"/>`;
+const CORE_TYPE = OVERRIDE(
+  "docProps/core.xml",
+  "application/vnd.openxmlformats-package.core-properties+xml",
+);
 
 export function buildDocx(layouts: PageLayout[], title: string) {
   const [first] = layouts;
@@ -283,14 +307,17 @@ export function buildDocx(layouts: PageLayout[], title: string) {
 /** Aligns each line's cells to shared column anchors so tables keep their columns. */
 export function tableRows(layout: PageLayout, tolerance = 12): string[][] {
   const anchors: number[] = [];
-  for (const x of layout.lines.flatMap((line) => line.cells.map((cell) => cell.x)).sort((a, b) => a - b)) {
+  for (const x of layout.lines
+    .flatMap((line) => line.cells.map((cell) => cell.x))
+    .sort((a, b) => a - b)) {
     if (!anchors.length || x - anchors[anchors.length - 1] > tolerance) anchors.push(x);
   }
   return layout.lines.map((line) => {
     const row: string[] = new Array(anchors.length).fill("");
     for (const cell of line.cells) {
       let column = 0;
-      for (let index = 0; index < anchors.length; index++) if (anchors[index] <= cell.x + tolerance / 2) column = index;
+      for (let index = 0; index < anchors.length; index++)
+        if (anchors[index] <= cell.x + tolerance / 2) column = index;
       row[column] = row[column] ? `${row[column]} ${cell.text}` : cell.text;
     }
     while (row.length && !row[row.length - 1]) row.pop();
@@ -300,7 +327,10 @@ export function tableRows(layout: PageLayout, tolerance = 12): string[][] {
 
 const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
 
-export type CellValue = { kind: "number"; value: number } | { kind: "date"; value: number } | { kind: "text"; value: string };
+export type CellValue =
+  | { kind: "number"; value: number }
+  | { kind: "date"; value: number }
+  | { kind: "text"; value: string };
 
 /** Numbers and ISO dates become typed cells; everything else, including `=` text, stays text. */
 export function cellValue(text: string): CellValue {
@@ -314,14 +344,16 @@ export function cellValue(text: string): CellValue {
   const numeric = /^(\()?-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?(\))?$/.exec(trimmed);
   if (numeric && Boolean(numeric[1]) === Boolean(numeric[5])) {
     const value = Number(trimmed.replace(/[(),]/g, ""));
-    if (Number.isFinite(value)) return { kind: "number", value: numeric[1] ? -Math.abs(value) : value };
+    if (Number.isFinite(value))
+      return { kind: "number", value: numeric[1] ? -Math.abs(value) : value };
   }
   return { kind: "text", value: text };
 }
 
 function columnName(index: number) {
   let name = "";
-  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26))
+    name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
   return name;
 }
 
@@ -329,7 +361,11 @@ export function buildXlsx(sheets: { name: string; rows: string[][] }[]) {
   const safeSheets = sheets.length ? sheets : [{ name: "Sheet1", rows: [] }];
   const names = new Set<string>();
   const sheetNames = safeSheets.map((sheet, index) => {
-    let name = sheet.name.replace(/[\\/?*[\]:]/g, " ").slice(0, 31).trim() || `Sheet${index + 1}`;
+    let name =
+      sheet.name
+        .replace(/[\\/?*[\]:]/g, " ")
+        .slice(0, 31)
+        .trim() || `Sheet${index + 1}`;
     while (names.has(name)) name = `${name.slice(0, 28)} ${index + 1}`;
     names.add(name);
     return name;
@@ -367,12 +403,17 @@ export function buildXlsx(sheets: { name: string; rows: string[][] }[]) {
       data: `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetNames.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheetNames.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     },
     { name: "xl/styles.xml", data: styles },
-    ...safeSheets.map((sheet, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: worksheet(sheet.rows) })),
+    ...safeSheets.map((sheet, i) => ({
+      name: `xl/worksheets/sheet${i + 1}.xml`,
+      data: worksheet(sheet.rows),
+    })),
   ]);
 }
 
-const DRAWING = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
-const EMPTY_TREE = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>';
+const DRAWING =
+  'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+const EMPTY_TREE =
+  '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>';
 const THEME = `${XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="NavPDF"><a:themeElements><a:clrScheme name="NavPDF"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F3D33"/></a:dk2><a:lt2><a:srgbClr val="EEF3F0"/></a:lt2><a:accent1><a:srgbClr val="25604B"/></a:accent1><a:accent2><a:srgbClr val="8F3F32"/></a:accent2><a:accent3><a:srgbClr val="F5CF58"/></a:accent3><a:accent4><a:srgbClr val="4F81BD"/></a:accent4><a:accent5><a:srgbClr val="9BBB59"/></a:accent5><a:accent6><a:srgbClr val="8064A2"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="NavPDF"><a:majorFont><a:latin typeface="Helvetica"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Helvetica"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="NavPDF"><a:fillStyleLst>${'<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'.repeat(3)}</a:fillStyleLst><a:lnStyleLst>${[6350, 12700, 19050].map((w) => `<a:ln w="${w}"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`).join("")}</a:lnStyleLst><a:effectStyleLst>${"<a:effectStyle><a:effectLst/></a:effectStyle>".repeat(3)}</a:effectStyleLst><a:bgFillStyleLst>${'<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'.repeat(3)}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
 
 /** Genuine PPTX slides: either a full-page picture or editable text boxes per line. */
@@ -384,7 +425,8 @@ export function buildPptx(slides: Slide[], title: string) {
   const cy = clamp(emu(first?.height ?? 540));
   const rel = (id: string, type: string, target: string) =>
     `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`;
-  const rels = (items: string) => `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items}</Relationships>`;
+  const rels = (items: string) =>
+    `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items}</Relationships>`;
   const entries: { name: string; data: Uint8Array | string }[] = [];
   slides.forEach((slide, index) => {
     const number = index + 1;
@@ -416,7 +458,9 @@ export function buildPptx(slides: Slide[], title: string) {
     });
     if (slide.image) entries.push({ name: `ppt/media/page${number}.png`, data: slide.image });
   });
-  const slideRels = slides.map((_, i) => rel(`rId${i + 2}`, "slide", `slides/slide${i + 1}.xml`)).join("");
+  const slideRels = slides
+    .map((_, i) => rel(`rId${i + 2}`, "slide", `slides/slide${i + 1}.xml`))
+    .join("");
   return createZip([
     {
       name: "[Content_Types].xml",
@@ -430,7 +474,11 @@ export function buildPptx(slides: Slide[], title: string) {
     },
     {
       name: "ppt/_rels/presentation.xml.rels",
-      data: rels(rel("rId1", "slideMaster", "slideMasters/slideMaster1.xml") + slideRels + rel(`rId${slides.length + 2}`, "theme", "theme/theme1.xml")),
+      data: rels(
+        rel("rId1", "slideMaster", "slideMasters/slideMaster1.xml") +
+          slideRels +
+          rel(`rId${slides.length + 2}`, "theme", "theme/theme1.xml"),
+      ),
     },
     {
       name: "ppt/slideMasters/slideMaster1.xml",
@@ -438,7 +486,10 @@ export function buildPptx(slides: Slide[], title: string) {
     },
     {
       name: "ppt/slideMasters/_rels/slideMaster1.xml.rels",
-      data: rels(rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml") + rel("rId2", "theme", "../theme/theme1.xml")),
+      data: rels(
+        rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml") +
+          rel("rId2", "theme", "../theme/theme1.xml"),
+      ),
     },
     {
       name: "ppt/slideLayouts/slideLayout1.xml",
@@ -461,13 +512,19 @@ export function buildRtf(layouts: PageLayout[]) {
         const code = char.codePointAt(0) ?? 0;
         if (char === "\\" || char === "{" || char === "}") return `\\${char}`;
         if (code < 0x80) return code < 0x20 ? "" : char;
-        const units = code > 0xffff ? [0xd800 + ((code - 0x10000) >> 10), 0xdc00 + ((code - 0x10000) & 0x3ff)] : [code];
+        const units =
+          code > 0xffff
+            ? [0xd800 + ((code - 0x10000) >> 10), 0xdc00 + ((code - 0x10000) & 0x3ff)]
+            : [code];
         return units.map((unit) => `\\u${unit > 0x7fff ? unit - 0x10000 : unit}?`).join("");
       })
       .join("");
   const pages = layouts.map((layout) =>
     layout.paragraphs
-      .map((item) => `${item.heading ? `\\b\\fs${item.heading === 1 ? 36 : 28} ` : ""}${escape(item.text)}${item.heading ? "\\b0\\fs24" : ""}\\par`)
+      .map(
+        (item) =>
+          `${item.heading ? `\\b\\fs${item.heading === 1 ? 36 : 28} ` : ""}${escape(item.text)}${item.heading ? "\\b0\\fs24" : ""}\\par`,
+      )
       .join("\n"),
   );
   return `{\\rtf1\\ansi\\ansicpg1252\\uc1\\deff0{\\fonttbl{\\f0\\fswiss Helvetica;}}\\f0\\fs24\n${pages.join("\n\\page\n")}\n}`;

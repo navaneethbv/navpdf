@@ -48,17 +48,15 @@ export function SnapshotTool({ onClose }: { onClose: () => void }) {
       const screenBottom = screenTop + h;
       const centerX = screenLeft + w / 2;
       const centerY = screenTop + h / 2;
-      const page = [...document.querySelectorAll<HTMLElement>(".page")].find(
-        (candidate) => {
-          const rect = candidate.getBoundingClientRect();
-          return (
-            centerX >= rect.left &&
-            centerX <= rect.right &&
-            centerY >= rect.top &&
-            centerY <= rect.bottom
-          );
-        },
-      );
+      const page = [...document.querySelectorAll<HTMLElement>(".page")].find((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        return (
+          centerX >= rect.left &&
+          centerX <= rect.right &&
+          centerY >= rect.top &&
+          centerY <= rect.bottom
+        );
+      });
       const canvas = page?.querySelector("canvas") as HTMLCanvasElement | null;
       const canvasRect = canvas?.getBoundingClientRect();
       if (!canvas || !canvasRect) {
@@ -112,9 +110,7 @@ export function SnapshotTool({ onClose }: { onClose: () => void }) {
     try {
       const res = await fetch(captured);
       const blob = await res.blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({ [blob.type]: blob }),
-      ]);
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       s.set({ status: "Snapshot copied to clipboard" });

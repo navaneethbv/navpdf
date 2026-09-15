@@ -119,9 +119,7 @@ it("reports Ready after late range progress while attaching the viewer", async (
     destroy: vi.fn(async () => {}),
     onProgress: () => {},
   };
-  vi.mocked(loadPdf).mockResolvedValue(
-    candidate as unknown as Awaited<ReturnType<typeof loadPdf>>,
-  );
+  vi.mocked(loadPdf).mockResolvedValue(candidate as unknown as Awaited<ReturnType<typeof loadPdf>>);
   vi.mocked(controller.attach).mockImplementation(async () =>
     candidate.onProgress({ percent: 77 }),
   );
@@ -160,9 +158,7 @@ it("R2: preserves previous document and rolls back if candidate attachment fails
   vi.mocked(loadPdf).mockResolvedValue(
     candidateTask as unknown as Awaited<ReturnType<typeof loadPdf>>,
   );
-  vi.mocked(controller.attach).mockRejectedValueOnce(
-    new Error("Viewer initialization failed"),
-  );
+  vi.mocked(controller.attach).mockRejectedValueOnce(new Error("Viewer initialization failed"));
   await act(async () => {
     expect(await session.load(next)).toBe(false);
   });
@@ -286,7 +282,14 @@ it("leaves a clean document clean when saving fails", async () => {
 it("closes the unsaved-changes prompt before a protected save asks how to protect", async () => {
   useWorkspace.getState().set({
     dirty: true,
-    info: { pages: 2, encrypted: false, protectedSource: true, title: "", author: "", version: "1.7" },
+    info: {
+      pages: 2,
+      encrypted: false,
+      protectedSource: true,
+      title: "",
+      author: "",
+      version: "1.7",
+    },
   });
   (controller as unknown as { pdf: unknown }).pdf = { saveDocument: vi.fn(), numPages: 2 };
   act(() => {

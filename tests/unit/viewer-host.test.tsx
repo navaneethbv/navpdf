@@ -80,34 +80,31 @@ describe("ViewerHost", () => {
   });
 
   it("hides the frame without a document and reflects hand/busy state", () => {
-    const { container, rerender } = render(
-      <ViewerHost onReady={() => {}} />,
-    );
-    expect(
-      container.querySelector(".viewer-frame.hidden"),
-    ).toBeTruthy();
+    const { container, rerender } = render(<ViewerHost onReady={() => {}} />);
+    expect(container.querySelector(".viewer-frame.hidden")).toBeTruthy();
     useWorkspace.getState().set({
       document: { id: "d", name: "d.pdf", size: 10 },
       tool: "hand",
       busy: true,
     });
     rerender(<ViewerHost onReady={() => {}} />);
-    expect(
-      container.querySelector(".pdf-container.hand-tool"),
-    ).toBeTruthy();
+    expect(container.querySelector(".pdf-container.hand-tool")).toBeTruthy();
     expect(screen.getByLabelText("PDF document")).toBeTruthy();
   });
-
-
 });
 
 it("fits the first visible document and preserves later user zoom", () => {
   let resized = () => {};
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(callback: () => void) { resized = callback; }
-    observe() {}
-    disconnect() {}
-  });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resized = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
   const onReady = vi.fn();
   render(<ViewerHost onReady={onReady} />);
   const controller = onReady.mock.calls[0][0] as ViewerController;
@@ -118,7 +115,8 @@ it("fits the first visible document and preserves later user zoom", () => {
   resized();
   expect(zoom).not.toHaveBeenCalled();
   Object.defineProperties(frame, {
-    clientWidth: { value: 800 }, clientHeight: { value: 600 },
+    clientWidth: { value: 800 },
+    clientHeight: { value: 600 },
   });
   resized();
   expect(zoom).toHaveBeenCalledWith(useWorkspace.getState().local.preferences.defaultZoom);

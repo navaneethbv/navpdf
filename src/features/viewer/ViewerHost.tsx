@@ -43,9 +43,7 @@ export function ViewerHost({
         if (event.ctrlKey || event.metaKey) {
           event.preventDefault();
           if (!useWorkspace.getState().busy)
-            controller.zoom(
-              controller.viewer.currentScale * Math.exp(-event.deltaY * 0.008),
-            );
+            controller.zoom(controller.viewer.currentScale * Math.exp(-event.deltaY * 0.008));
         }
       },
       { passive: false, signal: abort.signal },
@@ -53,11 +51,7 @@ export function ViewerHost({
     el.addEventListener(
       "pointerdown",
       (e) => {
-        if (
-          useWorkspace.getState().tool !== "hand" ||
-          useWorkspace.getState().busy
-        )
-          return;
+        if (useWorkspace.getState().tool !== "hand" || useWorkspace.getState().busy) return;
         e.preventDefault();
         el.setPointerCapture(e.pointerId);
         pan = {
@@ -110,9 +104,7 @@ export function ViewerHost({
       >
         <div ref={pages} className="pdfViewer" />
       </div>
-      {hasDocument && tool === "shape" && controller && (
-        <ShapeTool controller={controller} />
-      )}
+      {hasDocument && tool === "shape" && controller && <ShapeTool controller={controller} />}
       {hasDocument && tool === "select" && controller && (
         <AnnotationSelectionLayer controller={controller} />
       )}

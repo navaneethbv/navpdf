@@ -42,7 +42,9 @@ export function PageWorkspace({
 }) {
   const s = useWorkspace();
   const [selected, setSelected] = useState<number[]>([s.page - 1]);
-  const [focusedIndex, setFocusedIndex] = useState(Math.max(0, Math.min(s.page - 1, (s.info?.pages || 1) - 1)));
+  const [focusedIndex, setFocusedIndex] = useState(
+    Math.max(0, Math.min(s.page - 1, (s.info?.pages || 1) - 1)),
+  );
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -139,9 +141,8 @@ export function PageWorkspace({
     }
     const delSet = new Set(selected);
     const surviving = pagesList.filter((p) => !delSet.has(p));
-    const nextSelectedIndex = surviving.length > 0
-      ? Math.min(Math.max(0, selected[0]), surviving.length - 1)
-      : 0;
+    const nextSelectedIndex =
+      surviving.length > 0 ? Math.min(Math.max(0, selected[0]), surviving.length - 1) : 0;
 
     await mutate(
       async (bytes) => {
@@ -207,11 +208,9 @@ export function PageWorkspace({
 
   const handleInsertBlank = async () => {
     const at = selected.length > 0 ? selected[0] + 1 : totalPages;
-    await mutate(
-      (bytes) => insertBlankPage(bytes, at),
-      "Blank page inserted",
-      { pageMapping: computeInsertMapping(totalPages, at, 1) },
-    );
+    await mutate((bytes) => insertBlankPage(bytes, at), "Blank page inserted", {
+      pageMapping: computeInsertMapping(totalPages, at, 1),
+    });
     setSelected([at]);
     setFocusedIndex(at);
     s.set({ page: at + 1 });
@@ -224,11 +223,9 @@ export function PageWorkspace({
     const bytes = new Uint8Array(arrayBuffer);
     const type = file.type.includes("png") ? "png" : "jpg";
     const at = selected.length > 0 ? selected[0] + 1 : totalPages;
-    await mutate(
-      (docBytes) => insertImagePage(docBytes, at, bytes, type),
-      "Image page inserted",
-      { pageMapping: computeInsertMapping(totalPages, at, 1) },
-    );
+    await mutate((docBytes) => insertImagePage(docBytes, at, bytes, type), "Image page inserted", {
+      pageMapping: computeInsertMapping(totalPages, at, 1),
+    });
     setSelected([at]);
     setFocusedIndex(at);
     s.set({ page: at + 1 });
@@ -253,7 +250,10 @@ export function PageWorkspace({
     if (!controller?.pdf) return;
     try {
       const ranges = splitRange.split(",").map((r) => {
-        const parts = r.trim().split("-").map((n) => parseInt(n, 10) - 1);
+        const parts = r
+          .trim()
+          .split("-")
+          .map((n) => parseInt(n, 10) - 1);
         if (parts.length === 1) return [parts[0]];
         const start = Math.max(0, parts[0]);
         const end = Math.min(totalPages - 1, parts[1]);
@@ -261,9 +261,7 @@ export function PageWorkspace({
       });
       const currentBytes = await controller.pdf.saveDocument();
       const files = await splitDocument(currentBytes, ranges);
-      files.forEach((fileBytes, i) =>
-        downloadBytes(fileBytes, `split-part-${i + 1}.pdf`),
-      );
+      files.forEach((fileBytes, i) => downloadBytes(fileBytes, `split-part-${i + 1}.pdf`));
       setShowSplit(false);
       s.set({ status: `Document split into ${files.length} parts` });
     } catch (err) {
@@ -394,9 +392,7 @@ export function PageWorkspace({
           <button
             title="Move Page Right"
             onClick={() => handleMove(1)}
-            disabled={
-              selected.length !== 1 || selected[0] === totalPages - 1 || busy
-            }
+            disabled={selected.length !== 1 || selected[0] === totalPages - 1 || busy}
           >
             <ArrowRight size={17} />
           </button>
@@ -492,11 +488,7 @@ export function PageWorkspace({
         <div className="split-controls-bar">
           <label>
             Page ranges (e.g. 1-2, 3-5):
-            <input
-              type="text"
-              value={splitRange}
-              onChange={(e) => setSplitRange(e.target.value)}
-            />
+            <input type="text" value={splitRange} onChange={(e) => setSplitRange(e.target.value)} />
           </label>
           <button onClick={handleSplit}>Execute Split</button>
           <button onClick={() => setShowSplit(false)}>Cancel</button>

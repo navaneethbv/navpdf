@@ -204,10 +204,7 @@ export function CreatePdfDialog({
             </div>
           ) : (
             <div key="combine-section" className="combine-files-section">
-              <button
-                className="button-secondary"
-                onClick={() => fileInputRef.current?.click()}
-              >
+              <button className="button-secondary" onClick={() => fileInputRef.current?.click()}>
                 Select Files to Combine...
               </button>
               <input
@@ -225,7 +222,9 @@ export function CreatePdfDialog({
                   {items.map((item, i) => (
                     <div key={item.id} className="combine-file-item">
                       <div className="combine-file-info">
-                        <span className="combine-file-name">{i + 1}. {item.file.name}</span>
+                        <span className="combine-file-name">
+                          {i + 1}. {item.file.name}
+                        </span>
                         <input
                           type="text"
                           placeholder="All pages, or e.g. 1-3, 5"
@@ -286,7 +285,8 @@ export function CreatePdfDialog({
             disabled={creating || (tab === "combine" && items.length === 0)}
             className="button-primary"
           >
-            <Check size={16} /> {creating ? "Creating..." : tab === "blank" ? "Create PDF" : "Combine & Open"}
+            <Check size={16} />{" "}
+            {creating ? "Creating..." : tab === "blank" ? "Create PDF" : "Combine & Open"}
           </button>
         </div>
       </div>

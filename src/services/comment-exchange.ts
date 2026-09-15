@@ -59,10 +59,7 @@ export function parseCommentExchange(
   if (!value || typeof value !== "object")
     throw new Error("The comment file has an invalid format.");
   const input = value as Partial<CommentExchange>;
-  if (
-    input.schema !== "navpdf-comments" ||
-    (input.version !== 1 && input.version !== 2)
-  )
+  if (input.schema !== "navpdf-comments" || (input.version !== 1 && input.version !== 2))
     throw new Error("This is not a NavPDF comment exchange file.");
   const hasId =
     (typeof input.documentId === "string" && input.documentId.length > 0) ||
@@ -78,8 +75,7 @@ export function parseCommentExchange(
   ) {
     throw new Error("These comments belong to a different document.");
   }
-  if (!Array.isArray(input.comments))
-    throw new Error("The comment file has no comments.");
+  if (!Array.isArray(input.comments)) throw new Error("The comment file has no comments.");
   const ids = new Set<string>();
   const comments: Comment[] = [];
   for (const raw of input.comments) {
@@ -142,9 +138,7 @@ export function parseCommentExchange(
       text: comment.text,
       ...(comment.rect ? { rect: comment.rect as Comment["rect"] } : {}),
       ...(comment.line ? { line: comment.line as Comment["line"] } : {}),
-      ...(comment.lineEndings
-        ? { lineEndings: comment.lineEndings as [string, string] }
-        : {}),
+      ...(comment.lineEndings ? { lineEndings: comment.lineEndings as [string, string] } : {}),
       ...(comment.quads ? { quads: comment.quads as number[][] } : {}),
       ...(comment.color ? { color: comment.color as Comment["color"] } : {}),
       ...(typeof comment.opacity === "number" && Number.isFinite(comment.opacity)

@@ -147,7 +147,12 @@ export function FillAndSign({
       ctx.fillText(typedName, 20, 75);
     }
     const dataUrl = canvas.toDataURL("image/png");
-    const { signature, error } = await persistOrStageSignature(typedName, sigType, dataUrl, sessionOnly);
+    const { signature, error } = await persistOrStageSignature(
+      typedName,
+      sigType,
+      dataUrl,
+      sessionOnly,
+    );
     if (error) {
       s.set({ error });
       return;
@@ -173,7 +178,12 @@ export function FillAndSign({
         }
         const dataUrl = canvas.toDataURL("image/png");
         const name = file.name.replace(/\.[^.]+$/, "");
-        const { signature, error } = await persistOrStageSignature(name, sigType, dataUrl, sessionOnly);
+        const { signature, error } = await persistOrStageSignature(
+          name,
+          sigType,
+          dataUrl,
+          sessionOnly,
+        );
         if (error) {
           s.set({ error });
           return;
@@ -290,10 +300,7 @@ export function FillAndSign({
       }
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(
-        newBytes,
-        `Mark (${symbol}) placed on document`,
-      );
+      await controller.replaceWithBytes(newBytes, `Mark (${symbol}) placed on document`);
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -303,12 +310,7 @@ export function FillAndSign({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Fill and Sign"
-    >
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Fill and Sign">
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -335,7 +337,8 @@ export function FillAndSign({
           >
             <AlertTriangle size={18} color="#dc641e" />
             <span>
-              This document contains an existing digital signature. Placing appearances or edits will invalidate it.
+              This document contains an existing digital signature. Placing appearances or edits
+              will invalidate it.
             </span>
           </div>
         )}
@@ -354,7 +357,8 @@ export function FillAndSign({
               <strong>Plaintext signatures detected</strong>
             </div>
             <p style={{ margin: "0 0 10px 0" }}>
-              Previous versions stored reusable signatures unencrypted in local storage. Would you like to migrate them to OS-protected encrypted storage?
+              Previous versions stored reusable signatures unencrypted in local storage. Would you
+              like to migrate them to OS-protected encrypted storage?
             </p>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
@@ -541,7 +545,9 @@ export function FillAndSign({
 
           {(tab === "draw" || tab === "type" || tab === "import") && (
             <div style={{ marginBottom: "12px", display: "flex", gap: "20px" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
+              >
                 <input
                   type="radio"
                   name="sigType"
@@ -550,7 +556,9 @@ export function FillAndSign({
                 />
                 Signature
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
+              >
                 <input
                   type="radio"
                   name="sigType"
@@ -745,7 +753,8 @@ export function FillAndSign({
               lineHeight: 1.4,
             }}
           >
-            Notice: Signature appearances placed on the document are graphical representations, not cryptographic X.509 digital certificate signatures.
+            Notice: Signature appearances placed on the document are graphical representations, not
+            cryptographic X.509 digital certificate signatures.
           </div>
         </div>
 

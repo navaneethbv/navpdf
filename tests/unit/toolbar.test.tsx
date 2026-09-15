@@ -29,7 +29,12 @@ function withDocument() {
 describe("Toolbar", () => {
   it("shows the workspace title and opens documents", () => {
     render(
-      <Toolbar controller={null} open={callbacks.open} save={callbacks.save} home={callbacks.home} />,
+      <Toolbar
+        controller={null}
+        open={callbacks.open}
+        save={callbacks.save}
+        home={callbacks.home}
+      />,
     );
     expect(screen.getByText("Local workspace")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Open PDF"));
@@ -38,20 +43,26 @@ describe("Toolbar", () => {
 
   it("disables save and tools without a document", () => {
     render(
-      <Toolbar controller={null} open={callbacks.open} save={callbacks.save} home={callbacks.home} />,
+      <Toolbar
+        controller={null}
+        open={callbacks.open}
+        save={callbacks.save}
+        home={callbacks.home}
+      />,
     );
-    expect(
-      (screen.getByLabelText("Save PDF") as HTMLButtonElement).disabled,
-    ).toBe(true);
-    expect(
-      (screen.getByLabelText("Highlight text") as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((screen.getByLabelText("Save PDF") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Highlight text") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("toggles tool modes and fires save/home actions", () => {
     withDocument();
     render(
-      <Toolbar controller={null} open={callbacks.open} save={callbacks.save} home={callbacks.home} />,
+      <Toolbar
+        controller={null}
+        open={callbacks.open}
+        save={callbacks.save}
+        home={callbacks.home}
+      />,
     );
     expect(screen.getByText("report.pdf")).toBeTruthy();
     fireEvent.click(screen.getByText("Edit"));
@@ -102,7 +113,12 @@ describe("Toolbar", () => {
   it("hides the quick rail on request", () => {
     withDocument();
     render(
-      <Toolbar controller={null} open={callbacks.open} save={callbacks.save} home={callbacks.home} />,
+      <Toolbar
+        controller={null}
+        open={callbacks.open}
+        save={callbacks.save}
+        home={callbacks.home}
+      />,
     );
     fireEvent.click(screen.getByLabelText("Toggle Quick Tool Rail"));
     expect(useWorkspace.getState().quickRailVisible).toBe(false);

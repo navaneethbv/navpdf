@@ -50,12 +50,7 @@ export function LinkDialog({
         const pageIndex = Math.max(0, Math.min(placementPage - 1, doc.getPageCount() - 1));
         const page = doc.getPage(pageIndex);
         const mapped = fromTopLeftVisual(page, rectX, rectY, rectWidth, rectHeight);
-        rect = [
-          mapped.x,
-          mapped.y,
-          mapped.x + mapped.width,
-          mapped.y + mapped.height,
-        ];
+        rect = [mapped.x, mapped.y, mapped.x + mapped.width, mapped.y + mapped.height];
       } catch {
         // Fallback for mock test environments
       }
@@ -63,16 +58,15 @@ export function LinkDialog({
       const options: LinkAnnotationOptions = {
         page: placementPage,
         rect,
-        target:
-          linkType === "url"
-            ? { type: "url", url }
-            : { type: "page", targetPage },
+        target: linkType === "url" ? { type: "url", url } : { type: "page", targetPage },
       };
 
       const newBytes = await addLinkAnnotation(currentBytes, options);
       await controller.replaceWithBytes(
         newBytes,
-        linkType === "url" ? `Added URL link to page ${placementPage}` : `Added page jump to page ${targetPage}`,
+        linkType === "url"
+          ? `Added URL link to page ${placementPage}`
+          : `Added page jump to page ${targetPage}`,
       );
       onClose();
     } catch (err) {
@@ -101,10 +95,7 @@ export function LinkDialog({
         </div>
 
         <div className="tab-buttons-bar">
-          <button
-            className={linkType === "url" ? "active" : ""}
-            onClick={() => setLinkType("url")}
-          >
+          <button className={linkType === "url" ? "active" : ""} onClick={() => setLinkType("url")}>
             <ExternalLink size={15} /> External URL
           </button>
           <button

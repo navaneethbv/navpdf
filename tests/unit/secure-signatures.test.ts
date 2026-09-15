@@ -98,9 +98,7 @@ describe("signature store service", () => {
     const result = await migrateLegacySignatures(true);
     expect(result.count).toBe(1);
     expect(result.error).toBeNull();
-    expect(migrateSpy).toHaveBeenCalledWith([
-      expect.objectContaining(legacyData[0]),
-    ]);
+    expect(migrateSpy).toHaveBeenCalledWith([expect.objectContaining(legacyData[0])]);
     expect(localStorage.getItem("navpdf-signatures")).toBeNull();
   });
 

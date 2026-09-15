@@ -12,10 +12,7 @@ import {
  * Strips or rewrites Link annotations on kept pages that target pages outside the kept page set.
  * Returns the number of removed annotations.
  */
-export function stripExternalPageLinks(
-  doc: PDFDocument,
-  keptPages: Set<number>,
-): number {
+export function stripExternalPageLinks(doc: PDFDocument, keptPages: Set<number>): number {
   const pages = doc.getPages();
   const pageRefToIdx = new Map<string, number>();
   pages.forEach((p, idx) => {
@@ -49,10 +46,7 @@ export function stripExternalPageLinks(
     if (names) {
       for (let i = 0; i < names.size(); i += 2) {
         const k = names.lookup(i);
-        const nameStr =
-          k instanceof PDFString || k instanceof PDFHexString
-            ? k.asString()
-            : "";
+        const nameStr = k instanceof PDFString || k instanceof PDFHexString ? k.asString() : "";
         if (nameStr === targetName) {
           const val = names.lookup(i + 1);
           if (val instanceof PDFArray) return val;
@@ -82,9 +76,7 @@ export function stripExternalPageLinks(
       if (first instanceof PDFRef) {
         return pageRefToIdx.get(first.toString()) ?? null;
       }
-      if (
-        typeof (first as unknown as { asNumber?: () => number }).asNumber === "function"
-      ) {
+      if (typeof (first as unknown as { asNumber?: () => number }).asNumber === "function") {
         return (first as unknown as { asNumber: () => number }).asNumber();
       }
     }
@@ -94,9 +86,7 @@ export function stripExternalPageLinks(
       destObj instanceof PDFHexString
     ) {
       const name =
-        destObj instanceof PDFName
-          ? destObj.asString().replace(/^\//, "")
-          : destObj.asString();
+        destObj instanceof PDFName ? destObj.asString().replace(/^\//, "") : destObj.asString();
       const resolved = resolveNamedDest(name);
       if (resolved) {
         return resolveTargetPageIndex(resolved);

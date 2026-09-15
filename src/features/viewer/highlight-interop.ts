@@ -26,9 +26,7 @@ interface SerializedEditor {
  * chosen color on a white page; channels darker than the opacity allows are
  * clamped and render paler than chosen.
  */
-export function interoperableFreehandHighlight<T extends SerializedEditor>(
-  value: T,
-): T {
+export function interoperableFreehandHighlight<T extends SerializedEditor>(value: T): T {
   if (
     value.annotationType !== AnnotationEditorType.HIGHLIGHT ||
     value.quadPoints ||
@@ -41,9 +39,7 @@ export function interoperableFreehandHighlight<T extends SerializedEditor>(
     ...value,
     opacity: alpha,
     color: value.color.map((channel) =>
-      Math.round(
-        Math.min(255, Math.max(0, (channel - 255 * (1 - alpha)) / alpha)),
-      ),
+      Math.round(Math.min(255, Math.max(0, (channel - 255 * (1 - alpha)) / alpha))),
     ),
   };
 }
@@ -73,10 +69,7 @@ export function installHighlightInterop(storage: object) {
       if (!serialized.map?.size) return serialized;
       const map = new Map<string, unknown>();
       for (const [key, value] of serialized.map)
-        map.set(
-          key,
-          interoperableFreehandHighlight(value as SerializedEditor),
-        );
+        map.set(key, interoperableFreehandHighlight(value as SerializedEditor));
       return { ...serialized, map };
     },
   });

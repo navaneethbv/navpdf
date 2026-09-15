@@ -120,12 +120,7 @@ describe("DecorationsDialog and decoration commands", () => {
         replaceWithBytes: vi.fn().mockResolvedValue(undefined),
       } as unknown as ViewerController;
 
-      render(
-        <DecorationsDialog
-          controller={mockController}
-          onClose={onClose}
-        />,
-      );
+      render(<DecorationsDialog controller={mockController} onClose={onClose} />);
 
       // Verify Header & Footer tab
       fireEvent.click(screen.getByRole("button", { name: /Header & Footer/i }));
@@ -157,12 +152,7 @@ describe("DecorationsDialog and decoration commands", () => {
         replaceWithBytes: vi.fn().mockResolvedValue(undefined),
       } as unknown as ViewerController;
 
-      render(
-        <DecorationsDialog
-          controller={mockController}
-          onClose={onClose}
-        />,
-      );
+      render(<DecorationsDialog controller={mockController} onClose={onClose} />);
 
       const removeBtn = screen.getByRole("button", { name: /Remove Decorations/i });
       fireEvent.click(removeBtn);

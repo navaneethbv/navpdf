@@ -62,13 +62,10 @@ describe("ContentEditor", () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <ContentEditor controller={controller as never} type="text" onClose={onClose} />,
-    );
-    fireEvent.change(
-      screen.getByPlaceholderText("Enter text to place on page..."),
-      { target: { value: "Hello NavPDF" } },
-    );
+    render(<ContentEditor controller={controller as never} type="text" onClose={onClose} />);
+    fireEvent.change(screen.getByPlaceholderText("Enter text to place on page..."), {
+      target: { value: "Hello NavPDF" },
+    });
     fireEvent.click(screen.getByText("Insert Text"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalled();
@@ -82,12 +79,8 @@ describe("ContentEditor", () => {
   it("inserts an uploaded image into the live revision", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <ContentEditor controller={controller as never} type="image" onClose={() => {}} />,
-    );
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
+    render(<ContentEditor controller={controller as never} type="image" onClose={() => {}} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File([TINY_PNG as unknown as BlobPart], "pic.png", {
       type: "image/png",
     });
@@ -103,9 +96,7 @@ describe("DecorationsDialog", () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <DecorationsDialog controller={controller as never} onClose={onClose} />,
-    );
+    render(<DecorationsDialog controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Apply to All Pages"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(1);
@@ -129,9 +120,7 @@ describe("DecorationsDialog", () => {
   it("formats header tokens per page", async () => {
     seedDocument(2);
     const controller = await mockController(2);
-    render(
-      <DecorationsDialog controller={controller as never} onClose={() => {}} />,
-    );
+    render(<DecorationsDialog controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Header & Footer"));
     fireEvent.change(screen.getByPlaceholderText("e.g. Confidential Document"), {
       target: { value: "Secret {page}/{total}" },
@@ -148,13 +137,10 @@ describe("FormManager", () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <FormManager controller={controller as never} onClose={onClose} />,
-    );
-    fireEvent.change(
-      screen.getByPlaceholderText("e.g. FirstName, SignatureDate, Agreed"),
-      { target: { value: "FirstName" } },
-    );
+    render(<FormManager controller={controller as never} onClose={onClose} />);
+    fireEvent.change(screen.getByPlaceholderText("e.g. FirstName, SignatureDate, Agreed"), {
+      target: { value: "FirstName" },
+    });
     fireEvent.click(screen.getByText("Add Field"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(1);
@@ -172,13 +158,9 @@ describe("AttachmentsDialog", () => {
   it("embeds a chosen file into the live revision", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <AttachmentsDialog controller={controller as never} onClose={() => {}} />,
-    );
+    render(<AttachmentsDialog controller={controller as never} onClose={() => {}} />);
     expect(screen.getByText(/No embedded attachments/)).toBeTruthy();
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["hello"], "note.txt", { type: "text/plain" });
     fireEvent.change(input, { target: { files: [file] } });
     await vi.waitFor(() => {
@@ -193,9 +175,7 @@ describe("DesignTools", () => {
     seedDocument(2);
     const controller = await mockController(2);
     const onClose = vi.fn();
-    render(
-      <DesignTools controller={controller as never} onClose={onClose} />,
-    );
+    render(<DesignTools controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Insert Cover Page"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalled();
@@ -211,9 +191,7 @@ describe("FillAndSign marks", () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <FillAndSign controller={controller as never} onClose={onClose} />,
-    );
+    render(<FillAndSign controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Quick Marks"));
     for (const label of ["Checkmark", "Cross", "Dot", "Box", "Line"]) {
       fireEvent.click(screen.getByText(label));
@@ -233,9 +211,7 @@ describe("FillAndSign marks", () => {
       JSON.stringify([{ id: "s1", dataUrl, name: "Mine", type: "signature" }]),
     );
     const controller = await mockController();
-    render(
-      <FillAndSign controller={controller as never} onClose={() => {}} />,
-    );
+    render(<FillAndSign controller={controller as never} onClose={() => {}} />);
     expect(screen.getByText("Mine")).toBeTruthy();
     fireEvent.click(screen.getByText("Mine"));
     fireEvent.click(screen.getByText("Place Signature"));
@@ -252,31 +228,21 @@ describe("PageWorkspace", () => {
     seedDocument(3);
     const controller = await mockController(3);
     const onClose = vi.fn();
-    render(
-      <PageWorkspace controller={controller as never} onClose={onClose} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Select All"));
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("3 of 3 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("3 of 3 selected");
     fireEvent.click(screen.getByTitle("Rotate CW (90°)"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(1);
     });
     let bytes = controller.replaceWithBytes.mock.calls[0][0] as Uint8Array;
-    expect((await PDFDocument.load(bytes)).getPage(0).getRotation().angle).toBe(
-      90,
-    );
-    const deleteButton = screen.getByTitle(
-      "Delete selected pages",
-    ) as HTMLButtonElement;
+    expect((await PDFDocument.load(bytes)).getPage(0).getRotation().angle).toBe(90);
+    const deleteButton = screen.getByTitle("Delete selected pages") as HTMLButtonElement;
     expect(deleteButton.disabled).toBe(true);
     expect(controller.replaceWithBytes).toHaveBeenCalledTimes(1);
     const cards = document.querySelectorAll(".page-grid-item");
     fireEvent.click(cards[0]);
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("1 of 3 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("1 of 3 selected");
     fireEvent.click(screen.getByTitle("Delete selected pages"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(2);
@@ -288,12 +254,8 @@ describe("PageWorkspace", () => {
   it("extracts selected pages as a download", async () => {
     seedDocument(3);
     const controller = await mockController(3);
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     fireEvent.click(screen.getByText("Extract"));
     await vi.waitFor(() => {
       expect(click).toHaveBeenCalled();
@@ -304,12 +266,8 @@ describe("PageWorkspace", () => {
   it("splits the document into downloadable parts", async () => {
     seedDocument(4);
     const controller = await mockController(4);
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     fireEvent.click(screen.getByText("Split"));
     fireEvent.click(screen.getByText("Execute Split"));
     await vi.waitFor(() => {
@@ -341,9 +299,7 @@ describe("CreatePdfDialog", () => {
     const onLoad = vi.fn();
     render(<CreatePdfDialog onLoad={onLoad} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Combine Multiple Files"));
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, {
       target: {
         files: [
@@ -382,9 +338,7 @@ describe("CompressDialog", () => {
   it("never reports a reduction without the native engine", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <CompressDialog controller={controller as never} onClose={() => {}} />,
-    );
+    render(<CompressDialog controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Analyze Compression"));
     expect(screen.queryByText("Compressed size")).toBeNull();
     expect(screen.getByText(/runs only in the desktop app/)).toBeTruthy();
@@ -396,14 +350,14 @@ describe("PrintDialog", () => {
     seedDocument(5);
     const controller = await mockController(5);
     const onClose = vi.fn();
-    render(
-      <PrintDialog controller={controller as never} onClose={onClose} />,
-    );
+    render(<PrintDialog controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Current page", { exact: false }));
     // This test checks DOM staging only; happy-dom does not implement PDF
     // navigation for blob URLs. Native print integration is tested separately.
     const src = vi.spyOn(HTMLIFrameElement.prototype, "src", "set").mockImplementation(() => {});
-    const onload = vi.spyOn(HTMLIFrameElement.prototype, "onload", "set").mockImplementation(() => {});
+    const onload = vi
+      .spyOn(HTMLIFrameElement.prototype, "onload", "set")
+      .mockImplementation(() => {});
     fireEvent.click(screen.getByText("Print"));
     await vi.waitFor(() => {
       expect(document.querySelector("iframe")).toBeTruthy();

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { AlertTriangle, Image as ImageIcon, RefreshCw, Replace, Trash2, Type, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Image as ImageIcon,
+  RefreshCw,
+  Replace,
+  Trash2,
+  Type,
+  X,
+} from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { native } from "../../services/native";
@@ -72,7 +80,9 @@ export function ObjectEditor({
     () =>
       placePageBoxes(
         viewer,
-        selected && scan ? [{ page: scan.page, rect: selected.bbox, className: "object-edit-box" }] : [],
+        selected && scan
+          ? [{ page: scan.page, rect: selected.bbox, className: "object-edit-box" }]
+          : [],
       ),
     [viewer, selected, scan, s.zoom, s.renderedPages],
   );
@@ -109,7 +119,12 @@ export function ObjectEditor({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Edit Existing Content">
+    <div
+      className="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit Existing Content"
+    >
       <div className="modal-dialog wide">
         <div className="modal-header">
           <div className="modal-title">
@@ -128,18 +143,23 @@ export function ObjectEditor({
             </div>
           )}
           <p className="field-hint">
-            Replace text in its existing font without reflowing the paragraph,
-            delete text or images, or replace an image on this page only. Text
-            in composite or Type 3 fonts, and characters missing from an
-            embedded font subset, are refused instead of substituted.
+            Replace text in its existing font without reflowing the paragraph, delete text or
+            images, or replace an image on this page only. Text in composite or Type 3 fonts, and
+            characters missing from an embedded font subset, are refused instead of substituted.
           </p>
           <div className="object-editor-layout">
             <div className="object-list" role="listbox" aria-label={`Objects on page ${page}`}>
               <div className="inline-field">
                 <span className="setting-title">
-                  Page {page}: {scan?.objects.length ?? 0} {scan?.objects.length === 1 ? "object" : "objects"}
+                  Page {page}: {scan?.objects.length ?? 0}{" "}
+                  {scan?.objects.length === 1 ? "object" : "objects"}
                 </span>
-                <button className="icon-button" onClick={() => void scanPage()} aria-label="Scan page again" disabled={working}>
+                <button
+                  className="icon-button"
+                  onClick={() => void scanPage()}
+                  aria-label="Scan page again"
+                  disabled={working}
+                >
                   <RefreshCw size={15} />
                 </button>
               </div>
@@ -186,7 +206,14 @@ export function ObjectEditor({
                     <button
                       className="button-secondary"
                       disabled={!selected.replaceable || working || !text}
-                      onClick={() => void run({ type: "replaceText", objectId: selected.id, text, preview: true })}
+                      onClick={() =>
+                        void run({
+                          type: "replaceText",
+                          objectId: selected.id,
+                          text,
+                          preview: true,
+                        })
+                      }
                     >
                       Preview Width
                     </button>
@@ -238,7 +265,14 @@ export function ObjectEditor({
                 </button>
               )}
               {report && (
-                <p className={report.applied || report.missingCharacters.length === 0 ? "field-hint" : "error-text"} role="status">
+                <p
+                  className={
+                    report.applied || report.missingCharacters.length === 0
+                      ? "field-hint"
+                      : "error-text"
+                  }
+                  role="status"
+                >
                   {report.message}
                 </p>
               )}

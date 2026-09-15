@@ -161,7 +161,9 @@ describe("ViewerController lifecycle", () => {
   });
 
   it("undoes and redoes an adapter revision through the staged proxy boundary", async () => {
-    useWorkspace.getState().set({ document: { id: "test", name: "test.pdf", size: 1, revisionId: "base" } });
+    useWorkspace
+      .getState()
+      .set({ document: { id: "test", name: "test.pdf", size: 1, revisionId: "base" } });
     const first = makePdf(2);
     first.saveDocument.mockResolvedValue(new Uint8Array([0]));
     await controller.attach(first as never);
@@ -216,12 +218,16 @@ describe("ViewerController lifecycle", () => {
   it("restores the active document when native revision publication fails", async () => {
     const original = makePdf(2);
     await controller.attach(original as never);
-    useWorkspace.getState().set({ document: { id: "test", name: "test.pdf", size: 1, revisionId: "base" } });
+    useWorkspace
+      .getState()
+      .set({ document: { id: "test", name: "test.pdf", size: 1, revisionId: "base" } });
     const candidate = makePdf(3);
     const destroy = vi.fn(async () => {});
     loadPdfFromBytes.mockReturnValue({ promise: Promise.resolve(candidate), destroy });
     vi.mocked(commitWorkingRevision).mockRejectedValueOnce(new Error("Native write failed"));
-    await expect(controller.replaceWithBytes(new Uint8Array([3]), "Edit")).rejects.toThrow("Native write failed");
+    await expect(controller.replaceWithBytes(new Uint8Array([3]), "Edit")).rejects.toThrow(
+      "Native write failed",
+    );
     expect(controller.pdf).toBe(original);
     expect(useWorkspace.getState().dirty).toBe(false);
     expect(destroy).toHaveBeenCalled();
@@ -242,10 +248,22 @@ describe("ViewerController lifecycle", () => {
       promise: Promise.resolve(sanitized),
       destroy: vi.fn(async () => {}),
     });
-    await controller.replaceWithBytes(new Uint8Array([1]), "Redactions applied", { resetHistory: true });
-    expect(useWorkspace.getState().info).toMatchObject({ pages: 2, title: "", author: "", version: "1.7" });
+    await controller.replaceWithBytes(new Uint8Array([1]), "Redactions applied", {
+      resetHistory: true,
+    });
+    expect(useWorkspace.getState().info).toMatchObject({
+      pages: 2,
+      title: "",
+      author: "",
+      version: "1.7",
+    });
 
-    const unreadable = { ...makePdf(3), getMetadata: vi.fn(async () => { throw new Error("no metadata"); }) };
+    const unreadable = {
+      ...makePdf(3),
+      getMetadata: vi.fn(async () => {
+        throw new Error("no metadata");
+      }),
+    };
     useWorkspace.getState().set({
       info: { pages: 2, encrypted: false, title: "Kept", author: "Kept", version: "1.7" },
     });
@@ -294,17 +312,11 @@ describe("ViewerController tools and navigation", () => {
     controller.setTool("highlight");
     expect(useWorkspace.getState().tool).toBe("highlight");
     controller.setTool("draw");
-    expect(
-      (controller.viewer.annotationEditorMode as { mode: number }).mode,
-    ).toBe(3);
+    expect((controller.viewer.annotationEditorMode as { mode: number }).mode).toBe(3);
     controller.setTool("text");
-    expect(
-      (controller.viewer.annotationEditorMode as { mode: number }).mode,
-    ).toBe(2);
+    expect((controller.viewer.annotationEditorMode as { mode: number }).mode).toBe(2);
     controller.setTool("select");
-    expect(
-      (controller.viewer.annotationEditorMode as { mode: number }).mode,
-    ).toBe(0);
+    expect((controller.viewer.annotationEditorMode as { mode: number }).mode).toBe(0);
   });
 
   it("ignores tool changes without a document", () => {
@@ -410,9 +422,7 @@ describe("ViewerController tools and navigation", () => {
     await controller.attach(pdf as never);
     await controller.readComments();
     expect(useWorkspace.getState().comments).toHaveLength(4);
-    expect(useWorkspace.getState().comments[1].text).toBe(
-      "Highlight annotation",
-    );
+    expect(useWorkspace.getState().comments[1].text).toBe("Highlight annotation");
     expect(useWorkspace.getState().comments[2].type).toBe("Underline");
   });
 
@@ -437,7 +447,9 @@ it("restores the current revision and dirty state after a late mutation failure"
   candidate.getOutline.mockRejectedValueOnce(new Error("Outline failed"));
   const destroy = vi.fn(async () => {});
   loadPdfFromBytes.mockReturnValue({ promise: Promise.resolve(candidate), destroy });
-  await expect(controller.replaceWithBytes(new Uint8Array([1]), "Changed")).rejects.toThrow("Outline failed");
+  await expect(controller.replaceWithBytes(new Uint8Array([1]), "Changed")).rejects.toThrow(
+    "Outline failed",
+  );
   expect(controller.pdf).toBe(previous);
   expect(useWorkspace.getState()).toMatchObject({ dirty: true, page: 2 });
   expect(destroy).toHaveBeenCalledOnce();

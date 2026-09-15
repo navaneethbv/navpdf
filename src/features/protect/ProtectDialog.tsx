@@ -3,11 +3,7 @@ import { AlertTriangle, Lock, Shield, Unlock, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { discardRecovery, markDirty, native } from "../../services/native";
-import {
-  ENGINE_UNAVAILABLE,
-  saveProtectedCopy,
-  unlockDocument,
-} from "../../services/engine";
+import { ENGINE_UNAVAILABLE, saveProtectedCopy, unlockDocument } from "../../services/engine";
 import type { PermissionRequest } from "../../types/engine";
 
 const ALL_PERMISSIONS: PermissionRequest = {
@@ -62,8 +58,7 @@ export function validateProtection(
   return null;
 }
 
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function ProtectDialog({
   controller,
@@ -114,11 +109,8 @@ export function ProtectDialog({
       const state = useWorkspace.getState();
       state.set({
         dirty: false,
-        info: state.info
-          ? { ...state.info, encrypted: false, protectedSource: true }
-          : state.info,
-        status:
-          "Unlocked for editing. The file on disk stays password protected until you save.",
+        info: state.info ? { ...state.info, encrypted: false, protectedSource: true } : state.info,
+        status: "Unlocked for editing. The file on disk stays password protected until you save.",
       });
       controller.markSaved(bytes, controller.pdf?.numPages ?? pdf.numPages);
       await markDirty(false).catch(() => {});
@@ -195,12 +187,7 @@ export function ProtectDialog({
     await onSaveUnprotected();
   };
 
-  const field = (
-    suffix: string,
-    label: string,
-    value: string,
-    change: (value: string) => void,
-  ) => (
+  const field = (suffix: string, label: string, value: string, change: (value: string) => void) => (
     <div className="setting-group">
       <label className="setting-title" htmlFor={`${ids}-${suffix}`}>
         {label}
@@ -249,10 +236,9 @@ export function ProtectDialog({
               <div className="security-status-box">
                 <Lock size={20} />
                 <p>
-                  This PDF is password protected and opens read-only. Enter its
-                  password to create an editable working copy. If the PDF
-                  restricts changes, enter its permissions (owner) password.
-                  Recovery copies are not written for unlocked documents.
+                  This PDF is password protected and opens read-only. Enter its password to create
+                  an editable working copy. If the PDF restricts changes, enter its permissions
+                  (owner) password. Recovery copies are not written for unlocked documents.
                 </p>
               </div>
               {field("unlock", "Document password", unlockPassword, setUnlockPassword)}
@@ -263,23 +249,19 @@ export function ProtectDialog({
                 <div className="security-status-box">
                   <Lock size={20} />
                   <p>
-                    This working copy came from a password-protected file. Save
-                    a protected copy below, or explicitly save without
-                    protection.
+                    This working copy came from a password-protected file. Save a protected copy
+                    below, or explicitly save without protection.
                   </p>
                 </div>
               )}
               <p className="field-hint">
-                The copy is encrypted with AES-256 and checked by reopening it
-                with each password before it replaces anything. The open
-                document stays unencrypted in NavPDF.
+                The copy is encrypted with AES-256 and checked by reopening it with each password
+                before it replaces anything. The open document stays unencrypted in NavPDF.
               </p>
               {field("open", "Open password", openPassword, setOpenPassword)}
               {field("confirm-open", "Confirm open password", confirmOpen, setConfirmOpen)}
               <fieldset className="permission-grid" disabled={working || !native}>
-                <legend className="setting-title">
-                  Allowed without the permissions password
-                </legend>
+                <legend className="setting-title">Allowed without the permissions password</legend>
                 {PERMISSION_LABELS.map(([key, label]) => (
                   <label key={key} className="checkbox-row">
                     <input
@@ -297,9 +279,8 @@ export function ProtectDialog({
                 ))}
               </fieldset>
               <p className="field-hint">
-                Readers that honor PDF permissions enforce these restrictions;
-                they do not stop someone who has the open password from
-                reading the content.
+                Readers that honor PDF permissions enforce these restrictions; they do not stop
+                someone who has the open password from reading the content.
               </p>
               {field(
                 "permissions",

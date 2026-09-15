@@ -49,11 +49,7 @@ export function SearchPanel({ controller }: { controller: ViewerController }) {
         </label>
       </div>
       <div className="search-summary">
-        <span>
-          {pending
-            ? "Searching..."
-            : `${count} result${count === 1 ? "" : "s"}`}
-        </span>
+        <span>{pending ? "Searching..." : `${count} result${count === 1 ? "" : "s"}`}</span>
         <button
           className="icon-button"
           aria-label="Previous match"

@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  PDFDocument,
-  PDFName,
-  PDFArray,
-  PDFNumber,
-  PDFDict,
-} from "pdf-lib";
+import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFDict } from "pdf-lib";
 import { stripExternalPageLinks } from "../../src/services/pdf/link-targets";
 
 describe("stripExternalPageLinks (DS-03)", () => {

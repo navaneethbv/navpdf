@@ -1,10 +1,4 @@
-import {
-  FileText,
-  FolderOpen,
-  ShieldCheck,
-  Clock3,
-  ArrowUpRight,
-} from "lucide-react";
+import { FileText, FolderOpen, ShieldCheck, Clock3, ArrowUpRight } from "lucide-react";
 import { Fragment } from "react";
 import { useWorkspace } from "../../stores/workspace";
 import { native, clearRecents, discardRecovery } from "../../services/native";
@@ -49,9 +43,7 @@ export function Home({
             <Clock3 size={17} /> Recent documents
           </h2>
           {local.recents.length > 0 && (
-            <button
-              onClick={() => void clearRecents().then(refresh).catch(onError)}
-            >
+            <button onClick={() => void clearRecents().then(refresh).catch(onError)}>
               Clear history
             </button>
           )}
@@ -81,9 +73,7 @@ export function Home({
                   </button>
                   <button
                     className="text-button"
-                    onClick={() =>
-                      void discardRecovery(entry.id).then(refresh).catch(onError)
-                    }
+                    onClick={() => void discardRecovery(entry.id).then(refresh).catch(onError)}
                     aria-label={`Discard recovery for ${entry.name}`}
                   >
                     Discard recovery
@@ -100,9 +90,7 @@ export function Home({
                 <FileText size={22} />
                 <span>
                   <strong>{r.name}</strong>
-                  <small>
-                    Opened {new Date(r.openedAt * 1000).toLocaleDateString()}
-                  </small>
+                  <small>Opened {new Date(r.openedAt * 1000).toLocaleDateString()}</small>
                 </span>
                 <ArrowUpRight size={17} />
               </button>

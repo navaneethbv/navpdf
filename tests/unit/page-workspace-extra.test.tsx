@@ -50,27 +50,17 @@ describe("PageWorkspace selection and moves", () => {
   it("supports shift-range, ctrl-toggle, deselect, and keyboard reorder", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     const cards = document.querySelectorAll(".page-grid-item");
     fireEvent.click(cards[2]);
     fireEvent.click(cards[0], { shiftKey: true });
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("3 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("3 of 4 selected");
     fireEvent.click(screen.getByText("Deselect"));
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("0 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("0 of 4 selected");
     fireEvent.click(cards[1], { ctrlKey: true });
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("1 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("1 of 4 selected");
     fireEvent.click(cards[1], { ctrlKey: true });
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("0 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("0 of 4 selected");
     fireEvent.click(cards[1]);
     fireEvent.click(screen.getByTitle("Move Page Left"));
     await vi.waitFor(() => {
@@ -85,9 +75,7 @@ describe("PageWorkspace selection and moves", () => {
   it("inserts blank and image pages", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByTitle("Insert Blank Page"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(1);
@@ -112,13 +100,9 @@ describe("PageWorkspace selection and moves", () => {
   it("applies crop boxes with explicit dimensions", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Crop"));
-    const inputs = document.querySelectorAll(
-      '.crop-controls-bar input[type="number"]',
-    );
+    const inputs = document.querySelectorAll('.crop-controls-bar input[type="number"]');
     fireEvent.change(inputs[0], { target: { value: "400" } });
     fireEvent.change(inputs[1], { target: { value: "500" } });
     fireEvent.click(screen.getByText("Apply Crop"));
@@ -136,9 +120,7 @@ describe("PageWorkspace selection and moves", () => {
   it("cancels crop and split panels and closes the workspace", () => {
     seedDocument();
     const onClose = vi.fn();
-    render(
-      <PageWorkspace controller={null} onClose={onClose} />,
-    );
+    render(<PageWorkspace controller={null} onClose={onClose} />);
     fireEvent.click(screen.getByText("Crop"));
     fireEvent.click(screen.getByText("Cancel"));
     fireEvent.click(screen.getByText("Split"));
@@ -150,26 +132,20 @@ describe("PageWorkspace selection and moves", () => {
   it("rotates counter-clockwise", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByTitle("Rotate CCW (-90°)"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalled();
     });
     const bytes = controller.replaceWithBytes.mock.calls[0][0] as Uint8Array;
-    expect((await PDFDocument.load(bytes)).getPage(0).getRotation().angle).toBe(
-      270,
-    );
+    expect((await PDFDocument.load(bytes)).getPage(0).getRotation().angle).toBe(270);
   });
 
   it("supports keyboard navigation: arrows, space toggle, rotate, and delete", async () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <PageWorkspace controller={controller as never} onClose={onClose} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={onClose} />);
     const modal = screen.getByRole("region", { name: "Page Workspace" });
 
     // ArrowRight moves focus and selects next page (Page 2, index 1)
@@ -196,9 +172,7 @@ describe("PageWorkspace selection and moves", () => {
   it("supports drag and drop reordering of pages", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     const cards = document.querySelectorAll(".page-grid-item");
     expect(cards).toHaveLength(4);
 

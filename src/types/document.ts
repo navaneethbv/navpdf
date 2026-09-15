@@ -1,15 +1,7 @@
 export type Layout = "continuous" | "single" | "spread";
 export type ToolMode = "all" | "edit" | "convert" | "esign" | "create";
 export type Tool =
-  | "select"
-  | "hand"
-  | "highlight"
-  | "ink"
-  | "draw"
-  | "text"
-  | "shape"
-  | "signature"
-  | "snapshot";
+  "select" | "hand" | "highlight" | "ink" | "draw" | "text" | "shape" | "signature" | "snapshot";
 export type ShapeKind = "Square" | "Circle" | "Line" | "Arrow";
 export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "tools";
 export interface DocumentDescriptor {

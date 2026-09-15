@@ -87,7 +87,9 @@ async function redactionDocument() {
   page.pushOperators(...textOperators(font, fontKey, CANARIES.ocr, 72, 650, 12, true));
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="120"><rect width="600" height="120" fill="#ffffff"/><text x="20" y="80" font-family="Helvetica, Arial, sans-serif" font-size="52" fill="#000000">${CANARIES.image}</text></svg>`;
-  const image = await pdf.embedPng(await sharp(Buffer.from(svg)).flatten({ background: "#ffffff" }).png().toBuffer());
+  const image = await pdf.embedPng(
+    await sharp(Buffer.from(svg)).flatten({ background: "#ffffff" }).png().toBuffer(),
+  );
   page.drawImage(image, { x: 72, y: 500, width: 300, height: 60 });
 
   const note = pdf.context.obj({
@@ -102,11 +104,21 @@ async function redactionDocument() {
   field.setText(CANARIES.field);
   field.addToPage(page, { x: 72, y: 400, width: 250, height: 24, font });
 
-  const layer = pdf.context.register(pdf.context.obj({ Type: "OCG", Name: PDFString.of("Private notes") }));
-  pdf.catalog.set(PDFName.of("OCProperties"), pdf.context.obj({ OCGs: [layer], D: { OFF: [layer], Order: [layer] } }));
-  page.node.normalizedEntries().Resources.set(PDFName.of("Properties"), pdf.context.obj({ L1: layer }));
+  const layer = pdf.context.register(
+    pdf.context.obj({ Type: "OCG", Name: PDFString.of("Private notes") }),
+  );
+  pdf.catalog.set(
+    PDFName.of("OCProperties"),
+    pdf.context.obj({ OCGs: [layer], D: { OFF: [layer], Order: [layer] } }),
+  );
+  page.node
+    .normalizedEntries()
+    .Resources.set(PDFName.of("Properties"), pdf.context.obj({ L1: layer }));
   page.pushOperators(
-    PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [PDFName.of("OC"), PDFName.of("L1")]),
+    PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [
+      PDFName.of("OC"),
+      PDFName.of("L1"),
+    ]),
     ...textOperators(font, fontKey, CANARIES.layer, 72, 320, 12),
     PDFOperator.of(PDFOperatorNames.EndMarkedContent),
   );
@@ -116,18 +128,34 @@ async function redactionDocument() {
     { Type: "Metadata", Subtype: "XML" },
   );
   pdf.catalog.set(PDFName.of("Metadata"), pdf.context.register(xmp));
-  await pdf.attach(new TextEncoder().encode(`Synthetic notes ${CANARIES.attachment}`), "notes.txt", {
-    mimeType: "text/plain",
-    description: "Synthetic attachment",
-  });
+  await pdf.attach(
+    new TextEncoder().encode(`Synthetic notes ${CANARIES.attachment}`),
+    "notes.txt",
+    {
+      mimeType: "text/plain",
+      description: "Synthetic attachment",
+    },
+  );
   pdf.catalog.set(
     PDFName.of("OpenAction"),
-    pdf.context.register(pdf.context.obj({ S: "JavaScript", JS: PDFString.of(`app.alert("${CANARIES.script}")`) })),
+    pdf.context.register(
+      pdf.context.obj({ S: "JavaScript", JS: PDFString.of(`app.alert("${CANARIES.script}")`) }),
+    ),
   );
   const outlines = pdf.context.nextRef();
   const item = pdf.context.nextRef();
-  pdf.context.assign(item, pdf.context.obj({ Title: PDFString.of(CANARIES.outline), Parent: outlines, Dest: [page.ref, "Fit"] }));
-  pdf.context.assign(outlines, pdf.context.obj({ Type: "Outlines", First: item, Last: item, Count: 1 }));
+  pdf.context.assign(
+    item,
+    pdf.context.obj({
+      Title: PDFString.of(CANARIES.outline),
+      Parent: outlines,
+      Dest: [page.ref, "Fit"],
+    }),
+  );
+  pdf.context.assign(
+    outlines,
+    pdf.context.obj({ Type: "Outlines", First: item, Last: item, Count: 1 }),
+  );
   pdf.catalog.set(PDFName.of("Outlines"), outlines);
 
   const shared = pdf.context.register(
@@ -141,7 +169,11 @@ async function redactionDocument() {
   second.drawText("Second page public text", { x: 72, y: 700, size: 14, font });
   for (const target of [page, second]) {
     const key = target.node.newXObject("Shared", shared);
-    target.pushOperators(pushGraphicsState(), PDFOperator.of(PDFOperatorNames.DrawObject, [key]), popGraphicsState());
+    target.pushOperators(
+      pushGraphicsState(),
+      PDFOperator.of(PDFOperatorNames.DrawObject, [key]),
+      popGraphicsState(),
+    );
   }
 
   // The first revision also draws REVISION; the appended update removes that stream.
@@ -149,12 +181,17 @@ async function redactionDocument() {
     pdf.context.contentStream(textOperators(font, fontKey, CANARIES.revision, 72, 250, 12)),
   );
   page.node.addContentStream(revision);
-  const incremental = await dropLastContentStreamIncrementally(await pdf.save({ useObjectStreams: false }));
+  const incremental = await dropLastContentStreamIncrementally(
+    await pdf.save({ useObjectStreams: false }),
+  );
 
   const width = (text, size) => font.widthOfTextAtSize(text, size);
   const clientWidth = width("Client: ", 14);
   const regions = [
-    { page: 1, rect: [72 + clientWidth - 0.5, 695, 72 + clientWidth + width(CANARIES.visible, 14) + 1, 716] },
+    {
+      page: 1,
+      rect: [72 + clientWidth - 0.5, 695, 72 + clientWidth + width(CANARIES.visible, 14) + 1, 716],
+    },
     { page: 1, rect: [70, 645, 74 + width(CANARIES.ocr, 12), 663] },
     { page: 1, rect: [72, 500, 372, 560] },
     { page: 1, rect: [398, 688, 422, 712] },
@@ -172,7 +209,9 @@ async function protectionDocument() {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   for (let index = 1; index <= 3; index++) {
-    pdf.addPage([612, 792]).drawText(`Protected marker PROTECT-PAGE-${index}`, { x: 72, y: 700, size: 16, font });
+    pdf
+      .addPage([612, 792])
+      .drawText(`Protected marker PROTECT-PAGE-${index}`, { x: 72, y: 700, size: 16, font });
   }
   return pdf.save();
 }
@@ -182,7 +221,12 @@ async function compressionDocument() {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   for (let index = 1; index <= 3; index++) {
     const { data, info } = await sharp({
-      create: { width: 1800, height: 1200, channels: 3, background: { r: 40 * index, g: 120, b: 200 } },
+      create: {
+        width: 1800,
+        height: 1200,
+        channels: 3,
+        background: { r: 40 * index, g: 120, b: 200 },
+      },
     })
       .composite([
         {

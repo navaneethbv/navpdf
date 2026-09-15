@@ -67,16 +67,10 @@ export function PrintDialog({
       controller.editor?.commitOrRemove();
       const bytes = await controller.pdf.saveDocument();
       const totalPages = controller.pdf.numPages;
-      const pages = parsePageRange(
-        rangeMode,
-        customRange,
-        s.page,
-        totalPages,
-      );
+      const pages = parsePageRange(rangeMode, customRange, s.page, totalPages);
       // Only rebuild the document when a subset was actually requested, so a
       // full-document print keeps the original structure intact.
-      const payload =
-        pages.length === totalPages ? bytes : await extractPages(bytes, pages);
+      const payload = pages.length === totalPages ? bytes : await extractPages(bytes, pages);
       if (native) {
         const printed = await printDocument(payload as Uint8Array<ArrayBuffer>, pages.length);
         s.set({ status: printed ? "Print operation completed" : "Print cancelled" });
@@ -169,8 +163,8 @@ export function PrintDialog({
           </div>
 
           <p className="field-hint">
-            Orientation, scale, and destination are chosen in the system print
-            dialog that opens next.
+            Orientation, scale, and destination are chosen in the system print dialog that opens
+            next.
           </p>
 
           {hasMixedDimensions && (
@@ -184,11 +178,7 @@ export function PrintDialog({
           <button onClick={onClose} className="button-secondary">
             Cancel
           </button>
-          <button
-            onClick={handlePrint}
-            disabled={printing}
-            className="button-primary"
-          >
+          <button onClick={handlePrint} disabled={printing} className="button-primary">
             {printing ? "Preparing..." : "Print"}
           </button>
         </div>

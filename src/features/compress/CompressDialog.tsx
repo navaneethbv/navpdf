@@ -9,11 +9,7 @@ import {
   ENGINE_UNAVAILABLE,
   newJobId,
 } from "../../services/engine";
-import type {
-  CompressionPreset,
-  CompressionReport,
-  EngineResult,
-} from "../../types/engine";
+import type { CompressionPreset, CompressionReport, EngineResult } from "../../types/engine";
 
 const PRESETS: { id: CompressionPreset; label: string; description: string }[] = [
   {
@@ -25,8 +21,7 @@ const PRESETS: { id: CompressionPreset; label: string; description: string }[] =
   {
     id: "balanced",
     label: "Balanced",
-    description:
-      "Also downsamples images stored above 150 dpi and re-encodes them when smaller.",
+    description: "Also downsamples images stored above 150 dpi and re-encodes them when smaller.",
   },
   {
     id: "small",
@@ -148,8 +143,7 @@ export function CompressDialog({
 
           {running && (
             <p className="field-hint" aria-live="polite">
-              Measuring a compressed copy and checking text, forms, fonts,
-              links and images…
+              Measuring a compressed copy and checking text, forms, fonts, links and images…
             </p>
           )}
 
@@ -171,17 +165,15 @@ export function CompressDialog({
                 <span>Change</span>
                 <strong>
                   {formatBytes(change)} (
-                  {report.beforeBytes
-                    ? ((change / report.beforeBytes) * 100).toFixed(1)
-                    : "0.0"}
+                  {report.beforeBytes ? ((change / report.beforeBytes) * 100).toFixed(1) : "0.0"}
                   %)
                 </strong>
               </div>
               <p className="field-hint">
-                Images examined: {report.imagesExamined}, recompressed:{" "}
-                {report.imagesRecompressed}, left unchanged: {report.imagesSkipped}.
-                Duplicate streams merged: {report.duplicateStreamsMerged}. Unused
-                objects removed: {report.unusedObjectsRemoved}.
+                Images examined: {report.imagesExamined}, recompressed: {report.imagesRecompressed},
+                left unchanged: {report.imagesSkipped}. Duplicate streams merged:{" "}
+                {report.duplicateStreamsMerged}. Unused objects removed:{" "}
+                {report.unusedObjectsRemoved}.
               </p>
               <ul className="check-list" aria-label="Fidelity checks">
                 {report.checks.map((check) => (

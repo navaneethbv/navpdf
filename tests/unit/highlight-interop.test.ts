@@ -33,9 +33,7 @@ describe("freehand highlight interoperability", () => {
       const saved = interoperableFreehandHighlight({ ...freehand, color });
       const alpha = saved.opacity;
       saved.color.forEach((channel, index) =>
-        expect(
-          Math.abs(255 * (1 - alpha) + channel * alpha - color[index]),
-        ).toBeLessThanOrEqual(1),
+        expect(Math.abs(255 * (1 - alpha) + channel * alpha - color[index])).toBeLessThanOrEqual(1),
       );
     }
   });
@@ -73,9 +71,7 @@ describe("freehand highlight interoperability", () => {
       hash: string;
       transfer: unknown[];
     };
-    expect(serialized.map.get("free")?.opacity).toBe(
-      FREEHAND_HIGHLIGHT_OPACITY,
-    );
+    expect(serialized.map.get("free")?.opacity).toBe(FREEHAND_HIGHLIGHT_OPACITY);
     expect(serialized.map.get("value")).toEqual({ value: "form text" });
     expect(serialized.hash).toBe("abc");
     expect(serialized.transfer).toBe(transfer);

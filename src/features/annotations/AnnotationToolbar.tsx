@@ -33,8 +33,7 @@ export function AnnotationToolbar({
   onClose: () => void;
 }) {
   const s = useWorkspace();
-  const isBlocked =
-    !controller || s.busy || !!s.info?.encrypted || !s.editingAllowed;
+  const isBlocked = !controller || s.busy || !!s.info?.encrypted || !s.editingAllowed;
 
   const handleSetTool = (tool: "highlight" | "draw" | "text" | "select") => {
     s.set({ tool, selectedAnnotationId: null, hasSelection: false });
@@ -61,7 +60,10 @@ export function AnnotationToolbar({
   return (
     <div className="annotation-floating-toolbar" role="toolbar" aria-label="Annotation tools">
       {!s.editingAllowed && (
-        <span className="toolbar-restricted-notice" style={{ fontSize: "12px", color: "var(--text-secondary)", padding: "0 8px" }}>
+        <span
+          className="toolbar-restricted-notice"
+          style={{ fontSize: "12px", color: "var(--text-secondary)", padding: "0 8px" }}
+        >
           Editing is restricted for this document.
         </span>
       )}

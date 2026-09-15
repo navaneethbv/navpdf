@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  PDFDocument,
-  PDFName,
-  PDFString,
-} from "pdf-lib";
+import { PDFDocument, PDFName, PDFString } from "pdf-lib";
 import { walkEmbeddedFiles } from "../../src/services/pdf/name-tree";
 import {
   listEmbeddedAttachments,
@@ -16,12 +12,7 @@ describe("Embedded files name tree traversal", () => {
     const doc = await PDFDocument.create();
     doc.addPage([400, 400]);
 
-    const contents = [
-      "File 1 content",
-      "File 2 content",
-      "File 3 content",
-      "File 4 content",
-    ];
+    const contents = ["File 1 content", "File 2 content", "File 3 content", "File 4 content"];
     const fileSpecs = [];
     for (let i = 0; i < 4; i++) {
       const data = new TextEncoder().encode(contents[i]);
@@ -95,12 +86,7 @@ describe("Embedded files name tree traversal", () => {
     const entries = walkEmbeddedFiles(doc);
 
     expect(entries).toHaveLength(4);
-    expect(entries.map((e) => e.name)).toEqual([
-      "doc1.txt",
-      "doc2.txt",
-      "doc3.txt",
-      "doc4.txt",
-    ]);
+    expect(entries.map((e) => e.name)).toEqual(["doc1.txt", "doc2.txt", "doc3.txt", "doc4.txt"]);
   });
 
   it("listEmbeddedAttachments discovers all items in balanced tree", async () => {

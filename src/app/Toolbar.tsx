@@ -91,9 +91,7 @@ export function Toolbar({
         <span className="titlebar-divider" />
         <div className="document-title">
           {s.document?.name || "Local workspace"}
-          {s.dirty && (
-            <span className="dirty-indicator" title="Unsaved changes" />
-          )}
+          {s.dirty && <span className="dirty-indicator" title="Unsaved changes" />}
         </div>
         <div className="titlebar-space" />
         <span className="privacy-label">
@@ -119,12 +117,7 @@ export function Toolbar({
       {s.quickRailVisible && (
         <div className="main-toolbar" role="toolbar" aria-label="PDF tools">
           <div className="toolbar-group">
-            <button
-              title="Open (⌘O)"
-              aria-label="Open PDF"
-              onClick={open}
-              disabled={s.busy}
-            >
+            <button title="Open (⌘O)" aria-label="Open PDF" onClick={open} disabled={s.busy}>
               <FolderOpen size={18} />
               <span>Open</span>
             </button>
@@ -243,104 +236,82 @@ export function Toolbar({
               <Printer size={18} />
             </button>
           </div>
-        <div className="toolbar-group zoom-controls">
-          <button
-            aria-label="Zoom out"
-            disabled={disabled || s.zoom <= 25}
-            onClick={() => controller?.zoom(s.zoom / 100 / 1.15)}
-          >
-            <Minus size={16} />
-          </button>
-          <select
-            aria-label="Zoom percentage"
-            value={s.zoom}
-            disabled={disabled}
-            onChange={(e) => controller?.zoom(Number(e.target.value) / 100)}
-          >
-            {[
-              ...new Set([
-                25,
-                50,
-                75,
-                100,
-                125,
-                150,
-                200,
-                300,
-                400,
-                500,
-                s.zoom,
-              ]),
-            ]
-              .sort((a, b) => a - b)
-              .map((n) => (
-                <option value={n} key={n}>
-                  {n}%
-                </option>
-              ))}
-          </select>
-          <button
-            aria-label="Zoom in"
-            disabled={disabled || s.zoom >= 500}
-            onClick={() => controller?.zoom((s.zoom / 100) * 1.15)}
-          >
-            <Plus size={16} />
-          </button>
-          <button
-            aria-label="Fit width"
-            title="Fit width"
-            disabled={disabled}
-            onClick={() => controller?.zoom("page-width")}
-          >
-            <MoveHorizontal size={18} />
-          </button>
-          <button
-            aria-label="Fit page"
-            title="Fit page (⌘0)"
-            disabled={disabled}
-            onClick={() => controller?.zoom("page-fit")}
-          >
-            <Scan size={18} />
-          </button>
+          <div className="toolbar-group zoom-controls">
+            <button
+              aria-label="Zoom out"
+              disabled={disabled || s.zoom <= 25}
+              onClick={() => controller?.zoom(s.zoom / 100 / 1.15)}
+            >
+              <Minus size={16} />
+            </button>
+            <select
+              aria-label="Zoom percentage"
+              value={s.zoom}
+              disabled={disabled}
+              onChange={(e) => controller?.zoom(Number(e.target.value) / 100)}
+            >
+              {[...new Set([25, 50, 75, 100, 125, 150, 200, 300, 400, 500, s.zoom])]
+                .sort((a, b) => a - b)
+                .map((n) => (
+                  <option value={n} key={n}>
+                    {n}%
+                  </option>
+                ))}
+            </select>
+            <button
+              aria-label="Zoom in"
+              disabled={disabled || s.zoom >= 500}
+              onClick={() => controller?.zoom((s.zoom / 100) * 1.15)}
+            >
+              <Plus size={16} />
+            </button>
+            <button
+              aria-label="Fit width"
+              title="Fit width"
+              disabled={disabled}
+              onClick={() => controller?.zoom("page-width")}
+            >
+              <MoveHorizontal size={18} />
+            </button>
+            <button
+              aria-label="Fit page"
+              title="Fit page (⌘0)"
+              disabled={disabled}
+              onClick={() => controller?.zoom("page-fit")}
+            >
+              <Scan size={18} />
+            </button>
+          </div>
+          <div className="toolbar-space" />
+          <div className="toolbar-group">
+            <select
+              aria-label="Page layout"
+              disabled={disabled}
+              value={s.layout}
+              onChange={(e) => controller?.setLayout(e.target.value as Layout)}
+            >
+              <option value="continuous">Continuous</option>
+              <option value="single">Single page</option>
+              <option value="spread">Two pages</option>
+            </select>
+            <button
+              aria-label="Find in PDF"
+              title="Find (⌘F)"
+              disabled={disabled}
+              onClick={() => s.set({ sidebar: "search" })}
+            >
+              <Search size={18} />
+            </button>
+            <button aria-label="Close document" disabled={disabled} onClick={home}>
+              <Home size={17} />
+            </button>
+          </div>
         </div>
-        <div className="toolbar-space" />
-        <div className="toolbar-group">
-          <select
-            aria-label="Page layout"
-            disabled={disabled}
-            value={s.layout}
-            onChange={(e) => controller?.setLayout(e.target.value as Layout)}
-          >
-            <option value="continuous">Continuous</option>
-            <option value="single">Single page</option>
-            <option value="spread">Two pages</option>
-          </select>
-          <button
-            aria-label="Find in PDF"
-            title="Find (⌘F)"
-            disabled={disabled}
-            onClick={() => s.set({ sidebar: "search" })}
-          >
-            <Search size={18} />
-          </button>
-          <button
-            aria-label="Close document"
-            disabled={disabled}
-            onClick={home}
-          >
-            <Home size={17} />
-          </button>
-        </div>
-      </div>
       )}
     </>
   );
 }
-export function Statusbar({
-  controller,
-}: {
-  controller: ViewerController | null;
-}) {
+export function Statusbar({ controller }: { controller: ViewerController | null }) {
   const s = useWorkspace();
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -351,9 +322,7 @@ export function Statusbar({
   return (
     <footer className="statusbar">
       <span className={`status-light ${s.busy ? "working" : ""}`} />
-      <span role="status">
-        {s.status}
-      </span>
+      <span role="status">{s.status}</span>
       <div className="statusbar-space" />
       {s.document && (
         <>
@@ -399,8 +368,7 @@ export function Statusbar({
               defaultValue={s.page}
               onBlur={(e) => controller?.goTo(Number(e.target.value) || 1)}
               onKeyDown={(e) => {
-                if (e.key === "Enter")
-                  controller?.goTo(Number(e.currentTarget.value) || 1);
+                if (e.key === "Enter") controller?.goTo(Number(e.currentTarget.value) || 1);
               }}
             />
             <span>of {s.info?.pages}</span>

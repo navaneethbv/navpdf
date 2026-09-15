@@ -17,12 +17,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "lcov"],
       include: ["src/**/*.{ts,tsx}"],
-      exclude: [
-        "src/main.tsx",
-        "src/services/platform.ts",
-        "src-tauri/**",
-        "**/*.d.ts",
-      ],
+      exclude: ["src/main.tsx", "src/services/platform.ts", "src-tauri/**", "**/*.d.ts"],
       thresholds: {
         lines: 80,
         functions: 80,

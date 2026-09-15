@@ -215,9 +215,7 @@ describe("App shell", () => {
     act(() => {
       useWorkspace.getState().set({ tool: "select", activeSnapshot: true });
     });
-    expect(
-      screen.getByText("Click and drag across the document to capture a region"),
-    ).toBeTruthy();
+    expect(screen.getByText("Click and drag across the document to capture a region")).toBeTruthy();
     act(() => {
       useWorkspace.getState().set({ activeSnapshot: false, settingsOpen: true });
     });
@@ -235,9 +233,9 @@ describe("App shell", () => {
     seedDocument();
     render(<App />);
     const calls = vi.mocked(listen).mock.calls;
-    const menu = calls.find(([event]) => event === "menu-action")?.[1] as (
-      payload: { payload: string },
-    ) => void;
+    const menu = calls.find(([event]) => event === "menu-action")?.[1] as (payload: {
+      payload: string;
+    }) => void;
     expect(menu).toBeTruthy();
     await act(async () => {
       menu({ payload: "find" });

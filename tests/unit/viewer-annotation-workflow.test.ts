@@ -123,7 +123,9 @@ describe("ViewerController annotation and comment workflow", () => {
     });
 
     await controller.attach(pdf as never);
-    useWorkspace.getState().set({ highlightColor: "#ffcc00", inkColor: "#00ccff", inkWidth: 3, inkOpacity: 0.7 });
+    useWorkspace
+      .getState()
+      .set({ highlightColor: "#ffcc00", inkColor: "#00ccff", inkWidth: 3, inkOpacity: 0.7 });
 
     await controller.addStickyNote("Note content");
     expect(mockAddStickyNote).toHaveBeenCalled();
@@ -239,9 +241,7 @@ describe("ViewerController annotation and comment workflow", () => {
     const pdf = makePdf(3);
     await controller.attach(pdf as never);
     useWorkspace.getState().set({
-      comments: [
-        { id: "note-1", page: 2, type: "Text", text: "Target note" },
-      ],
+      comments: [{ id: "note-1", page: 2, type: "Text", text: "Target note" }],
     });
 
     const goTo = vi.spyOn(controller, "goTo");
@@ -284,7 +284,9 @@ describe("ViewerController annotation and comment workflow", () => {
       version: 1,
       documentId: "doc-other",
       pageCount: 2,
-      comments: [{ id: "new-1", page: 1, type: "Text", text: "Other note", rect: [20, 20, 50, 50] }],
+      comments: [
+        { id: "new-1", page: 1, type: "Text", text: "Other note", rect: [20, 20, 50, 50] },
+      ],
     });
     await expect(controller.importComments(otherDocExchange)).rejects.toThrow(
       "These comments belong to a different document.",

@@ -78,10 +78,7 @@ export function ExportDialog({
       }
 
       const fullText = textChunks.join("\n");
-      downloadBlob(
-        new Blob([fullText], { type: "text/plain;charset=utf-8" }),
-        `${baseName}.txt`,
-      );
+      downloadBlob(new Blob([fullText], { type: "text/plain;charset=utf-8" }), `${baseName}.txt`);
       s.set({
         status:
           targetIndices.length === totalPages
@@ -118,7 +115,9 @@ export function ExportDialog({
 
         // Memory boundary guard: prevent dimension overflow (> 8192px)
         if (viewport.width > 8192 || viewport.height > 8192) {
-          throw new Error(`Export resolution too high: page ${pageNum} would exceed maximum dimensions.`);
+          throw new Error(
+            `Export resolution too high: page ${pageNum} would exceed maximum dimensions.`,
+          );
         }
 
         const canvas = document.createElement("canvas");
@@ -164,24 +163,14 @@ export function ExportDialog({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Export Document"
-    >
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Export Document">
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
             <Download size={18} />
             <h3>Export Document</h3>
           </div>
-          <button
-            className="icon-button"
-            onClick={onClose}
-            aria-label="Close"
-            disabled={exporting}
-          >
+          <button className="icon-button" onClick={onClose} aria-label="Close" disabled={exporting}>
             <X size={18} />
           </button>
         </div>

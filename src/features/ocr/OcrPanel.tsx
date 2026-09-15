@@ -12,14 +12,8 @@ import {
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-import {
-  ocrGetEngineInfo,
-  ocrRecognizePage,
-} from "../../services/native";
-import {
-  applyOcrSearchableLayer,
-  detectExistingText,
-} from "../../services/document-commands";
+import { ocrGetEngineInfo, ocrRecognizePage } from "../../services/native";
+import { applyOcrSearchableLayer, detectExistingText } from "../../services/document-commands";
 import type { OcrEngineInfo, OcrPageResult } from "../../types/operations";
 import { parsePageRange } from "../pages/print-range";
 
@@ -50,13 +44,17 @@ export function OcrPanel({
   const totalPages = s.info?.pages || 1;
 
   useEffect(() => {
-    ocrGetEngineInfo().then((info) => {
-      setEngineInfo(info);
-      if (info.supportedLanguages.length > 0) {
-        setSelectedLang(info.supportedLanguages[0]);
-      }
-    }).catch((err: unknown) => setEngineError(err instanceof Error ? err.message : String(err)));
-    return () => { cancelledRef.current = true; };
+    ocrGetEngineInfo()
+      .then((info) => {
+        setEngineInfo(info);
+        if (info.supportedLanguages.length > 0) {
+          setSelectedLang(info.supportedLanguages[0]);
+        }
+      })
+      .catch((err: unknown) => setEngineError(err instanceof Error ? err.message : String(err)));
+    return () => {
+      cancelledRef.current = true;
+    };
   }, []);
 
   const getTargetPages = (): number[] => {
@@ -118,14 +116,21 @@ export function OcrPanel({
 
         const pageIndex = targetIndices[i];
         const pageNum = pageIndex + 1;
-        const pct = Math.round(((i) / targetIndices.length) * 85) + 5;
+        const pct = Math.round((i / targetIndices.length) * 85) + 5;
         setProgress(pct);
         setStatusText(`Recognizing page ${pageNum} of ${totalPages}...`);
 
         const page = await sourcePdf.getPage(pageNum);
         // Use unrotated crop coordinates so OCR boxes map back into PDF space.
         const viewport = page.getViewport({ scale: 2.0, rotation: 0 });
-        if (viewport.width <= 0 || viewport.height <= 0 || !Number.isFinite(viewport.width * viewport.height) || viewport.width > 8192 || viewport.height > 8192 || viewport.width * viewport.height > 16_000_000) {
+        if (
+          viewport.width <= 0 ||
+          viewport.height <= 0 ||
+          !Number.isFinite(viewport.width * viewport.height) ||
+          viewport.width > 8192 ||
+          viewport.height > 8192 ||
+          viewport.width * viewport.height > 16_000_000
+        ) {
           throw new Error("This page exceeds the OCR image size limit.");
         }
         const canvas = document.createElement("canvas");
@@ -193,24 +198,14 @@ export function OcrPanel({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Scan & OCR"
-    >
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Scan & OCR">
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
             <Scan size={18} />
             <h3>Optical Character Recognition (OCR)</h3>
           </div>
-          <button
-            className="icon-button"
-            onClick={onClose}
-            aria-label="Close"
-            disabled={running}
-          >
+          <button className="icon-button" onClick={onClose} aria-label="Close" disabled={running}>
             <X size={18} />
           </button>
         </div>
@@ -281,7 +276,9 @@ export function OcrPanel({
                 Target pages already contain digital text. Original text stays in the PDF and may
                 appear twice in search results. Only a previous NavPDF OCR layer is replaced.
               </p>
-              <label style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px" }}>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px" }}
+              >
                 <input
                   type="checkbox"
                   checked={replaceExisting}
@@ -373,7 +370,9 @@ export function OcrPanel({
             <div className="ocr-progress-box" style={{ marginTop: "12px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Loader2 size={18} className="spin" />
-                <span>{statusText} ({progress}%)</span>
+                <span>
+                  {statusText} ({progress}%)
+                </span>
               </div>
               <div
                 style={{
@@ -398,7 +397,10 @@ export function OcrPanel({
 
           {recognizedText && (
             <div className="ocr-result-box" style={{ marginTop: "12px" }}>
-              <div className="result-header" style={{ display: "flex", justifyContent: "space-between" }}>
+              <div
+                className="result-header"
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <Check size={16} /> <span>Recognized Text</span>
                 </div>
@@ -414,7 +416,12 @@ export function OcrPanel({
                 readOnly
                 value={recognizedText}
                 rows={6}
-                style={{ width: "100%", marginTop: "8px", fontSize: "12px", fontFamily: "monospace" }}
+                style={{
+                  width: "100%",
+                  marginTop: "8px",
+                  fontSize: "12px",
+                  fontFamily: "monospace",
+                }}
               />
             </div>
           )}

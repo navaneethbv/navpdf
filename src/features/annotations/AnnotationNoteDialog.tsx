@@ -50,16 +50,16 @@ export function AnnotationNoteDialog({
             placeholder="Write a comment about this page..."
           />
         </label>
-        {error && <p className="error-text" role="alert">{error}</p>}
+        {error && (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        )}
         <div className="dialog-actions">
           <button type="button" className="button" onClick={onClose}>
             Cancel
           </button>
-          <button
-            type="submit"
-            className="button primary"
-            disabled={saving || !contents.trim()}
-          >
+          <button type="submit" className="button primary" disabled={saving || !contents.trim()}>
             {saving ? "Adding..." : "Add Note"}
           </button>
         </div>

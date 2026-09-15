@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  PDFDocument,
-  StandardFonts,
-  PDFArray,
-  PDFRawStream,
-  decodePDFRawStream,
-} from "pdf-lib";
+import { PDFDocument, StandardFonts, PDFArray, PDFRawStream, decodePDFRawStream } from "pdf-lib";
 import {
   applyDocumentDecorations,
   removeDocumentDecorations,
@@ -48,14 +42,9 @@ describe("decorations content safety (DS-01)", () => {
       const streams = await streamsOfFirstPage(bytes);
       expect(streams.some((s) => s.includes("72 700"))).toBe(true);
     }
-    const hasChanged = (s: string) =>
-      s.includes("Changed") || s.includes("4368616E676564");
-    expect(
-      (await streamsOfFirstPage(twice)).filter(hasChanged).length,
-    ).toBe(1);
-    expect(
-      (await streamsOfFirstPage(removed)).some(hasChanged),
-    ).toBe(false);
+    const hasChanged = (s: string) => s.includes("Changed") || s.includes("4368616E676564");
+    expect((await streamsOfFirstPage(twice)).filter(hasChanged).length).toBe(1);
+    expect((await streamsOfFirstPage(removed)).some(hasChanged)).toBe(false);
   });
 
   it("keeps original content across Bates apply and removal", async () => {
@@ -88,9 +77,7 @@ describe("decorations content safety (DS-01)", () => {
 
     const streams = await streamsOfFirstPage(decorated);
     const hexToAscii = (str: string) =>
-      str.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) =>
-        Buffer.from(hex, "hex").toString("latin1"),
-      );
+      str.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) => Buffer.from(hex, "hex").toString("latin1"));
     const textCombined = streams.map(hexToAscii).join("\n");
     expect(textCombined).toContain("Price $100 & $& Special");
     expect(textCombined).toContain("User $1 and $$");

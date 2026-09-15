@@ -34,8 +34,7 @@ describe("ToolPanel", () => {
   it("disables document tools when no document is open", () => {
     render(<ToolPanel mode="all" onClose={() => {}} />);
     expect(
-      (screen.getByText("Organize Pages").closest("button") as HTMLButtonElement)
-        .disabled,
+      (screen.getByText("Organize Pages").closest("button") as HTMLButtonElement).disabled,
     ).toBe(true);
   });
 

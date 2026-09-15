@@ -16,10 +16,24 @@ describe("OcrPanel UI Component (P6.4)", () => {
   let samplePdf: Uint8Array;
 
   beforeEach(async () => {
-    vi.mocked(ocrGetEngineInfo).mockResolvedValue({ engineName: "Test adapter", isOffline: true, supportedLanguages: ["en-US"] });
-    vi.mocked(ocrRecognizePage).mockResolvedValue({ pageIndex: 0, language: "en-US", lines: [], fullText: "Synthetic adapter result", meanConfidence: 0 });
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
-    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,AA==");
+    vi.mocked(ocrGetEngineInfo).mockResolvedValue({
+      engineName: "Test adapter",
+      isOffline: true,
+      supportedLanguages: ["en-US"],
+    });
+    vi.mocked(ocrRecognizePage).mockResolvedValue({
+      pageIndex: 0,
+      language: "en-US",
+      lines: [],
+      fullText: "Synthetic adapter result",
+      meanConfidence: 0,
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      {} as CanvasRenderingContext2D,
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/png;base64,AA==",
+    );
     samplePdf = await createBlankDocument(3, 600, 800);
   });
 
@@ -68,12 +82,19 @@ describe("OcrPanel UI Component (P6.4)", () => {
     vi.mocked(ocrGetEngineInfo).mockRejectedValueOnce(new Error("OCR unavailable"));
     render(<OcrPanel controller={createMockController(samplePdf)} onClose={vi.fn()} />);
     await screen.findByText("OCR unavailable");
-    expect(screen.getByRole("button", { name: /Apply Searchable Layer/i }).hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: /Apply Searchable Layer/i }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("does not apply the final page after cancellation", async () => {
     let finish!: (value: Awaited<ReturnType<typeof ocrRecognizePage>>) => void;
-    vi.mocked(ocrRecognizePage).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(ocrRecognizePage).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
     const controller = createMockController(samplePdf);
     render(<OcrPanel controller={controller} onClose={vi.fn()} />);
     const button = screen.getByRole("button", { name: /Apply Searchable Layer/i });
@@ -81,13 +102,21 @@ describe("OcrPanel UI Component (P6.4)", () => {
     fireEvent.click(button);
     await waitFor(() => expect(finish).toBeDefined());
     fireEvent.click(screen.getByRole("button", { name: "Cancel OCR" }));
-    finish({ pageIndex: 0, language: "en-US", lines: [], fullText: "cancelled", meanConfidence: 0 });
+    finish({
+      pageIndex: 0,
+      language: "en-US",
+      lines: [],
+      fullText: "cancelled",
+      meanConfidence: 0,
+    });
     await waitFor(() => expect(screen.queryByText("Cancel OCR")).toBeNull());
     expect(controller.replaceWithBytes).not.toHaveBeenCalled();
   });
 
   it("does not call recognition when canvas encoding fails", async () => {
-    vi.mocked(HTMLCanvasElement.prototype.toDataURL).mockImplementationOnce(() => { throw new Error("Canvas failed"); });
+    vi.mocked(HTMLCanvasElement.prototype.toDataURL).mockImplementationOnce(() => {
+      throw new Error("Canvas failed");
+    });
     const controller = createMockController(samplePdf);
     vi.mocked(ocrRecognizePage).mockClear();
     render(<OcrPanel controller={controller} onClose={vi.fn()} />);

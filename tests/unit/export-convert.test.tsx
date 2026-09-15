@@ -51,16 +51,17 @@ beforeEach(() => {
 const originalCreateElement = Document.prototype.createElement;
 
 function mockCanvas2d() {
-  const spy = vi.spyOn(document, "createElement").mockImplementation(
-    ((tag: string, options?: ElementCreationOptions) => {
-      const el = originalCreateElement.call(document, tag, options);
-      if (tag === "canvas") {
-        el.getContext = vi.fn(() => ({}));
-        el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
-      }
-      return el;
-    }) as typeof document.createElement,
-  );
+  const spy = vi.spyOn(document, "createElement").mockImplementation(((
+    tag: string,
+    options?: ElementCreationOptions,
+  ) => {
+    const el = originalCreateElement.call(document, tag, options);
+    if (tag === "canvas") {
+      el.getContext = vi.fn(() => ({}));
+      el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
+    }
+    return el;
+  }) as typeof document.createElement);
   return spy;
 }
 
@@ -69,12 +70,8 @@ describe("ExportDialog", () => {
     seedDocument(2);
     const controller = textPages(["hello world", "second page"]);
     const onClose = vi.fn();
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
-    render(
-      <ExportDialog controller={controller as never} onClose={onClose} />,
-    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<ExportDialog controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Export"));
     await vi.waitFor(() => {
       expect(onClose).toHaveBeenCalled();
@@ -87,23 +84,20 @@ describe("ExportDialog", () => {
   it("exports the current page as PNG and JPEG", async () => {
     seedDocument();
     const toDataURL = vi.fn(() => "data:image/png;base64,AAA");
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tag: string, options?: ElementCreationOptions) => {
-        const el = originalCreateElement.call(document, tag, options);
-        if (tag === "canvas") {
-          el.getContext = vi.fn(() => ({}));
-          el.toDataURL = toDataURL;
-        }
-        return el;
-      }) as typeof document.createElement,
-    );
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tag: string,
+      options?: ElementCreationOptions,
+    ) => {
+      const el = originalCreateElement.call(document, tag, options);
+      if (tag === "canvas") {
+        el.getContext = vi.fn(() => ({}));
+        el.toDataURL = toDataURL;
+      }
+      return el;
+    }) as typeof document.createElement);
     const controller = textPages(["hello"]);
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
-    render(
-      <ExportDialog controller={controller as never} onClose={() => {}} />,
-    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<ExportDialog controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("PNG Image"));
     fireEvent.click(screen.getByText("Export"));
     await vi.waitFor(() => {
@@ -139,9 +133,7 @@ describe("OfficeExport", () => {
   it("exports genuine DOCX and XLSX packages with previewed cells", async () => {
     seedDocument(2);
     const controller = layoutPages([["Name", "Amount", "Alpha", "=1+1"], ["Second page"]]);
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const created: Blob[] = [];
     const original = URL.createObjectURL;
     URL.createObjectURL = vi.fn((blob: Blob) => {
@@ -149,9 +141,7 @@ describe("OfficeExport", () => {
       return "blob:mock";
     });
     const onClose = vi.fn();
-    const { unmount } = render(
-      <OfficeExport controller={controller as never} onClose={onClose} />,
-    );
+    const { unmount } = render(<OfficeExport controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Export File"));
     await vi.waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect(created[0].type).toBe(
@@ -176,9 +166,7 @@ describe("OfficeExport", () => {
   it("exports RTF and explains the conversion limits", async () => {
     seedDocument();
     const controller = layoutPages([["Only line"]]);
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     render(<OfficeExport controller={controller as never} onClose={() => {}} />);
     expect(screen.getByText(/Editable formats are rebuilt from the PDF text layer/)).toBeTruthy();
     fireEvent.click(screen.getByLabelText(/Rich Text/));
@@ -207,7 +195,9 @@ describe("OcrPanel", () => {
     render(<OcrPanel controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Extract Text Only/i }));
     await screen.findByText(/OCR requires the native macOS application/i);
-    expect(screen.getByRole("button", { name: /Recognize Text/i }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: /Recognize Text/i }).hasAttribute("disabled")).toBe(
+      true,
+    );
     expect(screen.queryByText("Recognized Text")).toBeNull();
     canvasMock.mockRestore();
   });
@@ -224,9 +214,7 @@ describe("AssistantPanel", () => {
       goTo: vi.fn(),
     };
     const onClose = vi.fn();
-    render(
-      <AssistantPanel controller={controller as never} onClose={onClose} />,
-    );
+    render(<AssistantPanel controller={controller as never} onClose={onClose} />);
     fireEvent.change(screen.getByLabelText("Words to find"), {
       target: { value: "renewal notice period" },
     });

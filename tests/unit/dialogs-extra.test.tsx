@@ -57,24 +57,25 @@ async function mockController(pages = 3) {
 const originalCreateElement = Document.prototype.createElement;
 
 function mockCanvas2d() {
-  return vi.spyOn(document, "createElement").mockImplementation(
-    ((tag: string, options?: ElementCreationOptions) => {
-      const el = originalCreateElement.call(document, tag, options);
-      if (tag === "canvas") {
-        el.getContext = vi.fn(() => ({
-          beginPath: vi.fn(),
-          moveTo: vi.fn(),
-          lineTo: vi.fn(),
-          stroke: vi.fn(),
-          clearRect: vi.fn(),
-          fillRect: vi.fn(),
-          fillText: vi.fn(),
-        }));
-        el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
-      }
-      return el;
-    }) as typeof document.createElement,
-  );
+  return vi.spyOn(document, "createElement").mockImplementation(((
+    tag: string,
+    options?: ElementCreationOptions,
+  ) => {
+    const el = originalCreateElement.call(document, tag, options);
+    if (tag === "canvas") {
+      el.getContext = vi.fn(() => ({
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        stroke: vi.fn(),
+        clearRect: vi.fn(),
+        fillRect: vi.fn(),
+        fillText: vi.fn(),
+      }));
+      el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
+    }
+    return el;
+  }) as typeof document.createElement);
 }
 
 function textController(texts: string[]) {
@@ -104,9 +105,7 @@ describe("FillAndSign draw, type, and library management", () => {
     seedDocument();
     const canvasMock = mockCanvas2d();
     const controller = await mockController();
-    render(
-      <FillAndSign controller={controller as never} onClose={() => {}} />,
-    );
+    render(<FillAndSign controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Draw"));
     const canvas = document.querySelector(".sig-canvas") as HTMLCanvasElement;
     fireEvent.mouseDown(canvas, { clientX: 10, clientY: 10 });
@@ -116,9 +115,7 @@ describe("FillAndSign draw, type, and library management", () => {
     fireEvent.click(screen.getByText("Save Signature"));
     expect(await screen.findByText("Signature 1")).toBeTruthy();
     fireEvent.click(screen.getByText("Signature 1"));
-    const remove = document.querySelector(
-      ".sig-card .icon-button.danger",
-    ) as HTMLElement;
+    const remove = document.querySelector(".sig-card .icon-button.danger") as HTMLElement;
     fireEvent.click(remove);
     expect(screen.queryByText("Signature 1")).toBeNull();
     canvasMock.mockRestore();
@@ -127,9 +124,7 @@ describe("FillAndSign draw, type, and library management", () => {
   it("saves a typed signature to the library", async () => {
     seedDocument();
     const canvasMock = mockCanvas2d();
-    render(
-      <FillAndSign controller={null} onClose={() => {}} />,
-    );
+    render(<FillAndSign controller={null} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Type"));
     fireEvent.change(screen.getByPlaceholderText("Type your name..."), {
       target: { value: "Ada Lovelace" },
@@ -153,14 +148,11 @@ describe("FormManager field types", () => {
   it("creates checked checkboxes and labeled buttons", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <FormManager controller={controller as never} onClose={() => {}} />,
-    );
+    render(<FormManager controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Checkbox"));
-    fireEvent.change(
-      screen.getByPlaceholderText("e.g. FirstName, SignatureDate, Agreed"),
-      { target: { value: "Agreed" } },
-    );
+    fireEvent.change(screen.getByPlaceholderText("e.g. FirstName, SignatureDate, Agreed"), {
+      target: { value: "Agreed" },
+    });
     fireEvent.change(screen.getByPlaceholderText("Optional default value"), {
       target: { value: "true" },
     });
@@ -169,10 +161,9 @@ describe("FormManager field types", () => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(1);
     });
     fireEvent.click(screen.getByText("Button"));
-    fireEvent.change(
-      screen.getByPlaceholderText("e.g. FirstName, SignatureDate, Agreed"),
-      { target: { value: "Submit" } },
-    );
+    fireEvent.change(screen.getByPlaceholderText("e.g. FirstName, SignatureDate, Agreed"), {
+      target: { value: "Submit" },
+    });
     fireEvent.click(screen.getByText("Add Field"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(2);
@@ -182,10 +173,9 @@ describe("FormManager field types", () => {
   it("requires a field name and edits the target page", () => {
     seedDocument();
     render(<FormManager controller={null} onClose={() => {}} />);
-    expect(
-      (screen.getByText("Add Field").closest("button") as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    expect((screen.getByText("Add Field").closest("button") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     const pages = screen.getAllByDisplayValue("1");
     fireEvent.change(pages[pages.length - 1], { target: { value: "2" } });
     fireEvent.click(screen.getByText("Cancel"));
@@ -197,16 +187,10 @@ describe("DecorationsDialog inputs", () => {
     seedDocument(2);
     const controller = await mockController(2);
     const onClose = vi.fn();
-    render(
-      <DecorationsDialog controller={controller as never} onClose={onClose} />,
-    );
-    const watermark = document.querySelector(
-      '.modal-body input[type="text"]',
-    ) as HTMLInputElement;
+    render(<DecorationsDialog controller={controller as never} onClose={onClose} />);
+    const watermark = document.querySelector('.modal-body input[type="text"]') as HTMLInputElement;
     fireEvent.change(watermark, { target: { value: "DRAFT" } });
-    const opacity = document.querySelector(
-      '.modal-body input[type="range"]',
-    ) as HTMLInputElement;
+    const opacity = document.querySelector('.modal-body input[type="range"]') as HTMLInputElement;
     fireEvent.change(opacity, { target: { value: "0.5" } });
     fireEvent.click(screen.getByText("Header & Footer"));
     fireEvent.change(screen.getByPlaceholderText("e.g. {date}"), {
@@ -218,9 +202,12 @@ describe("DecorationsDialog inputs", () => {
     fireEvent.change(numbers[1], { target: { value: "4" } });
     expect(screen.getByText(/Preview:/)).toBeTruthy();
     fireEvent.click(screen.getByText("Background"));
-    fireEvent.change(document.querySelector('.modal-body input[type="color"]') as HTMLInputElement, {
-      target: { value: "#ff0000" },
-    });
+    fireEvent.change(
+      document.querySelector('.modal-body input[type="color"]') as HTMLInputElement,
+      {
+        target: { value: "#ff0000" },
+      },
+    );
     fireEvent.click(screen.getByText("Apply to All Pages"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalled();
@@ -231,9 +218,7 @@ describe("DecorationsDialog inputs", () => {
 
   it("does nothing without a document revision", () => {
     seedDocument();
-    render(
-      <DecorationsDialog controller={{ pdf: null } as never} onClose={() => {}} />,
-    );
+    render(<DecorationsDialog controller={{ pdf: null } as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Apply to All Pages"));
   });
 });
@@ -242,20 +227,24 @@ describe("ContentEditor extras", () => {
   it("cancels, picks image files, and edits the target page", () => {
     seedDocument();
     const onClose = vi.fn();
-    render(
-      <ContentEditor controller={null} type="text" onClose={onClose} />,
-    );
+    render(<ContentEditor controller={null} type="text" onClose={onClose} />);
     const pages = screen.getAllByDisplayValue("1");
     fireEvent.change(pages[0], { target: { value: "2" } });
     fireEvent.change(screen.getByPlaceholderText("Enter text to place on page..."), {
       target: { value: "x" },
     });
-    fireEvent.change(document.querySelector('.modal-body input[type="number"]') as HTMLInputElement, {
-      target: { value: "18" },
-    });
-    fireEvent.change(document.querySelector('.modal-body input[type="color"]') as HTMLInputElement, {
-      target: { value: "#ff0000" },
-    });
+    fireEvent.change(
+      document.querySelector('.modal-body input[type="number"]') as HTMLInputElement,
+      {
+        target: { value: "18" },
+      },
+    );
+    fireEvent.change(
+      document.querySelector('.modal-body input[type="color"]') as HTMLInputElement,
+      {
+        target: { value: "#ff0000" },
+      },
+    );
     fireEvent.click(screen.getByText("Cancel"));
     expect(onClose).toHaveBeenCalled();
   });
@@ -263,13 +252,9 @@ describe("ContentEditor extras", () => {
   it("opens the file picker for images and ignores empty picks", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <ContentEditor controller={controller as never} type="image" onClose={() => {}} />,
-    );
+    render(<ContentEditor controller={controller as never} type="image" onClose={() => {}} />);
     fireEvent.click(screen.getByText("Choose PNG or JPEG..."));
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [] } });
     expect(controller.replaceWithBytes).not.toHaveBeenCalled();
   });
@@ -277,12 +262,10 @@ describe("ContentEditor extras", () => {
   it("surfaces mutation failures", async () => {
     seedDocument();
     const controller = await mockController();
-    (controller.pdf as { saveDocument: ReturnType<typeof vi.fn> }).saveDocument.mockRejectedValueOnce(
-      new Error("locked"),
-    );
-    render(
-      <ContentEditor controller={controller as never} type="text" onClose={() => {}} />,
-    );
+    (
+      controller.pdf as { saveDocument: ReturnType<typeof vi.fn> }
+    ).saveDocument.mockRejectedValueOnce(new Error("locked"));
+    render(<ContentEditor controller={controller as never} type="text" onClose={() => {}} />);
     fireEvent.change(screen.getByPlaceholderText("Enter text to place on page..."), {
       target: { value: "boom" },
     });
@@ -310,9 +293,7 @@ describe("CreatePdfDialog extras", () => {
   it("rejects non-PDF content when combining", async () => {
     render(<CreatePdfDialog onLoad={() => {}} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Combine Multiple Files"));
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, {
       target: { files: [new File(["nope"], "x.pdf", { type: "application/pdf" })] },
     });
@@ -329,9 +310,7 @@ describe("PrintDialog extras", () => {
     seedDocument(5);
     const controller = await mockController(5);
     const onClose = vi.fn();
-    render(
-      <PrintDialog controller={controller as never} onClose={onClose} />,
-    );
+    render(<PrintDialog controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText(/Current page/));
     fireEvent.click(screen.getByText(/^Pages:/));
     fireEvent.change(screen.getByPlaceholderText("e.g. 1-3, 5"), {
@@ -350,9 +329,7 @@ describe("PrintDialog extras", () => {
   it("rejects a custom range that selects no pages", async () => {
     seedDocument(5);
     const controller = await mockController(5);
-    render(
-      <PrintDialog controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PrintDialog controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText(/^Pages:/));
     fireEvent.change(screen.getByPlaceholderText("e.g. 1-3, 5"), {
       target: { value: "99" },
@@ -366,12 +343,10 @@ describe("PrintDialog extras", () => {
   it("surfaces staging failures", async () => {
     seedDocument();
     const controller = await mockController();
-    (controller.pdf as { saveDocument: ReturnType<typeof vi.fn> }).saveDocument.mockRejectedValueOnce(
-      new Error("no bytes"),
-    );
-    render(
-      <PrintDialog controller={controller as never} onClose={() => {}} />,
-    );
+    (
+      controller.pdf as { saveDocument: ReturnType<typeof vi.fn> }
+    ).saveDocument.mockRejectedValueOnce(new Error("no bytes"));
+    render(<PrintDialog controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Print"));
     await vi.waitFor(() => {
       expect(useWorkspace.getState().error).toBe("no bytes");
@@ -384,9 +359,7 @@ describe("CompressDialog outside the desktop app", () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <CompressDialog controller={controller as never} onClose={onClose} />,
-    );
+    render(<CompressDialog controller={controller as never} onClose={onClose} />);
     expect(screen.getByText(/runs only in the desktop app/)).toBeTruthy();
     fireEvent.click(screen.getByLabelText(/Lossless/));
     expect((screen.getByLabelText(/Lossless/) as HTMLInputElement).checked).toBe(true);
@@ -402,12 +375,8 @@ describe("OfficeExport formats", () => {
   it("refuses documents without a text layer instead of exporting empty files", async () => {
     seedDocument(2);
     const controller = textController(["one two", "three four"]);
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
-    render(
-      <OfficeExport controller={controller as never} onClose={() => {}} />,
-    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<OfficeExport controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByLabelText(/editable text/));
     fireEvent.click(screen.getByText("Export File"));
     await vi.waitFor(() => {
@@ -429,12 +398,8 @@ describe("ExportDialog JPG and failures", () => {
     seedDocument();
     const canvasMock = mockCanvas2d();
     const controller = textController(["hello"]);
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
-    render(
-      <ExportDialog controller={controller as never} onClose={() => {}} />,
-    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<ExportDialog controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("JPEG Image"));
     expect(screen.getByRole("button", { name: /150 DPI/i })).toBeTruthy();
     fireEvent.click(screen.getByText("Export"));
@@ -452,9 +417,7 @@ describe("ExportDialog JPG and failures", () => {
     (controller.pdf as { getPage: ReturnType<typeof vi.fn> }).getPage.mockRejectedValueOnce(
       new Error("bad page"),
     );
-    render(
-      <ExportDialog controller={controller as never} onClose={() => {}} />,
-    );
+    render(<ExportDialog controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Export"));
     await vi.waitFor(() => {
       expect(useWorkspace.getState().error).toBe("bad page");
@@ -466,10 +429,15 @@ describe("AssistantPanel without a model", () => {
   it("states that nothing is generated and answers unsupported questions honestly", async () => {
     seedDocument();
     render(
-      <AssistantPanel controller={textController(["alpha beta gamma"]) as never} onClose={() => {}} />,
+      <AssistantPanel
+        controller={textController(["alpha beta gamma"]) as never}
+        onClose={() => {}}
+      />,
     );
     expect(screen.getByText(/No local language model is installed/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Words to find"), { target: { value: "quarterly revenue" } });
+    fireEvent.change(screen.getByLabelText("Words to find"), {
+      target: { value: "quarterly revenue" },
+    });
     fireEvent.click(screen.getByText("Find Passages"));
     expect(await screen.findByText(/nothing to cite/)).toBeTruthy();
   });
@@ -480,10 +448,10 @@ describe("AssistantPanel without a model", () => {
     (controller.pdf as { getPage: ReturnType<typeof vi.fn> }).getPage.mockRejectedValueOnce(
       new Error("no text"),
     );
-    render(
-      <AssistantPanel controller={controller as never} onClose={() => {}} />,
-    );
-    fireEvent.change(screen.getByLabelText("Words to find"), { target: { value: "anything here" } });
+    render(<AssistantPanel controller={controller as never} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Words to find"), {
+      target: { value: "anything here" },
+    });
     fireEvent.click(screen.getByText("Find Passages"));
     await vi.waitFor(() => {
       expect(useWorkspace.getState().error).toBe("no text");
@@ -496,19 +464,13 @@ describe("AttachmentsDialog download and close", () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <AttachmentsDialog controller={controller as never} onClose={onClose} />,
-    );
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
+    render(<AttachmentsDialog controller={controller as never} onClose={onClose} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, {
       target: { files: [new File(["data"], "a.txt", { type: "text/plain" })] },
     });
     expect(await screen.findByText("a.txt")).toBeTruthy();
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     fireEvent.click(screen.getByTitle("Download attachment"));
     expect(click).toHaveBeenCalled();
     click.mockRestore();

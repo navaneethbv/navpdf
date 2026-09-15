@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createCommentExchange,
-  parseCommentExchange,
-} from "../../src/services/comment-exchange";
+import { createCommentExchange, parseCommentExchange } from "../../src/services/comment-exchange";
 
 const comment = {
   id: "a1",
@@ -48,28 +45,28 @@ describe("local comment exchange", () => {
 
   it("rejects mismatched schemas, versions, or missing documentId", () => {
     const base = createCommentExchange("document-1", 4, [comment]);
-    expect(() =>
-      parseCommentExchange(JSON.stringify({ ...base, schema: "other" }), 4),
-    ).toThrow("This is not a NavPDF comment exchange file.");
-    expect(() =>
-      parseCommentExchange(JSON.stringify({ ...base, version: 3 }), 4),
-    ).toThrow("This is not a NavPDF comment exchange file.");
-    expect(() =>
-      parseCommentExchange(JSON.stringify({ ...base, documentId: "" }), 4),
-    ).toThrow("The comment file has no document identity.");
-    expect(() =>
-      parseCommentExchange(JSON.stringify({ ...base, documentId: 123 }), 4),
-    ).toThrow("The comment file has no document identity.");
+    expect(() => parseCommentExchange(JSON.stringify({ ...base, schema: "other" }), 4)).toThrow(
+      "This is not a NavPDF comment exchange file.",
+    );
+    expect(() => parseCommentExchange(JSON.stringify({ ...base, version: 3 }), 4)).toThrow(
+      "This is not a NavPDF comment exchange file.",
+    );
+    expect(() => parseCommentExchange(JSON.stringify({ ...base, documentId: "" }), 4)).toThrow(
+      "The comment file has no document identity.",
+    );
+    expect(() => parseCommentExchange(JSON.stringify({ ...base, documentId: 123 }), 4)).toThrow(
+      "The comment file has no document identity.",
+    );
   });
 
   it("rejects layout mismatches and missing comment arrays", () => {
     const base = createCommentExchange("document-1", 4, [comment]);
-    expect(() =>
-      parseCommentExchange(JSON.stringify({ ...base, pageCount: 5 }), 4),
-    ).toThrow("These comments were exported from a different page layout.");
-    expect(() =>
-      parseCommentExchange(JSON.stringify({ ...base, comments: null }), 4),
-    ).toThrow("The comment file has no comments.");
+    expect(() => parseCommentExchange(JSON.stringify({ ...base, pageCount: 5 }), 4)).toThrow(
+      "These comments were exported from a different page layout.",
+    );
+    expect(() => parseCommentExchange(JSON.stringify({ ...base, comments: null }), 4)).toThrow(
+      "The comment file has no comments.",
+    );
   });
 
   it("rejects invalid or duplicate comments", () => {
@@ -78,16 +75,10 @@ describe("local comment exchange", () => {
       parseCommentExchange(JSON.stringify({ ...base, comments: ["not-obj"] }), 4),
     ).toThrow("The comment file contains an invalid comment.");
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment }, comment] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment }, comment] }), 4),
     ).toThrow(/invalid or duplicate/);
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment, id: "" }] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment, id: "" }] }), 4),
     ).toThrow(/invalid or duplicate/);
     expect(() =>
       parseCommentExchange(
@@ -96,28 +87,16 @@ describe("local comment exchange", () => {
       ),
     ).toThrow(/invalid or duplicate/);
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment, page: 0 }] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment, page: 0 }] }), 4),
     ).toThrow(/invalid or duplicate/);
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment, page: 9 }] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment, page: 9 }] }), 4),
     ).toThrow(/invalid or duplicate/);
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment, page: 1.5 }] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment, page: 1.5 }] }), 4),
     ).toThrow(/invalid or duplicate/);
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment, text: 123 }] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment, text: 123 }] }), 4),
     ).toThrow(/invalid or duplicate/);
   });
 
@@ -154,16 +133,10 @@ describe("local comment exchange", () => {
       ),
     ).toThrow("The comment file contains an invalid opacity.");
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment, width: 0.1 }] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment, width: 0.1 }] }), 4),
     ).toThrow("The comment file contains an invalid stroke width.");
     expect(() =>
-      parseCommentExchange(
-        JSON.stringify({ ...base, comments: [{ ...comment, width: 25 }] }),
-        4,
-      ),
+      parseCommentExchange(JSON.stringify({ ...base, comments: [{ ...comment, width: 25 }] }), 4),
     ).toThrow("The comment file contains an invalid stroke width.");
   });
 
@@ -192,10 +165,7 @@ describe("local comment exchange", () => {
       opacity: 0.4,
     };
 
-    const exchange = createCommentExchange("doc-fidelity", 2, [
-      arrowComment,
-      highlightWithQuads,
-    ]);
+    const exchange = createCommentExchange("doc-fidelity", 2, [arrowComment, highlightWithQuads]);
     const parsed = parseCommentExchange(JSON.stringify(exchange), 2);
     expect(parsed.comments).toHaveLength(2);
     expect(parsed.comments[0]).toEqual(arrowComment);
@@ -233,9 +203,21 @@ describe("local comment exchange", () => {
   it("derives identity from the PDF.js fingerprint when the info dictionary has no ID", async () => {
     const { contentIdentity } = await import("../../src/services/document-identity");
     const noId = async () => ({ info: {} });
-    const first = await contentIdentity({ numPages: 3, fingerprints: ["abc", null], getMetadata: noId });
-    const reopened = await contentIdentity({ numPages: 3, fingerprints: ["abc", null], getMetadata: noId });
-    const other = await contentIdentity({ numPages: 3, fingerprints: ["def", null], getMetadata: noId });
+    const first = await contentIdentity({
+      numPages: 3,
+      fingerprints: ["abc", null],
+      getMetadata: noId,
+    });
+    const reopened = await contentIdentity({
+      numPages: 3,
+      fingerprints: ["abc", null],
+      getMetadata: noId,
+    });
+    const other = await contentIdentity({
+      numPages: 3,
+      fingerprints: ["def", null],
+      getMetadata: noId,
+    });
     expect(first).toBe(reopened);
     expect(first).not.toBe(other);
   });

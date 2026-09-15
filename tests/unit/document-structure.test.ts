@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PDFDocument,
-  PDFArray,
-  PDFDict,
-  PDFName,
-  PDFNumber,
-  PDFString,
-} from "pdf-lib";
+import { PDFDocument, PDFArray, PDFDict, PDFName, PDFNumber, PDFString } from "pdf-lib";
 import {
   describeStructureLoss,
   extractPages,

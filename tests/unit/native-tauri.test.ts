@@ -86,11 +86,7 @@ describe("native service Tauri paths", () => {
   });
 
   it("writes and opens recovery copies through IPC", async () => {
-    await writeRecovery(
-      { id: "n1", name: "n.pdf", size: 1 },
-      new Uint8Array([1, 2]),
-      2,
-    );
+    await writeRecovery({ id: "n1", name: "n.pdf", size: 1 }, new Uint8Array([1, 2]), 2);
     expect(invoke).toHaveBeenCalledWith(
       "write_recovery",
       new Uint8Array([1, 2]),

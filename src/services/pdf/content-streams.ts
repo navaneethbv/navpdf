@@ -35,11 +35,7 @@ export function appendTaggedStream(
  * Preserves all other content streams intact.
  * If all streams were decorations and none remain, removes the Contents entry cleanly.
  */
-export function removeTaggedStreams(
-  doc: PDFDocument,
-  page: PDFPage,
-  tag: string,
-): number {
+export function removeTaggedStreams(doc: PDFDocument, page: PDFPage, tag: string): number {
   const contents = page.node.Contents();
   if (!(contents instanceof PDFArray)) return 0;
 

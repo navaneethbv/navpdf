@@ -58,7 +58,9 @@ describe("certificate signature dialog", () => {
     engine.saveSignedCopy.mockResolvedValue({ name: "synthetic-signed.pdf", size: 900 });
     const view = controller();
     const onClose = vi.fn();
-    const { unmount } = render(<CertificateSignature controller={view as never} onClose={onClose} />);
+    const { unmount } = render(
+      <CertificateSignature controller={view as never} onClose={onClose} />,
+    );
 
     expect(await screen.findByText("This file has no certificate signatures.")).toBeTruthy();
     expect(engine.verifySignatures).toHaveBeenCalledWith("doc");
@@ -98,7 +100,8 @@ describe("certificate signature dialog", () => {
         reason: null,
         subFilter: "ETSI.CAdES.detached",
         status: "valid",
-        message: "The signed revision is unchanged, but the document was changed after this signature.",
+        message:
+          "The signed revision is unchanged, but the document was changed after this signature.",
         coversWholeDocument: false,
         certification: 2,
       },
@@ -153,13 +156,17 @@ describe("certificate signature dialog", () => {
     engine.verifySignatures.mockRejectedValue(
       new Error("Signatures in password-protected PDFs cannot be checked yet."),
     );
-    engine.chooseCertificate.mockRejectedValue(new Error("The certificate file could not be opened."));
+    engine.chooseCertificate.mockRejectedValue(
+      new Error("The certificate file could not be opened."),
+    );
     render(<CertificateSignature controller={controller() as never} onClose={() => {}} />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/cannot be checked yet/);
     expect(screen.queryByText("Checking signatures…")).toBeNull();
     fireEvent.click(screen.getByText("Choose Certificate…"));
     await vi.waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toBe("The certificate file could not be opened."),
+      expect(screen.getByRole("alert").textContent).toBe(
+        "The certificate file could not be opened.",
+      ),
     );
   });
 });

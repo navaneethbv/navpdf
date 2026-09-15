@@ -46,13 +46,7 @@ interface ToolItem {
   disabled?: boolean;
 }
 
-export function ToolPanel({
-  mode,
-  onClose,
-}: {
-  mode: ToolMode;
-  onClose: () => void;
-}) {
+export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => void }) {
   const [search, setSearch] = useState("");
   const s = useWorkspace();
   const hasDoc = !!s.document;
@@ -368,22 +362,19 @@ export function ToolPanel({
     if (mode === "create" && !["create-blank", "combine-files"].includes(t.id)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
-    return (
-      t.label.toLowerCase().includes(q) ||
-      t.description.toLowerCase().includes(q)
-    );
+    return t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
   });
 
   const title =
     mode === "all"
       ? "All Tools"
       : mode === "edit"
-      ? "Edit PDF"
-      : mode === "convert"
-      ? "Convert & Export"
-      : mode === "esign"
-      ? "Fill & Sign"
-      : "Create PDF";
+        ? "Edit PDF"
+        : mode === "convert"
+          ? "Convert & Export"
+          : mode === "esign"
+            ? "Fill & Sign"
+            : "Create PDF";
 
   return (
     <div className="tool-drawer" role="region" aria-label={title}>
@@ -392,11 +383,7 @@ export function ToolPanel({
           <h3>{title}</h3>
           <span className="tool-count">{filtered.length} tools</span>
         </div>
-        <button
-          className="icon-button"
-          onClick={onClose}
-          aria-label="Close tools panel"
-        >
+        <button className="icon-button" onClick={onClose} aria-label="Close tools panel">
           <X size={18} />
         </button>
       </div>

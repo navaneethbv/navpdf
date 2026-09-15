@@ -18,34 +18,44 @@ import {
 type Format = "docx" | "xlsx" | "pptx-text" | "pptx-images" | "rtf";
 
 const PRESENTATION = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-const FORMATS: { id: Format; label: string; extension: string; mime: string; description: string }[] = [
+const FORMATS: {
+  id: Format;
+  label: string;
+  extension: string;
+  mime: string;
+  description: string;
+}[] = [
   {
     id: "docx",
     label: "Word document (.docx)",
     extension: "docx",
     mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    description: "Editable paragraphs and headings rebuilt from the PDF text layer, with a page break per page.",
+    description:
+      "Editable paragraphs and headings rebuilt from the PDF text layer, with a page break per page.",
   },
   {
     id: "xlsx",
     label: "Excel workbook (.xlsx)",
     extension: "xlsx",
     mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    description: "One sheet per page with text aligned into columns. Numbers and ISO dates become typed cells; formulas are never created.",
+    description:
+      "One sheet per page with text aligned into columns. Numbers and ISO dates become typed cells; formulas are never created.",
   },
   {
     id: "pptx-text",
     label: "PowerPoint, editable text (.pptx)",
     extension: "pptx",
     mime: PRESENTATION,
-    description: "One slide per page with each text line as an editable text box. Images and drawings are not carried over.",
+    description:
+      "One slide per page with each text line as an editable text box. Images and drawings are not carried over.",
   },
   {
     id: "pptx-images",
     label: "PowerPoint, page pictures (.pptx)",
     extension: "pptx",
     mime: PRESENTATION,
-    description: "One slide per page showing a 150 dpi picture of the page. Appearance is kept; text is not editable.",
+    description:
+      "One slide per page showing a 150 dpi picture of the page. Appearance is kept; text is not editable.",
   },
   {
     id: "rtf",
@@ -63,15 +73,23 @@ const MAX_PICTURE_EDGE = 4096;
 interface PageProxy {
   getViewport(options: { scale: number }): { width: number; height: number };
   getTextContent(): Promise<{ items: unknown[] }>;
-  render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): { promise: Promise<void> };
+  render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): {
+    promise: Promise<void>;
+  };
 }
 
 function isTextItem(item: unknown): item is TextItem {
   const candidate = item as Partial<TextItem>;
-  return typeof candidate?.str === "string" && Array.isArray(candidate.transform) && typeof candidate.width === "number";
+  return (
+    typeof candidate?.str === "string" &&
+    Array.isArray(candidate.transform) &&
+    typeof candidate.width === "number"
+  );
 }
 
-async function pagePicture(page: PageProxy): Promise<{ width: number; height: number; image: Uint8Array }> {
+async function pagePicture(
+  page: PageProxy,
+): Promise<{ width: number; height: number; image: Uint8Array }> {
   const base = page.getViewport({ scale: 1 });
   const scale = Math.min(PICTURE_DPI / 72, MAX_PICTURE_EDGE / Math.max(base.width, base.height));
   const viewport = page.getViewport({ scale });
@@ -85,7 +103,11 @@ async function pagePicture(page: PageProxy): Promise<{ width: number; height: nu
   await page.render({ canvasContext: context, viewport }).promise;
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("A page picture could not be encoded.");
-  return { width: base.width, height: base.height, image: new Uint8Array(await blob.arrayBuffer()) };
+  return {
+    width: base.width,
+    height: base.height,
+    image: new Uint8Array(await blob.arrayBuffer()),
+  };
 }
 
 export function OfficeExport({
@@ -102,7 +124,10 @@ export function OfficeExport({
   const [preview, setPreview] = useState<string[][] | null>(null);
   const cancelled = useRef(false);
   const selected = FORMATS.find((item) => item.id === format) ?? FORMATS[0];
-  const baseName = safeFileName((s.document?.name ?? "document").replace(/\.pdf$/i, ""), "document");
+  const baseName = safeFileName(
+    (s.document?.name ?? "document").replace(/\.pdf$/i, ""),
+    "document",
+  );
 
   const layouts = async (limit?: number): Promise<PageLayout[] | null> => {
     const pdf = controller?.pdf;
@@ -140,7 +165,9 @@ export function OfficeExport({
       let bytes: Uint8Array<ArrayBuffer> | string;
       if (format === "pptx-images") {
         if (pdf.numPages > MAX_PICTURE_SLIDES)
-          throw new Error(`Picture slides are limited to ${MAX_PICTURE_SLIDES} pages. Export a page range first.`);
+          throw new Error(
+            `Picture slides are limited to ${MAX_PICTURE_SLIDES} pages. Export a page range first.`,
+          );
         const slides: Slide[] = [];
         for (let number = 1; number <= pdf.numPages; number++) {
           if (cancelled.current) return;
@@ -152,18 +179,27 @@ export function OfficeExport({
         const pages = await layouts();
         if (!pages) return;
         if (!pages.some((page) => page.lines.length))
-          throw new Error("This PDF has no text layer to convert. Run OCR first, or export page pictures.");
+          throw new Error(
+            "This PDF has no text layer to convert. Run OCR first, or export page pictures.",
+          );
         bytes =
           format === "docx"
             ? buildDocx(pages, baseName)
             : format === "xlsx"
-              ? buildXlsx(pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) })))
+              ? buildXlsx(
+                  pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) })),
+                )
               : format === "pptx-text"
                 ? buildPptx(
                     pages.map((page) => ({
                       width: page.width,
                       height: page.height,
-                      boxes: page.lines.map((line) => ({ x: line.x, y: line.y, size: line.size, text: line.text })),
+                      boxes: page.lines.map((line) => ({
+                        x: line.x,
+                        y: line.y,
+                        size: line.size,
+                        text: line.text,
+                      })),
                     })),
                     baseName,
                   )
@@ -182,7 +218,12 @@ export function OfficeExport({
     });
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Export to Office Formats">
+    <div
+      className="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Export to Office Formats"
+    >
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -216,12 +257,16 @@ export function OfficeExport({
             ))}
           </fieldset>
           <p className="field-hint">
-            Editable formats are rebuilt from the PDF text layer: fonts, images,
-            vector drawings and exact positions are not carried over, and scanned
-            pages need OCR first. Files are created on this device.
+            Editable formats are rebuilt from the PDF text layer: fonts, images, vector drawings and
+            exact positions are not carried over, and scanned pages need OCR first. Files are
+            created on this device.
           </p>
           {format === "xlsx" && (
-            <button className="button-secondary" onClick={() => void previewCells()} disabled={running}>
+            <button
+              className="button-secondary"
+              onClick={() => void previewCells()}
+              disabled={running}
+            >
               <FileText size={15} /> Preview Page 1 Cells
             </button>
           )}
@@ -263,7 +308,11 @@ export function OfficeExport({
               Close
             </button>
           )}
-          <button onClick={() => void exportFile()} disabled={running || !controller?.pdf} className="button-primary">
+          <button
+            onClick={() => void exportFile()}
+            disabled={running || !controller?.pdf}
+            className="button-primary"
+          >
             {running ? "Exporting…" : "Export File"}
           </button>
         </div>

@@ -27,10 +27,7 @@ function pageAt(clientX: number, clientY: number) {
   const matchingPage = pages.find((page) => {
     const rect = page.getBoundingClientRect();
     return (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
+      clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
     );
   });
   return matchingPage ?? pages[0];
@@ -92,8 +89,7 @@ export function ShapeTool({ controller }: { controller: ViewerController }) {
     pdfPoint(controller, page, event.clientX, event.clientY);
 
   const handleDown = async (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || useWorkspace.getState().busy || !controller.pdf)
-      return;
+    if (event.button !== 0 || useWorkspace.getState().busy || !controller.pdf) return;
     const page = pageAt(event.clientX, event.clientY);
     if (!page) return;
     event.preventDefault();
@@ -129,14 +125,12 @@ export function ShapeTool({ controller }: { controller: ViewerController }) {
     const endPdf = await pointFor(current.page, event.nativeEvent);
     active.current = null;
     setDraft(null);
-    if (Math.hypot(event.clientX - current.startClient.x, event.clientY - current.startClient.y) < 4)
+    if (
+      Math.hypot(event.clientX - current.startClient.x, event.clientY - current.startClient.y) < 4
+    )
       return;
     try {
-      await controller.addShape(
-        kind,
-        startPdf,
-        endPdf,
-      );
+      await controller.addShape(kind, startPdf, endPdf);
       useWorkspace.getState().set({ tool: "select" });
       controller.setTool("select");
     } catch (error) {
@@ -146,17 +140,16 @@ export function ShapeTool({ controller }: { controller: ViewerController }) {
     }
   };
 
-  const shapePreview = draft && overlay.current
-    ? previewStyle(draft, overlay.current)
-    : null;
-  const line = draft && overlay.current
-    ? {
-        x1: draft.startClient.x - overlay.current.getBoundingClientRect().left,
-        y1: draft.startClient.y - overlay.current.getBoundingClientRect().top,
-        x2: draft.currentClient.x - overlay.current.getBoundingClientRect().left,
-        y2: draft.currentClient.y - overlay.current.getBoundingClientRect().top,
-      }
-    : null;
+  const shapePreview = draft && overlay.current ? previewStyle(draft, overlay.current) : null;
+  const line =
+    draft && overlay.current
+      ? {
+          x1: draft.startClient.x - overlay.current.getBoundingClientRect().left,
+          y1: draft.startClient.y - overlay.current.getBoundingClientRect().top,
+          x2: draft.currentClient.x - overlay.current.getBoundingClientRect().left,
+          y2: draft.currentClient.y - overlay.current.getBoundingClientRect().top,
+        }
+      : null;
 
   return (
     <div
@@ -177,10 +170,7 @@ export function ShapeTool({ controller }: { controller: ViewerController }) {
       onPointerCancel={cancel}
     >
       {shapePreview && kind !== "Line" && kind !== "Arrow" && (
-        <div
-          className={`shape-preview shape-preview-${kind.toLowerCase()}`}
-          style={shapePreview}
-        />
+        <div className={`shape-preview shape-preview-${kind.toLowerCase()}`} style={shapePreview} />
       )}
       {line && (kind === "Line" || kind === "Arrow") && (
         <svg className="shape-preview-svg" aria-hidden="true">

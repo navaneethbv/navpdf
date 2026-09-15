@@ -1,20 +1,9 @@
 import { useState } from "react";
-import {
-  Type,
-  CheckSquare,
-  CircleDot,
-  List,
-  MousePointerClick,
-  Plus,
-  X,
-} from "lucide-react";
+import { Type, CheckSquare, CircleDot, List, MousePointerClick, Plus, X } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-import {
-  addFormField,
-  type FormFieldDefinition,
-} from "../../services/document-commands";
+import { addFormField, type FormFieldDefinition } from "../../services/document-commands";
 import { fromTopLeftVisual } from "../../services/pdf/page-box";
 
 export function FormManager({
@@ -25,9 +14,9 @@ export function FormManager({
   onClose: () => void;
 }) {
   const s = useWorkspace();
-  const [fieldType, setFieldType] = useState<
-    "text" | "checkbox" | "radio" | "dropdown" | "button"
-  >("text");
+  const [fieldType, setFieldType] = useState<"text" | "checkbox" | "radio" | "dropdown" | "button">(
+    "text",
+  );
   const [fieldName, setFieldName] = useState("");
   const [defaultValue, setDefaultValue] = useState("");
   const [optionsText, setOptionsText] = useState("Option 1, Option 2, Option 3");
@@ -88,7 +77,7 @@ export function FormManager({
         required,
         readOnly,
         multiline: fieldType === "text" ? multiline : undefined,
-        group: fieldType === "radio" ? (groupName.trim() || fieldName.trim()) : undefined,
+        group: fieldType === "radio" ? groupName.trim() || fieldName.trim() : undefined,
         options:
           fieldType === "dropdown"
             ? optionsText
@@ -99,10 +88,7 @@ export function FormManager({
       };
 
       const newBytes = await addFormField(currentBytes, definition);
-      await controller.replaceWithBytes(
-        newBytes,
-        `Form field "${fieldName}" created`,
-      );
+      await controller.replaceWithBytes(newBytes, `Form field "${fieldName}" created`);
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });

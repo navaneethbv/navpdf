@@ -14,14 +14,8 @@ describe("viewer inputs", () => {
     expect(clampPage(3.6, 500)).toBe(4);
   });
   it("preserves search context and compresses whitespace", () => {
-    expect(snippet("Before\nmatching\ttext after", 7, 8)).toBe(
-      "Before matching text after",
-    );
-    const result = snippet(
-      "a".repeat(100) + "needle" + "b".repeat(100),
-      100,
-      6,
-    );
+    expect(snippet("Before\nmatching\ttext after", 7, 8)).toBe("Before matching text after");
+    const result = snippet("a".repeat(100) + "needle" + "b".repeat(100), 100, 6);
     expect(result).toContain("needle");
     expect(result.startsWith("…")).toBe(true);
     expect(result.endsWith("…")).toBe(true);

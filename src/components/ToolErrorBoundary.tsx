@@ -29,10 +29,7 @@ export class ToolErrorBoundary extends Component<Props, State> {
   }
 
   componentDidUpdate(previous: Props) {
-    if (
-      this.state.failedKey !== null &&
-      previous.resetKey !== this.props.resetKey
-    ) {
+    if (this.state.failedKey !== null && previous.resetKey !== this.props.resetKey) {
       this.setState({ failedKey: null });
     }
   }

@@ -1,28 +1,18 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type {
-  DocumentDescriptor,
-  LocalState,
-  Preferences,
-  SaveResult,
-} from "../types/document";
+import type { DocumentDescriptor, LocalState, Preferences, SaveResult } from "../types/document";
 import { defaultPreferences } from "../types/document";
-import type {
-  OcrEngineInfo,
-  OcrOptions,
-  OcrPageResult,
-} from "../types/operations";
+import type { OcrEngineInfo, OcrOptions, OcrPageResult } from "../types/operations";
 import { downloadBytes, safeFileName } from "../utils/download";
 export const native = isTauri();
 export const isNative = () => isTauri();
 const files = new Map<string, File>();
-export async function openDocument(
-  file?: File,
-): Promise<DocumentDescriptor | null> {
+export async function openDocument(file?: File): Promise<DocumentDescriptor | null> {
   if (!file) return native ? invoke<DocumentDescriptor | null>("open_document") : null;
   if (file.size > 1024 ** 3) throw new Error("Choose a PDF smaller than 1 GB.");
   if (native) {
-    const name = JSON.stringify(file.name).replace(/[^\x20-\x7e]/g, (char) =>
-      `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    const name = JSON.stringify(file.name).replace(
+      /[^\x20-\x7e]/g,
+      (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
     );
     return invoke<DocumentDescriptor>("import_document", new Uint8Array(await file.arrayBuffer()), {
       headers: { "x-document-name": name },
@@ -217,9 +207,7 @@ export async function deleteSignature(id: string): Promise<void> {
   writePreviewSignatures(previewSignatures().filter((s) => s.id !== id));
 }
 
-export async function migrateSignatures(
-  items: SavedSignature[],
-): Promise<SavedSignature[]> {
+export async function migrateSignatures(items: SavedSignature[]): Promise<SavedSignature[]> {
   const stored: StoredSignature[] = items.map(({ id, name, type, dataUrl, createdAt }) => ({
     id,
     name,

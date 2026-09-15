@@ -43,18 +43,14 @@ export default function App() {
   const input = useRef<HTMLInputElement>(null);
   const s = useWorkspace();
   const session = useDocumentSession(controller);
-  const ready = useCallback(
-    (value: ViewerController) => setController(value),
-    [],
-  );
+  const ready = useCallback((value: ViewerController) => setController(value), []);
   const open = useCallback(() => {
     if (native) session.open();
     else input.current?.click();
   }, [session]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () =>
-      applyTheme(s.local.preferences.theme, media.matches);
+    const apply = () => applyTheme(s.local.preferences.theme, media.matches);
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
@@ -83,8 +79,7 @@ export default function App() {
           if (action === "s") void session.save(event.shiftKey);
           if (action === "f" && s.document) s.set({ sidebar: "search" });
           if (action === "0") controller?.zoom("page-fit");
-          if (action === "+" || action === "=")
-            controller?.zoom((s.zoom / 100) * 1.15);
+          if (action === "+" || action === "=") controller?.zoom((s.zoom / 100) * 1.15);
           if (action === "-") controller?.zoom(s.zoom / 100 / 1.15);
         }
       }
@@ -209,10 +204,7 @@ export default function App() {
           </button>
         </div>
       )}
-      <div
-        className={`workspace ${s.document ? "has-document" : ""}`}
-        inert={s.busy}
-      >
+      <div className={`workspace ${s.document ? "has-document" : ""}`} inert={s.busy}>
         {s.document && controller && <Sidebar controller={controller} />}
         <ViewerHost controller={controller} onReady={ready} />
         {s.document && controller && <Properties controller={controller} />}
@@ -271,11 +263,7 @@ export default function App() {
               </p>
             )}
             <div className="dialog-actions">
-              <button
-                type="button"
-                className="button"
-                onClick={session.cancelPassword}
-              >
+              <button type="button" className="button" onClick={session.cancelPassword}>
                 Cancel
               </button>
               <button className="button primary">Unlock PDF</button>
@@ -286,8 +274,8 @@ export default function App() {
       {session.confirm && (
         <Dialog title="Save your changes?" onClose={session.cancelConfirm} priority>
           <p>
-            This document has unsaved edits. Save them before continuing, or
-            discard this session's changes.
+            This document has unsaved edits. Save them before continuing, or discard this session's
+            changes.
           </p>
           <div className="dialog-actions">
             <button className="button" onClick={session.cancelConfirm}>
@@ -318,166 +306,114 @@ export default function App() {
           })
         }
       >
-      {s.toolMode && (
-        <ToolPanel
-          mode={s.toolMode}
-          onClose={() => s.set({ toolMode: null })}
-        />
-      )}
-      {s.activeSnapshot && (
-        <SnapshotTool onClose={() => s.set({ activeSnapshot: false })} />
-      )}
-      {(s.activeModal === "annotations" ||
-        (s.document &&
-          (s.tool === "highlight" ||
-            s.tool === "draw" ||
-            s.tool === "text" ||
-            s.tool === "shape"))) && (
-        <AnnotationToolbar
-          controller={controller}
-          onClose={() => {
-            s.set({ activeModal: null });
-            if (
-              s.tool === "highlight" ||
+        {s.toolMode && <ToolPanel mode={s.toolMode} onClose={() => s.set({ toolMode: null })} />}
+        {s.activeSnapshot && <SnapshotTool onClose={() => s.set({ activeSnapshot: false })} />}
+        {(s.activeModal === "annotations" ||
+          (s.document &&
+            (s.tool === "highlight" ||
               s.tool === "draw" ||
               s.tool === "text" ||
-              s.tool === "shape"
-            ) {
-              s.set({ tool: "select" });
-              controller?.setTool("select");
-            }
-          }}
-        />
-      )}
-      {s.activeModal === "page-workspace" && (
-        <PageWorkspace
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "print" && (
-        <PrintDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "create-pdf" && (
-        <CreatePdfDialog
-          onLoad={(file) => session.open(file)}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "add-text" && (
-        <ContentEditor
-          controller={controller}
-          type="text"
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "add-image" && (
-        <ContentEditor
-          controller={controller}
-          type="image"
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "add-link" && (
-        <LinkDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "sticky-note" && controller && (
-        <AnnotationNoteDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "decorations" && (
-        <DecorationsDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "attachments" && (
-        <AttachmentsDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "forms" && (
-        <FormManager
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "fill-sign" && (
-        <FillAndSign
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "ocr" && (
-        <OcrPanel
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "convert" && (
-        <ExportDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "office-export" && (
-        <OfficeExport
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "redact" && (
-        <RedactionTool
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "edit-objects" && (
-        <ObjectEditor
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "compress" && (
-        <CompressDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "protect" && (
-        <ProtectDialog
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-          onSaveUnprotected={() => session.save(true, true)}
-        />
-      )}
-      {s.activeModal === "certificate-sign" && (
-        <CertificateSignature
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "design" && (
-        <DesignTools
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
-      {s.activeModal === "assistant" && (
-        <AssistantPanel
-          controller={controller}
-          onClose={() => s.set({ activeModal: null })}
-        />
-      )}
+              s.tool === "shape"))) && (
+          <AnnotationToolbar
+            controller={controller}
+            onClose={() => {
+              s.set({ activeModal: null });
+              if (
+                s.tool === "highlight" ||
+                s.tool === "draw" ||
+                s.tool === "text" ||
+                s.tool === "shape"
+              ) {
+                s.set({ tool: "select" });
+                controller?.setTool("select");
+              }
+            }}
+          />
+        )}
+        {s.activeModal === "page-workspace" && (
+          <PageWorkspace controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "print" && (
+          <PrintDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "create-pdf" && (
+          <CreatePdfDialog
+            onLoad={(file) => session.open(file)}
+            onClose={() => s.set({ activeModal: null })}
+          />
+        )}
+        {s.activeModal === "add-text" && (
+          <ContentEditor
+            controller={controller}
+            type="text"
+            onClose={() => s.set({ activeModal: null })}
+          />
+        )}
+        {s.activeModal === "add-image" && (
+          <ContentEditor
+            controller={controller}
+            type="image"
+            onClose={() => s.set({ activeModal: null })}
+          />
+        )}
+        {s.activeModal === "add-link" && (
+          <LinkDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "sticky-note" && controller && (
+          <AnnotationNoteDialog
+            controller={controller}
+            onClose={() => s.set({ activeModal: null })}
+          />
+        )}
+        {s.activeModal === "decorations" && (
+          <DecorationsDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "attachments" && (
+          <AttachmentsDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "forms" && (
+          <FormManager controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "fill-sign" && (
+          <FillAndSign controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "ocr" && (
+          <OcrPanel controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "convert" && (
+          <ExportDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "office-export" && (
+          <OfficeExport controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "redact" && (
+          <RedactionTool controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "edit-objects" && (
+          <ObjectEditor controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "compress" && (
+          <CompressDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "protect" && (
+          <ProtectDialog
+            controller={controller}
+            onClose={() => s.set({ activeModal: null })}
+            onSaveUnprotected={() => session.save(true, true)}
+          />
+        )}
+        {s.activeModal === "certificate-sign" && (
+          <CertificateSignature
+            controller={controller}
+            onClose={() => s.set({ activeModal: null })}
+          />
+        )}
+        {s.activeModal === "design" && (
+          <DesignTools controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "assistant" && (
+          <AssistantPanel controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
       </ToolErrorBoundary>
     </div>
   );

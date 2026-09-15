@@ -33,11 +33,7 @@ export function Dialog({
     >
       <header>
         <h2 id={id}>{title}</h2>
-        <button
-          className="icon-button"
-          onClick={onClose}
-          aria-label="Close dialog"
-        >
+        <button className="icon-button" onClick={onClose} aria-label="Close dialog">
           <X size={18} />
         </button>
       </header>

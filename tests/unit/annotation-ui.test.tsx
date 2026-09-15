@@ -28,9 +28,7 @@ const controller = {
 
 describe("AnnotationToolbar", () => {
   it("activates real highlight, ink, and text tools", () => {
-    render(
-      <AnnotationToolbar controller={controller as never} onClose={() => {}} />,
-    );
+    render(<AnnotationToolbar controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByTitle("Highlight Text"));
     expect(useWorkspace.getState().tool).toBe("highlight");
     expect(controller.setTool).toHaveBeenCalledWith("highlight");
@@ -41,9 +39,7 @@ describe("AnnotationToolbar", () => {
   });
 
   it("enables standard markup, notes, and shapes", async () => {
-    render(
-      <AnnotationToolbar controller={controller as never} onClose={() => {}} />,
-    );
+    render(<AnnotationToolbar controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByTitle("Underline Text"));
     fireEvent.click(screen.getByTitle("Strike-through Text"));
     fireEvent.click(screen.getByTitle("Sticky Note / Comment"));
@@ -67,9 +63,7 @@ describe("AnnotationToolbar", () => {
   });
 
   it("updates ink and highlight colors", () => {
-    render(
-      <AnnotationToolbar controller={controller as never} onClose={() => {}} />,
-    );
+    render(<AnnotationToolbar controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByTitle("Green"));
     expect(controller.setColor).toHaveBeenCalledWith("#80d49b");
     expect(useWorkspace.getState().inkColor).toBe("#80d49b");
@@ -77,9 +71,7 @@ describe("AnnotationToolbar", () => {
 
   it("disables toolbar buttons when editingAllowed is false", () => {
     useWorkspace.getState().set({ editingAllowed: false });
-    render(
-      <AnnotationToolbar controller={controller as never} onClose={() => {}} />,
-    );
+    render(<AnnotationToolbar controller={controller as never} onClose={() => {}} />);
     expect((screen.getByTitle("Highlight Text") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTitle("Underline Text") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTitle("Pencil / Freehand Ink") as HTMLButtonElement).disabled).toBe(true);
@@ -221,9 +213,7 @@ describe("Properties", () => {
       ],
     });
     render(<Properties controller={controller as never} />);
-    expect(
-      screen.getByText("This annotation can be navigated and deleted here."),
-    ).toBeTruthy();
+    expect(screen.getByText("This annotation can be navigated and deleted here.")).toBeTruthy();
     fireEvent.click(screen.getByText("Delete selected"));
     expect(controller.deleteSelectedAnnotation).toHaveBeenCalled();
   });
@@ -277,9 +267,7 @@ describe("SnapshotTool", () => {
     );
 
     const { container } = render(<SnapshotTool onClose={onClose} />);
-    const overlay = container.querySelector(
-      ".snapshot-overlay",
-    ) as HTMLElement;
+    const overlay = container.querySelector(".snapshot-overlay") as HTMLElement;
     vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
       left: 0,
       top: 0,
@@ -295,9 +283,7 @@ describe("SnapshotTool", () => {
     fireEvent.mouseMove(overlay, { clientX: 60, clientY: 60 });
     fireEvent.mouseUp(overlay);
     expect(await screen.findByText("Snapshot captured!")).toBeTruthy();
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     fireEvent.click(screen.getByText("Download PNG"));
     expect(useWorkspace.getState().status).toBe("Snapshot downloaded");
     expect(click).toHaveBeenCalled();
@@ -398,17 +384,13 @@ describe("SnapshotTool", () => {
     fireEvent.mouseDown(overlay, { clientX: 10, clientY: 10 });
     fireEvent.mouseMove(overlay, { clientX: 50, clientY: 50 });
     fireEvent.mouseUp(overlay);
-    expect(useWorkspace.getState().error).toBe(
-      "Keep the snapshot inside a rendered PDF page.",
-    );
+    expect(useWorkspace.getState().error).toBe("Keep the snapshot inside a rendered PDF page.");
   });
 
   it("ignores tiny drags and closes on request", () => {
     const onClose = vi.fn();
     const { container } = render(<SnapshotTool onClose={onClose} />);
-    const overlay = container.querySelector(
-      ".snapshot-overlay",
-    ) as HTMLElement;
+    const overlay = container.querySelector(".snapshot-overlay") as HTMLElement;
     vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
       left: 0,
       top: 0,

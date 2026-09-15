@@ -109,7 +109,11 @@ export function termRects(items: TextItemLike[], term: string, measure?: Measure
     const whole = measure && text.length === length ? measure(item.str, item) : 0;
     const offset = (count: number) =>
       whole > 0 ? (measure!(item.str.slice(0, count), item) / whole) * item.width : count * advance;
-    for (let index = text.indexOf(needle); index !== -1; index = text.indexOf(needle, index + needle.length)) {
+    for (
+      let index = text.indexOf(needle);
+      index !== -1;
+      index = text.indexOf(needle, index + needle.length)
+    ) {
       const start = offset(index) - CHARACTER_PADDING * advance;
       const end = offset(index + needle.length) + CHARACTER_PADDING * advance;
       // Up is perpendicular to the baseline direction, so rotated text is covered too.
@@ -129,7 +133,9 @@ export function termRects(items: TextItemLike[], term: string, measure?: Measure
 }
 
 /** Canvas text measurement in each item's substituted font family, when a 2D canvas exists. */
-function canvasMeasure(styles: Record<string, { fontFamily?: string }> = {}): MeasureText | undefined {
+function canvasMeasure(
+  styles: Record<string, { fontFamily?: string }> = {},
+): MeasureText | undefined {
   const context = createMeasuringContext();
   if (!context || typeof context.measureText !== "function") return undefined;
   return (text, item) => {
@@ -140,7 +146,9 @@ function canvasMeasure(styles: Record<string, { fontFamily?: string }> = {}): Me
 
 function createMeasuringContext(): CanvasRenderingContext2D | null {
   try {
-    return typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+    return typeof document === "undefined"
+      ? null
+      : document.createElement("canvas").getContext("2d");
   } catch {
     // Test DOMs without canvas support fall back to average character widths.
     return null;

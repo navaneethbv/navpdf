@@ -20,19 +20,12 @@ import {
   popGraphicsState,
   PDFOperator,
 } from "pdf-lib";
-import {
-  appendTaggedStream,
-  removeTaggedStreams,
-} from "./pdf/content-streams";
+import { appendTaggedStream, removeTaggedStreams } from "./pdf/content-streams";
 import { stripExternalPageLinks } from "./pdf/link-targets";
 import { walkEmbeddedFiles } from "./pdf/name-tree";
 import { visibleBox, clampRectToBox } from "./pdf/page-box";
 import type { ShapeKind } from "../types/document";
-import type {
-  MergeInputItem,
-  OperationManifestItem,
-  OcrPageResult,
-} from "../types/operations";
+import type { MergeInputItem, OperationManifestItem, OcrPageResult } from "../types/operations";
 
 export type TextMarkupKind = "Highlight" | "Underline" | "StrikeOut";
 
@@ -55,8 +48,7 @@ export interface TextMarkupInput {
 
 const finite = (value: number) => Number.isFinite(value);
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const annotationId = (() => {
   let sequence = 0;
@@ -117,9 +109,7 @@ export async function addTextMarkupAnnotations(
       quad.x2,
       quad.y1,
     ]);
-    const color = (input.color ?? [1, 0.9, 0.2]).map((channel) =>
-      clamp(channel, 0, 1),
-    );
+    const color = (input.color ?? [1, 0.9, 0.2]).map((channel) => clamp(channel, 0, 1));
     const opacity = clamp(input.opacity ?? (kind === "Highlight" ? 0.4 : 1), 0, 1);
     const context = doc.context;
     const dateStr = toPdfDate();
@@ -166,8 +156,7 @@ export async function addStickyNote(
   const pageIndex = input.page - 1;
   if (pageIndex < 0 || pageIndex >= doc.getPageCount())
     throw new Error("Sticky note page is outside the document.");
-  if (![input.x, input.y].every(finite))
-    throw new Error("Sticky note position is invalid.");
+  if (![input.x, input.y].every(finite)) throw new Error("Sticky note position is invalid.");
   const page = doc.getPage(pageIndex);
   const box = visibleBox(page);
   const size = clamp(input.size ?? 24, 12, 64);
@@ -236,8 +225,7 @@ export async function addShapeAnnotation(
   const pageIndex = input.page - 1;
   if (pageIndex < 0 || pageIndex >= doc.getPageCount())
     throw new Error("Shape page is outside the document.");
-  if (![...input.start, ...input.end].every(finite))
-    throw new Error("Shape geometry is invalid.");
+  if (![...input.start, ...input.end].every(finite)) throw new Error("Shape geometry is invalid.");
   const page = doc.getPage(pageIndex);
   const box = visibleBox(page);
   const clampPoint = ([x, y]: [number, number]): [number, number] => [
@@ -248,9 +236,7 @@ export async function addShapeAnnotation(
   const end = clampPoint(input.end);
   if (start[0] === end[0] && start[1] === end[1])
     throw new Error("Shape must have a visible size.");
-  const color = (input.color ?? [0.15, 0.38, 0.29]).map((channel) =>
-    clamp(channel, 0, 1),
-  );
+  const color = (input.color ?? [0.15, 0.38, 0.29]).map((channel) => clamp(channel, 0, 1));
   const lineWidth = clamp(input.width ?? 2, 0.5, 20);
   const opacity = clamp(input.opacity ?? 1, 0, 1);
   const isArrow = input.kind === "Arrow";
@@ -280,10 +266,7 @@ export async function addShapeAnnotation(
     ...(isLine
       ? {
           L: [start[0], start[1], end[0], end[1]],
-          LE: [
-            PDFName.of("None"),
-            PDFName.of(isArrow ? "OpenArrow" : "None"),
-          ],
+          LE: [PDFName.of("None"), PDFName.of(isArrow ? "OpenArrow" : "None")],
         }
       : {}),
   });
@@ -336,11 +319,7 @@ export function findAnnotation(doc: PDFDocument, id: string, targetPage?: number
       const isDirect = !(entry instanceof PDFRef);
       if (isDirect) directCount++;
       const annotation = annots.lookup(index, PDFDict);
-      const name = annotation.lookupMaybe(
-        PDFName.of("NM"),
-        PDFString,
-        PDFHexString,
-      )?.asString();
+      const name = annotation.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.asString();
 
       // Check direct annotation index match
       if (targetDirectIdx !== null) {
@@ -355,7 +334,8 @@ export function findAnnotation(doc: PDFDocument, id: string, targetPage?: number
 
       // Check ref identifier or explicit NM
       const entryIdent = annotationIdentifier(entry);
-      const entryRef = entry instanceof PDFRef ? `${entry.objectNumber}R${entry.generationNumber}` : null;
+      const entryRef =
+        entry instanceof PDFRef ? `${entry.objectNumber}R${entry.generationNumber}` : null;
       if (
         entryIdent === id ||
         (entryRef && (entryRef === id || `${(entry as PDFRef).objectNumber}R` === id)) ||
@@ -418,10 +398,10 @@ export async function updateAnnotation(
       const le = found.annotation.lookupMaybe(PDFName.of("LE"), PDFArray);
       const hasArrow = Boolean(
         le &&
-          Array.from({ length: le.size() }).some((_, i) => {
-            const n = le.lookupMaybe(i, PDFName)?.asString()?.toLowerCase() ?? "";
-            return n.includes("arrow");
-          }),
+        Array.from({ length: le.size() }).some((_, i) => {
+          const n = le.lookupMaybe(i, PDFName)?.asString()?.toLowerCase() ?? "";
+          return n.includes("arrow");
+        }),
       );
       const arrowheadSize = hasArrow ? Math.max(10, lineWidth * 3) : 0;
       const margin = lineWidth / 2 + 2 + arrowheadSize;
@@ -454,8 +434,7 @@ export async function updateAnnotation(
     const bottom = clamp(Math.min(y1, y2), box.y, box.y + box.height);
     const right = clamp(Math.max(x1, x2), box.x, box.x + box.width);
     const top = clamp(Math.max(y1, y2), box.y, box.y + box.height);
-    if (right <= left || top <= bottom)
-      throw new Error("Annotation must have a visible size.");
+    if (right <= left || top <= bottom) throw new Error("Annotation must have a visible size.");
     found.annotation.set(PDFName.of("Rect"), context.obj([left, bottom, right, top]));
   }
 
@@ -481,10 +460,10 @@ export async function updateAnnotation(
     const le = found.annotation.lookupMaybe(PDFName.of("LE"), PDFArray);
     const hasArrow = Boolean(
       le &&
-        Array.from({ length: le.size() }).some((_, i) => {
-          const n = le.lookupMaybe(i, PDFName)?.asString()?.toLowerCase() ?? "";
-          return n.includes("arrow");
-        }),
+      Array.from({ length: le.size() }).some((_, i) => {
+        const n = le.lookupMaybe(i, PDFName)?.asString()?.toLowerCase() ?? "";
+        return n.includes("arrow");
+      }),
     );
     const arrowheadSize = hasArrow ? Math.max(10, lineWidth * 3) : 0;
     const margin = lineWidth / 2 + 2 + arrowheadSize;
@@ -511,10 +490,7 @@ export async function updateAnnotation(
   }
   if (input.width !== undefined) {
     if (!finite(input.width)) throw new Error("Annotation width is invalid.");
-    found.annotation.set(
-      PDFName.of("BS"),
-      context.obj({ W: clamp(input.width, 0.5, 20), S: "S" }),
-    );
+    found.annotation.set(PDFName.of("BS"), context.obj({ W: clamp(input.width, 0.5, 20), S: "S" }));
   }
   if (input.contents !== undefined)
     found.annotation.set(PDFName.of("Contents"), PDFString.of(input.contents));
@@ -579,9 +555,7 @@ export async function deleteAnnotation(
     const annotDict = annots.lookup(i, PDFDict);
     const nm = annotDict.lookupMaybe(PDFName.of("NM"), PDFString)?.asString();
     const shouldDelete =
-      i === found.index ||
-      (entryKey !== null && refsToDelete.has(entryKey)) ||
-      nm === id;
+      i === found.index || (entryKey !== null && refsToDelete.has(entryKey)) || nm === id;
     if (shouldDelete) {
       annots.remove(i);
     }
@@ -615,9 +589,7 @@ export async function deletePages(
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(pdfBytes);
   const total = doc.getPageCount();
-  const sorted = [...new Set(pageIndices)]
-    .filter((i) => i >= 0 && i < total)
-    .sort((a, b) => b - a);
+  const sorted = [...new Set(pageIndices)].filter((i) => i >= 0 && i < total).sort((a, b) => b - a);
 
   if (sorted.length >= total) {
     throw new Error("Cannot delete all pages. A PDF must contain at least one page.");
@@ -637,10 +609,7 @@ export async function deletePages(
  * the existing page tree keeps every catalog-level structure intact, so a
  * reorder is a pure permutation of the pages the document already has.
  */
-export async function reorderPages(
-  pdfBytes: Uint8Array,
-  newOrder: number[],
-): Promise<Uint8Array> {
+export async function reorderPages(pdfBytes: Uint8Array, newOrder: number[]): Promise<Uint8Array> {
   const doc = await PDFDocument.load(pdfBytes);
   const total = doc.getPageCount();
   if (newOrder.length !== total) {
@@ -700,10 +669,7 @@ export async function insertImagePage(
   type: "png" | "jpg",
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(pdfBytes);
-  const image =
-    type === "png"
-      ? await doc.embedPng(imageBytes)
-      : await doc.embedJpg(imageBytes);
+  const image = type === "png" ? await doc.embedPng(imageBytes) : await doc.embedJpg(imageBytes);
   const total = doc.getPageCount();
   const idx = Math.max(0, Math.min(atIndex, total));
   const page = doc.insertPage(idx, [image.width, image.height]);
@@ -729,13 +695,9 @@ export async function cropPages(
       const page = doc.getPage(i);
       const box = visibleBox(page);
       const originX =
-        cropBox.x !== undefined && cropBox.x >= box.x
-          ? cropBox.x
-          : box.x + (cropBox.x ?? 0);
+        cropBox.x !== undefined && cropBox.x >= box.x ? cropBox.x : box.x + (cropBox.x ?? 0);
       const originY =
-        cropBox.y !== undefined && cropBox.y >= box.y
-          ? cropBox.y
-          : box.y + (cropBox.y ?? 0);
+        cropBox.y !== undefined && cropBox.y >= box.y ? cropBox.y : box.y + (cropBox.y ?? 0);
       const targetW = Math.min(cropBox.width, Math.max(0, box.x + box.width - originX));
       const targetH = Math.min(cropBox.height, Math.max(0, box.y + box.height - originY));
       page.setCropBox(originX, originY, targetW, targetH);
@@ -744,9 +706,7 @@ export async function cropPages(
   return doc.save();
 }
 
-export async function mergeDocuments(
-  inputs: (Uint8Array | MergeInputItem)[],
-): Promise<Uint8Array> {
+export async function mergeDocuments(inputs: (Uint8Array | MergeInputItem)[]): Promise<Uint8Array> {
   if (inputs.length === 0) {
     throw new Error("At least one document is required to merge.");
   }
@@ -758,9 +718,10 @@ export async function mergeDocuments(
 
     const doc = await PDFDocument.load(bytes);
     const allIndices = doc.getPageIndices();
-    const pageIndices = specifiedRanges && specifiedRanges.length > 0
-      ? specifiedRanges.filter((idx) => idx >= 0 && idx < allIndices.length)
-      : allIndices;
+    const pageIndices =
+      specifiedRanges && specifiedRanges.length > 0
+        ? specifiedRanges.filter((idx) => idx >= 0 && idx < allIndices.length)
+        : allIndices;
 
     if (pageIndices.length === 0) continue;
 
@@ -840,7 +801,11 @@ export function computeDeleteMapping(total: number, deletedIndices: number[]): n
   return mapping;
 }
 
-export function computeInsertMapping(total: number, insertIndex: number, insertedCount = 1): number[] {
+export function computeInsertMapping(
+  total: number,
+  insertIndex: number,
+  insertedCount = 1,
+): number[] {
   const mapping: number[] = [];
   for (let i = 0; i < insertIndex; i++) {
     mapping.push(i);
@@ -871,10 +836,7 @@ export async function createDocumentFromImage(
   type: "png" | "jpg",
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  const image =
-    type === "png"
-      ? await doc.embedPng(imageBytes)
-      : await doc.embedJpg(imageBytes);
+  const image = type === "png" ? await doc.embedPng(imageBytes) : await doc.embedJpg(imageBytes);
   const page = doc.addPage([image.width, image.height]);
   page.drawImage(image, {
     x: 0,
@@ -893,9 +855,7 @@ export type StructureSummary = {
   title: string;
 };
 
-export async function inspectStructure(
-  pdfBytes: Uint8Array,
-): Promise<StructureSummary> {
+export async function inspectStructure(pdfBytes: Uint8Array): Promise<StructureSummary> {
   const doc = await PDFDocument.load(pdfBytes);
   let formFields: number;
   try {
@@ -920,9 +880,7 @@ export async function inspectStructure(
  * about that rather than dropping it silently. Returns "" when there is
  * nothing to lose.
  */
-export async function describeStructureLoss(
-  sources: Uint8Array[],
-): Promise<string> {
+export async function describeStructureLoss(sources: Uint8Array[]): Promise<string> {
   let outlines = 0;
   let formFields = 0;
   for (const bytes of sources) {
@@ -1023,9 +981,10 @@ export async function addFormField(
       throw new Error(`A form field named "${name}" already exists.`);
     }
     const dd = form.createDropdown(name);
-    const opts = definition.options && definition.options.length > 0
-      ? definition.options
-      : ["Option 1", "Option 2"];
+    const opts =
+      definition.options && definition.options.length > 0
+        ? definition.options
+        : ["Option 1", "Option 2"];
     dd.addOptions(opts);
     if (definition.defaultValue && opts.includes(definition.defaultValue)) {
       dd.select(definition.defaultValue);
@@ -1062,10 +1021,9 @@ export function validateStandardFontCoverage(text: string): {
       (code >= 32 && code <= 126) ||
       (code >= 160 && code <= 255) ||
       [
-        0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6,
-        0x2030, 0x0160, 0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c,
-        0x201d, 0x2022, 0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a,
-        0x0153, 0x017e, 0x0178,
+        0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160, 0x2039,
+        0x0152, 0x017d, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014, 0x02dc, 0x2122,
+        0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
       ].includes(code);
     if (!isWinAnsi && !unsupported.includes(ch)) {
       unsupported.push(ch);
@@ -1077,11 +1035,7 @@ export function validateStandardFontCoverage(text: string): {
   };
 }
 
-export type StandardFontFamily =
-  | "Helvetica"
-  | "Helvetica-Bold"
-  | "Times-Roman"
-  | "Courier";
+export type StandardFontFamily = "Helvetica" | "Helvetica-Bold" | "Times-Roman" | "Courier";
 
 export interface InsertTextOptions {
   page: number; // 1-based page number
@@ -1185,8 +1139,7 @@ export async function insertTextContent(
     if (!line) continue;
     const lineWidth = font.widthOfTextAtSize(line, fontSize);
     let lineX = clampedX;
-    const containerWidth =
-      options.maxWidth && options.maxWidth > 0 ? options.maxWidth : lineWidth;
+    const containerWidth = options.maxWidth && options.maxWidth > 0 ? options.maxWidth : lineWidth;
     if (options.alignment === "center") {
       lineX = clampedX + (containerWidth - lineWidth) / 2;
     } else if (options.alignment === "right") {
@@ -1574,12 +1527,7 @@ export interface BatesNumberingOptions {
   startNumber?: number;
   padding?: number;
   pageIndices?: number[]; // 0-based; all pages if omitted
-  position?:
-    | "top-left"
-    | "top-right"
-    | "bottom-left"
-    | "bottom-right"
-    | "bottom-center";
+  position?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "bottom-center";
   fontSize?: number;
   color?: [number, number, number];
 }
@@ -1676,10 +1624,7 @@ export async function applyBatesNumbering(
         break;
     }
 
-    const fontBoldKey = page.node.newFontDictionary(
-      "NavPDF_BatesFontBold",
-      fontBold.ref,
-    );
+    const fontBoldKey = page.node.newFontDictionary("NavPDF_BatesFontBold", fontBold.ref);
     const ops: PDFOperator[] = [
       pushGraphicsState(),
       ...drawLinesOfText([fontBold.encodeText(batesText)], {
@@ -1812,13 +1757,7 @@ export async function addLinkAnnotation(
       throw new Error("Target destination page does not exist.");
     }
     const targetPageRef = doc.getPage(targetPageIndex).ref;
-    const destArray = doc.context.obj([
-      targetPageRef,
-      PDFName.of("XYZ"),
-      null,
-      null,
-      null,
-    ]);
+    const destArray = doc.context.obj([targetPageRef, PDFName.of("XYZ"), null, null, null]);
     linkAnnot = doc.context.obj({
       Type: "Annot",
       Subtype: "Link",
@@ -1855,8 +1794,7 @@ export async function deleteLinkAnnotation(
     const annotRef = annots.get(i);
     const annot = doc.context.lookup(annotRef);
     const isLink =
-      annot instanceof PDFDict &&
-      annot.get(PDFName.of("Subtype")) === PDFName.of("Link");
+      annot instanceof PDFDict && annot.get(PDFName.of("Subtype")) === PDFName.of("Link");
     if (isLink) {
       if (linkCount === annotationIndex) {
         linkCount++;
@@ -1864,13 +1802,10 @@ export async function deleteLinkAnnotation(
       }
       linkCount++;
     }
-    remaining.push(annotRef as (PDFRef | PDFDict));
+    remaining.push(annotRef as PDFRef | PDFDict);
   }
 
-  pageLeaf.node.set(
-    PDFName.of("Annots"),
-    doc.context.obj(remaining as unknown as PDFObject[]),
-  );
+  pageLeaf.node.set(PDFName.of("Annots"), doc.context.obj(remaining as unknown as PDFObject[]));
   return doc.save();
 }
 
@@ -1919,10 +1854,7 @@ export async function listEmbeddedAttachments(
     let description: string | undefined;
 
     const descObj = doc.context.lookup(fileSpec.get(PDFName.of("Desc"))) as unknown;
-    if (
-      descObj &&
-      typeof (descObj as { decodeText?: () => string }).decodeText === "function"
-    ) {
+    if (descObj && typeof (descObj as { decodeText?: () => string }).decodeText === "function") {
       description = (descObj as { decodeText: () => string }).decodeText();
     }
     const efDict = doc.context.lookup(fileSpec.get(PDFName.of("EF")));
@@ -1965,8 +1897,7 @@ export async function addEmbeddedAttachment(
   const safeName = sanitizeAttachmentFilename(name);
   const doc = await PDFDocument.load(pdfBytes);
   await doc.attach(data, safeName, {
-    description:
-      description || `Attached by NavPDF on ${new Date().toLocaleDateString()}`,
+    description: description || `Attached by NavPDF on ${new Date().toLocaleDateString()}`,
     creationDate: new Date(),
     modificationDate: new Date(),
   });
@@ -2004,9 +1935,7 @@ export async function extractEmbeddedAttachment(
     return tooLarge(decoded.decode());
   } else if (typeof decoded.getContents === "function") {
     return tooLarge(decoded.getContents());
-  } else if (
-    typeof (stream as { getContents?: () => Uint8Array }).getContents === "function"
-  ) {
+  } else if (typeof (stream as { getContents?: () => Uint8Array }).getContents === "function") {
     return tooLarge((stream as { getContents: () => Uint8Array }).getContents());
   }
   return null;
@@ -2029,10 +1958,7 @@ export async function deleteEmbeddedAttachment(
     remaining.push(efNames.get(i), efNames.get(i + 1));
   }
 
-  entry.containingDict.set(
-    PDFName.of("Names"),
-    doc.context.obj(remaining),
-  );
+  entry.containingDict.set(PDFName.of("Names"), doc.context.obj(remaining));
 
   if (entry.containingDict.has(PDFName.of("Limits"))) {
     if (remaining.length >= 2) {
@@ -2058,10 +1984,7 @@ export async function deleteEmbeddedAttachment(
       }
       afRemaining.push(item);
     }
-    doc.catalog.set(
-      PDFName.of("AF"),
-      doc.context.obj(afRemaining),
-    );
+    doc.catalog.set(PDFName.of("AF"), doc.context.obj(afRemaining));
   }
 
   return doc.save();
@@ -2080,12 +2003,9 @@ function streamContainsText(streamObj: unknown): boolean {
     }
   } catch {
     if (
-      typeof (streamObj as { getContentsString?: () => string })
-        ?.getContentsString === "function"
+      typeof (streamObj as { getContentsString?: () => string })?.getContentsString === "function"
     ) {
-      textStr = (
-        streamObj as { getContentsString: () => string }
-      ).getContentsString();
+      textStr = (streamObj as { getContentsString: () => string }).getContentsString();
     }
   }
   return /\b(BT|Tj|TJ)\b/.test(textStr);
@@ -2100,9 +2020,7 @@ function resourcesContainText(
   visited.add(resourcesObj);
 
   const resDict =
-    resourcesObj instanceof PDFDict
-      ? resourcesObj
-      : (resourcesObj as { dict?: PDFDict })?.dict;
+    resourcesObj instanceof PDFDict ? resourcesObj : (resourcesObj as { dict?: PDFDict })?.dict;
   if (!resDict) return false;
 
   const xobject = context.lookup(resDict.get(PDFName.of("XObject")));
@@ -2114,9 +2032,7 @@ function resourcesContainText(
     visited.add(xobjStream);
 
     const xobjDict =
-      xobjStream instanceof PDFDict
-        ? xobjStream
-        : (xobjStream as { dict?: PDFDict })?.dict;
+      xobjStream instanceof PDFDict ? xobjStream : (xobjStream as { dict?: PDFDict })?.dict;
 
     const subtype = xobjDict?.get(PDFName.of("Subtype"));
     if (subtype === PDFName.of("Form")) {
@@ -2157,9 +2073,7 @@ export async function detectExistingText(
   for (const ref of streamRefs) {
     const streamObj = doc.context.lookup(ref);
     const dict =
-      streamObj instanceof PDFDict
-        ? streamObj
-        : (streamObj as unknown as { dict?: PDFDict })?.dict;
+      streamObj instanceof PDFDict ? streamObj : (streamObj as unknown as { dict?: PDFDict })?.dict;
 
     if (dict?.get(PDFName.of("NavPDF_OCR"))) {
       continue;

@@ -65,10 +65,7 @@ export function AttachmentsDialog({
         bytes,
         `Attached by NavPDF on ${new Date().toLocaleDateString()}`,
       );
-      await controller.replaceWithBytes(
-        newBytes,
-        `File "${file.name}" attached to PDF`,
-      );
+      await controller.replaceWithBytes(newBytes, `File "${file.name}" attached to PDF`);
       setAttachments((prev) => [
         ...prev.filter((a) => a.name !== file.name),
         { name: file.name, size: file.size, data: bytes },
@@ -119,10 +116,7 @@ export function AttachmentsDialog({
           status: "Deleted objects remain in the file until saved from the desktop app.",
         });
       }
-      await controller.replaceWithBytes(
-        newBytes,
-        `Attachment "${item.name}" removed from PDF`,
-      );
+      await controller.replaceWithBytes(newBytes, `Attachment "${item.name}" removed from PDF`);
       setAttachments((prev) => prev.filter((a) => a.name !== item.name));
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -132,12 +126,7 @@ export function AttachmentsDialog({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="PDF Attachments"
-    >
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="PDF Attachments">
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -176,7 +165,11 @@ export function AttachmentsDialog({
                     <Paperclip size={16} />
                     <span className="attachment-name">{att.name}</span>
                     <span className="attachment-size">
-                      ({att.size !== undefined ? `${Math.round(att.size / 1024)} KB` : "unknown size"})
+                      (
+                      {att.size !== undefined
+                        ? `${Math.round(att.size / 1024)} KB`
+                        : "unknown size"}
+                      )
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: "6px" }}>

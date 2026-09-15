@@ -67,10 +67,7 @@ export class RevisionHistory {
     if (!this.current) {
       return this.seed(revision);
     }
-    if (
-      revision.baseRevisionId &&
-      this.current.revisionId !== revision.baseRevisionId
-    ) {
+    if (revision.baseRevisionId && this.current.revisionId !== revision.baseRevisionId) {
       throw new Error("Stale base revision. The document has been modified.");
     }
     if (sameBytes(this.current.bytes, revision.bytes)) {

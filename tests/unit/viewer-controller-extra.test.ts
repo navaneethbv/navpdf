@@ -145,28 +145,21 @@ describe("ViewerController bus reactions", () => {
     busHandlers.get("switchannotationeditorparams")!({ type: 7, value: "#fff" } as never);
     expect(editor.updateParams).toHaveBeenCalledWith(7, "#fff");
     busHandlers.get("switchannotationeditormode")!({ mode: 1 } as never);
-    expect(
-      (controller.viewer.annotationEditorMode as { mode: number }).mode,
-    ).toBe(1);
+    expect((controller.viewer.annotationEditorMode as { mode: number }).mode).toBe(1);
     busHandlers.get("switchannotationeditormode")!({ mode: 99 } as never);
-    expect(
-      (controller.viewer.annotationEditorMode as { mode: number }).mode,
-    ).toBe(1);
+    expect((controller.viewer.annotationEditorMode as { mode: number }).mode).toBe(1);
   });
 
   it("reports annotation storage failures while marking dirty", async () => {
     const pdf = makePdf();
-    vi.mocked(await import("../../src/services/native").then((m) => m.markDirty)).mockRejectedValueOnce(
-      new Error("ipc down"),
-    );
+    vi.mocked(
+      await import("../../src/services/native").then((m) => m.markDirty),
+    ).mockRejectedValueOnce(new Error("ipc down"));
     await controller.attach(pdf as never);
-    const storage = (pdf as { annotationStorage: Record<string, () => void> })
-      .annotationStorage;
+    const storage = (pdf as { annotationStorage: Record<string, () => void> }).annotationStorage;
     storage.onSetModified();
     await vi.waitFor(() => {
-      expect(useWorkspace.getState().error).toContain(
-        "Native change tracking is unavailable",
-      );
+      expect(useWorkspace.getState().error).toContain("Native change tracking is unavailable");
     });
     expect(useWorkspace.getState().dirty).toBe(true);
   });
@@ -190,7 +183,10 @@ describe("ViewerController search results", () => {
     const pdf = makePdf(2);
     pdf.getPage = vi.fn(async () => ({
       getTextContent: vi.fn(async () => ({
-        items: [{ str: "the quick brown river jumps ", hasEOL: false }, { str: "over the lazy river bank", hasEOL: true }],
+        items: [
+          { str: "the quick brown river jumps ", hasEOL: false },
+          { str: "over the lazy river bank", hasEOL: true },
+        ],
       })),
       getAnnotations: vi.fn(async () => []),
     }));
@@ -266,8 +262,10 @@ describe("ViewerController search results", () => {
 
   it("resets nativeCanUndo and nativeCanRedo in attach()", async () => {
     // Set undo/redo flags
-    (controller as unknown as { nativeCanUndo: boolean; nativeCanRedo: boolean }).nativeCanUndo = true;
-    (controller as unknown as { nativeCanUndo: boolean; nativeCanRedo: boolean }).nativeCanRedo = true;
+    (controller as unknown as { nativeCanUndo: boolean; nativeCanRedo: boolean }).nativeCanUndo =
+      true;
+    (controller as unknown as { nativeCanUndo: boolean; nativeCanRedo: boolean }).nativeCanRedo =
+      true;
     useWorkspace.getState().set({ canUndo: true, canRedo: true });
 
     const pdf = makePdf(1);
@@ -312,7 +310,9 @@ describe("ViewerController search results", () => {
     await controller.attach(pdf as never);
 
     const updateParamsSpy = vi.fn();
-    (controller as unknown as { editor: { updateParams: (type: number, val: unknown) => void } }).editor = {
+    (
+      controller as unknown as { editor: { updateParams: (type: number, val: unknown) => void } }
+    ).editor = {
       updateParams: updateParamsSpy,
     };
 

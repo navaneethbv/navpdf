@@ -7,7 +7,11 @@ import { applyOcrSearchableLayer } from "../src/services/document-commands.ts";
 
 const directory = "output/ocr-review";
 await mkdir(directory, { recursive: true });
-const references = ["A violet lighthouse shines beside the river.", "Invoice 7392 total 184.50", ""];
+const references = [
+  "A violet lighthouse shines beside the river.",
+  "Invoice 7392 total 184.50",
+  "",
+];
 const report = [];
 for (const [index, reference] of references.entries()) {
   const path = `${directory}/scan-${index}.png`;
@@ -15,7 +19,9 @@ for (const [index, reference] of references.entries()) {
   const png = await sharp(Buffer.from(svg)).png().toBuffer();
   await writeFile(path, png);
   const start = performance.now();
-  const result = JSON.parse(execFileSync("src-tauri/target/debug/examples/ocr_cli", [path], { encoding: "utf8" }));
+  const result = JSON.parse(
+    execFileSync("src-tauri/target/debug/examples/ocr_cli", [path], { encoding: "utf8" }),
+  );
   assert.equal(result.fullText.trim(), reference);
   for (const line of result.lines) {
     assert.ok(line.bbox.every(Number.isFinite));
@@ -31,8 +37,18 @@ for (const [index, reference] of references.entries()) {
   await writeFile(saved, await applyOcrSearchableLayer(original, [result]));
   const extracted = execFileSync("pdftotext", [saved, "-"], { encoding: "utf8" });
   assert.equal(extracted.trim(), reference);
-  for (const [file, suffix] of [[source, "before"], [saved, "after"]]) {
-    execFileSync("pdftoppm", ["-singlefile", "-r", "72", "-png", file, `${directory}/${index}-${suffix}`]);
+  for (const [file, suffix] of [
+    [source, "before"],
+    [saved, "after"],
+  ]) {
+    execFileSync("pdftoppm", [
+      "-singlefile",
+      "-r",
+      "72",
+      "-png",
+      file,
+      `${directory}/${index}-${suffix}`,
+    ]);
   }
   const before = await sharp(`${directory}/${index}-before.png`).raw().toBuffer();
   const after = await sharp(`${directory}/${index}-after.png`).raw().toBuffer();
@@ -40,4 +56,6 @@ for (const [index, reference] of references.entries()) {
   report.push({ reference, result, milliseconds: performance.now() - start });
 }
 await writeFile(`${directory}/report.json`, JSON.stringify(report, null, 2));
-console.log("Native OCR: two distinct scans recognized exactly; blank image returned no invented text. Saved text verified by poppler; scan rendering unchanged.");
+console.log(
+  "Native OCR: two distinct scans recognized exactly; blank image returned no invented text. Saved text verified by poppler; scan rendering unchanged.",
+);

@@ -27,11 +27,7 @@ export class LocalRangeTransport extends PDFDataRangeTransport {
     // Native reads remain bounded even when the library asks for a larger range.
     void (async () => {
       const result = new Uint8Array(end - begin);
-      for (
-        let offset = begin;
-        offset < end && !this.cancelled;
-        offset += 1024 * 1024
-      ) {
+      for (let offset = begin; offset < end && !this.cancelled; offset += 1024 * 1024) {
         const bytes = await readRange(
           this.descriptor.id,
           offset,
@@ -41,11 +37,7 @@ export class LocalRangeTransport extends PDFDataRangeTransport {
       }
       if (!this.cancelled) this.onDataRange(begin, result);
     })().catch((error: unknown) =>
-      this.failure(
-        error instanceof Error
-          ? error
-          : new Error("The PDF could not be read."),
-      ),
+      this.failure(error instanceof Error ? error : new Error("The PDF could not be read.")),
     );
   }
   override abort() {
@@ -57,11 +49,7 @@ export async function loadPdf(
   onPassword: (submit: (password: string) => void, reason: number) => void,
   onFailure: (error: Error) => void,
 ) {
-  const initial = await readRange(
-    descriptor.id,
-    0,
-    Math.min(65536, descriptor.size),
-  );
+  const initial = await readRange(descriptor.id, 0, Math.min(65536, descriptor.size));
   const range = new LocalRangeTransport(descriptor, initial, onFailure);
   const task = getDocument({
     ...pdfAssets,

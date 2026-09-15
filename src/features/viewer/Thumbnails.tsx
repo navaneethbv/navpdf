@@ -12,9 +12,7 @@ export function Thumbnails({ controller }: { controller: ViewerController }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current!;
-    const resize = new ResizeObserver(([entry]) =>
-      setHeight(entry.contentRect.height),
-    );
+    const resize = new ResizeObserver(([entry]) => setHeight(entry.contentRect.height));
     resize.observe(el);
     return () => resize.disconnect();
   }, []);
@@ -86,11 +84,7 @@ function ThumbCanvas({
           error?.message?.includes("Worker was destroyed") ||
           error?.message?.includes("worker was destroyed") ||
           error?.name === "WorkerDestroyedException";
-        if (
-          !cancelled &&
-          error?.name !== "RenderingCancelledException" &&
-          !isWorkerDestroyed
-        )
+        if (!cancelled && error?.name !== "RenderingCancelledException" && !isWorkerDestroyed)
           setFailed(true);
       });
     return () => {
@@ -102,11 +96,7 @@ function ThumbCanvas({
   }, [pdf, page, revision]);
   return (
     <div className="thumb-paper">
-      {failed ? (
-        <span>Preview unavailable</span>
-      ) : (
-        <canvas ref={ref} aria-hidden="true" />
-      )}
+      {failed ? <span>Preview unavailable</span> : <canvas ref={ref} aria-hidden="true" />}
     </div>
   );
 }

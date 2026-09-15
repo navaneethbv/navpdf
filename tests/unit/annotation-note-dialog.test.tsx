@@ -16,12 +16,7 @@ describe("AnnotationNoteDialog", () => {
       addStickyNote: vi.fn(async () => {}),
     };
     const onClose = vi.fn();
-    render(
-      <AnnotationNoteDialog
-        controller={controller as never}
-        onClose={onClose}
-      />,
-    );
+    render(<AnnotationNoteDialog controller={controller as never} onClose={onClose} />);
     expect(screen.getByText("Page 3")).toBeTruthy();
     const submitButton = screen.getByRole("button", { name: "Add Note" });
     expect((submitButton as HTMLButtonElement).disabled).toBe(true);
@@ -44,12 +39,7 @@ describe("AnnotationNoteDialog", () => {
       addStickyNote: vi.fn(async () => {}),
     };
     const onClose = vi.fn();
-    render(
-      <AnnotationNoteDialog
-        controller={controller as never}
-        onClose={onClose}
-      />,
-    );
+    render(<AnnotationNoteDialog controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalled();
   });
@@ -62,12 +52,7 @@ describe("AnnotationNoteDialog", () => {
       }),
     };
     const onClose = vi.fn();
-    render(
-      <AnnotationNoteDialog
-        controller={controller as never}
-        onClose={onClose}
-      />,
-    );
+    render(<AnnotationNoteDialog controller={controller as never} onClose={onClose} />);
     const textarea = screen.getByPlaceholderText("Write a comment about this page...");
     fireEvent.change(textarea, { target: { value: "Failing note" } });
     fireEvent.click(screen.getByRole("button", { name: "Add Note" }));

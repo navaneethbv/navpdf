@@ -20,9 +20,9 @@ export function DecorationsDialog({
   onClose: () => void;
 }) {
   const s = useWorkspace();
-  const [tab, setTab] = useState<
-    "watermark" | "header-footer" | "bates" | "background"
-  >("watermark");
+  const [tab, setTab] = useState<"watermark" | "header-footer" | "bates" | "background">(
+    "watermark",
+  );
 
   // Watermark
   const [watermarkText, setWatermarkText] = useState("CONFIDENTIAL");
@@ -160,10 +160,7 @@ export function DecorationsDialog({
     setApplying(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      let cleanedBytes = await removeDocumentDecorations(
-        currentBytes,
-        parsedPageRange,
-      );
+      let cleanedBytes = await removeDocumentDecorations(currentBytes, parsedPageRange);
       if (native) {
         try {
           cleanedBytes = await pruneDocument(cleanedBytes);
@@ -218,10 +215,7 @@ export function DecorationsDialog({
           >
             <Heading size={15} /> Header & Footer
           </button>
-          <button
-            className={tab === "bates" ? "active" : ""}
-            onClick={() => setTab("bates")}
-          >
+          <button className={tab === "bates" ? "active" : ""} onClick={() => setTab("bates")}>
             <Hash size={15} /> Bates Numbers
           </button>
           <button
@@ -354,7 +348,8 @@ export function DecorationsDialog({
               </div>
 
               <p className="field-hint">
-                Available tokens: &#123;page&#125;, &#123;total&#125;, &#123;date&#125;, &#123;title&#125;, &#123;author&#125;
+                Available tokens: &#123;page&#125;, &#123;total&#125;, &#123;date&#125;,
+                &#123;title&#125;, &#123;author&#125;
               </p>
             </>
           )}
@@ -456,7 +451,14 @@ export function DecorationsDialog({
             </>
           )}
 
-          <div className="setting-group" style={{ marginTop: "16px", borderTop: "1px solid var(--border-subtle, #e0e0e0)", paddingTop: "12px" }}>
+          <div
+            className="setting-group"
+            style={{
+              marginTop: "16px",
+              borderTop: "1px solid var(--border-subtle, #e0e0e0)",
+              paddingTop: "12px",
+            }}
+          >
             <label className="setting-title">Page Scope</label>
             <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -507,11 +509,7 @@ export function DecorationsDialog({
             <button onClick={onClose} className="button-secondary">
               Cancel
             </button>
-            <button
-              onClick={handleApply}
-              disabled={applying}
-              className="button-primary"
-            >
+            <button onClick={handleApply} disabled={applying} className="button-primary">
               {applying ? "Applying..." : "Apply to All Pages"}
             </button>
           </div>

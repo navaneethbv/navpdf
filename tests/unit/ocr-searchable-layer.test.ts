@@ -7,23 +7,11 @@ import {
   detectExistingText,
   insertTextContent,
 } from "../../src/services/document-commands";
-import {
-  getDocument,
-  GlobalWorkerOptions,
-} from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { OcrPageResult } from "../../src/types/operations";
-import {
-  PDFDocument,
-  PDFName,
-  PDFArray,
-  PDFDict,
-  decodePDFRawStream,
-  degrees,
-} from "pdf-lib";
+import { PDFDocument, PDFName, PDFArray, PDFDict, decodePDFRawStream, degrees } from "pdf-lib";
 
-GlobalWorkerOptions.workerSrc = resolve(
-  "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
-);
+GlobalWorkerOptions.workerSrc = resolve("node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
 
 const pdfOptions = {
   standardFontDataUrl: resolve("node_modules/pdfjs-dist/standard_fonts") + "/",
@@ -41,11 +29,20 @@ describe("Searchable PDF Layer and Integrity (P6.3)", () => {
     const source = await PDFDocument.load(samplePdf);
     source.getPage(0).setCropBox(50, 100, 400, 500);
     source.getPage(0).setRotation(degrees(90));
-    const word = { text: "Café résumé", confidence: 1, bbox: [0.1, 0.2, 0.5, 0.04] as [number, number, number, number] };
-    const bytes = await applyOcrSearchableLayer(await source.save(), [{
-      pageIndex: 0, language: "fr-FR", fullText: word.text, meanConfidence: 1,
-      lines: [{ ...word, words: [word] }],
-    }]);
+    const word = {
+      text: "Café résumé",
+      confidence: 1,
+      bbox: [0.1, 0.2, 0.5, 0.04] as [number, number, number, number],
+    };
+    const bytes = await applyOcrSearchableLayer(await source.save(), [
+      {
+        pageIndex: 0,
+        language: "fr-FR",
+        fullText: word.text,
+        meanConfidence: 1,
+        lines: [{ ...word, words: [word] }],
+      },
+    ]);
     const pdf = await getDocument({ ...pdfOptions, data: bytes }).promise;
     try {
       const page = await pdf.getPage(1);
@@ -58,15 +55,28 @@ describe("Searchable PDF Layer and Integrity (P6.3)", () => {
         expect(text.width).toBeCloseTo(200, 2);
       }
       expect(page.rotate).toBe(90);
-    } finally { await pdf.loadingTask.destroy(); }
+    } finally {
+      await pdf.loadingTask.destroy();
+    }
   });
 
   it("rejects unsupported OCR glyphs instead of corrupting saved text", async () => {
-    const word = { text: "日本語", confidence: 1, bbox: [0.1, 0.2, 0.5, 0.04] as [number, number, number, number] };
-    await expect(applyOcrSearchableLayer(samplePdf, [{
-      pageIndex: 0, language: "ja-JP", fullText: word.text, meanConfidence: 1,
-      lines: [{ ...word, words: [word] }],
-    }])).rejects.toThrow("Extract Text Only");
+    const word = {
+      text: "日本語",
+      confidence: 1,
+      bbox: [0.1, 0.2, 0.5, 0.04] as [number, number, number, number],
+    };
+    await expect(
+      applyOcrSearchableLayer(samplePdf, [
+        {
+          pageIndex: 0,
+          language: "ja-JP",
+          fullText: word.text,
+          meanConfidence: 1,
+          lines: [{ ...word, words: [word] }],
+        },
+      ]),
+    ).rejects.toThrow("Extract Text Only");
   });
 
   const mockOcrResult: OcrPageResult = {
@@ -212,9 +222,7 @@ describe("Searchable PDF Layer and Integrity (P6.3)", () => {
     for (const ref of refs) {
       const stream = doc.context.lookup(ref);
       const dict =
-        stream instanceof PDFDict
-          ? stream
-          : (stream as unknown as { dict?: PDFDict })?.dict;
+        stream instanceof PDFDict ? stream : (stream as unknown as { dict?: PDFDict })?.dict;
       if (dict?.get(PDFName.of("NavPDF_OCR"))) {
         foundOcrStream = true;
         const decoded = decodePDFRawStream(

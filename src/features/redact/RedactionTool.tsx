@@ -1,13 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Check,
-  EyeOff,
-  Search,
-  Square,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertTriangle, Check, EyeOff, Search, Square, Trash2, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { discardRecovery, native } from "../../services/native";
@@ -17,11 +9,7 @@ import {
   newJobId,
   redactDocument,
 } from "../../services/engine";
-import type {
-  PdfRect,
-  RedactionReport,
-  SanitizeOptions,
-} from "../../types/engine";
+import type { PdfRect, RedactionReport, SanitizeOptions } from "../../types/engine";
 import {
   findTermMarks,
   placePageBoxes,
@@ -55,8 +43,7 @@ const OPTION_LABELS: [keyof SanitizeOptions, string][] = [
 ];
 
 const MIN_DRAWN_SIZE = 2;
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function RedactionTool({
   controller,
@@ -126,7 +113,10 @@ export function RedactionTool({
       const rect = viewportToPdfRect(viewer, page, start, end);
       start = null;
       if (rect && rect[2] - rect[0] >= MIN_DRAWN_SIZE && rect[3] - rect[1] >= MIN_DRAWN_SIZE) {
-        setMarks((current) => [...current, { id: crypto.randomUUID(), page, rect, source: "drawn" }]);
+        setMarks((current) => [
+          ...current,
+          { id: crypto.randomUUID(), page, rect, source: "drawn" },
+        ]);
       }
     };
     document.addEventListener("mousedown", down, true);
@@ -241,13 +231,20 @@ export function RedactionTool({
         type="number"
         className="text-input"
         value={region[key]}
-        onChange={(event) => setRegion((current) => ({ ...current, [key]: Number(event.target.value) }))}
+        onChange={(event) =>
+          setRegion((current) => ({ ...current, [key]: Number(event.target.value) }))
+        }
       />
     </div>
   );
 
   return (
-    <aside className="redaction-panel" role="dialog" aria-modal="false" aria-label="Redact Sensitive Content">
+    <aside
+      className="redaction-panel"
+      role="dialog"
+      aria-modal="false"
+      aria-label="Redact Sensitive Content"
+    >
       <div className="modal-header">
         <div className="modal-title">
           <EyeOff size={18} />
@@ -269,9 +266,9 @@ export function RedactionTool({
         {stage === "mark" && (
           <>
             <p className="field-hint">
-              Marks are reversible. Applying them rewrites a fresh copy that
-              removes the marked text, image pixels and hidden data, then audits
-              the result before it replaces your working document.
+              Marks are reversible. Applying them rewrites a fresh copy that removes the marked
+              text, image pixels and hidden data, then audits the result before it replaces your
+              working document.
             </p>
             <form
               className="setting-group"
@@ -302,7 +299,8 @@ export function RedactionTool({
               aria-pressed={drawing}
               onClick={() => setDrawing((value) => !value)}
             >
-              <Square size={15} /> {drawing ? "Drawing Regions (click to stop)" : "Draw Regions on Pages"}
+              <Square size={15} />{" "}
+              {drawing ? "Drawing Regions (click to stop)" : "Draw Regions on Pages"}
             </button>
             <details>
               <summary>Add a region by coordinates (PDF points)</summary>
@@ -337,7 +335,9 @@ export function RedactionTool({
                     className="icon-button"
                     title="Remove mark"
                     aria-label={`Remove mark on page ${mark.page}`}
-                    onClick={() => setMarks((current) => current.filter((item) => item.id !== mark.id))}
+                    onClick={() =>
+                      setMarks((current) => current.filter((item) => item.id !== mark.id))
+                    }
                   >
                     <Trash2 size={16} />
                   </button>
@@ -354,7 +354,9 @@ export function RedactionTool({
                       className="icon-button"
                       title="Stop auditing term"
                       aria-label={`Stop auditing ${value}`}
-                      onClick={() => setTerms((current) => current.filter((item) => item !== value))}
+                      onClick={() =>
+                        setTerms((current) => current.filter((item) => item !== value))
+                      }
                     >
                       <Trash2 size={16} />
                     </button>
@@ -369,7 +371,9 @@ export function RedactionTool({
                   <input
                     type="checkbox"
                     checked={options[key]}
-                    onChange={(event) => setOptions((current) => ({ ...current, [key]: event.target.checked }))}
+                    onChange={(event) =>
+                      setOptions((current) => ({ ...current, [key]: event.target.checked }))
+                    }
                   />
                   {label}
                 </label>
@@ -383,11 +387,10 @@ export function RedactionTool({
             <div className="warning-banner">
               <AlertTriangle size={18} />
               <span>
-                Apply {marks.length} region{marks.length === 1 ? "" : "s"} and audit{" "}
-                {terms.length} term{terms.length === 1 ? "" : "s"} permanently? Marked
-                content and the selected hidden data are removed, undo history is
-                cleared and recovery copies are discarded. The original file on disk
-                is unchanged until you use Save As.
+                Apply {marks.length} region{marks.length === 1 ? "" : "s"} and audit {terms.length}{" "}
+                term{terms.length === 1 ? "" : "s"} permanently? Marked content and the selected
+                hidden data are removed, undo history is cleared and recovery copies are discarded.
+                The original file on disk is unchanged until you use Save As.
               </span>
             </div>
             {s.hasDigitalSignature && (
@@ -397,8 +400,8 @@ export function RedactionTool({
                   checked={acknowledged}
                   onChange={(event) => setAcknowledged(event.target.checked)}
                 />
-                I understand this removes the document's digital signatures, which
-                redaction invalidates.
+                I understand this removes the document's digital signatures, which redaction
+                invalidates.
               </label>
             )}
           </>
@@ -415,15 +418,15 @@ export function RedactionTool({
             <p>
               <Check size={14} /> Audit passed: {report.audit.regionsChecked} region
               {report.audit.regionsChecked === 1 ? "" : "s"} and {report.audit.termsChecked} term
-              {report.audit.termsChecked === 1 ? "" : "s"} checked across {report.audit.streamsScanned}{" "}
-              streams.
+              {report.audit.termsChecked === 1 ? "" : "s"} checked across{" "}
+              {report.audit.streamsScanned} streams.
             </p>
             <p className="field-hint">
               Removed {report.removedGlyphs} glyphs, {report.removedAnnotations} annotations
               {report.hiddenAnnotationsRemoved > 0
                 ? ` (${report.hiddenAnnotationsRemoved} hidden by layers)`
-                : ""},{" "}
-              {report.removedFormFields} form fields and {report.removedPaths} vector shapes.
+                : ""}
+              , {report.removedFormFields} form fields and {report.removedPaths} vector shapes.
               Redacted pixels in {report.pixelRedactedImages} images and removed{" "}
               {report.removedImages} images that could not be redacted pixel by pixel.
             </p>

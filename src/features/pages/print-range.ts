@@ -27,8 +27,7 @@ export function parsePageRange(
     const token = part.trim();
     if (!token) continue;
     const span = token.split("-").map((n) => Number.parseInt(n.trim(), 10));
-    const [start, end] =
-      span.length === 1 ? [span[0], span[0]] : [span[0], span[1]];
+    const [start, end] = span.length === 1 ? [span[0], span[0]] : [span[0], span[1]];
     if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
     const from = Math.min(start, end);
     const to = Math.max(start, end);
@@ -38,9 +37,7 @@ export function parsePageRange(
   }
 
   if (selected.size === 0) {
-    throw new Error(
-      `Enter a page range between 1 and ${totalPages}, for example 1-3, 5.`,
-    );
+    throw new Error(`Enter a page range between 1 and ${totalPages}, for example 1-3, 5.`);
   }
   return [...selected].sort((a, b) => a - b);
 }

@@ -76,9 +76,7 @@ describe("FormManager", () => {
   });
 
   it("handles field creation error without crashing", async () => {
-    vi.spyOn(docCommands, "addFormField").mockRejectedValue(
-      new Error("Duplicate field name"),
-    );
+    vi.spyOn(docCommands, "addFormField").mockRejectedValue(new Error("Duplicate field name"));
 
     render(<FormManager controller={controller as never} onClose={() => {}} />);
 
@@ -99,9 +97,7 @@ describe("FillAndSign safeguards and UI", () => {
     useWorkspace.getState().set({ hasDigitalSignature: true });
     render(<FillAndSign controller={controller as never} onClose={() => {}} />);
 
-    expect(
-      screen.getByText(/This document contains an existing digital signature/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/This document contains an existing digital signature/i)).toBeTruthy();
   });
 
   it("renders non-cryptographic visual appearance notice", () => {

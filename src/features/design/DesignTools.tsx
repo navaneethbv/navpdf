@@ -141,10 +141,7 @@ export function DesignTools({
       }
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(
-        newBytes,
-        "Cover page generated and inserted",
-      );
+      await controller.replaceWithBytes(newBytes, "Cover page generated and inserted");
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -154,7 +151,12 @@ export function DesignTools({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Generate Cover Page">
+    <div
+      className="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Generate Cover Page"
+    >
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">

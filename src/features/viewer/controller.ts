@@ -52,10 +52,7 @@ import {
 } from "pdf-lib";
 import { installHighlightInterop } from "./highlight-interop";
 import { readTextSelectionGeometry } from "./selection-geometry";
-import {
-  createCommentExchange,
-  parseCommentExchange,
-} from "../../services/comment-exchange";
+import { createCommentExchange, parseCommentExchange } from "../../services/comment-exchange";
 import { contentIdentity } from "../../services/document-identity";
 
 const finite = (value: number) => Number.isFinite(value);
@@ -126,8 +123,7 @@ export class ViewerController {
       enablePermissions: true,
       enableAutoLinking: false,
       imagesRightClickMinSize: -1,
-      annotationEditorHighlightColors:
-        "yellow=#f5cf58,green=#80d49b,blue=#8cc9f7,pink=#f3a1c0",
+      annotationEditorHighlightColors: "yellow=#f5cf58,green=#80d49b,blue=#8cc9f7,pink=#f3a1c0",
       supportsPinchToZoom: true,
     });
     this.links.setViewer(this.viewer);
@@ -136,8 +132,7 @@ export class ViewerController {
     on("pagesinit", () => {
       this.setLayout(useWorkspace.getState().layout);
       if (this.container.clientWidth > 0 && this.container.clientHeight > 0) {
-        this.viewer.currentScaleValue =
-          useWorkspace.getState().local.preferences.defaultZoom;
+        this.viewer.currentScaleValue = useWorkspace.getState().local.preferences.defaultZoom;
       }
     });
     on("pagechanging", ({ pageNumber }: { pageNumber: number }) => {
@@ -147,9 +142,7 @@ export class ViewerController {
         const id = useWorkspace.getState().document?.id;
         if (id)
           void rememberPage(id, pageNumber).catch(() =>
-            useWorkspace
-              .getState()
-              .set({ error: "The last viewed page could not be remembered." }),
+            useWorkspace.getState().set({ error: "The last viewed page could not be remembered." }),
           );
       }, 500);
     });
@@ -171,12 +164,9 @@ export class ViewerController {
           : {}),
       });
     });
-    on(
-      "annotationeditoruimanager",
-      ({ uiManager }: { uiManager: AnnotationEditorUIManager }) => {
-        this.editor = uiManager;
-      },
-    );
+    on("annotationeditoruimanager", ({ uiManager }: { uiManager: AnnotationEditorUIManager }) => {
+      this.editor = uiManager;
+    });
     on(
       "editingstateschanged",
       ({
@@ -211,19 +201,13 @@ export class ViewerController {
       )
         this.viewer.annotationEditorMode = { mode };
     });
-    on(
-      "switchannotationeditorparams",
-      ({ type, value }: { type: number; value: unknown }) => {
-        this.editor?.updateParams(type, value);
-      },
-    );
-    on(
-      "updatefindmatchescount",
-      ({ matchesCount }: { matchesCount: { total: number } }) => {
-        useWorkspace.getState().set({ searchCount: matchesCount.total });
-        this.queueResults();
-      },
-    );
+    on("switchannotationeditorparams", ({ type, value }: { type: number; value: unknown }) => {
+      this.editor?.updateParams(type, value);
+    });
+    on("updatefindmatchescount", ({ matchesCount }: { matchesCount: { total: number } }) => {
+      useWorkspace.getState().set({ searchCount: matchesCount.total });
+      this.queueResults();
+    });
     on("updatefindcontrolstate", ({ state }: { state: number }) => {
       useWorkspace.getState().set({ searchPending: state === 3 });
       this.queueResults();
@@ -232,8 +216,7 @@ export class ViewerController {
       "click",
       (event) => {
         const anchor = (event.target as Element).closest("a");
-        if (anchor && !anchor.classList.contains("internalLink"))
-          event.preventDefault();
+        if (anchor && !anchor.classList.contains("internalLink")) event.preventDefault();
       },
       { capture: true, signal: this.abort.signal },
     );
@@ -250,35 +233,24 @@ export class ViewerController {
     this.links.setDocument(pdf);
     this.find.setDocument(pdf);
     this.viewer.setDocument(pdf);
-    (
-      pdf.annotationStorage as unknown as { onSetModified: () => void }
-    ).onSetModified = () => {
+    (pdf.annotationStorage as unknown as { onSetModified: () => void }).onSetModified = () => {
       this.storageModified = true;
       useWorkspace.getState().set({ dirty: true, status: "Unsaved changes" });
       void markDirty(true).catch(() =>
-        useWorkspace
-          .getState()
-          .set({
-            error:
-              "Native change tracking is unavailable. Save a copy before closing.",
-          }),
+        useWorkspace.getState().set({
+          error: "Native change tracking is unavailable. Save a copy before closing.",
+        }),
       );
     };
     installHighlightInterop(pdf.annotationStorage);
     try {
-      await (
-        await pdf.getPage(1)
-      ).getTextContent({ disableNormalization: true });
+      await (await pdf.getPage(1)).getTextContent({ disableNormalization: true });
     } catch (error) {
-      useWorkspace
-        .getState()
-        .set({ error: `Text extraction failed: ${String(error)}` });
+      useWorkspace.getState().set({ error: `Text extraction failed: ${String(error)}` });
     }
     const outline = await pdf.getOutline();
     if (generation !== this.generation) return;
-    type OutlineItem = NonNullable<
-      Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>
-    >[number];
+    type OutlineItem = NonNullable<Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>>[number];
     const map = (nodes: OutlineItem[]): Bookmark[] =>
       nodes
         .filter((n) => n.dest || (n.items && n.items.length > 0))
@@ -294,16 +266,14 @@ export class ViewerController {
     useWorkspace.getState().set({ formNotice: null, hasDigitalSignature: false });
     if (pdf.isPureXfa || Boolean(pdf.allXfaHtml)) {
       useWorkspace.getState().set({
-        formNotice:
-          "XFA forms are not supported. Form elements are read-only or unavailable.",
+        formNotice: "XFA forms are not supported. Form elements are read-only or unavailable.",
       });
     }
     try {
       const js = await pdf.getJSActions();
       if (js && js.size > 0) {
         useWorkspace.getState().set({
-          formNotice:
-            "Script-based calculations and actions are disabled for document safety.",
+          formNotice: "Script-based calculations and actions are disabled for document safety.",
         });
       }
     } catch {
@@ -316,10 +286,7 @@ export class ViewerController {
         for (const fields of fieldObjects.values()) {
           for (const f of fields) {
             const fieldObj = f as { type?: string; subtype?: string };
-            if (
-              fieldObj.type === "signature" ||
-              fieldObj.subtype === "Sig"
-            ) {
+            if (fieldObj.type === "signature" || fieldObj.subtype === "Sig") {
               hasSig = true;
               break;
             }
@@ -393,13 +360,12 @@ export class ViewerController {
     // Keep an owned copy for history and later rollback bookkeeping.
     const candidateBytes = new Uint8Array(bytes);
     const historyBytes = new Uint8Array(candidateBytes);
-    const previousBytes =
-      !options?.resetHistory
-        ? (options?.preMutationBytes ??
-            (this.pdf && typeof this.pdf.saveDocument === "function"
-              ? await this.pdf.saveDocument()
-              : null))
-        : null;
+    const previousBytes = !options?.resetHistory
+      ? (options?.preMutationBytes ??
+        (this.pdf && typeof this.pdf.saveDocument === "function"
+          ? await this.pdf.saveDocument()
+          : null))
+      : null;
     if (previousBytes) {
       this.history.adopt({
         bytes: previousBytes,
@@ -417,7 +383,11 @@ export class ViewerController {
       loaded = await task.promise;
       await this.attach(loaded);
       await this.viewer.firstPagePromise;
-      nativeRevisionId = await this.commitNativeRevision(historyBytes, loaded.numPages, previousState.document);
+      nativeRevisionId = await this.commitNativeRevision(
+        historyBytes,
+        loaded.numPages,
+        previousState.document,
+      );
     } catch (error) {
       await task.destroy().catch(() => {});
       if (previousPdf && this.pdf !== previousPdf) {
@@ -463,8 +433,7 @@ export class ViewerController {
     this.goTo(useWorkspace.getState().page);
     await markDirty(true).catch(() =>
       state.set({
-        error:
-          "Native change tracking is unavailable. Save a copy before closing.",
+        error: "Native change tracking is unavailable. Save a copy before closing.",
       }),
     );
   }
@@ -526,8 +495,7 @@ export class ViewerController {
     this.updateHistoryControls();
     await markDirty(dirty).catch(() =>
       state.set({
-        error:
-          "Native change tracking is unavailable. Save a copy before closing.",
+        error: "Native change tracking is unavailable. Save a copy before closing.",
       }),
     );
   }
@@ -557,10 +525,8 @@ export class ViewerController {
     this.abort.abort();
   }
   setLayout(layout: Layout) {
-    this.viewer.scrollMode =
-      layout === "single" ? ScrollMode.PAGE : ScrollMode.VERTICAL;
-    this.viewer.spreadMode =
-      layout === "spread" ? SpreadMode.ODD : SpreadMode.NONE;
+    this.viewer.scrollMode = layout === "single" ? ScrollMode.PAGE : ScrollMode.VERTICAL;
+    this.viewer.spreadMode = layout === "spread" ? SpreadMode.ODD : SpreadMode.NONE;
     useWorkspace.getState().set({ layout });
   }
   setTool(tool: Tool) {
@@ -584,29 +550,17 @@ export class ViewerController {
   setColor(value: string) {
     const currentTool = useWorkspace.getState().tool;
     if (currentTool === "draw" || currentTool === "ink") {
-      this.editor?.updateParams(
-        AnnotationEditorParamsType.INK_COLOR,
-        value,
-      );
+      this.editor?.updateParams(AnnotationEditorParamsType.INK_COLOR, value);
     } else {
-      this.editor?.updateParams(
-        AnnotationEditorParamsType.HIGHLIGHT_COLOR,
-        value,
-      );
+      this.editor?.updateParams(AnnotationEditorParamsType.HIGHLIGHT_COLOR, value);
     }
     useWorkspace.getState().set({ highlightColor: value, inkColor: value });
   }
   setWidth(value: number) {
-    this.editor?.updateParams(
-      AnnotationEditorParamsType.INK_THICKNESS,
-      value,
-    );
+    this.editor?.updateParams(AnnotationEditorParamsType.INK_THICKNESS, value);
   }
   setOpacity(value: number) {
-    this.editor?.updateParams(
-      AnnotationEditorParamsType.INK_OPACITY,
-      value,
-    );
+    this.editor?.updateParams(AnnotationEditorParamsType.INK_OPACITY, value);
   }
   currentPage() {
     return this.viewer.currentPageNumber;
@@ -640,11 +594,7 @@ export class ViewerController {
       });
     });
   }
-  async addShape(
-    kind: ShapeKind,
-    start: [number, number],
-    end: [number, number],
-  ) {
+  async addShape(kind: ShapeKind, start: [number, number], end: [number, number]) {
     if (!this.pdf) throw new Error("Open a PDF before adding a shape.");
     const status = `${kind === "Arrow" ? "Arrow" : kind} added to document`;
     return this.mutate(status, async () => {
@@ -670,28 +620,23 @@ export class ViewerController {
   }
   async addTextMarkup(kind: TextMarkupKind) {
     if (!this.pdf) throw new Error("Open a PDF before adding an annotation.");
-    const selection = await readTextSelectionGeometry(
-      this.container,
-      async (pageNumber) => {
-        const viewport = (await this.pdf!.getPage(pageNumber)).getViewport({
-          scale: 1,
-        });
-        return {
-          width: viewport.width,
-          height: viewport.height,
-          convertToPdfPoint: (x: number, y: number): [number, number] => {
-            const point = viewport.convertToPdfPoint(x, y);
-            return [point[0], point[1]];
-          },
-        };
-      },
-    );
+    const selection = await readTextSelectionGeometry(this.container, async (pageNumber) => {
+      const viewport = (await this.pdf!.getPage(pageNumber)).getViewport({
+        scale: 1,
+      });
+      return {
+        width: viewport.width,
+        height: viewport.height,
+        convertToPdfPoint: (x: number, y: number): [number, number] => {
+          const point = viewport.convertToPdfPoint(x, y);
+          return [point[0], point[1]];
+        },
+      };
+    });
     if (selection.length === 0)
       throw new Error("Select text on the page before adding this annotation.");
     const status =
-      kind === "Underline"
-        ? "Underline added to document"
-        : "Strike-through added to document";
+      kind === "Underline" ? "Underline added to document" : "Strike-through added to document";
     return this.mutate(status, async () => {
       const hex = useWorkspace.getState().highlightColor;
       const color: [number, number, number] = [
@@ -717,8 +662,7 @@ export class ViewerController {
   }
   exportComments() {
     const state = useWorkspace.getState();
-    if (!state.document || !this.pdf)
-      throw new Error("Open a PDF before exporting comments.");
+    if (!state.document || !this.pdf) throw new Error("Open a PDF before exporting comments.");
     return JSON.stringify(
       createCommentExchange(
         state.document.id,
@@ -738,14 +682,18 @@ export class ViewerController {
       this.identity = await contentIdentity(this.pdf).catch(() => null);
     }
     const exchange = parseCommentExchange(source, this.pdf.numPages, this.identity ?? undefined);
-    if (exchange.version === 2 && exchange.identity && this.identity && exchange.identity !== this.identity)
+    if (
+      exchange.version === 2 &&
+      exchange.identity &&
+      this.identity &&
+      exchange.identity !== this.identity
+    )
       throw new Error("These comments belong to a different document.");
     if (exchange.version === 1 && exchange.documentId && exchange.documentId !== state.document.id)
       throw new Error("These comments belong to a different document.");
     const existing = new Set(state.comments.map((comment) => comment.id));
     const pending = exchange.comments.filter((comment) => !existing.has(comment.id));
-    if (pending.length === 0)
-      throw new Error("Every imported comment is already present.");
+    if (pending.length === 0) throw new Error("Every imported comment is already present.");
     state.set({ busy: true, status: "Importing comments" });
     try {
       let bytes = await this.pdf.saveDocument();
@@ -757,10 +705,16 @@ export class ViewerController {
             page: comment.page,
             x: comment.rect[0],
             y: comment.rect[3],
-            size: Math.max(12, Math.min(64, Math.min(
-              Math.abs(comment.rect[2] - comment.rect[0]),
-              Math.abs(comment.rect[3] - comment.rect[1]),
-            ))),
+            size: Math.max(
+              12,
+              Math.min(
+                64,
+                Math.min(
+                  Math.abs(comment.rect[2] - comment.rect[0]),
+                  Math.abs(comment.rect[3] - comment.rect[1]),
+                ),
+              ),
+            ),
             contents: comment.text,
             color: comment.color,
             id: comment.id,
@@ -845,10 +799,7 @@ export class ViewerController {
     this.setTool("select");
     this.goTo(comment.page);
   }
-  private async applyAnnotationEdit(
-    input: Parameters<typeof updateAnnotation>[1],
-    status: string,
-  ) {
+  private async applyAnnotationEdit(input: Parameters<typeof updateAnnotation>[1], status: string) {
     if (!this.pdf) throw new Error("Open a PDF before editing an annotation.");
     return this.mutate(status, async () => {
       const bytes = await this.pdf!.saveDocument();
@@ -860,15 +811,10 @@ export class ViewerController {
       });
     });
   }
-  async updateSelectedAnnotation(
-    patch: Omit<Parameters<typeof updateAnnotation>[1], "id">,
-  ) {
+  async updateSelectedAnnotation(patch: Omit<Parameters<typeof updateAnnotation>[1], "id">) {
     const id = useWorkspace.getState().selectedAnnotationId;
     if (!id) return;
-    await this.applyAnnotationEdit(
-      { id, ...patch },
-      "Annotation properties updated",
-    );
+    await this.applyAnnotationEdit({ id, ...patch }, "Annotation properties updated");
   }
   async moveSelectedAnnotation(dx: number, dy: number) {
     const selected = useWorkspace
@@ -1015,17 +961,12 @@ export class ViewerController {
     else this.viewer.currentScale = boundedZoom(value);
   }
   goTo(page: number) {
-    if (this.pdf)
-      this.viewer.currentPageNumber = Math.max(
-        1,
-        Math.min(this.pdf.numPages, page),
-      );
+    if (this.pdf) this.viewer.currentPageNumber = Math.max(1, Math.min(this.pdf.numPages, page));
   }
   search(again = false, backward = false) {
     const s = useWorkspace.getState();
     this.searchGeneration++;
-    if (!again)
-      s.set({ searchPending: !!s.searchQuery, results: [], searchCount: 0 });
+    if (!again) s.set({ searchPending: !!s.searchQuery, results: [], searchCount: 0 });
     this.bus.dispatch("find", {
       source: this,
       type: again ? "again" : "",
@@ -1050,9 +991,7 @@ export class ViewerController {
     clearTimeout(this.searchTimer);
     this.searchTimer = setTimeout(() => {
       void this.buildResults().catch(() =>
-        useWorkspace
-          .getState()
-          .set({ error: "Search context could not be read from this PDF." }),
+        useWorkspace.getState().set({ error: "Search context could not be read from this PDF." }),
       );
     }, 120);
   }
@@ -1074,16 +1013,12 @@ export class ViewerController {
           disableNormalization: true,
         });
         text = content.items
-          .map((item) =>
-            "str" in item ? item.str + (item.hasEOL ? "\n" : "") : "",
-          )
+          .map((item) => ("str" in item ? item.str + (item.hasEOL ? "\n" : "") : ""))
           .join("");
         this.contexts.set(p, text);
-        if (this.contexts.size > 40)
-          this.contexts.delete(this.contexts.keys().next().value!);
+        if (this.contexts.size > 40) this.contexts.delete(this.contexts.keys().next().value!);
       }
-      if (generation !== this.generation || search !== this.searchGeneration)
-        return;
+      if (generation !== this.generation || search !== this.searchGeneration) return;
       for (let i = 0; i < pageMatches.length && results.length < 250; i++) {
         const start = pageMatches[i],
           len = lengths?.[p]?.[i] ?? 0;
@@ -1148,10 +1083,7 @@ export class ViewerController {
             a.lineEndings && a.lineEndings.length === 2
               ? [a.lineEndings[0], a.lineEndings[1]]
               : undefined;
-          if (
-            lineEndings &&
-            lineEndings.some((le) => le && le.toLowerCase().includes("arrow"))
-          ) {
+          if (lineEndings && lineEndings.some((le) => le && le.toLowerCase().includes("arrow"))) {
             isArrow = true;
           }
 
@@ -1280,8 +1212,7 @@ export class ViewerController {
           comments.push(comment);
         }
       }
-      if (p % 20 === 0)
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (p % 20 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     const state = useWorkspace.getState();
     state.set({

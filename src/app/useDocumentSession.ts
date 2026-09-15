@@ -29,11 +29,7 @@ export function useDocumentSession(controller: ViewerController | null) {
   useEffect(() => {
     void desktop
       .localState()
-      .then((local) =>
-        useWorkspace
-          .getState()
-          .set({ local, layout: local.preferences.layout }),
-      )
+      .then((local) => useWorkspace.getState().set({ local, layout: local.preferences.layout }))
       .catch(report);
   }, [report]);
   const refreshLocal = useCallback(async () => {
@@ -49,16 +45,13 @@ export function useDocumentSession(controller: ViewerController | null) {
       const previousState = useWorkspace.getState();
       lock.current = true;
       openingCancelled.current = false;
-      useWorkspace
-        .getState()
-        .set({ busy: true, error: "", status: "Opening PDF..." });
+      useWorkspace.getState().set({ busy: true, error: "", status: "Opening PDF..." });
       let candidate: PDFDocumentLoadingTask | null = null;
       const previousPdf = controller.pdf;
       try {
         candidate = await loadPdf(
           descriptor,
-          (submit, reason) =>
-            setPassword({ name: descriptor.name, reason, submit }),
+          (submit, reason) => setPassword({ name: descriptor.name, reason, submit }),
           (error) => {
             report(error);
             void loading.current?.destroy();
@@ -67,9 +60,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         loading.current = candidate;
         candidate.onProgress = ({ percent }: { percent: number }) => {
           if (loading.current === candidate && Number.isFinite(percent))
-            useWorkspace
-              .getState()
-              .set({ status: `Opening PDF... ${percent}%` });
+            useWorkspace.getState().set({ status: `Opening PDF... ${percent}%` });
         };
         const loaded = await candidate.promise;
         setPassword(null);
@@ -101,14 +92,12 @@ export function useDocumentSession(controller: ViewerController | null) {
             controller.clearRevisionHistory?.();
           }
         }
-        if (recovering || descriptor.unsaved)
-          controller.markUnsavedRevision?.();
+        if (recovering || descriptor.unsaved) controller.markUnsavedRevision?.();
 
         // Commit before retiring any previous resource. Cleanup errors cannot
         // roll back to a proxy that has already been destroyed.
         // attach() read these from the candidate; reset() must not discard them.
-        const { bookmarks, comments, formNotice, hasDigitalSignature } =
-          useWorkspace.getState();
+        const { bookmarks, comments, formNotice, hasDigitalSignature } = useWorkspace.getState();
         task.current = candidate;
         useWorkspace.getState().reset();
         useWorkspace.getState().set({
@@ -159,9 +148,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         setPassword(null);
         if (!openingCancelled.current) report(error);
         useWorkspace.getState().set({
-          status: openingCancelled.current
-            ? "Opening cancelled"
-            : "Unable to open PDF",
+          status: openingCancelled.current ? "Opening cancelled" : "Unable to open PDF",
         });
         return false;
       } finally {
@@ -176,8 +163,7 @@ export function useDocumentSession(controller: ViewerController | null) {
     async (saveAs = false, unprotected = false) => {
       const state = useWorkspace.getState();
       const pdf = controller?.pdf ?? null;
-      if (!controller || !pdf || !state.document || lock.current)
-        return false;
+      if (!controller || !pdf || !state.document || lock.current) return false;
       if (state.info?.encrypted) {
         report(
           "This password-protected PDF opens read-only. Unlock it from Password Protect before editing or saving. Your original is unchanged.",
@@ -204,12 +190,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         // Committing a pending editor can itself mark the document dirty.
         dirtyBeforeSave = useWorkspace.getState().dirty;
         const bytes = await pdf.saveDocument();
-        const result = await desktop.saveDocument(
-          state.document,
-          bytes,
-          pdf.numPages,
-          saveAs,
-        );
+        const result = await desktop.saveDocument(state.document, bytes, pdf.numPages, saveAs);
         if (!result) {
           state.set({ status: "Save cancelled" });
           return false;
@@ -223,9 +204,7 @@ export function useDocumentSession(controller: ViewerController | null) {
             name: result.name,
             size: result.size,
           },
-          ...(unprotected && state.info
-            ? { info: { ...state.info, protectedSource: false } }
-            : {}),
+          ...(unprotected && state.info ? { info: { ...state.info, protectedSource: false } } : {}),
         });
         controller.markSaved?.(bytes, pdf.numPages);
         await desktop.markDirty(false);
@@ -271,10 +250,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         void desktop
           .openRecent(id)
           .then((descriptor) =>
-            load(
-              descriptor,
-              useWorkspace.getState().local.preferences.rememberPage ? page : 1,
-            ),
+            load(descriptor, useWorkspace.getState().local.preferences.rememberPage ? page : 1),
           )
           .catch(report);
       }),
@@ -340,9 +316,7 @@ export function useDocumentSession(controller: ViewerController | null) {
       state.set({ status: autosaveStatus });
       void active
         .saveDocument()
-        .then((bytes) =>
-          desktop.writeRecovery(descriptor, bytes, active.numPages),
-        )
+        .then((bytes) => desktop.writeRecovery(descriptor, bytes, active.numPages))
         .catch((err) => {
           console.warn("Autosave recovery write failed:", err);
         })

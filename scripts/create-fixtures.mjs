@@ -1,11 +1,4 @@
-import {
-  PDFDocument,
-  StandardFonts,
-  rgb,
-  PDFName,
-  PDFString,
-  degrees,
-} from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, PDFName, PDFString, degrees } from "pdf-lib";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -106,15 +99,9 @@ mixed
   .getPage(0)
   .node.set(
     PDFName.of("Annots"),
-    mixed.context.obj([
-      mixed.context.register(note),
-      ...mixed.getPage(0).node.Annots().asArray(),
-    ]),
+    mixed.context.obj([mixed.context.register(note), ...mixed.getPage(0).node.Annots().asArray()]),
   );
-await writeFile(
-  path.join(target, "mixed-forms-annotations.pdf"),
-  await mixed.save(),
-);
+await writeFile(path.join(target, "mixed-forms-annotations.pdf"), await mixed.save());
 
 // Generate rotated and offset fixture
 const rotDoc = await PDFDocument.create();
@@ -194,6 +181,4 @@ for (const sample of corpusJson.samples) {
 }
 await writeFile(path.join(target, "ocr-scans.pdf"), await ocrDoc.save());
 
-console.log(
-  "Created reader, forms, annotation, rotation, dimension, damaged, and OCR fixtures.",
-);
+console.log("Created reader, forms, annotation, rotation, dimension, damaged, and OCR fixtures.");

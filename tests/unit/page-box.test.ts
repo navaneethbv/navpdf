@@ -2,11 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, type PDFRef } from "pdf-lib";
-import {
-  visibleBox,
-  clampRectToBox,
-  fromTopLeftVisual,
-} from "../../src/services/pdf/page-box";
+import { visibleBox, clampRectToBox, fromTopLeftVisual } from "../../src/services/pdf/page-box";
 
 function rectOf(doc: PDFDocument, ref: PDFRef | unknown): number[] {
   return doc.context
@@ -16,7 +12,10 @@ function rectOf(doc: PDFDocument, ref: PDFRef | unknown): number[] {
     .map((value) => (value as PDFNumber).asNumber());
 }
 
-function expectInside(rect: number[], box: { x: number; y: number; width: number; height: number }) {
+function expectInside(
+  rect: number[],
+  box: { x: number; y: number; width: number; height: number },
+) {
   expect(Math.min(rect[0], rect[2])).toBeGreaterThanOrEqual(box.x);
   expect(Math.max(rect[0], rect[2])).toBeLessThanOrEqual(box.x + box.width);
   expect(Math.min(rect[1], rect[3])).toBeGreaterThanOrEqual(box.y);
@@ -199,7 +198,12 @@ describe("page-box and visual geometry foundation (VIEW-04, DLG-05, DLG-06)", ()
 
     const withLink = await addLinkAnnotation(withField, {
       page: 2,
-      rect: [visualPos.x, visualPos.y, visualPos.x + visualPos.width, visualPos.y + visualPos.height],
+      rect: [
+        visualPos.x,
+        visualPos.y,
+        visualPos.x + visualPos.width,
+        visualPos.y + visualPos.height,
+      ],
       target: { type: "url", url: "https://example.com" },
     });
 

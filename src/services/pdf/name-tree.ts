@@ -1,11 +1,4 @@
-import {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFObject,
-  PDFRef,
-} from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFObject, PDFRef } from "pdf-lib";
 
 export interface EmbeddedFileEntry {
   name: string;
