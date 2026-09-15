@@ -495,10 +495,14 @@ Preview and Acrobat reopen verification for this final source revision was not c
 
 The final package executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
 
-The final package DMG SHA-256 is 9183379ea6631cde2ce5d9f19fe95f4071fe10037ab08f922975870032935e92.
+The final package DMG SHA-256 is d222b60865446a935e3a66611c2f3f6f69352771a86c7894469cd1a34cd5e211.
 
-hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg reported a valid checksum with CRC32 $0797E84E.
+hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg reported a valid checksum with CRC32 $C4C2E61F.
 
-The hosted Cargo Deny failure from the prior run was caused by the workflow using the repository root manifest.
+The hosted run for commit 1d1a6c8 confirmed the manifest path correction, then failed Cargo Deny because the current configuration still used the removed unlicensed key.
 
-The workflow correction now uses src-tauri/Cargo.toml and requires a fresh hosted check after the final push.
+The same hosted run failed the macOS Rust job because the Swift runtime search path omitted the active Xcode SDK path.
+
+The follow-up removes the obsolete Cargo Deny key and discovers Swift runtime and SDK search paths from the active toolchain and Xcode selection.
+
+The hosted recheck for this follow-up remains pending.

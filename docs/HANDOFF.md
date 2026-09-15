@@ -103,9 +103,9 @@ The final local DMG is src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.
 
 The executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
 
-The DMG SHA-256 is 9183379ea6631cde2ce5d9f19fe95f4071fe10037ab08f922975870032935e92.
+The DMG SHA-256 is d222b60865446a935e3a66611c2f3f6f69352771a86c7894469cd1a34cd5e211.
 
-The DMG passed hdiutil verify with CRC32 $0797E84E.
+The DMG passed hdiutil verify with CRC32 $C4C2E61F.
 
 Local tests and acceptance suites pass as recorded in docs/VERIFICATION.md.
 
@@ -113,6 +113,10 @@ Preview and Acrobat reopen checks for the final source revision remain unverifie
 
 Full Tranche 6 structural refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
 
-The Cargo Deny workflow correction is included in the branch and will be validated by the hosted run after push.
+The hosted run for commit 1d1a6c8 confirmed the Cargo Deny manifest path correction, then exposed an obsolete configuration key and a missing Swift runtime SDK search path on macOS.
+
+The follow-up removes the obsolete Cargo Deny key and discovers Swift runtime and SDK search paths from the active toolchain and Xcode selection.
+
+The hosted recheck for this follow-up remains pending.
 
 The root planning files DELIVERY-PHASES.md, IMPLEMENTATION-PLAN-2026-09-14.md, and REVIEW-2026-09-14.md remain untracked source material and must not be included in the commit.

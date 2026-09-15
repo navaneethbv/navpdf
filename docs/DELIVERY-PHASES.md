@@ -378,12 +378,16 @@ The final local package contains src-tauri/target/release/bundle/macos/NavPDF.ap
 
 The executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
 
-The DMG SHA-256 is 9183379ea6631cde2ce5d9f19fe95f4071fe10037ab08f922975870032935e92.
+The DMG SHA-256 is d222b60865446a935e3a66611c2f3f6f69352771a86c7894469cd1a34cd5e211.
 
-hdiutil verify reports a valid DMG with CRC32 $0797E84E.
+hdiutil verify reports a valid DMG with CRC32 $C4C2E61F.
 
 Preview and Acrobat reopen checks for this final source revision remain open.
 
 Full Tranche 6 domain refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
 
-The Cargo Deny workflow now points at src-tauri/Cargo.toml and will be rechecked by the hosted run after this push.
+The hosted run for commit 1d1a6c8 confirmed that Cargo Deny now receives src-tauri/Cargo.toml, but it rejected the removed unlicensed configuration key and the macOS Rust job could not find the Swift runtime library path.
+
+The follow-up removes the obsolete Cargo Deny key and discovers Swift runtime and SDK search paths from the active toolchain and Xcode selection.
+
+The hosted recheck for this follow-up remains pending.
