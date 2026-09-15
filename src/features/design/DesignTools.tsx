@@ -3,6 +3,7 @@ import { Sparkles, Layout, X } from "lucide-react";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import { validateStandardFontCoverage } from "../../services/document-commands";
 
 export function DesignTools({
   controller,
@@ -22,6 +23,13 @@ export function DesignTools({
     if (!controller?.pdf) return;
     setGenerating(true);
     try {
+      const fullText = `${title} ${subtitle} ${author}`;
+      const coverage = validateStandardFontCoverage(fullText);
+      if (!coverage.valid) {
+        throw new Error(
+          `Unsupported characters for standard PDF fonts: ${coverage.unsupportedChars.join(", ")}`,
+        );
+      }
       const currentBytes = await controller.pdf.saveDocument();
       const doc = await PDFDocument.load(currentBytes);
       const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);

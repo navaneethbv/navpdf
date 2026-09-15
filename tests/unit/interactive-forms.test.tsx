@@ -138,6 +138,7 @@ describe("FillAndSign safeguards and UI", () => {
         type: "signature",
         dataUrl: "data:image/png;base64,data",
         createdAt: 1000,
+        storage: "session",
         sessionOnly: true,
       },
       error: null,
@@ -164,5 +165,33 @@ describe("FillAndSign safeguards and UI", () => {
         true,
       );
     });
+  });
+
+  it("renders Unprotected badge for legacy unauthenticated signatures", async () => {
+    vi.spyOn(sigStore, "fetchSignatureLibrary").mockResolvedValue({
+      signatures: [
+        {
+          id: "unprot-1",
+          name: "Plaintext Signature",
+          type: "signature",
+          dataUrl: "data:image/png;base64,data",
+          createdAt: 1000,
+          storage: "legacy",
+        },
+      ],
+      error: null,
+      warnings: ["One saved signature could not be read."],
+    });
+
+    render(<FillAndSign controller={controller as never} onClose={() => {}} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("unprotected-badge")).toBeTruthy();
+      expect(screen.getByText(/Unprotected/i)).toBeTruthy();
+    });
+    expect(screen.queryByText("Protected")).toBeNull();
+    expect(screen.getByTestId("signature-warnings").textContent).toContain(
+      "One saved signature could not be read.",
+    );
   });
 });

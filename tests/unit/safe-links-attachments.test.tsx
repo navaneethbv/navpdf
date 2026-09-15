@@ -124,6 +124,11 @@ describe("Safe links and attachments", () => {
       expect(sanitizeAttachmentFilename("...")).toBe("attachment.bin");
       expect(sanitizeAttachmentFilename("")).toBe("attachment.bin");
     });
+
+    it("strips bidirectional override and isolate characters that disguise extensions", () => {
+      expect(sanitizeAttachmentFilename("invoice‮txt.exe")).toBe("invoicetxt.exe");
+      expect(sanitizeAttachmentFilename("⁦report⁩.pdf")).toBe("report.pdf");
+    });
   });
 
   describe("embedded attachments lifecycle", () => {

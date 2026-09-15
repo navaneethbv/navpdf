@@ -70,7 +70,7 @@ export function OcrPanel({
   };
 
   const handleStartOcr = async () => {
-    if (!controller?.pdf || !engineInfo) return;
+    if (!controller?.pdf || !engineInfo || s.info?.encrypted) return;
     const sourcePdf = controller.pdf;
     const sourceId = useWorkspace.getState().document?.id;
     const ensureCurrent = () => {
@@ -234,6 +234,29 @@ export function OcrPanel({
               <span>
                 <strong>{engineInfo.engineName}</strong> &bull; 100% Offline & Private
               </span>
+            </div>
+          )}
+
+          {s.info?.encrypted && (
+            <div
+              role="alert"
+              style={{
+                background: "#fef3c7",
+                border: "1px solid #f59e0b",
+                color: "#92400e",
+                padding: "10px",
+                borderRadius: "6px",
+                fontSize: "12px",
+                marginBottom: "12px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+                <AlertTriangle size={16} />
+                <span>Encrypted Document</span>
+              </div>
+              <p style={{ marginTop: "4px" }}>
+                OCR is disabled for password-protected and encrypted documents.
+              </p>
             </div>
           )}
 
@@ -416,7 +439,12 @@ export function OcrPanel({
               {!recognizedText && (
                 <button
                   onClick={handleStartOcr}
-                  disabled={running || !engineInfo || (hasExistingWarning && !replaceExisting)}
+                  disabled={
+                    running ||
+                    !engineInfo ||
+                    (hasExistingWarning && !replaceExisting) ||
+                    !!s.info?.encrypted
+                  }
                   className="button-primary"
                 >
                   {hasExistingWarning && replaceExisting

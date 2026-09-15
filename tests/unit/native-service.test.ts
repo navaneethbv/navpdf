@@ -76,7 +76,7 @@ describe("native service browser fallback", () => {
     expect(state.preferences.theme).toBe("dark");
     expect(state.preferences.networkAccess).toBe(false);
     expect(state.recents).toEqual([]);
-    expect(state.recovery).toBeNull();
+    expect(state.recoveries).toEqual([]);
   });
 
   it("returns defaults when nothing is stored", async () => {

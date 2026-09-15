@@ -112,10 +112,13 @@ describe("Toolbar", () => {
 describe("Statusbar", () => {
   it("reports status, dirty state, and page navigation", () => {
     withDocument();
-    useWorkspace.getState().set({ dirty: true });
+    const failure = "Save failed; changes are still in this workspace";
+    useWorkspace.getState().set({ dirty: true, status: failure });
     const controller = { goTo: vi.fn() };
     render(<Statusbar controller={controller as never} />);
-    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    // A dirty document must not hide the status message that explains what happened.
+    expect(screen.getByText(failure)).toBeTruthy();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
     expect(screen.getByText("of 5")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Next page"));
     expect(controller.goTo).toHaveBeenCalledWith(3);

@@ -106,12 +106,17 @@ export function useDocumentSession(controller: ViewerController | null) {
 
         // Commit before retiring any previous resource. Cleanup errors cannot
         // roll back to a proxy that has already been destroyed.
-        const bookmarks = useWorkspace.getState().bookmarks;
+        // attach() read these from the candidate; reset() must not discard them.
+        const { bookmarks, comments, formNotice, hasDigitalSignature } =
+          useWorkspace.getState();
         task.current = candidate;
         useWorkspace.getState().reset();
         useWorkspace.getState().set({
           document: descriptor,
           bookmarks,
+          comments,
+          formNotice,
+          hasDigitalSignature,
           dirty: recovering || !!descriptor.unsaved,
           info: {
             pages: loaded.numPages,
@@ -125,9 +130,10 @@ export function useDocumentSession(controller: ViewerController | null) {
         });
         controller.goTo(initialPage);
         await desktop.markDirty(recovering || !!descriptor.unsaved).catch(report);
-        if (!recovering) await desktop.discardRecovery().catch(report);
         await refreshLocal().catch(report);
         if (previous && previous.id !== descriptor.id) {
+          // The dirty guard already saved or discarded the previous document's changes.
+          await desktop.discardRecovery(previous.id).catch(report);
           await desktop.releaseDocument(previous.id).catch(report);
         }
         await controller.releaseRevision().catch(report);
@@ -192,8 +198,11 @@ export function useDocumentSession(controller: ViewerController | null) {
         error: "",
         status: "Validating and saving PDF...",
       });
+      let dirtyBeforeSave = state.dirty;
       try {
         controller.editor?.commitOrRemove();
+        // Committing a pending editor can itself mark the document dirty.
+        dirtyBeforeSave = useWorkspace.getState().dirty;
         const bytes = await pdf.saveDocument();
         const result = await desktop.saveDocument(
           state.document,
@@ -225,10 +234,12 @@ export function useDocumentSession(controller: ViewerController | null) {
       } catch (error) {
         report(error);
         state.set({
-          dirty: true,
-          status: "Save failed; changes are still in this workspace",
+          dirty: dirtyBeforeSave,
+          status: dirtyBeforeSave
+            ? "Save failed; changes are still in this workspace"
+            : "Save failed. The document is unchanged.",
         });
-        void desktop.markDirty(true).catch(report);
+        void desktop.markDirty(dirtyBeforeSave).catch(report);
         return false;
       } finally {
         lock.current = false;
@@ -280,17 +291,17 @@ export function useDocumentSession(controller: ViewerController | null) {
           if (doc) await desktop.releaseDocument(doc.id);
           useWorkspace.getState().reset();
           await desktop.markDirty(false);
-          await desktop.discardRecovery();
+          if (doc) await desktop.discardRecovery(doc.id);
           await refreshLocal();
         })().catch(report);
       }),
     [controller, guard, report, refreshLocal],
   );
   const recover = useCallback(
-    () =>
+    (id: string) =>
       guard(() => {
         void desktop
-          .openRecovery()
+          .openRecovery(id)
           .then((descriptor) => load(descriptor, 1, true))
           .then((opened) => {
             if (!opened) return;
@@ -315,6 +326,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         state.info?.encrypted ||
         state.info?.protectedSource ||
         !state.document ||
+        state.busy ||
         !controller?.pdf ||
         lock.current
       )
@@ -322,22 +334,26 @@ export function useDocumentSession(controller: ViewerController | null) {
       lock.current = true;
       const descriptor = state.document;
       const active = controller.pdf;
-      state.set({ busy: true, status: "Saving recovery..." });
+      // Autosave never sets busy, so typing and open dialogs keep focus while it runs.
+      const previousStatus = state.status;
+      const autosaveStatus = "Saving recovery copy...";
+      state.set({ status: autosaveStatus });
       void active
         .saveDocument()
         .then((bytes) =>
           desktop.writeRecovery(descriptor, bytes, active.numPages),
         )
-        .catch(report)
+        .catch((err) => {
+          console.warn("Autosave recovery write failed:", err);
+        })
         .finally(() => {
           lock.current = false;
-          useWorkspace
-            .getState()
-            .set({ busy: false, status: "Unsaved changes" });
+          if (useWorkspace.getState().status === autosaveStatus)
+            useWorkspace.getState().set({ status: previousStatus });
         });
     }, 10000);
     return () => clearInterval(interval);
-  }, [controller, report]);
+  }, [controller]);
   useEffect(() => {
     if (!desktop.native) return;
     let unlisten: (() => void) | undefined;
@@ -345,7 +361,8 @@ export function useDocumentSession(controller: ViewerController | null) {
     void listen("close-requested", () => {
       if (!useWorkspace.getState().busy)
         guard(() => {
-          void desktop.discardRecovery().catch(() => {});
+          const id = useWorkspace.getState().document?.id;
+          if (id) void desktop.discardRecovery(id).catch(() => {});
           void invoke("close_window").catch(report);
         });
     }).then((fn) => {
@@ -380,11 +397,10 @@ export function useDocumentSession(controller: ViewerController | null) {
       action?.();
     },
     saveAndContinue: async () => {
-      if (await save()) {
-        const action = confirm;
-        setConfirm(null);
-        action?.();
-      }
+      const action = confirm;
+      // Close the prompt first so a save that opens another dialog is not hidden behind it.
+      setConfirm(null);
+      if (await save()) action?.();
     },
   };
 }

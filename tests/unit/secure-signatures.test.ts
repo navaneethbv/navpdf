@@ -51,9 +51,13 @@ describe("signature store service", () => {
       type: "signature" as const,
       dataUrl: "data:image/png;base64,native",
       createdAt: 1000,
+      storage: "secure" as const,
     };
     vi.spyOn(nativeModule, "saveSignature").mockResolvedValue(mockSig);
-    vi.spyOn(nativeModule, "loadSignatures").mockResolvedValue([mockSig]);
+    vi.spyOn(nativeModule, "loadSignatures").mockResolvedValue({
+      assets: [mockSig],
+      warnings: ["One saved signature could not be read."],
+    });
     const deleteSpy = vi.spyOn(nativeModule, "deleteSignature").mockResolvedValue();
 
     const { signature, error } = await persistOrStageSignature(
@@ -94,7 +98,9 @@ describe("signature store service", () => {
     const result = await migrateLegacySignatures(true);
     expect(result.count).toBe(1);
     expect(result.error).toBeNull();
-    expect(migrateSpy).toHaveBeenCalledWith(legacyData);
+    expect(migrateSpy).toHaveBeenCalledWith([
+      expect.objectContaining(legacyData[0]),
+    ]);
     expect(localStorage.getItem("navpdf-signatures")).toBeNull();
   });
 

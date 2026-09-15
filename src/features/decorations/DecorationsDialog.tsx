@@ -9,6 +9,8 @@ import {
   type DocumentDecorationsOptions,
   type BatesNumberingOptions,
 } from "../../services/document-commands";
+import { native } from "../../services/native";
+import { pruneDocument } from "../../services/engine";
 
 export function DecorationsDialog({
   controller,
@@ -158,10 +160,21 @@ export function DecorationsDialog({
     setApplying(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const cleanedBytes = await removeDocumentDecorations(
+      let cleanedBytes = await removeDocumentDecorations(
         currentBytes,
         parsedPageRange,
       );
+      if (native) {
+        try {
+          cleanedBytes = await pruneDocument(cleanedBytes);
+        } catch {
+          // ignore
+        }
+      } else {
+        s.set({
+          status: "Deleted objects remain in the file until saved from the desktop app.",
+        });
+      }
       await controller.replaceWithBytes(
         cleanedBytes,
         "Removed app-owned decorations from document",

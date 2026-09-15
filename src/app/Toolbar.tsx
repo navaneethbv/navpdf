@@ -25,6 +25,7 @@ import {
   Eye,
   EyeOff,
   Layers,
+  Lock,
 } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
@@ -341,15 +342,45 @@ export function Statusbar({
   controller: ViewerController | null;
 }) {
   const s = useWorkspace();
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <footer className="statusbar">
       <span className={`status-light ${s.busy ? "working" : ""}`} />
       <span role="status">
-        {s.busy ? s.status : s.dirty ? "Unsaved changes" : s.status}
+        {s.status}
       </span>
       <div className="statusbar-space" />
       {s.document && (
         <>
+          {s.info?.encrypted && (
+            <span
+              className="statusbar-item"
+              title="Document is encrypted"
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              <Lock size={13} /> Protected
+            </span>
+          )}
+          {s.hasDigitalSignature && (
+            <span
+              className="statusbar-item"
+              title="Document contains a digital signature"
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              <ShieldCheck size={13} /> Signed
+            </span>
+          )}
+          {s.document.size > 0 && (
+            <span className="statusbar-item" title={`File size: ${s.document.size} bytes`}>
+              {formatSize(s.document.size)}
+            </span>
+          )}
+          <span className="status-separator" />
           <button
             aria-label="Previous page"
             disabled={s.page === 1 || s.busy}

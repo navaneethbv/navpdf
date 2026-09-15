@@ -74,6 +74,17 @@ describe("AnnotationToolbar", () => {
     expect(controller.setColor).toHaveBeenCalledWith("#80d49b");
     expect(useWorkspace.getState().inkColor).toBe("#80d49b");
   });
+
+  it("disables toolbar buttons when editingAllowed is false", () => {
+    useWorkspace.getState().set({ editingAllowed: false });
+    render(
+      <AnnotationToolbar controller={controller as never} onClose={() => {}} />,
+    );
+    expect((screen.getByTitle("Highlight Text") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTitle("Underline Text") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTitle("Pencil / Freehand Ink") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Editing is restricted for this document.")).toBeTruthy();
+  });
 });
 
 describe("Properties", () => {
@@ -133,16 +144,20 @@ describe("Properties", () => {
       color: [0, 0, 1],
     });
 
-    fireEvent.change(screen.getByLabelText("Selected annotation width"), {
+    const widthSlider = screen.getByLabelText("Selected annotation width");
+    fireEvent.change(widthSlider, {
       target: { value: "4.5" },
     });
+    fireEvent.pointerUp(widthSlider);
     expect(controller.updateSelectedAnnotation).toHaveBeenCalledWith({
       width: 4.5,
     });
 
-    fireEvent.change(screen.getByLabelText("Selected annotation opacity"), {
+    const opacitySlider = screen.getByLabelText("Selected annotation opacity");
+    fireEvent.change(opacitySlider, {
       target: { value: "0.5" },
     });
+    fireEvent.pointerUp(opacitySlider);
     expect(controller.updateSelectedAnnotation).toHaveBeenCalledWith({
       opacity: 0.5,
     });
@@ -187,6 +202,7 @@ describe("Properties", () => {
     expect((textarea as HTMLTextAreaElement).value).toBe("Existing note content");
 
     fireEvent.change(textarea, { target: { value: "Updated note text" } });
+    fireEvent.blur(textarea);
     expect(controller.updateSelectedAnnotation).toHaveBeenCalledWith({
       contents: "Updated note text",
     });

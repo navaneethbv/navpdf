@@ -204,7 +204,7 @@ export function RedactionTool({
       if (job.current !== jobId) return;
       if (!result.bytes) throw new Error("The redaction engine returned no document.");
       await controller.replaceWithBytes(result.bytes, "Redactions applied", { resetHistory: true });
-      await discardRecovery().catch(() => {});
+      await discardRecovery(doc.id).catch(() => {});
       setReport(result.report);
       setMarks([]);
       setTerms([]);
@@ -419,7 +419,10 @@ export function RedactionTool({
               streams.
             </p>
             <p className="field-hint">
-              Removed {report.removedGlyphs} glyphs, {report.removedAnnotations} annotations,{" "}
+              Removed {report.removedGlyphs} glyphs, {report.removedAnnotations} annotations
+              {report.hiddenAnnotationsRemoved > 0
+                ? ` (${report.hiddenAnnotationsRemoved} hidden by layers)`
+                : ""},{" "}
               {report.removedFormFields} form fields and {report.removedPaths} vector shapes.
               Redacted pixels in {report.pixelRedactedImages} images and removed{" "}
               {report.removedImages} images that could not be redacted pixel by pixel.

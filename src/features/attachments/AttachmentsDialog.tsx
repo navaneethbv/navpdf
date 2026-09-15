@@ -3,6 +3,8 @@ import { Paperclip, Plus, Download, Trash2, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { downloadBlob } from "../../utils/download";
+import { native } from "../../services/native";
+import { pruneDocument } from "../../services/engine";
 import {
   listEmbeddedAttachments,
   addEmbeddedAttachment,
@@ -105,7 +107,18 @@ export function AttachmentsDialog({
     setSaving(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const newBytes = await deleteEmbeddedAttachment(currentBytes, item.name);
+      let newBytes = await deleteEmbeddedAttachment(currentBytes, item.name);
+      if (native) {
+        try {
+          newBytes = await pruneDocument(newBytes);
+        } catch {
+          // ignore or fall back
+        }
+      } else {
+        s.set({
+          status: "Deleted objects remain in the file until saved from the desktop app.",
+        });
+      }
       await controller.replaceWithBytes(
         newBytes,
         `Attachment "${item.name}" removed from PDF`,

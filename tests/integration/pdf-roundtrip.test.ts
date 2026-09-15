@@ -29,6 +29,7 @@ import {
   addLinkAnnotation,
   addEmbeddedAttachment,
   extractEmbeddedAttachment,
+  extractPages,
   applyOcrSearchableLayer,
 } from "../../src/services/document-commands";
 import type { OcrPageResult } from "../../src/types/operations";
@@ -565,5 +566,46 @@ describe("special document corpus", () => {
     } finally {
       await reopened.loadingTask.destroy();
     }
+  });
+
+  it("extracts a single page from a document with cross-page links without leaking unreferenced pages (DS-03)", async () => {
+    const doc = await PDFDocument.create();
+    const page1 = doc.addPage([300, 400]);
+    const page2 = doc.addPage([300, 400]);
+
+    // Cross-page link on page 1 targeting page 2
+    const dest = doc.context.obj([
+      page2.ref,
+      PDFName.of("XYZ"),
+      PDFNumber.of(0),
+      PDFNumber.of(0),
+      PDFNumber.of(0),
+    ]);
+    const link = doc.context.obj({
+      Type: "Annot",
+      Subtype: "Link",
+      Rect: [10, 10, 50, 20],
+      Dest: dest,
+    });
+    const linkRef = doc.context.register(link);
+    page1.node.set(PDFName.of("Annots"), doc.context.obj([linkRef]));
+
+    const inputBytes = await doc.save();
+    const extractedBytes = await extractPages(inputBytes, [0]);
+
+    // Verify extracted document has exactly 1 page dictionary in its saved objects
+    const extractedDoc = await PDFDocument.load(extractedBytes);
+    expect(extractedDoc.getPageCount()).toBe(1);
+
+    const pageObjectCount = extractedDoc.context
+      .enumerateIndirectObjects()
+      .filter(([, obj]) => {
+        if (obj instanceof PDFDict) {
+          const type = obj.lookupMaybe(PDFName.of("Type"), PDFName);
+          return type?.asString() === "/Page";
+        }
+        return false;
+      }).length;
+    expect(pageObjectCount).toBe(1);
   });
 });

@@ -20,6 +20,7 @@ const JPEG_FILL_MARGIN: usize = 16;
 const REDACTION_JPEG_QUALITY: u8 = 92;
 /// Compact-text term matching ignores word boundaries, so it only applies to longer terms.
 const MIN_COMPACT_TERM_CHARS: usize = 6;
+const UNMEASURABLE_TEXT: &str = "Redaction was blocked because text near a marked area uses a font whose character codes cannot be measured, so its removal cannot be verified. The document is unchanged.";
 const MARKUP_SUBTYPES: &[&[u8]] = &[
     b"Text",
     b"FreeText",
@@ -115,11 +116,43 @@ pub struct RedactionReport {
     pub removed_images: usize,
     pub removed_paths: usize,
     pub removed_annotations: usize,
+    pub hidden_annotations_removed: usize,
     pub removed_form_fields: usize,
     pub rewritten_forms: usize,
     pub sanitized: Vec<String>,
     pub warnings: Vec<String>,
     pub audit: AuditReport,
+}
+
+/// The regions and terms a redacted output must keep passing. Deliberately has no `Debug`
+/// implementation because the terms are sensitive.
+#[derive(Clone, Default)]
+pub struct AuditSpec {
+    pub regions: BTreeMap<u32, Vec<Rect>>,
+    pub terms: Vec<String>,
+}
+
+impl AuditSpec {
+    /// Validates a request's regions and terms without loading the document.
+    pub fn from_request(request: &RedactionRequest) -> Result<Self, String> {
+        let terms = validated_terms(request)?;
+        Ok(Self {
+            regions: region_map(&request.regions)?,
+            terms,
+        })
+    }
+
+    /// Adds another pass's regions and terms so earlier redactions keep being audited.
+    pub fn merge(&mut self, other: AuditSpec) {
+        for (page, rects) in other.regions {
+            self.regions.entry(page).or_default().extend(rects);
+        }
+        for term in other.terms {
+            if !self.terms.contains(&term) {
+                self.terms.push(term);
+            }
+        }
+    }
 }
 
 type ResourceAddition = (Vec<u8>, Vec<u8>, ObjectId);
@@ -163,7 +196,7 @@ pub fn apply(
         )?;
         if !page_regions.is_empty() {
             report.pages.push(number);
-            let removed = filter_annotations(&mut doc, page_id, |annotation| {
+            let removed = filter_annotations(&mut doc, page_id, |_doc, annotation| {
                 annotation_rect(annotation)
                     .is_some_and(|rect| page_regions.iter().any(|region| region.overlaps(&rect)))
             });
@@ -211,14 +244,18 @@ fn group_regions(
     pages: &BTreeMap<u32, ObjectId>,
     inputs: &[RegionInput],
 ) -> Result<BTreeMap<u32, Vec<Rect>>, String> {
+    if let Some(missing) = inputs.iter().find(|input| !pages.contains_key(&input.page)) {
+        return Err(format!(
+            "Page {} does not exist in this document.",
+            missing.page
+        ));
+    }
+    region_map(inputs)
+}
+
+fn region_map(inputs: &[RegionInput]) -> Result<BTreeMap<u32, Vec<Rect>>, String> {
     let mut regions: BTreeMap<u32, Vec<Rect>> = BTreeMap::new();
     for input in inputs {
-        if !pages.contains_key(&input.page) {
-            return Err(format!(
-                "Page {} does not exist in this document.",
-                input.page
-            ));
-        }
         let [x0, y0, x1, y1] = input.rect;
         let rect = Rect::new(x0, y0, x1, y1);
         if !rect.is_valid() || rect.width() <= 0.0 || rect.height() <= 0.0 {
@@ -369,8 +406,14 @@ impl<'a> Rewriter<'a, '_> {
                             .map(|glyph| self.overlaps(&glyph.bbox))
                             .collect()
                     } else {
-                        // Approximate metrics: remove the whole string near any region.
-                        vec![self.overlaps(&item.bbox.inflate(size.abs().max(1.0))); glyphs.len()]
+                        let near = self.overlaps(&item.bbox.inflate(size.abs().max(1.0)));
+                        if near && !*segmentable {
+                            // Estimated advances would also misplace later glyphs in both the
+                            // rewrite and the audit, so this text cannot be verified.
+                            return Err(UNMEASURABLE_TEXT.into());
+                        }
+                        // Measurable but approximate metrics: remove the whole string.
+                        vec![near; glyphs.len()]
                     };
                     if remove.iter().any(|removed| *removed) {
                         self.report.removed_glyphs +=
@@ -818,7 +861,7 @@ struct RemovedAnnotations {
 fn filter_annotations(
     doc: &mut Document,
     page_id: ObjectId,
-    should_remove: impl Fn(&Dictionary) -> bool,
+    should_remove: impl Fn(&Document, &Dictionary) -> bool,
 ) -> RemovedAnnotations {
     let mut removed = RemovedAnnotations {
         count: 0,
@@ -846,7 +889,7 @@ fn filter_annotations(
         let mut kept = Vec::new();
         for entry in entries {
             match resolve(entry) {
-                Some((id, annotation)) if should_remove(annotation) => {
+                Some((id, annotation)) if should_remove(doc, annotation) => {
                     removed.count += 1;
                     removed.ids.extend(id);
                 }
@@ -882,6 +925,65 @@ fn filter_annotations(
         }
     }
     removed
+}
+
+fn annotation_hidden_by_layers(
+    doc: &Document,
+    annot: &Dictionary,
+    hidden: &HashSet<ObjectId>,
+) -> bool {
+    let Some(oc_obj) = annot.get(b"OC").ok() else {
+        return false;
+    };
+    let oc_id = oc_obj.as_reference().ok();
+    let oc_dict = match oc_obj {
+        Object::Reference(id) => doc.get_dictionary(*id).ok(),
+        Object::Dictionary(dict) => Some(dict),
+        _ => None,
+    };
+    let Some(dict) = oc_dict else {
+        if let Some(id) = oc_id {
+            return hidden.contains(&id);
+        }
+        return false;
+    };
+
+    let is_ocmd = dict
+        .get(b"Type")
+        .and_then(Object::as_name)
+        .is_ok_and(|t| t == b"OCMD");
+    if !is_ocmd {
+        if let Some(id) = oc_id {
+            return hidden.contains(&id);
+        }
+        return false;
+    }
+
+    let ocgs: Vec<ObjectId> = match dict.get(b"OCGs").ok() {
+        Some(Object::Reference(id)) => vec![*id],
+        Some(Object::Array(arr)) => arr
+            .iter()
+            .filter_map(|item| item.as_reference().ok())
+            .collect(),
+        _ => Vec::new(),
+    };
+    if ocgs.is_empty() {
+        return false;
+    }
+
+    let policy = dict.get(b"P").and_then(Object::as_name).unwrap_or(b"AnyOn");
+
+    let is_off = |id: &ObjectId| hidden.contains(id);
+    let is_on = |id: &ObjectId| !hidden.contains(id);
+
+    let is_visible = match policy {
+        b"AllOn" => ocgs.iter().all(is_on),
+        b"AnyOff" => ocgs.iter().any(is_off),
+        b"AllOff" => ocgs.iter().all(is_off),
+        _ => ocgs.iter().any(is_on),
+    };
+
+    !is_visible
 }
 
 /// Removes deleted widget annotations from the interactive form tree, then removes ancestor
@@ -1011,7 +1113,7 @@ fn remove_page_annotations(
     pages
         .values()
         .map(|page_id| {
-            filter_annotations(doc, *page_id, |annotation| {
+            filter_annotations(doc, *page_id, |_doc, annotation| {
                 annotation
                     .get(b"Subtype")
                     .and_then(Object::as_name)
@@ -1078,6 +1180,17 @@ fn sanitize_document(
         report.sanitized.push("Bookmarks".into());
     }
     if options.remove_hidden_content {
+        let hidden = hidden_groups(doc);
+        let mut hidden_annots_removed = 0;
+        for page_id in pages.values() {
+            let removed = filter_annotations(doc, *page_id, |doc, annotation| {
+                annotation_hidden_by_layers(doc, annotation, &hidden)
+            });
+            hidden_annots_removed += removed.count;
+            report.removed_form_fields += prune_fields(doc, &removed.ids);
+        }
+        report.hidden_annotations_removed += hidden_annots_removed;
+        report.removed_annotations += hidden_annots_removed;
         catalog_keys.push(b"OCProperties");
         report
             .sanitized
@@ -1125,6 +1238,13 @@ pub fn audit(
     let mut page_texts = String::new();
     for (number, page_id) in doc.get_pages() {
         let rects = regions.get(&number).map(Vec::as_slice).unwrap_or_default();
+        if !terms.is_empty() {
+            // A second, independent text decoder, so a term the interpreter misreads is found.
+            if let Ok(text) = doc.extract_text(&[number]) {
+                page_texts.push(' ');
+                page_texts.push_str(&text);
+            }
+        }
         let ops = super::page_operations(&doc, page_id)?;
         let resources = Resources::for_page(&doc, page_id);
         let mut images_to_check: Vec<(ObjectId, Matrix, Rect)> = Vec::new();
@@ -1240,38 +1360,47 @@ fn residual_terms(
     };
     let compact = |text: &str| text.split_whitespace().collect::<String>().to_lowercase();
     let mut strings = String::from(page_texts);
-    let mut raw: Vec<Vec<u8>> = Vec::new();
     for object in doc.objects.values() {
         collect_strings(object, &mut strings);
-        if let Object::Stream(stream) = object {
-            *streams_scanned += 1;
-            raw.push(super::stream_bytes(stream).unwrap_or_else(|_| stream.content.clone()));
-        }
     }
     for (_, value) in doc.trailer.iter() {
         collect_strings(value, &mut strings);
     }
     let text = normalize(&strings);
     let compact_text = compact(&strings);
-    let lowered: Vec<Vec<u8>> = raw
+    let mut found: Vec<bool> = terms
         .iter()
-        .map(|stream| stream.to_ascii_lowercase())
-        .collect();
-    terms
-        .iter()
-        .filter(|term| {
+        .map(|term| {
             let compact_term = compact(term);
-            let lower = term.to_lowercase();
-            let utf16: Vec<u8> = term.encode_utf16().flat_map(u16::to_be_bytes).collect();
             text.contains(&normalize(term))
                 || (compact_term.chars().count() >= MIN_COMPACT_TERM_CHARS
                     && compact_text.contains(&compact_term))
-                || lowered
-                    .iter()
-                    .any(|stream| contains(stream, lower.as_bytes()))
-                || raw.iter().any(|stream| contains(stream, &utf16))
         })
-        .count()
+        .collect();
+    let needles: Vec<(Vec<u8>, Vec<u8>)> = terms
+        .iter()
+        .map(|term| {
+            let utf16 = term.encode_utf16().flat_map(u16::to_be_bytes).collect();
+            (term.to_lowercase().into_bytes(), utf16)
+        })
+        .collect();
+    for object in doc.objects.values() {
+        let Object::Stream(stream) = object else {
+            continue;
+        };
+        *streams_scanned += 1;
+        if found.iter().all(|hit| *hit) {
+            continue;
+        }
+        // Decode one stream at a time and drop it before the next, so memory is bounded by the
+        // largest stream rather than the sum of all streams.
+        let decoded = super::stream_bytes(stream).ok();
+        let bytes = decoded.as_deref().unwrap_or(&stream.content);
+        for (hit, (lower, utf16)) in found.iter_mut().zip(&needles) {
+            *hit = *hit || contains_ignore_ascii_case(bytes, lower) || contains(bytes, utf16);
+        }
+    }
+    found.into_iter().filter(|hit| *hit).count()
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
@@ -1279,6 +1408,17 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
         && haystack
             .windows(needle.len())
             .any(|window| window == needle)
+}
+
+/// `needle` is already lower-cased; only ASCII letters in `haystack` are folded.
+fn contains_ignore_ascii_case(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty()
+        && haystack.windows(needle.len()).any(|window| {
+            window
+                .iter()
+                .zip(needle)
+                .all(|(byte, expected)| byte.to_ascii_lowercase() == *expected)
+        })
 }
 
 #[cfg(test)]
@@ -1731,5 +1871,189 @@ mod tests {
         assert_eq!(report.removed_form_fields, 2);
         let result = Document::load_mem(&output).unwrap();
         assert!(!result.objects.contains_key(&field) && !result.objects.contains_key(&widget));
+    }
+
+    #[test]
+    fn layer_hidden_annotations_are_removed_with_hidden_content() {
+        let (mut doc, page) = page_document("", dictionary! {});
+        let layer = doc.add_object(dictionary! {
+            "Type" => "OCG",
+            "Name" => "Watermark Layer",
+        });
+        let catalog = catalog_id(&doc).unwrap();
+        {
+            let catalog = doc.get_dictionary_mut(catalog).unwrap();
+            catalog.set(
+                "OCProperties",
+                dictionary! {"OCGs" => vec![layer.into()], "D" => dictionary! {"OFF" => vec![layer.into()]}},
+            );
+        }
+        let hidden_annot = doc.add_object(dictionary! {
+            "Type" => "Annot",
+            "Subtype" => "FreeText",
+            "Rect" => vec![50.into(), 50.into(), 150.into(), 100.into()],
+            "OC" => layer,
+        });
+        let visible_annot = doc.add_object(dictionary! {
+            "Type" => "Annot",
+            "Subtype" => "Text",
+            "Rect" => vec![200.into(), 200.into(), 250.into(), 250.into()],
+        });
+        doc.get_dictionary_mut(page)
+            .unwrap()
+            .set("Annots", vec![hidden_annot.into(), visible_annot.into()]);
+
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+
+        let request = RedactionRequest {
+            regions: Vec::new(),
+            terms: Vec::new(),
+            options: SanitizeOptions {
+                remove_hidden_content: true,
+                remove_metadata: false,
+                remove_attachments: false,
+                remove_scripts: false,
+                remove_comments: false,
+                remove_bookmarks: false,
+            },
+            acknowledge_signatures: false,
+        };
+        let cancel = AtomicBool::new(false);
+        let (output, report) = apply(&bytes, &request, &cancel).unwrap();
+
+        assert_eq!(report.hidden_annotations_removed, 1);
+        let out_doc = Document::load_mem(&output).unwrap();
+        let out_page = out_doc.get_pages()[&1];
+        let annots = out_doc
+            .get_dictionary(out_page)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(annots.len(), 1);
+        assert_eq!(annots[0].as_reference().unwrap(), visible_annot);
+    }
+
+    #[test]
+    fn term_audit_holds_one_decoded_stream_at_a_time() {
+        const STREAMS: usize = 24;
+        const STREAM_BYTES: usize = 1 << 20;
+        let (mut doc, _) = page_document(LINE, dictionary! {});
+        for _ in 0..STREAMS {
+            let mut stream = Stream::new(dictionary! {}, vec![b'x'; STREAM_BYTES]);
+            stream.compress().unwrap();
+            doc.add_object(stream);
+        }
+        let terms = vec!["secret-canary".to_owned(), "absent term".to_owned()];
+        let mut scanned = 0;
+        let (found, peak) = allocation::peak(|| residual_terms(&doc, "", &terms, &mut scanned));
+        assert_eq!(found, 1);
+        assert_eq!(scanned, STREAMS + 1);
+        assert!(peak < 3 * STREAM_BYTES, "peak allocation was {peak} bytes");
+    }
+
+    #[test]
+    fn text_with_unmeasurable_codes_near_a_region_blocks_redaction() {
+        let font = dictionary! {
+            "Type" => "Font", "Subtype" => "Type0", "BaseFont" => "Synthetic-CJK",
+            "Encoding" => "UniJIS-UCS2-H",
+            "DescendantFonts" => vec![Object::Dictionary(dictionary! {
+                "Type" => "Font", "Subtype" => "CIDFontType0", "BaseFont" => "Synthetic-CJK",
+            })],
+        };
+        let (mut doc, _) = page_document(
+            "BT /F2 20 Tf 72 700 Td <00410042> Tj ET",
+            dictionary! {"Font" => dictionary! {"F2" => font}},
+        );
+        let source = crate::engine::save(&mut doc).unwrap();
+        let near = request(vec![region(1, Rect::new(70.0, 690.0, 90.0, 730.0))], &[]);
+        let error = apply(&source, &near, &AtomicBool::new(false)).unwrap_err();
+        assert!(error.contains("cannot be measured"), "{error}");
+
+        let far = request(vec![region(1, Rect::new(400.0, 100.0, 450.0, 150.0))], &[]);
+        let (_, report) = apply(&source, &far, &AtomicBool::new(false)).unwrap();
+        assert!(report.audit.passed);
+    }
+
+    #[test]
+    fn audit_specs_validate_requests_and_merge_later_passes() {
+        let mut first = AuditSpec::from_request(&request(
+            vec![region(1, Rect::new(0.0, 0.0, 10.0, 10.0))],
+            &[" alpha "],
+        ))
+        .unwrap();
+        let second = AuditSpec::from_request(&request(
+            vec![region(2, Rect::new(0.0, 0.0, 5.0, 5.0))],
+            &["alpha", "beta"],
+        ))
+        .unwrap();
+        first.merge(second);
+        assert_eq!(first.terms, ["alpha", "beta"]);
+        assert_eq!(first.regions.keys().copied().collect::<Vec<_>>(), [1, 2]);
+        let empty_region = request(vec![region(1, Rect::new(5.0, 5.0, 5.0, 9.0))], &[]);
+        assert!(AuditSpec::from_request(&empty_region).is_err());
+    }
+
+    /// Counts heap allocations on the current thread so memory bounds can be asserted.
+    mod allocation {
+        use std::alloc::{GlobalAlloc, Layout, System};
+        use std::cell::Cell;
+
+        thread_local! {
+            static TRACKING: Cell<bool> = const { Cell::new(false) };
+            static CURRENT: Cell<usize> = const { Cell::new(0) };
+            static PEAK: Cell<usize> = const { Cell::new(0) };
+        }
+
+        pub struct Counting;
+
+        // SAFETY: every call is forwarded unchanged to the system allocator.
+        unsafe impl GlobalAlloc for Counting {
+            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                let pointer = unsafe { System.alloc(layout) };
+                if !pointer.is_null() {
+                    record(layout.size(), 0);
+                }
+                pointer
+            }
+
+            unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+                unsafe { System.dealloc(pointer, layout) };
+                record(0, layout.size());
+            }
+
+            unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+                let moved = unsafe { System.realloc(pointer, layout, new_size) };
+                if !moved.is_null() {
+                    record(new_size, layout.size());
+                }
+                moved
+            }
+        }
+
+        fn record(added: usize, removed: usize) {
+            let _ = TRACKING.try_with(|tracking| {
+                if tracking.get() {
+                    let current = CURRENT.get().saturating_add(added).saturating_sub(removed);
+                    CURRENT.set(current);
+                    PEAK.set(PEAK.get().max(current));
+                }
+            });
+        }
+
+        #[global_allocator]
+        static ALLOCATOR: Counting = Counting;
+
+        /// Runs `work` and returns its result with the most bytes it held at once on this thread.
+        pub fn peak<T>(work: impl FnOnce() -> T) -> (T, usize) {
+            CURRENT.set(0);
+            PEAK.set(0);
+            TRACKING.set(true);
+            let result = work();
+            TRACKING.set(false);
+            (result, PEAK.get())
+        }
     }
 }

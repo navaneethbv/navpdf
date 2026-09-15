@@ -12,7 +12,14 @@ import {
   GlobalWorkerOptions,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { OcrPageResult } from "../../src/types/operations";
-import { PDFDocument, degrees } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFName,
+  PDFArray,
+  PDFDict,
+  decodePDFRawStream,
+  degrees,
+} from "pdf-lib";
 
 GlobalWorkerOptions.workerSrc = resolve(
   "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
@@ -166,5 +173,59 @@ describe("Searchable PDF Layer and Integrity (P6.3)", () => {
     } finally {
       await reopened.loadingTask.destroy();
     }
+  });
+
+  it("detects text nested inside Form XObjects", async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([600, 800]);
+    // Create an XObject Form containing BT ... ET
+    const xobjStream = doc.context.flateStream("BT /F1 12 Tf (Hidden in XObject) Tj ET");
+    xobjStream.dict.set(PDFName.of("Type"), PDFName.of("XObject"));
+    xobjStream.dict.set(PDFName.of("Subtype"), PDFName.of("Form"));
+    xobjStream.dict.set(PDFName.of("BBox"), doc.context.obj([0, 0, 100, 100]));
+    const xobjRef = doc.context.register(xobjStream);
+
+    const xobjDict = doc.context.obj({
+      Form1: xobjRef,
+    });
+    const resDict = doc.context.obj({
+      XObject: xobjDict,
+    });
+    page.node.set(PDFName.of("Resources"), resDict);
+
+    const bytes = await doc.save();
+    const hasText = await detectExistingText(bytes, 0);
+    expect(hasText).toBe(true);
+  });
+
+  it("isolates OCR text stream with q 1 0 0 1 0 0 cm and Q using NavPDF_OCR tag", async () => {
+    const ocrPdf = await applyOcrSearchableLayer(samplePdf, [mockOcrResult]);
+    const doc = await PDFDocument.load(ocrPdf);
+    const page = doc.getPage(0);
+    const contents = page.node.Contents();
+    const refs =
+      contents instanceof PDFArray
+        ? Array.from({ length: contents.size() }, (_, i) => contents.get(i))
+        : [contents];
+
+    let foundOcrStream = false;
+    for (const ref of refs) {
+      const stream = doc.context.lookup(ref);
+      const dict =
+        stream instanceof PDFDict
+          ? stream
+          : (stream as unknown as { dict?: PDFDict })?.dict;
+      if (dict?.get(PDFName.of("NavPDF_OCR"))) {
+        foundOcrStream = true;
+        const decoded = decodePDFRawStream(
+          stream as unknown as Parameters<typeof decodePDFRawStream>[0],
+        );
+        const text = new TextDecoder().decode(decoded.decode());
+        expect(text).toMatch(/^q\b/);
+        expect(text).toContain("1 0 0 1 0 0 cm");
+        expect(text).toMatch(/Q\s*$/);
+      }
+    }
+    expect(foundOcrStream).toBe(true);
   });
 });

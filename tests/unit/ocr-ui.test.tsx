@@ -5,6 +5,7 @@ import { OcrPanel } from "../../src/features/ocr/OcrPanel";
 import { createBlankDocument, insertTextContent } from "../../src/services/document-commands";
 import type { ViewerController } from "../../src/features/viewer/controller";
 import { ocrGetEngineInfo, ocrRecognizePage } from "../../src/services/native";
+import { useWorkspace } from "../../src/stores/workspace";
 
 vi.mock("../../src/services/native", () => ({
   ocrGetEngineInfo: vi.fn(),
@@ -161,5 +162,25 @@ describe("OcrPanel UI Component (P6.4)", () => {
       expect(screen.getByText("Recognized Text")).toBeDefined();
       expect(screen.getByText(/Copy Text/i)).toBeDefined();
     });
+  });
+
+  it("disables OCR button and displays warning when document is encrypted", async () => {
+    useWorkspace.getState().set({
+      info: {
+        pages: 3,
+        title: "Secret",
+        author: "Me",
+        version: "1.7",
+        encrypted: true,
+      },
+    });
+    const controller = createMockController(samplePdf);
+    render(<OcrPanel controller={controller} onClose={vi.fn()} />);
+
+    expect(
+      screen.getByText(/OCR is disabled for password-protected and encrypted documents/i),
+    ).toBeDefined();
+    const button = screen.getByRole("button", { name: /Apply Searchable Layer/i });
+    expect(button.hasAttribute("disabled")).toBe(true);
   });
 });

@@ -29,6 +29,8 @@ import {
   computeReorderMapping,
 } from "../../services/document-commands";
 import { downloadBytes } from "../../utils/download";
+import { native } from "../../services/native";
+import { pruneDocument } from "../../services/engine";
 import type { ViewerController } from "../viewer/controller";
 
 export function PageWorkspace({
@@ -142,7 +144,21 @@ export function PageWorkspace({
       : 0;
 
     await mutate(
-      (bytes) => deletePages(bytes, selected),
+      async (bytes) => {
+        let res = await deletePages(bytes, selected);
+        if (native) {
+          try {
+            res = await pruneDocument(res);
+          } catch {
+            // ignore
+          }
+        } else {
+          s.set({
+            status: "Deleted objects remain in the file until saved from the desktop app.",
+          });
+        }
+        return res;
+      },
       `Deleted ${selected.length} page(s)`,
       { pageMapping: computeDeleteMapping(totalPages, selected) },
     );
@@ -420,7 +436,22 @@ export function PageWorkspace({
             style={{ display: "none" }}
             onChange={handleInsertImage}
           />
-          <button title="Crop Page" onClick={() => setShowCrop(!showCrop)}>
+          <button
+            title="Crop Page"
+            onClick={async () => {
+              if (!showCrop && controller?.pdf && selected.length > 0) {
+                try {
+                  const pdfPage = await controller.pdf.getPage(selected[0] + 1);
+                  const vp = pdfPage.getViewport({ scale: 1 });
+                  setCropWidth(Math.round(vp.width));
+                  setCropHeight(Math.round(vp.height));
+                } catch {
+                  // ignore
+                }
+              }
+              setShowCrop(!showCrop);
+            }}
+          >
             <Crop size={17} />
             <span>Crop</span>
           </button>

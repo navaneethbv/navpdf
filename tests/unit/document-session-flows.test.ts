@@ -13,7 +13,7 @@ vi.mock("../../src/services/native", () => ({
   localState: vi.fn(async () => ({
     preferences: defaultPreferences,
     recents: [],
-    recovery: null,
+    recoveries: [],
   })),
   openDocument: vi.fn(async () => null),
   openRecent: vi.fn(async () => null),
@@ -159,9 +159,10 @@ it("recovers an autosaved copy as dirty and prompts Save As", async () => {
     destroy: vi.fn(async () => {}),
   } as never);
   await act(async () => {
-    session.recover();
+    session.recover("entry-1");
   });
   await act(async () => {});
+  expect(desktop.openRecovery).toHaveBeenCalledWith("entry-1");
   expect(useWorkspace.getState().dirty).toBe(true);
   expect(useWorkspace.getState().status).toContain("Recovery opened");
 });

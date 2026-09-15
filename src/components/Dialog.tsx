@@ -5,10 +5,14 @@ export function Dialog({
   title,
   children,
   onClose,
+  priority,
+  className = "",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  priority?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     id = useId();
@@ -25,7 +29,7 @@ export function Dialog({
         e.preventDefault();
         onClose();
       }}
-      className="app-dialog"
+      className={`app-dialog ${priority ? "priority-dialog" : ""} ${className}`.trim()}
     >
       <header>
         <h2 id={id}>{title}</h2>

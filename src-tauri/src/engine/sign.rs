@@ -250,7 +250,7 @@ pub fn sign(
     now: SystemTime,
 ) -> Result<Vec<u8>, String> {
     let doc = load(bytes)?;
-    if doc.xref_start == 0 {
+    if doc.xref_start == 0 || !xref_offset_is_exact(bytes, doc.xref_start) {
         return Err(
             "This PDF's cross-reference table is damaged. Save a repaired copy before signing."
                 .into(),
@@ -393,6 +393,48 @@ pub fn sign(
     }
     output[start + 1..start + 1 + hex.len()].copy_from_slice(hex.as_bytes());
     Ok(output)
+}
+
+/// How far from the end of the file the final `startxref` keyword is searched for.
+const STARTXREF_SEARCH_BYTES: usize = 1024;
+
+/// True when the final `startxref` names `offset` and a cross-reference section starts there.
+/// The reader silently corrects small offset errors, and an incremental update built on a
+/// corrected offset would carry a `/Prev` that other readers cannot follow.
+fn xref_offset_is_exact(bytes: &[u8], offset: usize) -> bool {
+    let tail = &bytes[bytes.len().saturating_sub(STARTXREF_SEARCH_BYTES)..];
+    let Some(keyword) = tail.windows(9).rposition(|window| window == b"startxref") else {
+        return false;
+    };
+    let digits: String = tail[keyword + 9..]
+        .iter()
+        .skip_while(|byte| byte.is_ascii_whitespace())
+        .take_while(|byte| byte.is_ascii_digit())
+        .map(|byte| char::from(*byte))
+        .collect();
+    if digits.parse::<usize>().ok() != Some(offset) {
+        return false;
+    }
+    bytes
+        .get(offset..)
+        .is_some_and(|section| section.starts_with(b"xref") || starts_indirect_object(section))
+}
+
+/// Whether `bytes` begins with an `N G obj` header, as a cross-reference stream does.
+fn starts_indirect_object(bytes: &[u8]) -> bool {
+    let mut rest = bytes;
+    for _ in 0..2 {
+        let digits = rest.iter().take_while(|byte| byte.is_ascii_digit()).count();
+        let spaces = rest[digits..]
+            .iter()
+            .take_while(|byte| byte.is_ascii_whitespace())
+            .count();
+        if digits == 0 || spaces == 0 {
+            return false;
+        }
+        rest = &rest[digits + spaces..];
+    }
+    rest.starts_with(b"obj")
 }
 
 /// Adds the field and sets SignaturesExist and AppendOnly.
@@ -1213,6 +1255,52 @@ mod tests {
         let page = *doc.get_pages().values().next().unwrap();
         let annots = doc.get_dictionary(page).unwrap().get(b"Annots").unwrap();
         assert_eq!(deref(&doc, annots).as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn refuses_to_sign_when_startxref_does_not_name_the_cross_reference_section() {
+        let source = pdf(false);
+        let keyword = source
+            .windows(9)
+            .rposition(|window| window == b"startxref")
+            .unwrap();
+        let start = keyword
+            + 9
+            + source[keyword + 9..]
+                .iter()
+                .take_while(|byte| byte.is_ascii_whitespace())
+                .count();
+        let end = start
+            + source[start..]
+                .iter()
+                .take_while(|byte| byte.is_ascii_digit())
+                .count();
+        let offset: usize = std::str::from_utf8(&source[start..end])
+            .unwrap()
+            .parse()
+            .unwrap();
+        let with_offset = |declared: usize| {
+            let mut bytes = source[..start].to_vec();
+            bytes.extend_from_slice(declared.to_string().as_bytes());
+            bytes.extend_from_slice(&source[end..]);
+            bytes
+        };
+        // An offset one byte early lands on the line break before `xref`. The reader accepts it
+        // and records it as the section start, so an update would carry an inexact `/Prev`.
+        let damaged = with_offset(offset - 1);
+        assert_eq!(Document::load_mem(&damaged).unwrap().xref_start, offset - 1);
+        assert!(damaged[offset - 1].is_ascii_whitespace());
+
+        let identity = load_identity(&p256_identity(), PASSWORD, SystemTime::now()).unwrap();
+        let request = SignRequest {
+            reason: "Approved".into(),
+            location: "Test lab".into(),
+            certification: Certification::None,
+        };
+        let error = sign(&damaged, &identity, &request, SystemTime::now()).unwrap_err();
+        assert!(error.contains("cross-reference"), "{error}");
+        assert!(sign(&source, &identity, &request, SystemTime::now()).is_ok());
+        assert!(sign(&pdf(true), &identity, &request, SystemTime::now()).is_ok());
     }
 
     #[test]

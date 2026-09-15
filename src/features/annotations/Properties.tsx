@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -12,6 +13,16 @@ export function Properties({ controller }: { controller: ViewerController }) {
         .map((channel) => Math.round(channel * 255).toString(16).padStart(2, "0"))
         .join("")}`
     : s.inkColor;
+
+  const [localWidth, setLocalWidth] = useState<number>(selected?.width ?? s.inkWidth);
+  const [localOpacity, setLocalOpacity] = useState<number>(selected?.opacity ?? s.inkOpacity);
+  const [localText, setLocalText] = useState<string>(selected?.text ?? "");
+
+  useEffect(() => {
+    setLocalWidth(selected?.width ?? s.inkWidth);
+    setLocalOpacity(selected?.opacity ?? s.inkOpacity);
+    setLocalText(selected?.text ?? "");
+  }, [selected?.id, selected?.width, selected?.opacity, selected?.text, s.inkWidth, s.inkOpacity]);
   return (
     <aside className="properties">
       <h2>
@@ -64,14 +75,15 @@ export function Properties({ controller }: { controller: ViewerController }) {
                   max="12"
                   step="0.5"
                   aria-label="Selected annotation width"
-                  value={selected.width ?? s.inkWidth}
-                  onChange={(event) =>
+                  value={localWidth}
+                  onChange={(event) => setLocalWidth(Number(event.target.value))}
+                  onPointerUp={() => {
                     void controller.updateSelectedAnnotation({
-                      width: Number(event.target.value),
-                    })
-                  }
+                      width: localWidth,
+                    });
+                  }}
                 />
-                <span>{(selected.width ?? s.inkWidth).toFixed(1)} pt</span>
+                <span>{localWidth.toFixed(1)} pt</span>
               </label>
               <label className="range-label">
                 Opacity
@@ -81,15 +93,16 @@ export function Properties({ controller }: { controller: ViewerController }) {
                   max="1"
                   step="0.05"
                   aria-label="Selected annotation opacity"
-                  value={selected.opacity ?? s.inkOpacity}
-                  onChange={(event) =>
+                  value={localOpacity}
+                  onChange={(event) => setLocalOpacity(Number(event.target.value))}
+                  onPointerUp={() => {
                     void controller.updateSelectedAnnotation({
-                      opacity: Number(event.target.value),
-                    })
-                  }
+                      opacity: localOpacity,
+                    });
+                  }}
                 />
                 <span>
-                  {Math.round((selected.opacity ?? s.inkOpacity) * 100)}%
+                  {Math.round(localOpacity * 100)}%
                 </span>
               </label>
               <div className="property-button-grid" role="group" aria-label="Move selected annotation">
@@ -126,13 +139,16 @@ export function Properties({ controller }: { controller: ViewerController }) {
               Note text
               <textarea
                 aria-label="Selected note text"
-                value={selected.text}
+                value={localText}
                 rows={5}
-                onChange={(event) =>
-                  void controller.updateSelectedAnnotation({
-                    contents: event.target.value,
-                  })
-                }
+                onChange={(event) => setLocalText(event.target.value)}
+                onBlur={() => {
+                  if (localText !== selected.text) {
+                    void controller.updateSelectedAnnotation({
+                      contents: localText,
+                    });
+                  }
+                }}
               />
             </label>
           ) : (

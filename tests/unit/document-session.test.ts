@@ -16,7 +16,7 @@ vi.mock("../../src/services/native", () => ({
   localState: vi.fn(async () => ({
     preferences: defaultPreferences,
     recents: [],
-    recovery: null,
+    recoveries: [],
   })),
   openDocument: vi.fn(async () => null),
   releaseDocument: vi.fn(async () => {}),
@@ -227,8 +227,76 @@ it("retains the recovery file until the recovered copy is saved", async () => {
     promise: Promise.resolve({ numPages: 2, getMetadata: async () => ({ info: {} }) }),
     destroy: vi.fn(async () => {}),
   } as unknown as Awaited<ReturnType<typeof loadPdf>>);
-  await act(async () => session.recover());
+  await act(async () => session.recover("candidate-recovery"));
+  expect(desktop.openRecovery).toHaveBeenCalledWith("candidate-recovery");
   expect(useWorkspace.getState().document).toEqual(next);
   expect(useWorkspace.getState().dirty).toBe(true);
-  expect(desktop.discardRecovery).not.toHaveBeenCalled();
+  expect(desktop.discardRecovery).not.toHaveBeenCalledWith("candidate-recovery");
+});
+
+function candidateTask() {
+  vi.mocked(loadPdf).mockResolvedValue({
+    promise: Promise.resolve({ numPages: 2, getMetadata: async () => ({ info: {} }) }),
+    destroy: vi.fn(async () => {}),
+  } as unknown as Awaited<ReturnType<typeof loadPdf>>);
+}
+
+it("keeps signature, form and comment findings from attach across the store reset", async () => {
+  candidateTask();
+  const comment = { id: "c1", page: 1, kind: "Text", contents: "Check", author: "" };
+  vi.mocked(controller.attach).mockImplementation(async () => {
+    useWorkspace.getState().set({
+      hasDigitalSignature: true,
+      formNotice: "XFA forms are not supported.",
+      comments: [comment] as never,
+    });
+  });
+  await act(async () => expect(await session.load(next)).toBe(true));
+  expect(useWorkspace.getState()).toMatchObject({
+    document: next,
+    hasDigitalSignature: true,
+    formNotice: "XFA forms are not supported.",
+    comments: [comment],
+  });
+});
+
+it("discards only the replaced document's recovery copy when another document opens", async () => {
+  candidateTask();
+  await act(async () => expect(await session.load(next)).toBe(true));
+  expect(desktop.discardRecovery).toHaveBeenCalledWith(previous.id);
+  expect(desktop.discardRecovery).not.toHaveBeenCalledWith(next.id);
+  expect(desktop.discardRecovery).toHaveBeenCalledTimes(1);
+});
+
+it("leaves a clean document clean when saving fails", async () => {
+  useWorkspace.getState().set({ dirty: false });
+  (controller as unknown as { pdf: unknown }).pdf = {
+    saveDocument: vi.fn(async () => new Uint8Array([1])),
+    numPages: 2,
+  };
+  vi.mocked(desktop.saveDocument).mockRejectedValueOnce(new Error("disk full"));
+  await act(async () => expect(await session.save()).toBe(false));
+  expect(useWorkspace.getState()).toMatchObject({
+    dirty: false,
+    status: "Save failed. The document is unchanged.",
+  });
+  expect(desktop.markDirty).toHaveBeenCalledWith(false);
+});
+
+it("closes the unsaved-changes prompt before a protected save asks how to protect", async () => {
+  useWorkspace.getState().set({
+    dirty: true,
+    info: { pages: 2, encrypted: false, protectedSource: true, title: "", author: "", version: "1.7" },
+  });
+  (controller as unknown as { pdf: unknown }).pdf = { saveDocument: vi.fn(), numPages: 2 };
+  act(() => {
+    session.home();
+  });
+  expect(session.confirm).not.toBeNull();
+  await act(async () => {
+    await session.saveAndContinue();
+  });
+  expect(session.confirm).toBeNull();
+  expect(useWorkspace.getState()).toMatchObject({ activeModal: "protect", document: previous });
+  expect(desktop.saveDocument).not.toHaveBeenCalled();
 });

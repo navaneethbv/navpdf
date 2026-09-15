@@ -8,6 +8,7 @@ pub mod fonts;
 pub mod geometry;
 pub mod images;
 pub mod protect;
+pub mod prune;
 pub mod redact;
 pub mod sign;
 #[rustfmt::skip]

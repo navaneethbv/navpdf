@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { AlertCircle, LoaderCircle, X } from "lucide-react";
+import { AlertCircle, Info, LoaderCircle, X } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import { ViewerController } from "../features/viewer/controller";
 import { ViewerHost } from "../features/viewer/ViewerHost";
@@ -196,6 +196,19 @@ export default function App() {
           </button>
         </div>
       )}
+      {s.formNotice && (
+        <div className="error-banner notice-banner">
+          <Info size={17} />
+          <span>{s.formNotice}</span>
+          <button
+            className="icon-button"
+            onClick={() => s.set({ formNotice: null })}
+            aria-label="Dismiss form notice"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
       <div
         className={`workspace ${s.document ? "has-document" : ""}`}
         inert={s.busy}
@@ -233,7 +246,7 @@ export default function App() {
       />
       {s.settingsOpen && <Settings />}
       {session.password && (
-        <Dialog title="Unlock PDF" onClose={session.cancelPassword}>
+        <Dialog title="Unlock PDF" onClose={session.cancelPassword} priority>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -271,7 +284,7 @@ export default function App() {
         </Dialog>
       )}
       {session.confirm && (
-        <Dialog title="Save your changes?" onClose={session.cancelConfirm}>
+        <Dialog title="Save your changes?" onClose={session.cancelConfirm} priority>
           <p>
             This document has unsaved edits. Save them before continuing, or
             discard this session's changes.

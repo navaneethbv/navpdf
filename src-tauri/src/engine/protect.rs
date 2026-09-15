@@ -82,6 +82,16 @@ pub struct ProtectionRequest {
     pub permissions: PermissionRequest,
 }
 
+impl ProtectionRequest {
+    pub fn user_only(password: impl Into<String>) -> Self {
+        Self {
+            user_password: password.into(),
+            owner_password: String::new(),
+            permissions: PermissionRequest::all(),
+        }
+    }
+}
+
 /// Encrypts an unprotected document with AES-256 (security handler revision 6).
 pub fn protect(
     bytes: &[u8],

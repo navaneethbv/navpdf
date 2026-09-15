@@ -110,7 +110,7 @@ export function ProtectDialog({
       await controller.replaceWithBytes(bytes, "Unlocked for editing", {
         resetHistory: true,
       });
-      await discardRecovery().catch(() => {});
+      await discardRecovery(doc.id).catch(() => {});
       const state = useWorkspace.getState();
       state.set({
         dirty: false,
@@ -173,7 +173,7 @@ export function ProtectDialog({
         });
         controller.markSaved(bytes, pdf.numPages);
         await markDirty(false).catch(() => {});
-        await discardRecovery().catch(() => {});
+        await discardRecovery(doc.id).catch(() => {});
       }
       state.set({
         status: result.replacedSource

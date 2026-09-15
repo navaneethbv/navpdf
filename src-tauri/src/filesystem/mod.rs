@@ -93,19 +93,79 @@ pub fn snapshot(path: &Path) -> Result<(NamedTempFile, Vec<u8>, u64), String> {
     Ok((temp, digest.finalize().to_vec(), length))
 }
 
-pub fn validate_pdf(bytes: &[u8], expected_pages: u32) -> Result<(), String> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidationError {
+    EmptyOrTooLarge,
+    Unparseable,
+    Encrypted,
+    PageCount { expected: u32, actual: usize },
+}
+
+impl ValidationError {
+    pub fn for_save(&self) -> String {
+        match self {
+            ValidationError::EmptyOrTooLarge => "The output PDF is empty or too large.".into(),
+            ValidationError::Unparseable => {
+                "Changes could not be saved: the output PDF failed validation.".into()
+            }
+            ValidationError::Encrypted => {
+                "Saving encrypted documents is not available in this milestone. The original is unchanged.".into()
+            }
+            ValidationError::PageCount { .. } => {
+                "Changes could not be saved: the output page count is incorrect.".into()
+            }
+        }
+    }
+
+    pub fn for_commit(&self) -> String {
+        match self {
+            ValidationError::EmptyOrTooLarge => "The revision PDF is empty or too large.".into(),
+            ValidationError::Unparseable => {
+                "Working revision could not be committed: the PDF failed validation.".into()
+            }
+            ValidationError::Encrypted => "Encrypted revisions are not supported.".into(),
+            ValidationError::PageCount { .. } => {
+                "Working revision could not be committed: the page count is incorrect.".into()
+            }
+        }
+    }
+
+    pub fn for_print(&self) -> String {
+        match self {
+            ValidationError::EmptyOrTooLarge => "The print PDF is empty or too large.".into(),
+            ValidationError::Unparseable => {
+                "Printing failed: the document failed validation.".into()
+            }
+            ValidationError::Encrypted => {
+                "Printing encrypted documents is not supported directly.".into()
+            }
+            ValidationError::PageCount { .. } => {
+                "Printing failed: the page count is incorrect.".into()
+            }
+        }
+    }
+}
+
+pub fn validate_pdf_structure(bytes: &[u8], expected_pages: u32) -> Result<(), ValidationError> {
     if bytes.is_empty() || bytes.len() as u64 > MAX_FILE_BYTES {
-        return Err("The output PDF is empty or too large.".into());
+        return Err(ValidationError::EmptyOrTooLarge);
     }
-    let document = lopdf::Document::load_mem(bytes)
-        .map_err(|_| "Changes could not be saved: the output PDF failed validation.")?;
+    let document = lopdf::Document::load_mem(bytes).map_err(|_| ValidationError::Unparseable)?;
     if document.is_encrypted() {
-        return Err("Saving encrypted documents is not available in this milestone. The original is unchanged.".into());
+        return Err(ValidationError::Encrypted);
     }
-    if expected_pages == 0 || document.get_pages().len() != expected_pages as usize {
-        return Err("Changes could not be saved: the output page count is incorrect.".into());
+    let actual_pages = document.get_pages().len();
+    if expected_pages == 0 || actual_pages != expected_pages as usize {
+        return Err(ValidationError::PageCount {
+            expected: expected_pages,
+            actual: actual_pages,
+        });
     }
     Ok(())
+}
+
+pub fn validate_pdf(bytes: &[u8], expected_pages: u32) -> Result<(), String> {
+    validate_pdf_structure(bytes, expected_pages).map_err(|err| err.for_save())
 }
 
 pub fn atomic_save(
@@ -200,7 +260,7 @@ pub fn private_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), S
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use lopdf::{dictionary, Object, Stream};
     pub fn fixture() -> Vec<u8> {
@@ -393,7 +453,7 @@ mod tests {
         assert_eq!(fs::read(p).expect("read"), bytes);
     }
     #[test]
-    fn custom_validators_gate_the_write_and_default_validation_rejects_encryption() {
+    fn custom_validators_gate_the_write() {
         let d = tempfile::tempdir().expect("temp");
         let p = d.path().join("protected.pdf");
         let rejected = atomic_save_with(&p, b"%PDF-1.7 encrypted", None, |_| Err("invalid".into()));
@@ -401,7 +461,23 @@ mod tests {
         assert!(!p.exists());
         atomic_save_with(&p, b"%PDF-1.7 encrypted", None, |_| Ok(())).expect("save");
         assert_eq!(fs::read(&p).expect("read"), b"%PDF-1.7 encrypted");
-        assert!(validate_pdf(b"%PDF-1.7 encrypted", 1).is_err());
+    }
+
+    #[test]
+    fn validate_pdf_rejects_real_encrypted_output() {
+        let plain = fixture();
+        let encrypted = crate::engine::protect::protect(
+            &plain,
+            &crate::engine::protect::ProtectionRequest::user_only("pw"),
+            1,
+        )
+        .unwrap();
+        let err = validate_pdf(&encrypted, 1).unwrap_err();
+        assert!(err.contains("encrypted"), "{err}");
+        assert_eq!(
+            validate_pdf_structure(&encrypted, 1).unwrap_err(),
+            ValidationError::Encrypted
+        );
     }
     #[test]
     fn corrupt_output_never_overwrites() {

@@ -705,6 +705,20 @@ p {
 .error-banner > span {
   flex: 1;
 }
+.notice-banner {
+  background: var(--surface);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.signature-warnings {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12px;
+}
+.signature-warnings p {
+  margin: 0;
+}
 .busy-indicator {
   position: fixed;
   bottom: 45px;
@@ -925,10 +939,17 @@ p {
   width: 460px;
   max-width: calc(100vw - 40px);
   box-shadow: 0 20px 80px var(--shadow-color);
+  z-index: 500;
+}
+.app-dialog.priority-dialog {
+  z-index: 2000;
 }
 .app-dialog::backdrop {
   background: var(--dialog-backdrop);
   backdrop-filter: blur(3px);
+}
+.app-dialog.priority-dialog::backdrop {
+  z-index: 1999;
 }
 .app-dialog > header {
   display: flex;

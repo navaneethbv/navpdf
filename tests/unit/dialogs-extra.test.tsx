@@ -34,7 +34,7 @@ function seedDocument(pages = 3) {
         version: "1.7",
       },
       page: 1,
-      local: { preferences: defaultPreferences, recents: [], recovery: null },
+      local: { preferences: defaultPreferences, recents: [], recoveries: [] },
     });
   });
 }
@@ -595,7 +595,10 @@ describe("Home history actions", () => {
         local: {
           preferences: defaultPreferences,
           recents: [{ id: "r1", name: "a.pdf", openedAt: 1, page: 1 }],
-          recovery: { name: "rec.pdf", savedAt: 2 },
+          recoveries: [
+            { id: "rec-a", name: "rec.pdf", pages: 1, savedAt: 2 },
+            { id: "rec-b", name: "other.pdf", pages: 1, savedAt: 1 },
+          ],
         },
       });
     });
@@ -612,7 +615,8 @@ describe("Home history actions", () => {
     await vi.waitFor(() => {
       expect(refresh).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByText("Discard recovery"));
+    expect(screen.getByText("rec.pdf")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Discard recovery for other.pdf"));
     await vi.waitFor(() => {
       expect(refresh).toHaveBeenCalledTimes(2);
     });

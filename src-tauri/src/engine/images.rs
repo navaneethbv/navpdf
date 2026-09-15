@@ -46,6 +46,11 @@ pub fn decode(doc: &Document, stream: &Stream) -> Result<Raster, &'static str> {
     if value(b"Mask").is_some_and(|mask| mask.as_stream().is_ok()) {
         return Err("explicit image masks are not decoded");
     }
+    if value(b"Mask").is_some_and(|mask| mask.as_array().is_ok()) {
+        // Averaged or lossy samples no longer match the color-key ranges, so transparent
+        // areas would become opaque.
+        return Err("color-key masked images are not re-encoded");
+    }
     let dimension = |key: &[u8]| {
         value(key)
             .and_then(|o| o.as_i64().ok())
@@ -373,6 +378,15 @@ mod tests {
             vec![0],
         );
         assert!(decode(&doc, &indexed).is_err());
+        let keyed = Stream::new(
+            dictionary! {"Width" => 1, "Height" => 1, "BitsPerComponent" => 8,
+            "ColorSpace" => "DeviceRGB", "Mask" => vec![Object::Integer(0); 6]},
+            vec![0, 0, 0],
+        );
+        assert_eq!(
+            decode(&doc, &keyed).unwrap_err(),
+            "color-key masked images are not re-encoded"
+        );
         let raster = Raster {
             width: 2,
             height: 2,

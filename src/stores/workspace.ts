@@ -53,6 +53,8 @@ interface Workspace {
   activeSnapshot: boolean;
   hasDigitalSignature: boolean;
   formNotice: string | null;
+  revision: number;
+  editingAllowed: boolean;
   set: (patch: Partial<Omit<Workspace, "set" | "reset">>) => void;
   reset: () => void;
 }
@@ -62,6 +64,8 @@ const cleanDocument = {
   page: 1,
   hasDigitalSignature: false,
   formNotice: null,
+  revision: 0,
+  editingAllowed: true,
   dirty: false,
   canUndo: false,
   canRedo: false,
@@ -87,7 +91,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   busy: false,
   status: "Ready",
   error: "",
-  local: { preferences: defaultPreferences, recents: [], recovery: null },
+  local: { preferences: defaultPreferences, recents: [], recoveries: [] },
   settingsOpen: false,
   matchCase: false,
   wholeWord: false,
@@ -106,6 +110,7 @@ export const useWorkspace = create<Workspace>((set) => ({
       tool: "select",
       toolMode: null,
       activeModal: null,
+      busy: false,
       status: "Ready",
       error: "",
     }),

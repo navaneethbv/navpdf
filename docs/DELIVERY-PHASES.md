@@ -17,6 +17,24 @@ Historical test counts and package hashes below do not establish acceptance of t
 Phase 6's previous corpus accuracy claim is withdrawn: its tests compared hard-coded identical strings and its runtime returned sample text.
 Full completion of all ten phases is not established.
 
+## September 14 codebase review
+
+A full source review at `4f667c1` is recorded in [REVIEW-2026-09-14.md](REVIEW-2026-09-14.md) with finding ids by area and a specification gap table.
+Its corrective and feature work is sequenced in [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md).
+The review found two data-loss defects that affect Phases 5 and 3: repeated decoration or Bates application deletes original page content, and editor mode switches clear the dirty flag while form edits are pending.
+
+Progress on branch `fix/september-14-review-corrections`, recorded September 14, 2026:
+
+| Tranche | Automated status | Native acceptance |
+| --- | --- | --- |
+| 0: environment and guardrails | Implemented; hosted CI result pending the first push | Not applicable |
+| 1: data-safety corrections (Tasks 1.1 to 1.9) | Implemented with regressions; local checks pass | Not run; every task's native check is open |
+| 2: mutation correctness and geometry (Tasks 2.1 to 2.7) | Implemented with regressions; local checks and Phase 7 acceptance pass | Not run; placement and redaction native checks are open |
+
+Evidence, deliberate deviations from the plan text and remaining limits are recorded in [VERIFICATION.md](VERIFICATION.md).
+Phase 5 completion is not established until Task 1.1's native check is recorded, and Phases 3, 4 and 6 remain reopened.
+Next task: the Tranche 1 and 2 native checks, then Tranche 3 (dialog robustness and accessibility).
+
 ## Working agreement
 
 Work through phases in order and record evidence before marking a phase complete.

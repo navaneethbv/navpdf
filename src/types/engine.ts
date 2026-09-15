@@ -39,6 +39,7 @@ export interface RedactionReport {
   removedImages: number;
   removedPaths: number;
   removedAnnotations: number;
+  hiddenAnnotationsRemoved: number;
   removedFormFields: number;
   rewrittenForms: number;
   sanitized: string[];

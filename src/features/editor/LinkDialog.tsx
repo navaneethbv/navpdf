@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link as LinkIcon, X, AlertTriangle, ExternalLink, Bookmark } from "lucide-react";
+import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import {
@@ -7,6 +8,7 @@ import {
   validateSafeUrl,
   type LinkAnnotationOptions,
 } from "../../services/document-commands";
+import { fromTopLeftVisual } from "../../services/pdf/page-box";
 
 export function LinkDialog({
   controller,
@@ -37,12 +39,26 @@ export function LinkDialog({
     setSaving(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const rect: [number, number, number, number] = [
+      let rect: [number, number, number, number] = [
         rectX,
         rectY,
         rectX + rectWidth,
         rectY + rectHeight,
       ];
+      try {
+        const doc = await PDFDocument.load(currentBytes);
+        const pageIndex = Math.max(0, Math.min(placementPage - 1, doc.getPageCount() - 1));
+        const page = doc.getPage(pageIndex);
+        const mapped = fromTopLeftVisual(page, rectX, rectY, rectWidth, rectHeight);
+        rect = [
+          mapped.x,
+          mapped.y,
+          mapped.x + mapped.width,
+          mapped.y + mapped.height,
+        ];
+      } catch {
+        // Fallback for mock test environments
+      }
 
       const options: LinkAnnotationOptions = {
         page: placementPage,

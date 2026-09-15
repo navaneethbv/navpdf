@@ -115,6 +115,36 @@ await writeFile(
   path.join(target, "mixed-forms-annotations.pdf"),
   await mixed.save(),
 );
+
+// Generate rotated and offset fixture
+const rotDoc = await PDFDocument.create();
+rotDoc.setTitle("NavPDF rotated and offset pages fixture");
+const rotFont = await rotDoc.embedFont(StandardFonts.Helvetica);
+
+// Page 1: Rotate 0, MediaBox [0 0 612 792]
+const rotP0 = rotDoc.addPage([612, 792]);
+rotP0.setRotation(degrees(0));
+rotP0.drawText("Page 1: Rotate 0", { x: 54, y: 720, font: rotFont, size: 18 });
+
+// Page 2: Rotate 90, MediaBox [0 0 612 792]
+const rotP1 = rotDoc.addPage([612, 792]);
+rotP1.setRotation(degrees(90));
+rotP1.drawText("Page 2: Rotate 90", { x: 54, y: 720, font: rotFont, size: 18 });
+
+// Page 3: Rotate 270, MediaBox [100 100 712 892]
+const rotP2 = rotDoc.addPage([612, 792]);
+rotP2.setMediaBox(100, 100, 612, 792);
+rotP2.setRotation(degrees(270));
+rotP2.drawText("Page 3: Rotate 270 Offset", { x: 154, y: 820, font: rotFont, size: 18 });
+
+// Page 4: Rotate 180, CropBox [50 50 562 742]
+const rotP3 = rotDoc.addPage([612, 792]);
+rotP3.setCropBox(50, 50, 512, 692);
+rotP3.setRotation(degrees(180));
+rotP3.drawText("Page 4: Rotate 180 Crop", { x: 104, y: 700, font: rotFont, size: 18 });
+
+await writeFile(path.join(target, "rotated-offset.pdf"), await rotDoc.save());
+
 await writeFile(
   path.join(target, "damaged.pdf"),
   "%PDF-1.7\nThis file deliberately has no PDF objects or cross-reference table.",

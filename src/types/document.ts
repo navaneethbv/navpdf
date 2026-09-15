@@ -41,7 +41,14 @@ export interface RecentDocument {
 export interface LocalState {
   preferences: Preferences;
   recents: RecentDocument[];
-  recovery: { name: string; savedAt: number } | null;
+  recoveries: RecoveryEntry[];
+}
+/** An autosaved copy of a document that was not saved before NavPDF closed. */
+export interface RecoveryEntry {
+  id: string;
+  name: string;
+  pages: number;
+  savedAt: number;
 }
 export interface SearchResult {
   page: number;
@@ -61,9 +68,14 @@ export interface Comment {
   text: string;
   rect?: [number, number, number, number];
   line?: [number, number, number, number];
+  lineEndings?: [string, string];
+  quads?: number[][];
   color?: [number, number, number];
   opacity?: number;
   width?: number;
+  vertices?: number[][];
+  callout?: number[];
+  stampName?: string;
 }
 export interface DocumentInfo {
   pages: number;

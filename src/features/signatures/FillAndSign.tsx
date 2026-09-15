@@ -26,6 +26,7 @@ import {
   getSessionSignatures,
   getLegacyPlaintextSignatures,
 } from "../../services/signature-store";
+import { fromTopLeftVisual } from "../../services/pdf/page-box";
 import type { SavedSignature } from "../../services/native";
 
 export function FillAndSign({
@@ -50,6 +51,7 @@ export function FillAndSign({
   const [sigType, setSigType] = useState<"signature" | "initials">("signature");
   const [legacyMigrationPrompt, setLegacyMigrationPrompt] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
+  const [storeWarnings, setStoreWarnings] = useState<string[]>([]);
   const [posX, setPosX] = useState(60);
   const [posY, setPosY] = useState(150);
   const [sigWidth, setSigWidth] = useState(160);
@@ -59,9 +61,10 @@ export function FillAndSign({
   const isDrawing = useRef(false);
 
   const refreshLibrary = async () => {
-    const { signatures: list, error } = await fetchSignatureLibrary();
+    const { signatures: list, error, warnings } = await fetchSignatureLibrary();
     setSignatures(list);
-    if (error) setStoreError(error);
+    setStoreError(error);
+    setStoreWarnings(warnings);
   };
 
   useEffect(() => {
@@ -204,17 +207,18 @@ export function FillAndSign({
 
       const pageIndex = Math.max(0, Math.min(targetPage - 1, doc.getPageCount() - 1));
       const page = doc.getPage(pageIndex);
-      const { height } = page.getSize();
 
       const width = sigWidth;
       const aspect = img.height / img.width;
       const sigHeight = width * aspect;
 
+      const rect = fromTopLeftVisual(page, posX, posY, width, sigHeight);
+
       page.drawImage(img, {
-        x: posX,
-        y: Math.max(10, height - posY - sigHeight),
-        width,
-        height: sigHeight,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
       });
 
       const newBytes = await doc.save();
@@ -235,9 +239,9 @@ export function FillAndSign({
       const doc = await PDFDocument.load(currentBytes);
       const pageIndex = Math.max(0, Math.min(targetPage - 1, doc.getPageCount() - 1));
       const page = doc.getPage(pageIndex);
-      const { height } = page.getSize();
-      const y = Math.max(20, height - posY);
-      const x = posX;
+      const rect = fromTopLeftVisual(page, posX, posY, 24, 24);
+      const x = rect.x;
+      const y = rect.y + rect.height;
 
       if (symbol === "check") {
         page.drawLine({
@@ -385,6 +389,13 @@ export function FillAndSign({
             {storeError}
           </div>
         )}
+        {storeWarnings.length > 0 && (
+          <div className="signature-warnings" data-testid="signature-warnings">
+            {storeWarnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        )}
 
         <div className="tab-buttons-bar">
           <button
@@ -459,7 +470,7 @@ export function FillAndSign({
                       <div className="sig-meta">
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span>{sig.name}</span>
-                          {sig.sessionOnly ? (
+                          {sig.storage === "session" ? (
                             <span
                               title="Session-only (in memory)"
                               style={{
@@ -473,6 +484,23 @@ export function FillAndSign({
                               }}
                             >
                               <Clock size={10} /> Session
+                            </span>
+                          ) : sig.storage === "legacy" ? (
+                            <span
+                              title="Unprotected legacy storage (not encrypted by OS)"
+                              data-testid="unprotected-badge"
+                              style={{
+                                fontSize: "10px",
+                                padding: "1px 4px",
+                                borderRadius: "3px",
+                                background: "rgba(220, 38, 38, 0.15)",
+                                color: "var(--color-danger, #dc2626)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "2px",
+                              }}
+                            >
+                              <AlertTriangle size={10} /> Unprotected
                             </span>
                           ) : (
                             <span

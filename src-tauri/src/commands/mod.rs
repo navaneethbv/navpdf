@@ -1,10 +1,13 @@
 pub mod engine;
+mod recovery;
 
 use crate::{
+    engine::redact,
     filesystem, logging, security,
-    signatures::{SignatureAsset, SignatureStore},
+    signatures::{LibraryListing, SignatureAsset, SignatureStore},
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -60,12 +63,6 @@ pub struct LocalData {
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Recovery {
-    pub name: String,
-    pub saved_at: u64,
-}
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SaveResult {
     pub name: String,
     pub size: u64,
@@ -108,6 +105,17 @@ pub struct Opened {
     pub sensitive: Mutex<bool>,
     /// Set after redaction or unlocking so a plain Save cannot overwrite the source.
     pub force_save_as: Mutex<bool>,
+    /// Set when the source file was encrypted when opened.
+    pub source_encrypted: Mutex<bool>,
+    pub redaction_audit: Mutex<RedactionAudit>,
+}
+/// Redaction audits that a save must pass, because the renderer re-serializes redacted output.
+#[derive(Default)]
+pub struct RedactionAudit {
+    /// Regions and terms of redactions whose output was committed; cleared by a successful save.
+    pub armed: Option<redact::AuditSpec>,
+    /// SHA-256 of the latest redacted output and its audit, until those bytes are committed.
+    pub candidate: Option<(Vec<u8>, redact::AuditSpec)>,
 }
 pub struct AppState {
     pub documents: Mutex<HashMap<String, Arc<Opened>>>,
@@ -141,11 +149,41 @@ fn document(state: &AppState, id: &str) -> Result<Arc<Opened>, String> {
         .cloned()
         .ok_or("This document is no longer open.".into())
 }
+pub fn refuse_plaintext_overwrite(doc: &Opened, target: &std::path::Path) -> Result<(), String> {
+    let sensitive = *doc
+        .sensitive
+        .lock()
+        .map_err(|_| "Document state unavailable.")?;
+    let source_encrypted = *doc
+        .source_encrypted
+        .lock()
+        .map_err(|_| "Document state unavailable.")?;
+    if !sensitive && !source_encrypted {
+        return Ok(());
+    }
+    let (source, _) = doc
+        .source
+        .lock()
+        .map_err(|_| "Document state unavailable.")?
+        .clone();
+    let canon_source = fs::canonicalize(&source).unwrap_or(source);
+    let canon_target = fs::canonicalize(target).unwrap_or_else(|_| target.to_path_buf());
+    if canon_source == canon_target {
+        return Err("This document was opened from an encrypted file. Choose a different name to save an unencrypted copy.".into());
+    }
+    Ok(())
+}
 fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor, String> {
     let (snapshot, hash, length) = filesystem::snapshot(&path)?;
     let file = snapshot
         .reopen()
         .map_err(|_| "Unable to open working copy.")?;
+    let source_encrypted = match lopdf::Document::load(snapshot.path()) {
+        Ok(doc) => doc.is_encrypted(),
+        Err(_) => fs::read(snapshot.path())
+            .map(|b| b.windows(8).any(|w| w == b"/Encrypt"))
+            .unwrap_or(false),
+    };
     let name = path
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -167,6 +205,8 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
         saved_revision: Mutex::new(revision_id.clone()),
         sensitive: Mutex::new(false),
         force_save_as: Mutex::new(false),
+        source_encrypted: Mutex::new(source_encrypted),
+        redaction_audit: Mutex::new(RedactionAudit::default()),
     });
     state
         .documents
@@ -306,6 +346,8 @@ pub fn close_document(state: State<AppState>, id: String) -> Result<(), String> 
         .lock()
         .map_err(|_| "Document state unavailable.")?
         .remove(&id);
+    let _ = fs::remove_file(state.root.join(format!("recovery-{id}.pdf")));
+    let _ = fs::remove_file(state.root.join(format!("recovery-{id}.json")));
     Ok(())
 }
 fn header(request: &Request<'_>, name: &str) -> Result<String, String> {
@@ -356,14 +398,33 @@ pub async fn save_document(
             .map(|n| n.clone())
             .unwrap_or_else(|_| "Document.pdf".into());
         let force_save_as = doc.force_save_as.lock().map(|flag| *flag).unwrap_or(true);
+        let sensitive = *doc
+            .sensitive
+            .lock()
+            .map_err(|_| "Document state unavailable.")?;
+        let source_encrypted = *doc
+            .source_encrypted
+            .lock()
+            .map_err(|_| "Document state unavailable.")?;
+        let suggested_name = if sensitive || source_encrypted {
+            let stem = std::path::Path::new(&current_name)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Document");
+            format!("{stem}-unlocked.pdf")
+        } else {
+            current_name.clone()
+        };
         let target = if save_as
             || force_save_as
+            || sensitive
+            || source_encrypted
             || source == doc._snapshot.path()
-            || source == app.state::<AppState>().root.join("recovery.pdf")
+            || recovery::entry_for(&app.state::<AppState>().root, &source).is_some()
         {
             let Some(file) = rfd::AsyncFileDialog::new()
                 .add_filter("PDF", &["pdf"])
-                .set_file_name(&current_name)
+                .set_file_name(&suggested_name)
                 .save_file()
                 .await
             else {
@@ -373,6 +434,7 @@ pub async fn save_document(
         } else {
             source.clone()
         };
+        refuse_plaintext_overwrite(&doc, &target)?;
         let check = if target == source {
             Some(hash)
         } else if target.exists() {
@@ -380,9 +442,19 @@ pub async fn save_document(
         } else {
             None
         };
+        let armed_audit = doc
+            .redaction_audit
+            .lock()
+            .map_err(|_| "Document state unavailable.")?
+            .armed
+            .clone();
         let worker_app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            let new_hash = filesystem::atomic_save(&target, &bytes, pages, check.as_deref())?;
+            let new_hash =
+                filesystem::atomic_save_with(&target, &bytes, check.as_deref(), |candidate| {
+                    filesystem::validate_pdf(candidate, pages)?;
+                    verify_redactions(candidate, armed_audit.as_ref())
+                })?;
             *doc.source
                 .lock()
                 .map_err(|_| "Document state unavailable.")? = (target.clone(), new_hash);
@@ -395,6 +467,11 @@ pub async fn save_document(
             }
             if let Ok(mut flag) = doc.force_save_as.lock() {
                 *flag = false;
+            }
+            if target != source {
+                if let Ok(mut enc_guard) = doc.source_encrypted.lock() {
+                    *enc_guard = false;
+                }
             }
             let size = bytes.len() as u64;
             let state = worker_app.state::<AppState>();
@@ -421,8 +498,10 @@ pub async fn save_document(
                     let _ = filesystem::private_json(&state.root.join("settings.json"), &*local);
                 }
             }
-            let _ = fs::remove_file(state.root.join("recovery.pdf"));
-            let _ = fs::remove_file(state.root.join("recovery.json"));
+            retire_recovery(&state.root, &id, &source);
+            if let Ok(mut audit) = doc.redaction_audit.lock() {
+                audit.armed = None;
+            }
             if let Ok(mut saved_guard) = doc.saved_revision.lock() {
                 if let Ok(rev_guard) = doc.current_revision.lock() {
                     *saved_guard = rev_guard.revision_id.clone();
@@ -486,7 +565,7 @@ fn commit_revision(
     if current.revision_id != base_revision_id {
         return Err("Stale base revision. The document has been modified elsewhere.".into());
     }
-    filesystem::validate_pdf(bytes, pages)?;
+    filesystem::validate_pdf_structure(bytes, pages).map_err(|err| err.for_commit())?;
     let sensitive = *doc
         .sensitive
         .lock()
@@ -511,12 +590,45 @@ fn commit_revision(
         page_count: pages,
         timestamp: time(),
     };
+    promote_redaction_audit(doc, bytes)?;
     // doc.file and doc.length belong to the immutable source range transport.
     Ok(CommitRevisionResult {
         revision_id,
         page_count: pages,
         size: bytes.len() as u64,
     })
+}
+
+/// Arms the save-time redaction audit once the committed bytes are the audited redaction
+/// output, so a failed attach never blocks saving the unredacted document.
+fn promote_redaction_audit(doc: &Opened, bytes: &[u8]) -> Result<(), String> {
+    let mut audit = doc
+        .redaction_audit
+        .lock()
+        .map_err(|_| "Document state unavailable.")?;
+    let committed = audit
+        .candidate
+        .as_ref()
+        .is_some_and(|(hash, _)| hash.as_slice() == Sha256::digest(bytes).as_slice());
+    if let Some((_, spec)) = committed.then(|| audit.candidate.take()).flatten() {
+        match audit.armed.as_mut() {
+            Some(armed) => armed.merge(spec),
+            None => audit.armed = Some(spec),
+        }
+    }
+    Ok(())
+}
+
+/// Re-runs armed redaction audits on bytes about to replace a file on disk.
+fn verify_redactions(bytes: &[u8], audit: Option<&redact::AuditSpec>) -> Result<(), String> {
+    let Some(spec) = audit else {
+        return Ok(());
+    };
+    if redact::audit(bytes, &spec.regions, &spec.terms)?.passed {
+        Ok(())
+    } else {
+        Err("Saving was blocked because this copy no longer passes the redaction audit: content was found inside a redacted area or a redaction term is present again. The file on disk is unchanged.".into())
+    }
 }
 
 #[tauri::command]
@@ -539,10 +651,8 @@ pub fn get_revision(state: State<AppState>, id: String) -> Result<RevisionStatus
 }
 #[tauri::command]
 pub fn local_state(state: State<AppState>) -> Result<serde_json::Value, String> {
+    let recoveries = recovery::list(&state.root);
     let local = state.local.lock().map_err(|_| "Settings unavailable.")?;
-    let recovery = fs::read(state.root.join("recovery.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Recovery>(&bytes).ok());
     Ok(serde_json::json!({
         "preferences": local.preferences,
         "recents": local.recents.iter().map(|r| serde_json::json!({
@@ -551,10 +661,7 @@ pub fn local_state(state: State<AppState>) -> Result<serde_json::Value, String> 
             "openedAt": r.opened_at,
             "page": r.page,
         })).collect::<Vec<_>>(),
-        "recovery": recovery.map(|r| serde_json::json!({
-            "name": r.name,
-            "savedAt": r.saved_at,
-        })),
+        "recoveries": recoveries,
     }))
 }
 #[tauri::command]
@@ -612,64 +719,71 @@ pub async fn write_recovery(app: AppHandle, request: Request<'_>) -> Result<(), 
         .map_err(|_| "Invalid recovery page count.")?;
     let bytes = payload(&request)?;
     let doc = document(&app.state::<AppState>(), &id)?;
-    let doc_name = doc
-        .name
-        .lock()
-        .map(|n| n.clone())
-        .unwrap_or_else(|_| "Document.pdf".into());
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        if doc.sensitive.lock().map(|flag| *flag).unwrap_or(true) {
-            // Never leave decrypted recovery copies of encrypted documents.
-            let _ = fs::remove_file(state.root.join("recovery.pdf"));
-            let _ = fs::remove_file(state.root.join("recovery.json"));
-            return Ok(());
-        }
-        if !state
+        let autosave = state
             .local
             .lock()
             .map_err(|_| "Settings unavailable.")?
             .preferences
-            .autosave
-        {
-            return Ok(());
-        }
-        let recovery_path = state.root.join("recovery.pdf");
-        let previous_hash = if recovery_path.exists() {
-            Some(filesystem::fingerprint(&recovery_path)?)
-        } else {
-            None
-        };
-        filesystem::atomic_save(&recovery_path, &bytes, pages, previous_hash.as_deref())?;
-        filesystem::private_json(
-            &state.root.join("recovery.json"),
-            &Recovery {
-                name: doc_name,
-                saved_at: time(),
-            },
-        )
+            .autosave;
+        store_recovery(&state.root, &id, &doc, pages, &bytes, autosave)
     })
     .await
     .map_err(|_| "Recovery could not be saved.")?
 }
 #[tauri::command]
-pub async fn open_recovery(app: AppHandle) -> Result<Descriptor, String> {
+pub async fn open_recovery(app: AppHandle, id: String) -> Result<Descriptor, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        opened(&state, state.root.join("recovery.pdf"), false)
+        let path = recovery::path_for(&state.root, &id)?;
+        opened(&state, path, false)
     })
     .await
     .map_err(|_| "Recovery could not be opened.")?
 }
 #[tauri::command]
-pub fn discard_recovery(state: State<AppState>) -> Result<(), String> {
-    for name in ["recovery.pdf", "recovery.json"] {
-        let path = state.root.join(name);
-        if path.exists() {
-            fs::remove_file(path).map_err(|_| "Recovery could not be removed.")?;
-        }
+pub fn discard_recovery(state: State<AppState>, id: String) -> Result<(), String> {
+    recovery::discard(&state.root, &id)
+}
+
+/// Writes one document's recovery copy unless its session is sensitive or autosave is off.
+fn store_recovery(
+    root: &std::path::Path,
+    id: &str,
+    doc: &Opened,
+    pages: u32,
+    bytes: &[u8],
+    autosave: bool,
+) -> Result<(), String> {
+    if doc.sensitive.lock().map(|flag| *flag).unwrap_or(true) {
+        // Never leave decrypted recovery copies of encrypted documents.
+        return recovery::discard(root, id);
     }
-    Ok(())
+    if !autosave {
+        return Ok(());
+    }
+    let name = doc
+        .name
+        .lock()
+        .map(|name| name.clone())
+        .unwrap_or_else(|_| "Document.pdf".into());
+    let entry = recovery::RecoveryEntry {
+        id: id.to_owned(),
+        name,
+        pages,
+        saved_at: time(),
+    };
+    recovery::write(root, &entry, bytes)
+}
+
+/// Removes a saved document's own recovery entry and, when the document was opened from a
+/// recovery copy, the entry it came from.
+fn retire_recovery(root: &std::path::Path, id: &str, source: &std::path::Path) {
+    let _ = recovery::discard(root, id);
+    if let Some(entry) = recovery::entry_for(root, source) {
+        let _ = recovery::discard(root, &entry);
+    }
 }
 #[tauri::command]
 pub fn mark_dirty(state: State<AppState>, dirty: bool) -> Result<(), String> {
@@ -702,7 +816,7 @@ pub struct SaveSignatureRequest {
 }
 
 #[tauri::command]
-pub fn load_signatures(state: State<AppState>) -> Result<Vec<SignatureAsset>, String> {
+pub fn load_signatures(state: State<AppState>) -> Result<LibraryListing, String> {
     let store = SignatureStore::new(&state.root)?;
     store.list()
 }
@@ -841,6 +955,158 @@ mod tests {
         );
         assert!(commit_revision(&doc, &next_rev_id, &candidate, 5).is_err());
     }
+
+    #[test]
+    fn save_refuses_plaintext_over_encrypted_source() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState {
+            documents: Mutex::new(HashMap::new()),
+            local: Mutex::new(LocalData::default()),
+            root: root.path().to_path_buf(),
+            dirty: Mutex::new(false),
+            saving: Mutex::new(false),
+            engine: engine::EngineState::default(),
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("secret.pdf");
+        let plain = filesystem::tests::fixture();
+        let encrypted = crate::engine::protect::protect(
+            &plain,
+            &crate::engine::protect::ProtectionRequest::user_only("pw"),
+            1,
+        )
+        .unwrap();
+        fs::write(&source_path, &encrypted).unwrap();
+
+        let descriptor = opened(&state, source_path.clone(), false).unwrap();
+        let doc = document(&state, &descriptor.id).unwrap();
+        assert!(*doc.source_encrypted.lock().unwrap());
+
+        let err = refuse_plaintext_overwrite(&doc, &source_path).unwrap_err();
+        assert!(err.contains("unencrypted copy"), "{err}");
+        let after = fs::read(&source_path).unwrap();
+        assert!(lopdf::Document::load_mem(&after).unwrap().is_encrypted());
+    }
+
+    fn test_state(root: &std::path::Path) -> AppState {
+        AppState {
+            documents: Mutex::new(HashMap::new()),
+            local: Mutex::new(LocalData::default()),
+            root: root.to_path_buf(),
+            dirty: Mutex::new(false),
+            saving: Mutex::new(false),
+            engine: engine::EngineState::default(),
+        }
+    }
+
+    #[test]
+    fn protecting_in_place_marks_sensitive_and_removes_recovery() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("doc.pdf");
+        let plain = filesystem::tests::fixture();
+        fs::write(&source_path, &plain).unwrap();
+        let descriptor = opened(&state, source_path.clone(), false).unwrap();
+        let doc = document(&state, &descriptor.id).unwrap();
+        *doc.working_file.lock().unwrap() = Some(NamedTempFile::new().unwrap());
+        store_recovery(&state.root, &descriptor.id, &doc, 1, &plain, true).unwrap();
+        assert_eq!(recovery::list(&state.root).len(), 1);
+
+        engine::adopt_protected_source(&doc, &state.root, &descriptor.id, source_path, vec![7])
+            .unwrap();
+
+        assert!(*doc.sensitive.lock().unwrap());
+        assert!(*doc.source_encrypted.lock().unwrap());
+        assert!(*doc.force_save_as.lock().unwrap());
+        assert!(doc.working_file.lock().unwrap().is_none());
+        assert_eq!(doc.source.lock().unwrap().1, vec![7]);
+        assert!(recovery::list(&state.root).is_empty());
+        // Later autosave ticks must not recreate a plaintext copy.
+        store_recovery(&state.root, &descriptor.id, &doc, 1, &plain, true).unwrap();
+        assert!(recovery::list(&state.root).is_empty());
+    }
+
+    #[test]
+    fn recovery_is_retired_per_document_and_skipped_when_not_allowed() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let dir = tempfile::tempdir().unwrap();
+        let plain = filesystem::tests::fixture();
+        let open = |name: &str| {
+            let path = dir.path().join(name);
+            fs::write(&path, &plain).unwrap();
+            let descriptor = opened(&state, path, false).unwrap();
+            let doc = document(&state, &descriptor.id).unwrap();
+            (descriptor.id, doc)
+        };
+        let (a_id, a) = open("a.pdf");
+        let (b_id, b) = open("b.pdf");
+        store_recovery(&state.root, &a_id, &a, 1, &plain, true).unwrap();
+        store_recovery(&state.root, &b_id, &b, 1, &plain, true).unwrap();
+
+        // Saving A retires only A's entry.
+        retire_recovery(&state.root, &a_id, &dir.path().join("a.pdf"));
+        let remaining: Vec<String> = recovery::list(&state.root)
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect();
+        assert_eq!(remaining, vec![b_id.clone()]);
+
+        // Saving a document opened from a recovery copy retires the entry it came from.
+        let copy = recovery::path_for(&state.root, &b_id).unwrap();
+        let recovered = opened(&state, copy.clone(), false).unwrap();
+        retire_recovery(&state.root, &recovered.id, &copy);
+        assert!(recovery::list(&state.root).is_empty());
+
+        // Autosave off and sensitive sessions never write a copy.
+        store_recovery(&state.root, &a_id, &a, 1, &plain, false).unwrap();
+        *b.sensitive.lock().unwrap() = true;
+        store_recovery(&state.root, &b_id, &b, 1, &plain, true).unwrap();
+        assert!(recovery::list(&state.root).is_empty());
+    }
+
+    #[test]
+    fn committed_redaction_output_arms_an_audit_that_saving_must_pass() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.pdf");
+        fs::write(&path, filesystem::tests::fixture()).unwrap();
+        let descriptor = opened(&state, path, false).unwrap();
+        let doc = document(&state, &descriptor.id).unwrap();
+        let page = |content: &str| {
+            let (mut pdf, _) =
+                crate::engine::content::tests::page_document(content, dictionary! {});
+            crate::engine::save(&mut pdf).unwrap()
+        };
+        let leaked = page("BT /F1 12 Tf 72 700 Td (SECRET-CANARY) Tj ET");
+        let redacted = page("BT /F1 12 Tf 72 700 Td (Nothing to see) Tj ET");
+        let spec = redact::AuditSpec {
+            regions: Default::default(),
+            terms: vec!["SECRET-CANARY".into()],
+        };
+        doc.redaction_audit.lock().unwrap().candidate =
+            Some((Sha256::digest(&redacted).to_vec(), spec));
+
+        // Committing other bytes, as when attaching the redacted output failed, arms nothing.
+        let base = doc.current_revision.lock().unwrap().revision_id.clone();
+        let unrelated = commit_revision(&doc, &base, &leaked, 1).unwrap();
+        let armed = doc.redaction_audit.lock().unwrap().armed.clone();
+        assert!(armed.is_none());
+        assert!(verify_redactions(&leaked, armed.as_ref()).is_ok());
+
+        commit_revision(&doc, &unrelated.revision_id, &redacted, 1).unwrap();
+        let armed = doc.redaction_audit.lock().unwrap().armed.clone();
+        assert!(armed.is_some());
+        assert!(doc.redaction_audit.lock().unwrap().candidate.is_none());
+        assert!(verify_redactions(&redacted, armed.as_ref()).is_ok());
+        let error = verify_redactions(&leaked, armed.as_ref()).unwrap_err();
+        assert!(
+            error.contains("redaction audit") && !error.contains("SECRET"),
+            "{error}"
+        );
+    }
 }
 
 #[tauri::command]
@@ -850,7 +1116,7 @@ pub async fn print_document(app: AppHandle, request: Request<'_>) -> Result<bool
         .parse()
         .map_err(|_| "Invalid print page count.")?;
     tauri::async_runtime::spawn_blocking(move || {
-        filesystem::validate_pdf(&bytes, pages)?;
+        filesystem::validate_pdf_structure(&bytes, pages).map_err(|err| err.for_print())?;
         #[cfg(target_os = "macos")]
         {
             let (send, receive) = std::sync::mpsc::channel();

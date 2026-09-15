@@ -2,9 +2,10 @@
 //! typed JSON commands never carry large payloads, and passwords never travel in headers.
 
 use super::{document, payload, AppState};
-use crate::engine::{compress, edit, protect, redact, sign};
+use crate::engine::{compress, edit, protect, prune, redact, sign};
 use crate::{filesystem, logging};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::Path;
@@ -189,6 +190,7 @@ pub async fn engine_redact(
 ) -> Result<EngineOutcome<redact::RedactionReport>, String> {
     let state = app.state::<AppState>();
     let doc = document(&state, &document_id)?;
+    let spec = redact::AuditSpec::from_request(&request)?;
     let bytes = state.engine.take(&input_id)?;
     let result = run_job(&app, &job_id, move |cancel| {
         redact::apply(&bytes, &request, cancel)
@@ -199,6 +201,12 @@ pub async fn engine_redact(
     // Neither a plain Save nor an implicit recovery cleanup may happen until the renderer has
     // attached this candidate and the replacement save has committed successfully.
     *doc.force_save_as.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
+    // The renderer re-serializes this output before saving. The audit arms when these exact
+    // bytes are committed as a revision and is re-run by every save until one succeeds.
+    doc.redaction_audit
+        .lock()
+        .map_err(|_| STATE_UNAVAILABLE)?
+        .candidate = Some((Sha256::digest(&output).to_vec(), spec));
     Ok(EngineOutcome {
         output_id: Some(state.engine.stage(output)?),
         report,
@@ -222,6 +230,18 @@ pub async fn engine_compress(
     let (output, report) = result?;
     let output_id = output.map(|bytes| state.engine.stage(bytes)).transpose()?;
     Ok(EngineOutcome { output_id, report })
+}
+
+#[tauri::command]
+pub async fn engine_prune(app: AppHandle, input_id: String) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || prune::prune(&bytes))
+        .await
+        .map_err(|_| "Pruning failed.".to_string())?;
+    logging::record(&state.root, "engine_prune", result.is_err());
+    let output = result?;
+    state.engine.stage(output)
 }
 
 #[tauri::command]
@@ -290,18 +310,16 @@ pub async fn engine_save_protected(
     } else {
         None
     };
+    let root = state.root.clone();
     let worker_doc = doc.clone();
+    let worker_id = document_id.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let output = protect::protect(&bytes, &request, expected_pages)?;
         let hash = filesystem::atomic_save_with(&target, &output, check.as_deref(), |candidate| {
             protect::validate_protected(candidate, &request.user_password, &owner, expected_pages)
         })?;
         if replaced_source {
-            *worker_doc.source.lock().map_err(|_| STATE_UNAVAILABLE)? = (target.clone(), hash);
-            *worker_doc
-                .force_save_as
-                .lock()
-                .map_err(|_| STATE_UNAVAILABLE)? = true;
+            adopt_protected_source(&worker_doc, &root, &worker_id, target.clone(), hash)?;
         }
         Ok::<_, String>(ProtectedSave {
             name: file_name(&target),
@@ -313,6 +331,23 @@ pub async fn engine_save_protected(
     .map_err(|_| "The protected copy could not be saved. Nothing was replaced.".to_string())?;
     logging::record(&state.root, "engine_save_protected", result.is_err());
     result.map(Some)
+}
+
+/// After an in-place protected save the open document is an unlocked copy of an encrypted
+/// file: no working revision or recovery copy may remain, and a plain Save must ask for a name.
+pub(super) fn adopt_protected_source(
+    doc: &super::Opened,
+    root: &Path,
+    document_id: &str,
+    target: std::path::PathBuf,
+    hash: Vec<u8>,
+) -> Result<(), String> {
+    *doc.source.lock().map_err(|_| STATE_UNAVAILABLE)? = (target, hash);
+    for flag in [&doc.force_save_as, &doc.sensitive, &doc.source_encrypted] {
+        *flag.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
+    }
+    *doc.working_file.lock().map_err(|_| STATE_UNAVAILABLE)? = None;
+    super::recovery::discard(root, document_id)
 }
 
 /// Decrypts the open document's original bytes into an editable working copy. The session
@@ -336,6 +371,7 @@ pub async fn engine_unlock(
     let output = output?;
     *doc.sensitive.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
     *doc.force_save_as.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
+    *doc.source_encrypted.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
     state.engine.stage(output)
 }
 

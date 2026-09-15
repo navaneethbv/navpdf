@@ -5,6 +5,7 @@ import {
   Clock3,
   ArrowUpRight,
 } from "lucide-react";
+import { Fragment } from "react";
 import { useWorkspace } from "../../stores/workspace";
 import { native, clearRecents, discardRecovery } from "../../services/native";
 export function Home({
@@ -16,7 +17,7 @@ export function Home({
 }: {
   open: () => void;
   recent: (id: string, page: number) => void;
-  recover: () => void;
+  recover: (id: string) => void;
   refresh: () => Promise<void>;
   onError: (e: unknown) => void;
 }) {
@@ -55,23 +56,41 @@ export function Home({
             </button>
           )}
         </div>
-        {local.recovery && (
+        {local.recoveries.length > 0 && (
           <div className="recovery-box">
-            <strong>Recover an unsaved document</strong>
-            <p>{local.recovery.name}</p>
-            <div>
-              <button className="button" onClick={recover}>
-                Open recovery
-              </button>
-              <button
-                className="text-button"
-                onClick={() =>
-                  void discardRecovery().then(refresh).catch(onError)
-                }
-              >
-                Discard recovery
-              </button>
-            </div>
+            <strong>
+              {local.recoveries.length === 1
+                ? "Recover an unsaved document"
+                : "Recover unsaved documents"}
+            </strong>
+            {local.recoveries.map((entry) => (
+              <Fragment key={entry.id}>
+                <p>
+                  {entry.name}
+                  {entry.savedAt > 0 && (
+                    <small> Saved {new Date(entry.savedAt * 1000).toLocaleString()}</small>
+                  )}
+                </p>
+                <div>
+                  <button
+                    className="button"
+                    onClick={() => recover(entry.id)}
+                    aria-label={`Open recovery for ${entry.name}`}
+                  >
+                    Open recovery
+                  </button>
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      void discardRecovery(entry.id).then(refresh).catch(onError)
+                    }
+                    aria-label={`Discard recovery for ${entry.name}`}
+                  >
+                    Discard recovery
+                  </button>
+                </div>
+              </Fragment>
+            ))}
           </div>
         )}
         {local.recents.length ? (

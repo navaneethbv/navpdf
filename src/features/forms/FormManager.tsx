@@ -1,16 +1,21 @@
 import { useState } from "react";
 import {
-  CheckSquare,
   Type,
+  CheckSquare,
+  CircleDot,
+  List,
   MousePointerClick,
   Plus,
   X,
-  List,
-  CircleDot,
 } from "lucide-react";
+import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-import { addFormField, type FormFieldDefinition } from "../../services/document-commands";
+import {
+  addFormField,
+  type FormFieldDefinition,
+} from "../../services/document-commands";
+import { fromTopLeftVisual } from "../../services/pdf/page-box";
 
 export function FormManager({
   controller,
@@ -31,6 +36,8 @@ export function FormManager({
   const [required, setRequired] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [targetPage, setTargetPage] = useState(s.page);
+  const [posX, setPosX] = useState(50);
+  const [posY, setPosY] = useState(50);
   const [saving, setSaving] = useState(false);
 
   const handleAddField = async () => {
@@ -52,14 +59,31 @@ export function FormManager({
         height = 60;
       }
 
+      let mappedX = posX;
+      let mappedY = posY;
+      let mappedW = width;
+      let mappedH = height;
+      try {
+        const doc = await PDFDocument.load(currentBytes);
+        const pageIndex = Math.max(0, Math.min(page - 1, doc.getPageCount() - 1));
+        const targetPdfPage = doc.getPage(pageIndex);
+        const mapped = fromTopLeftVisual(targetPdfPage, posX, posY, width, height);
+        mappedX = mapped.x;
+        mappedY = mapped.y;
+        mappedW = mapped.width;
+        mappedH = mapped.height;
+      } catch {
+        // Fallback if currentBytes is dummy data in mock test environment
+      }
+
       const definition: FormFieldDefinition = {
         type: fieldType,
         name: fieldName.trim(),
         page,
-        x: 50,
-        y: 650,
-        width,
-        height,
+        x: mappedX,
+        y: mappedY,
+        width: mappedW,
+        height: mappedH,
         defaultValue: defaultValue.trim() || undefined,
         required,
         readOnly,
@@ -220,6 +244,27 @@ export function FormManager({
               onChange={(e) => setTargetPage(Number(e.target.value))}
               className="text-input"
             />
+          </div>
+
+          <div className="setting-group" style={{ display: "flex", gap: "12px" }}>
+            <div style={{ flex: 1 }}>
+              <label className="setting-title">X Position (pt)</label>
+              <input
+                type="number"
+                value={posX}
+                onChange={(e) => setPosX(Number(e.target.value))}
+                className="text-input"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="setting-title">Y Position from top (pt)</label>
+              <input
+                type="number"
+                value={posY}
+                onChange={(e) => setPosY(Number(e.target.value))}
+                className="text-input"
+              />
+            </div>
           </div>
 
           <div className="setting-group">

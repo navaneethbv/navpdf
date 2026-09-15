@@ -35,7 +35,7 @@ beforeEach(() => {
       case "save_document":
         return { name: "saved.pdf", size: 9 };
       case "local_state":
-        return { preferences: {}, recents: [], recovery: null };
+        return { preferences: {}, recents: [], recoveries: [] };
       case "open_recovery":
         return { id: "rec", name: "rec.pdf", size: 10 };
       case "open_recent":
@@ -96,10 +96,11 @@ describe("native service Tauri paths", () => {
       new Uint8Array([1, 2]),
       expect.objectContaining({ headers: expect.anything() }),
     );
-    await expect(openRecovery()).resolves.toMatchObject({ id: "rec" });
+    await expect(openRecovery("rec")).resolves.toMatchObject({ id: "rec" });
+    expect(invoke).toHaveBeenCalledWith("open_recovery", { id: "rec" });
     await expect(openRecent("r")).resolves.toMatchObject({ id: "r" });
-    await discardRecovery();
-    expect(invoke).toHaveBeenCalledWith("discard_recovery");
+    await discardRecovery("n1");
+    expect(invoke).toHaveBeenCalledWith("discard_recovery", { id: "n1" });
   });
 });
 

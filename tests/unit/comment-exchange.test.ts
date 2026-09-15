@@ -52,7 +52,7 @@ describe("local comment exchange", () => {
       parseCommentExchange(JSON.stringify({ ...base, schema: "other" }), 4),
     ).toThrow("This is not a NavPDF comment exchange file.");
     expect(() =>
-      parseCommentExchange(JSON.stringify({ ...base, version: 2 }), 4),
+      parseCommentExchange(JSON.stringify({ ...base, version: 3 }), 4),
     ).toThrow("This is not a NavPDF comment exchange file.");
     expect(() =>
       parseCommentExchange(JSON.stringify({ ...base, documentId: "" }), 4),
@@ -165,5 +165,91 @@ describe("local comment exchange", () => {
         4,
       ),
     ).toThrow("The comment file contains an invalid stroke width.");
+  });
+
+  it("round-trips Arrow comments with lineEndings and highlights with quads", () => {
+    const arrowComment = {
+      id: "arrow-1",
+      page: 1,
+      type: "Arrow",
+      text: "Arrow comment",
+      rect: [100, 200, 300, 200] as [number, number, number, number],
+      line: [100, 200, 300, 200] as [number, number, number, number],
+      lineEndings: ["None", "OpenArrow"] as [string, string],
+      width: 4,
+    };
+    const highlightWithQuads = {
+      id: "hl-1",
+      page: 1,
+      type: "Highlight",
+      text: "Multi-line text",
+      rect: [50, 600, 450, 640] as [number, number, number, number],
+      quads: [
+        [50, 620, 450, 640],
+        [50, 600, 250, 620],
+      ],
+      color: [1, 0.9, 0.2] as [number, number, number],
+      opacity: 0.4,
+    };
+
+    const exchange = createCommentExchange("doc-fidelity", 2, [
+      arrowComment,
+      highlightWithQuads,
+    ]);
+    const parsed = parseCommentExchange(JSON.stringify(exchange), 2);
+    expect(parsed.comments).toHaveLength(2);
+    expect(parsed.comments[0]).toEqual(arrowComment);
+    expect(parsed.comments[1]).toEqual(highlightWithQuads);
+  });
+
+  it("exports comments with content identity and imports across sessions for the same document", async () => {
+    const { contentIdentity } = await import("../../src/services/document-identity");
+
+    const pdfA = {
+      numPages: 5,
+      getMetadata: async () => ({ info: { ID: ["trailer-id-12345", "trailer-id-12345"] } }),
+    };
+    const identityA = await contentIdentity(pdfA);
+
+    const exchange = createCommentExchange("session-uuid-1", 5, [comment], identityA);
+    const serialized = JSON.stringify(exchange);
+
+    // Simulate reloading the same document in a new session (different documentId, same contentIdentity)
+    const parsedSameDoc = parseCommentExchange(serialized, 5, identityA);
+    expect(parsedSameDoc.comments).toHaveLength(1);
+    expect(parsedSameDoc.version).toBe(2);
+
+    // Simulate importing into a different document
+    const pdfB = {
+      numPages: 5,
+      getMetadata: async () => ({ info: { ID: ["different-trailer-id", "different-trailer-id"] } }),
+    };
+    const identityB = await contentIdentity(pdfB);
+    expect(() => parseCommentExchange(serialized, 5, identityB)).toThrow(
+      "These comments belong to a different document.",
+    );
+  });
+
+  it("derives identity from the PDF.js fingerprint when the info dictionary has no ID", async () => {
+    const { contentIdentity } = await import("../../src/services/document-identity");
+    const noId = async () => ({ info: {} });
+    const first = await contentIdentity({ numPages: 3, fingerprints: ["abc", null], getMetadata: noId });
+    const reopened = await contentIdentity({ numPages: 3, fingerprints: ["abc", null], getMetadata: noId });
+    const other = await contentIdentity({ numPages: 3, fingerprints: ["def", null], getMetadata: noId });
+    expect(first).toBe(reopened);
+    expect(first).not.toBe(other);
+  });
+
+  it("accepts legacy version 1 comments when page count matches and includes a warning", () => {
+    const legacyV1 = {
+      schema: "navpdf-comments",
+      version: 1,
+      documentId: "legacy-session-doc",
+      pageCount: 4,
+      comments: [comment],
+    };
+    const parsed = parseCommentExchange(JSON.stringify(legacyV1), 4, "any-identity:4");
+    expect(parsed.comments).toHaveLength(1);
+    expect(parsed.warning).toContain("legacy version 1");
   });
 });

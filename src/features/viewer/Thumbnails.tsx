@@ -5,7 +5,8 @@ import type { ViewerController } from "./controller";
 const ROW = 187;
 export function Thumbnails({ controller }: { controller: ViewerController }) {
   const page = useWorkspace((s) => s.page),
-    count = useWorkspace((s) => s.info?.pages || 0);
+    count = useWorkspace((s) => s.info?.pages || 0),
+    revision = useWorkspace((s) => s.revision);
   const [scroll, setScroll] = useState(0),
     [height, setHeight] = useState(650);
   const ref = useRef<HTMLDivElement>(null);
@@ -42,7 +43,7 @@ export function Thumbnails({ controller }: { controller: ViewerController }) {
             aria-current={page === i + 1 ? "page" : undefined}
             onClick={() => controller.goTo(i + 1)}
           >
-            <ThumbCanvas pdf={controller.pdf!} page={i + 1} />
+            <ThumbCanvas pdf={controller.pdf} page={i + 1} revision={revision} />
             <span>{i + 1}</span>
           </button>
         ))}
@@ -50,10 +51,20 @@ export function Thumbnails({ controller }: { controller: ViewerController }) {
     </div>
   );
 }
-function ThumbCanvas({ pdf, page }: { pdf: PDFDocumentProxy; page: number }) {
+function ThumbCanvas({
+  pdf,
+  page,
+  revision,
+}: {
+  pdf?: PDFDocumentProxy | null;
+  page: number;
+  revision: number;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    if (!pdf) return;
+    setFailed(false);
     let cancelled = false,
       render: RenderTask | undefined;
     const canvas = ref.current!;
@@ -71,7 +82,15 @@ function ThumbCanvas({ pdf, page }: { pdf: PDFDocumentProxy; page: number }) {
         return render.promise;
       })
       .catch((error) => {
-        if (!cancelled && error?.name !== "RenderingCancelledException")
+        const isWorkerDestroyed =
+          error?.message?.includes("Worker was destroyed") ||
+          error?.message?.includes("worker was destroyed") ||
+          error?.name === "WorkerDestroyedException";
+        if (
+          !cancelled &&
+          error?.name !== "RenderingCancelledException" &&
+          !isWorkerDestroyed
+        )
           setFailed(true);
       });
     return () => {
@@ -80,7 +99,7 @@ function ThumbCanvas({ pdf, page }: { pdf: PDFDocumentProxy; page: number }) {
       canvas.width = 0;
       canvas.height = 0;
     };
-  }, [pdf, page]);
+  }, [pdf, page, revision]);
   return (
     <div className="thumb-paper">
       {failed ? (

@@ -13,6 +13,7 @@ import type {
 } from "../types/operations";
 import { downloadBytes, safeFileName } from "../utils/download";
 export const native = isTauri();
+export const isNative = () => isTauri();
 const files = new Map<string, File>();
 export async function openDocument(
   file?: File,
@@ -80,7 +81,7 @@ export async function localState(): Promise<LocalState> {
       ? { ...defaultPreferences, ...JSON.parse(raw), networkAccess: false }
       : defaultPreferences,
     recents: [],
-    recovery: null,
+    recoveries: [],
   };
 }
 export async function savePreferences(preferences: Preferences) {
@@ -109,11 +110,12 @@ export async function writeRecovery(
       },
     });
 }
-export async function openRecovery() {
-  return invoke<DocumentDescriptor>("open_recovery");
+export async function openRecovery(id: string) {
+  return invoke<DocumentDescriptor>("open_recovery", { id });
 }
-export async function discardRecovery() {
-  if (native) await invoke("discard_recovery");
+/** Removes one document's recovery copy; other documents' entries are kept. */
+export async function discardRecovery(id: string) {
+  if (native) await invoke("discard_recovery", { id });
 }
 
 export async function printDocument(bytes: Uint8Array<ArrayBuffer>, pages: number) {
@@ -122,23 +124,67 @@ export async function printDocument(bytes: Uint8Array<ArrayBuffer>, pages: numbe
   });
 }
 
+/** Where a saved signature lives: memory only, OS-protected storage, or unprotected storage. */
+export type SignatureStorage = "session" | "secure" | "legacy";
+
 export interface SavedSignature {
   id: string;
   name: string;
   type: "signature" | "initials";
   dataUrl: string;
   createdAt: number;
+  storage: SignatureStorage;
   sessionOnly?: boolean;
 }
 
-export async function loadSignatures(): Promise<SavedSignature[]> {
-  if (native) return invoke<SavedSignature[]>("load_signatures");
+export interface SignatureLibraryListing {
+  assets: SavedSignature[];
+  /** Notes about saved signatures that could not be read; never contains paths. */
+  warnings: string[];
+}
+
+type StoredSignature = Omit<SavedSignature, "storage" | "sessionOnly">;
+
+const withStorage = (asset: StoredSignature, storage: SignatureStorage): SavedSignature => ({
+  ...asset,
+  storage,
+});
+
+// The browser preview keeps signatures in plain localStorage, which is never OS-protected.
+const PREVIEW_SIGNATURES = "navpdf-signatures-store";
+
+function previewSignatures(): StoredSignature[] {
   try {
-    const raw = localStorage.getItem("navpdf-signatures-store");
-    return raw ? JSON.parse(raw) : [];
+    const raw = localStorage.getItem(PREVIEW_SIGNATURES);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as StoredSignature[]) : [];
   } catch {
     return [];
   }
+}
+
+function writePreviewSignatures(items: StoredSignature[]) {
+  try {
+    localStorage.setItem(PREVIEW_SIGNATURES, JSON.stringify(items));
+  } catch {
+    // Storage can be full or blocked in the preview; the signature stays usable this session.
+  }
+}
+
+export async function loadSignatures(): Promise<SignatureLibraryListing> {
+  if (native) {
+    const listing = await invoke<{ assets: StoredSignature[]; warnings: string[] }>(
+      "load_signatures",
+    );
+    return {
+      assets: listing.assets.map((asset) => withStorage(asset, "secure")),
+      warnings: listing.warnings,
+    };
+  }
+  return {
+    assets: previewSignatures().map((asset) => withStorage(asset, "legacy")),
+    warnings: [],
+  };
 }
 
 export async function saveSignature(
@@ -147,25 +193,20 @@ export async function saveSignature(
   dataUrl: string,
 ): Promise<SavedSignature> {
   if (native) {
-    return invoke<SavedSignature>("save_signature", {
+    const saved = await invoke<StoredSignature>("save_signature", {
       request: { name, type, dataUrl },
     });
+    return withStorage(saved, "secure");
   }
-  const sig: SavedSignature = {
+  const sig: StoredSignature = {
     id: crypto.randomUUID(),
     name,
     type,
     dataUrl,
     createdAt: Math.floor(Date.now() / 1000),
   };
-  try {
-    const current = await loadSignatures();
-    const next = [sig, ...current];
-    localStorage.setItem("navpdf-signatures-store", JSON.stringify(next));
-  } catch {
-    // ignore
-  }
-  return sig;
+  writePreviewSignatures([sig, ...previewSignatures()]);
+  return withStorage(sig, "legacy");
 }
 
 export async function deleteSignature(id: string): Promise<void> {
@@ -173,27 +214,25 @@ export async function deleteSignature(id: string): Promise<void> {
     await invoke("delete_signature", { id });
     return;
   }
-  try {
-    const current = await loadSignatures();
-    const next = current.filter((s) => s.id !== id);
-    localStorage.setItem("navpdf-signatures-store", JSON.stringify(next));
-  } catch {
-    // ignore
-  }
+  writePreviewSignatures(previewSignatures().filter((s) => s.id !== id));
 }
 
 export async function migrateSignatures(
   items: SavedSignature[],
 ): Promise<SavedSignature[]> {
-  if (native) return invoke<SavedSignature[]>("migrate_signatures", { items });
-  try {
-    const current = await loadSignatures();
-    const next = [...items, ...current];
-    localStorage.setItem("navpdf-signatures-store", JSON.stringify(next));
-    return items;
-  } catch {
-    return items;
+  const stored: StoredSignature[] = items.map(({ id, name, type, dataUrl, createdAt }) => ({
+    id,
+    name,
+    type,
+    dataUrl,
+    createdAt,
+  }));
+  if (native) {
+    const migrated = await invoke<StoredSignature[]>("migrate_signatures", { items: stored });
+    return migrated.map((asset) => withStorage(asset, "secure"));
   }
+  writePreviewSignatures([...stored, ...previewSignatures()]);
+  return stored.map((asset) => withStorage(asset, "legacy"));
 }
 
 export interface CommitRevisionResult {

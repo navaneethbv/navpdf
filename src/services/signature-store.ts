@@ -19,14 +19,15 @@ export function clearSessionSignatures(): void {
 export async function fetchSignatureLibrary(): Promise<{
   signatures: SavedSignature[];
   error: string | null;
+  warnings: string[];
 }> {
   const sessionList = Array.from(sessionSignatures.values());
   const legacy = getLegacyPlaintextSignatures();
   try {
     const persistent = await loadSignatures();
-    const combined = [...sessionList, ...persistent, ...legacy];
+    const combined = [...sessionList, ...persistent.assets, ...legacy];
     combined.sort((a, b) => b.createdAt - a.createdAt);
-    return { signatures: combined, error: null };
+    return { signatures: combined, error: null, warnings: persistent.warnings };
   } catch (err) {
     // If native storage fails, do not silently fail; expose session and legacy assets and report error
     const combined = [...sessionList, ...legacy];
@@ -36,6 +37,7 @@ export async function fetchSignatureLibrary(): Promise<{
         err instanceof Error
           ? err.message
           : "Secure signature storage is unavailable. Only session-only signatures can be created.",
+      warnings: [],
     };
   }
 }
@@ -53,6 +55,7 @@ export async function persistOrStageSignature(
       type,
       dataUrl,
       createdAt: Math.floor(Date.now() / 1000),
+      storage: "session",
       sessionOnly: true,
     };
     sessionSignatures.set(sessionSig.id, sessionSig);
@@ -70,6 +73,7 @@ export async function persistOrStageSignature(
         type,
         dataUrl,
         createdAt: 0,
+        storage: "session",
       },
       error:
         err instanceof Error
@@ -122,6 +126,7 @@ export function getLegacyPlaintextSignatures(): SavedSignature[] {
       type: item.type === "initials" ? "initials" : "signature",
       dataUrl: item.dataUrl || "",
       createdAt: item.createdAt || Math.floor(Date.now() / 1000),
+      storage: "legacy" as const,
     }));
   } catch {
     return [];

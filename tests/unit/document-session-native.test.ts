@@ -24,7 +24,7 @@ vi.mock("../../src/services/native", () => ({
   localState: vi.fn(async () => ({
     preferences: defaultPreferences,
     recents: [],
-    recovery: null,
+    recoveries: [],
   })),
   openDocument: vi.fn(async () => null),
   openRecent: vi.fn(async () => null),
@@ -138,7 +138,8 @@ it("restores the dirty guard when a pending editor save fails", async () => {
       version: "1.7",
     },
   });
-  const commitOrRemove = vi.fn();
+  // Committing the pending editor marks the document dirty, as PDF.js storage does.
+  const commitOrRemove = vi.fn(() => useWorkspace.getState().set({ dirty: true }));
   (controller as unknown as { editor: unknown }).editor = { commitOrRemove };
   (controller as unknown as { pdf: unknown }).pdf = {
     saveDocument: vi.fn(async () => new Uint8Array([1])),
@@ -181,14 +182,48 @@ it("writes recovery copies on the autosave interval", async () => {
   expect(desktop.writeRecovery).toHaveBeenCalled();
 });
 
+it("autosaves without marking the workspace busy and restores the previous status", async () => {
+  useWorkspace.getState().set({ document: doc, dirty: true, status: "Highlight added" });
+  let finish: (bytes: Uint8Array) => void = () => {};
+  (controller as unknown as { pdf: unknown }).pdf = {
+    saveDocument: vi.fn(() => new Promise<Uint8Array>((resolve) => (finish = resolve))),
+    numPages: 2,
+  };
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000);
+  });
+  expect(useWorkspace.getState()).toMatchObject({
+    busy: false,
+    status: "Saving recovery copy...",
+  });
+  await act(async () => {
+    finish(new Uint8Array([1]));
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(desktop.writeRecovery).toHaveBeenCalled();
+  expect(useWorkspace.getState()).toMatchObject({ busy: false, status: "Highlight added" });
+});
+
+it("skips an autosave tick while another operation is busy", async () => {
+  useWorkspace.getState().set({ document: doc, dirty: true, busy: true });
+  const saveDocument = vi.fn(async () => new Uint8Array([1]));
+  (controller as unknown as { pdf: unknown }).pdf = { saveDocument, numPages: 2 };
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(11000);
+  });
+  expect(saveDocument).not.toHaveBeenCalled();
+  expect(useWorkspace.getState().busy).toBe(true);
+});
+
 it("discards recovery and closes on a native close request", async () => {
+  useWorkspace.getState().set({ document: doc });
   const calls = vi.mocked(listen).mock.calls;
   const close = calls.find(([event]) => event === "close-requested")?.[1] as () => void;
   expect(close).toBeTruthy();
   await act(async () => {
     close();
   });
-  expect(desktop.discardRecovery).toHaveBeenCalled();
+  expect(desktop.discardRecovery).toHaveBeenCalledWith(doc.id);
   expect(invoke).toHaveBeenCalledWith("close_window");
 });
 

@@ -65,7 +65,7 @@ vi.mock("../../src/services/native", () => ({
       networkAccess: false,
     },
     recents: [],
-    recovery: null,
+    recoveries: [],
   })),
   openDocument: vi.fn(async () => null),
   openRecent: vi.fn(async () => null),
