@@ -7,35 +7,35 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
-## September 14 current implementation checkpoint
+## September 15 current implementation checkpoint
 
-This checkpoint supersedes the stale progress table below for the uncommitted worktree on `fix/september-14-review-corrections`.
+This checkpoint supersedes the stale progress table below for the pushed worktree on `fix/september-14-review-corrections`.
 
 | Tranche | Current source status | Evidence or open gate |
 | --- | --- | --- |
-| 0 | Complete in the worktree | Node 24, Rust 1.89, CI guardrails and Cargo Deny manifest path are configured; hosted rerun is pending publication. |
-| 1 | Complete in the worktree | Data-safety corrections and regressions are present; native save, recovery and independent-reader checks remain open. |
-| 2 | Complete in the worktree | Tasks 2.1 through 2.7 are implemented; placement, redaction and packaged native checks remain open. |
-| 3 | Complete in the worktree | Tasks 3.1 through 3.8 are implemented and covered by the frontend suite; keyboard-only and native dialog checks remain open. |
-| 4 | In progress | Fixture guards, the PDF artifact inspection helper, corpus-driven OCR reporting, acceptance commands and a macOS acceptance job are added; hosted rerun and final artifact audit remain open. |
-| 5 | In progress | Metadata editing, preferences, menus and shortcuts, page operations, tokenized OS open-with and drag-drop, XFDF exchange, comment threads, stamps and context-menu redaction are implemented; forms editing, crop and transform controls, image replacement, signature placement rotation, protection parity and native checks remain open. |
-| 6 | Pending | Structural refactors are intentionally deferred until the capability gaps are closed. |
-| 7 | Partial | View modes, navigation, page labels and the external-link trust prompt are implemented; Acrobat Reader parity and independent-reader checks remain open. |
-| 8 | Partial | Revision-history byte bounds, PDF.js scripting restrictions and reproducible memory probe and driver scripts are implemented; native memory budgets and renderer ownership changes remain open. |
+| 0 | Complete locally | Node 24, Rust 1.89, CI guardrails and the `src-tauri/Cargo.toml` Cargo Deny manifest path are configured; the latest hosted run exposed advisory and fixture workflow issues under correction. |
+| 1 | Complete and tested | Data-safety corrections and regressions are present; the required local frontend and Rust checks pass. |
+| 2 | Complete in source | Tasks 2.1 through 2.7 are implemented, including mutation serialization, page-box geometry, comment identity, permission handling, redaction safeguards and native rendering recovery. |
+| 3 | Implemented in source | Tasks 3.1 through 3.8 are covered by the frontend suite; keyboard-only and native dialog checks remain open. |
+| 4 | In progress | Fixture guards, the PDF artifact inspection helper, corpus-driven OCR reporting, acceptance commands and a macOS acceptance job are present; hosted rerun and final artifact audit remain open. |
+| 5 | Partial | Forms editing, crop positioning, image transforms, inserted-image rotation, signature rotation and protection parity are implemented; broader content parity and independent-reader checks remain open. |
+| 6 | Pending | Structural refactors remain open. |
+| 7 | Partial | View modes, navigation, page labels, existing-content editing, protection and redaction are implemented; most Acrobat parity and independent-reader checks remain open. |
+| 8 | Partial | Revision history and native staging use machine-relative byte budgets; native revision recycling and the remaining performance gates remain open. |
 
-Current local evidence is 498 tests passing across 79 frontend files with 83.42% statement, 75.03% branch, 81.24% function and 86.26% line coverage.
-TypeScript, ESLint, formatting checks, 78 Rust tests with one constrained-volume test ignored, and Clippy with warnings denied pass locally.
+Current local evidence is 504 tests passing across 80 frontend files with 83.39% statement, 75.01% branch, 81.18% function and 86.20% line coverage.
+TypeScript, ESLint, formatting checks, 80 Rust tests with one constrained-volume test ignored, and Clippy with warnings denied pass locally.
 The production app bundle and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` build successfully.
-The current executable SHA-256 is `f653c59f63585b775dccf4318ec669ca8dc973a57b57d26184d859618c010e4b`.
-The current DMG SHA-256 is `19a191ef48a94cc21a8e335426c862ca6f9c0034fe7f6eeeb43c12f6ff8bb695`.
-`hdiutil verify` reports a valid DMG checksum with CRC32 `$8D90D7F1`.
-Native rendering remains blocked by a persistent page-render spinner after the document metadata loads.
-The OCR acceptance script runs but Apple Vision returns no recognized text for all six generated samples in this environment.
-The Phase 8 acceptance script passes 11 of 12 checks because Quick Look produces no rendered output in this noninteractive environment.
-PR #4's hosted run for the current pushed head passed every listed check except Cargo Deny.
-Cargo Deny failed before analysis because the hosted workflow used the repository root `./Cargo.toml`, while the manifest is under `src-tauri/Cargo.toml`.
-The uncommitted workflow correction uses the native manifest path, but it has not been pushed or rerun.
-No merge or deployment claim is made for this uncommitted worktree.
+The current executable SHA-256 is `9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4`.
+The current DMG SHA-256 is `2904b2a5bcbbf680aff64ec8284e5e7553afdc0c579379818eb68e8f9f27c0a82`.
+`hdiutil verify` reports a valid DMG checksum with CRC32 `$B4992B9A`.
+Native rendering was verified from one fresh packaged process with the page canvas and thumbnails visible without the previous persistent spinner.
+Native OCR acceptance passed all six Apple Vision samples.
+Phase 7 acceptance passed 55 of 55 checks locally after the fixture generation step was added to the macOS workflow.
+The latest hosted run `35009656343` failed Cargo Deny on six unmaintained transitive advisories and stopped Phase 7 because the generated `reader-100.pdf` fixture was absent from the checkout.
+The advisory ignores and workflow fixture generation are now pushed for hosted recheck.
+Preview and Acrobat reopen checks for the final source revision remain open.
+No merge or deployment claim is made for this branch.
 
 ## September 14 PR 2 corrective review
 
@@ -392,4 +392,8 @@ The follow-up adds the explicit transitive license allowances and JPEG IJG clari
 
 The local cargo-deny 0.18.4 full license check passes.
 
-The hosted recheck for this follow-up remains pending.
+Hosted run `35009656343` passed the normal frontend, Rust, SonarCloud and commit checks.
+It failed Cargo Deny on `RUSTSEC-2024-0370`, `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098` and `RUSTSEC-2025-0100`, all transitive advisories with no safe upgrade reported by the database.
+It also failed native acceptance because `reader-100.pdf` is generated by `npm run fixtures` and was not generated in that job.
+The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
+The hosted recheck for this follow-up is pending.

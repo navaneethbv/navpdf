@@ -195,6 +195,7 @@ jobs:
       - run: npm ci
       - run: npm run acceptance:check-tools
       - run: npm run acceptance:licenses
+      - run: npm run fixtures
       - run: npm run acceptance:phase7
       - run: npm run acceptance:phase8
       - run: npm run acceptance:phase10

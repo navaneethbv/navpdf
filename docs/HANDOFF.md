@@ -119,6 +119,10 @@ The follow-up adds explicit license allowances and a versioned JPEG IJG clarific
 
 The local cargo-deny 0.18.4 full license check passes.
 
-The hosted recheck for this follow-up remains pending.
+Hosted run `35009656343` passed the normal frontend, Rust, SonarCloud and commit checks.
+It failed Cargo Deny on six transitive unmaintained advisories with no safe upgrade reported by the advisory database.
+It also failed native acceptance because the job did not generate the ignored `reader-100.pdf` fixture before Phase 7.
+The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
+The hosted recheck for this follow-up is pending.
 
 The root planning files DELIVERY-PHASES.md, IMPLEMENTATION-PLAN-2026-09-14.md, and REVIEW-2026-09-14.md remain untracked source material and must not be included in the commit.
