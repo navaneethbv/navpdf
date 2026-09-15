@@ -9,6 +9,11 @@ Existing controls or passing unit tests do not establish completed native workfl
 
 ## September 15 current implementation checkpoint
 
+PR #4 follow-up review corrections fix page-space image transforms, preserve XFDF text-markup quadrilaterals, and allow clearing dropdown and radio selections while updating field flags.
+The follow-up passes 510 frontend tests and 80 Rust tests, with the existing constrained-volume test ignored.
+Saved-output regressions cover these defects; packaged UI and independent-reader acceptance for this follow-up remain open.
+See the follow-up section in `docs/VERIFICATION.md` for the verification boundary.
+
 This checkpoint supersedes the stale progress table below for the pushed worktree on `fix/september-14-review-corrections`.
 
 | Tranche | Current source status | Evidence or open gate |

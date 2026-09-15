@@ -1,5 +1,22 @@
 # Verification ledger
 
+## September 15 PR #4 follow-up review fixes
+
+The follow-up to `3d2f611` corrects image transforms by converting the requested page-space matrix into the current image coordinate system.
+The native engine reproduction previously moved an image 1,000 points when asked to move it 10 points.
+The saved-output regression now checks translation, rotation, and preservation of the same image on a second page.
+Coordinate comparisons allow 0.0001 points for PDF single-precision serialization.
+XFDF import retains text-markup quadrilaterals and rejects missing or malformed geometry, with reload assertions for highlights, underlines, and strikeouts.
+Dropdown and radio updates can clear selections and change flags without inventing an option value.
+
+Local validation passes ESLint, TypeScript, formatting, 510 frontend tests with coverage, production build, 80 Rust tests, Clippy with warnings denied, rustfmt, instruction-file parity, and diff whitespace checks.
+Coverage is 83.54% statements, 75.46% branches, 81.16% functions, and 86.37% lines.
+The existing constrained-volume Rust test remains ignored.
+The production build retains its existing large-chunk advisory.
+These checks use the native engine and PDF services; they do not establish packaged UI, Preview, or Acrobat acceptance.
+The packaged application and DMG were not rebuilt for this follow-up, so earlier artifact hashes do not identify these fixes.
+Hosted checks must run on the pushed follow-up revision.
+
 ## September 15 current worktree checkpoint
 
 The pushed worktree is `fix/september-14-review-corrections` at source revision `d83f6d8271dd77c973df799f63dfecff14152128`.

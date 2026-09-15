@@ -1,5 +1,13 @@
 # NavPDF handoff
 
+## PR #4 follow-up to `3d2f611`
+
+Image transform coordinates, XFDF markup geometry, and empty choice-field updates are corrected with saved-output regressions.
+All required local automated checks pass, including 510 frontend tests and 80 Rust tests with the existing constrained-volume test ignored.
+See `docs/VERIFICATION.md` for the follow-up evidence and limits.
+Packaged UI and Preview/Acrobat acceptance remain open, and existing package hashes predate these fixes.
+The three untracked root planning documents remain untouched.
+
 ## Current September 15 worktree
 
 The active worktree is `fix/september-14-review-corrections` at `d83f6d8271dd77c973df799f63dfecff14152128`.

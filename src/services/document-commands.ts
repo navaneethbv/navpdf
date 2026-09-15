@@ -1255,15 +1255,21 @@ export async function updateFormField(
     if (update.checked) field.check();
     else field.uncheck();
   } else if (field instanceof PDFRadioGroup && update.value !== undefined) {
-    if (!field.getOptions().includes(update.value)) {
-      throw new Error(`The radio option "${update.value}" is not available.`);
+    if (update.value === "") field.clear();
+    else {
+      if (!field.getOptions().includes(update.value)) {
+        throw new Error(`The radio option "${update.value}" is not available.`);
+      }
+      field.select(update.value);
     }
-    field.select(update.value);
   } else if (field instanceof PDFDropdown && update.value !== undefined) {
-    if (!field.getOptions().includes(update.value)) {
-      throw new Error(`The dropdown option "${update.value}" is not available.`);
+    if (update.value === "") field.clear();
+    else {
+      if (!field.getOptions().includes(update.value)) {
+        throw new Error(`The dropdown option "${update.value}" is not available.`);
+      }
+      field.select(update.value);
     }
-    field.select(update.value);
   } else if (update.value !== undefined && !(field instanceof PDFTextField)) {
     throw new Error(`Form field "${name}" does not accept text values.`);
   }

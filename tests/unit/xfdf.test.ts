@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PDFDocument } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber } from "pdf-lib";
 import {
   addFormField,
   addReply,
@@ -17,6 +17,37 @@ async function blank() {
 }
 
 describe("XFDF exchange", () => {
+  it.each(["Highlight", "Underline", "StrikeOut"] as const)(
+    "preserves %s quadrilaterals after reload",
+    async (kind) => {
+      const source = await addTextMarkupAnnotations(await blank(), kind, [
+        {
+          page: 1,
+          quads: [
+            { x1: 10, y1: 20, x2: 80, y2: 40 },
+            { x1: 10, y1: 50, x2: 70, y2: 65 },
+          ],
+        },
+      ]);
+      const xml = await exportXfdf(source);
+      const doc = await PDFDocument.load(await importXfdf(await blank(), xml));
+      const annotation = doc.getPage(0).node.Annots()!.lookup(0, PDFDict);
+      const quads = annotation.lookup(PDFName.of("QuadPoints"), PDFArray);
+      expect(quads.asArray().map((v) => (v as PDFNumber).asNumber())).toEqual([
+        10, 40, 80, 40, 10, 20, 80, 20, 10, 65, 70, 65, 10, 50, 70, 50,
+      ]);
+    },
+  );
+
+  it("accepts coords and refuses malformed markup geometry", async () => {
+    const bytes = await blank();
+    const xml = (coords: string) =>
+      `<xfdf><annots><highlight page="0" rect="0,0,10,10" coords="${coords}"></highlight></annots></xfdf>`;
+    await expect(importXfdf(bytes, xml("0,10,10,10,0,0,10,0"))).resolves.toBeInstanceOf(Uint8Array);
+    for (const coords of ["", "0,1", "0,10,10,10,0,0,10,NaN", "0,10,10,10,0,0,10,0,bad"]) {
+      await expect(importXfdf(bytes, xml(coords))).rejects.toThrow(/geometry/);
+    }
+  });
   it("exports markup and imports it into a new PDF", async () => {
     const source = await addStickyNote(await blank(), {
       page: 1,

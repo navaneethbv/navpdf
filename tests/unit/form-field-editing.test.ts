@@ -8,6 +8,40 @@ import {
 } from "../../src/services/document-commands";
 
 describe("form field editing", () => {
+  it.each(["dropdown", "radio"] as const)(
+    "clears %s selections and updates unselected flags",
+    async (type) => {
+      let bytes = await addFormField(await createBlankDocument(1, 600, 800), {
+        type,
+        name: "Choice",
+        page: 1,
+        x: 30,
+        y: 30,
+        width: 100,
+        height: 20,
+        options: ["A", "B"],
+        defaultValue: "A",
+      });
+      bytes = await updateFormField(bytes, { name: "Choice", value: "A" });
+      for (const required of [true, false]) {
+        bytes = await updateFormField(bytes, {
+          name: "Choice",
+          value: "",
+          required,
+          readOnly: true,
+        });
+        const form = (await PDFDocument.load(bytes)).getForm();
+        const field =
+          type === "dropdown" ? form.getDropdown("Choice") : form.getRadioGroup("Choice");
+        expect(field.getSelected()).toEqual(type === "dropdown" ? [] : undefined);
+        expect(field.isRequired()).toBe(required);
+        expect(field.isReadOnly()).toBe(true);
+      }
+      await expect(updateFormField(bytes, { name: "Choice", value: "Missing" })).rejects.toThrow(
+        /not available/,
+      );
+    },
+  );
   it("updates values and flags, then removes a field without dropping its siblings", async () => {
     let bytes = await createBlankDocument(1, 600, 800);
     bytes = await addFormField(bytes, {

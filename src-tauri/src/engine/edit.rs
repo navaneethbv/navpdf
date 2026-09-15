@@ -311,7 +311,7 @@ pub fn apply(
     .ok_or(STALE)?;
     let mut report = EditReport::default();
     match (request, &item.kind) {
-        (EditRequest::TransformImage { cm, .. }, ItemKind::Image { .. }) => {
+        (EditRequest::TransformImage { cm, .. }, ItemKind::Image { ctm, .. }) => {
             if !cm.iter().all(|value| value.is_finite())
                 || cm[0].hypot(cm[1]) > 10_000.0
                 || cm[2].hypot(cm[3]) > 10_000.0
@@ -319,7 +319,21 @@ pub fn apply(
             {
                 return Err("The image transform is invalid or collapses the image.".into());
             }
-            let matrix = cm.iter().map(|value| Object::Real(*value as f32)).collect();
+            // The inserted cm runs inside the image's current transform. Conjugate the
+            // page-space request so the resulting CTM is current followed by requested.
+            let inverse = ctm
+                .invert()
+                .ok_or("The image transform cannot be inverted.")?;
+            let requested = Matrix::new(cm[0], cm[1], cm[2], cm[3], cm[4], cm[5]);
+            let local = ctm.then(&requested).then(&inverse);
+            let values = [local.a, local.b, local.c, local.d, local.e, local.f];
+            if !values.iter().all(|value| (*value as f32).is_finite()) {
+                return Err("The image transform exceeds the supported numeric range.".into());
+            }
+            let matrix = values
+                .iter()
+                .map(|value| Object::Real(*value as f32))
+                .collect();
             let original = ops[index].clone();
             ops.splice(
                 index..=index,
@@ -682,16 +696,40 @@ mod tests {
         let (transformed, report) = apply(&source, 1, &transform, None).unwrap();
         assert!(report.applied && report.message.contains("transform"));
         let transformed = transformed.unwrap();
-        let transformed_doc = crate::engine::load(&transformed).unwrap();
-        let transformed_ops =
-            crate::engine::page_operations(&transformed_doc, transformed_doc.get_pages()[&1])
-                .unwrap();
-        assert!(transformed_ops.iter().any(|op| op.operator == "q"));
-        assert!(transformed_ops.iter().any(|op| {
-            op.operator == "cm"
-                && op.operands.first().and_then(number) == Some(0.0)
-                && op.operands.get(1).and_then(number) == Some(1.0)
-        }));
+        let image_bounds = |bytes: &[u8], page| {
+            inspect(bytes, page)
+                .unwrap()
+                .objects
+                .into_iter()
+                .find(|object| object.kind == "image")
+                .unwrap()
+                .bbox
+        };
+        for (actual, expected) in image_bounds(&transformed, 1)
+            .iter()
+            .zip([70.0, 140.0, 120.0, 190.0])
+        {
+            assert!((actual - expected).abs() < 1e-4);
+        }
+        assert_eq!(image_bounds(&transformed, 2), image_object.bbox);
+        let translated = apply(
+            &source,
+            1,
+            &EditRequest::TransformImage {
+                object_id: image_object.id.clone(),
+                cm: [1.0, 0.0, 0.0, 1.0, 10.0, -5.0],
+            },
+            None,
+        )
+        .unwrap()
+        .0
+        .unwrap();
+        for (actual, expected) in image_bounds(&translated, 1)
+            .iter()
+            .zip([110.0, 95.0, 160.0, 145.0])
+        {
+            assert!((actual - expected).abs() < 1e-4);
+        }
 
         let replace = EditRequest::ReplaceImage {
             object_id: image_object.id.clone(),

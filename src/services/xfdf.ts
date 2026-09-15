@@ -17,9 +17,9 @@ const attrs = (source: string) => {
 };
 const numbers = (value: string | undefined) =>
   value
-    ?.split(/[ ,]+/)
-    .map(Number)
-    .filter((number) => Number.isFinite(number)) ?? [];
+    ?.trim()
+    .split(/[\s,]+/)
+    .map(Number) ?? [];
 
 function annotationTag(subtype: string) {
   return subtype === "StrikeOut" ? "strikeout" : subtype.toLowerCase();
@@ -105,12 +105,22 @@ export async function importXfdf(pdfBytes: Uint8Array, xml: string): Promise<Uin
     const rect = numbers(attributes.get("rect"));
     if (rect.length !== 4 || rect.some((value) => !Number.isFinite(value))) continue;
     const body = match[3];
+    let quadPoints: number[] | undefined;
+    if (["highlight", "underline", "strikeout"].includes(tag)) {
+      const geometry =
+        attributes.get("coords") ?? body.match(/<quadpoints>([\s\S]*?)<\/quadpoints>/i)?.[1];
+      quadPoints = numbers(geometry);
+      if (!geometry?.trim() || quadPoints.length % 8 !== 0 || !quadPoints.every(Number.isFinite)) {
+        throw new Error("The XFDF text markup has invalid or missing quadrilateral geometry.");
+      }
+    }
     const contents = body.match(/<contents>([\s\S]*?)<\/contents>/i)?.[1] ?? "";
     const subtype = tag === "strikeout" ? "StrikeOut" : tag[0].toUpperCase() + tag.slice(1);
     const annotation = context.obj({
       Type: "Annot",
       Subtype: subtype,
       Rect: rect,
+      ...(quadPoints ? { QuadPoints: quadPoints } : {}),
       F: 4,
       P: page.ref,
       NM: PDFString.of(attributes.get("name") ?? `xfdf-${Date.now()}-${pageIndex}`),
