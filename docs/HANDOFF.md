@@ -127,6 +127,7 @@ The hosted recheck for this follow-up is pending.
 
 The hosted Phase 10 checks then exposed more OpenSSL version drift because the runner rejected `x509 -not_before` and used different successful CMS output text.
 The script now uses the compatible `req -nodes` and `x509 -days 0` forms and checks the CMS process exit status.
+OpenSSL checks CMS and byte-range integrity with `-noverify`, while independent `pdfsig` checks the synthetic trust chain.
 Local Phase 10 acceptance passes 55 of 55 checks.
 
 The root planning files DELIVERY-PHASES.md, IMPLEMENTATION-PLAN-2026-09-14.md, and REVIEW-2026-09-14.md remain untracked source material and must not be included in the commit.

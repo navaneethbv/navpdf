@@ -175,10 +175,9 @@ function opensslVerify(file) {
       cms,
       "-content",
       content,
-      "-CAfile",
-      key("root.pem"),
-      "-purpose",
-      "any",
+      // pdfsig independently verifies the synthetic root trust chain above.
+      // OpenSSL is responsible here for CMS signature and byte-range integrity.
+      "-noverify",
       "-out",
       "/dev/null",
     ]);
