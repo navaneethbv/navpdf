@@ -50,6 +50,6 @@ jobs:
 
       - name: SonarCloud scan
         if: steps.guard.outputs.configured == 'true'
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
