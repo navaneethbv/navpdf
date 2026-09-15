@@ -4,6 +4,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { validateStandardFontCoverage } from "../../services/document-commands";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function DesignTools({
   controller,
@@ -151,12 +152,7 @@ export function DesignTools({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Generate Cover Page"
-    >
+    <FeatureDialog title="Generate Cover Page" onClose={onClose} busy={generating}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -174,18 +170,21 @@ export function DesignTools({
             <div className="tab-buttons-bar">
               <button
                 className={template === "modern" ? "active" : ""}
+                aria-pressed={template === "modern"}
                 onClick={() => setTemplate("modern")}
               >
                 Modern Accent
               </button>
               <button
                 className={template === "corporate" ? "active" : ""}
+                aria-pressed={template === "corporate"}
                 onClick={() => setTemplate("corporate")}
               >
                 Corporate
               </button>
               <button
                 className={template === "minimal" ? "active" : ""}
+                aria-pressed={template === "minimal"}
                 onClick={() => setTemplate("minimal")}
               >
                 Minimal
@@ -237,6 +236,6 @@ export function DesignTools({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

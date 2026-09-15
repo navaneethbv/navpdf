@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { PDFDocument, rgb } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
+import { FeatureDialog } from "../../components/FeatureDialog";
 import type { ViewerController } from "../viewer/controller";
 import {
   fetchSignatureLibrary,
@@ -28,6 +29,7 @@ import {
 } from "../../services/signature-store";
 import { fromTopLeftVisual } from "../../services/pdf/page-box";
 import type { SavedSignature } from "../../services/native";
+import { PageNumberInput } from "../../components/PageNumberInput";
 
 export function FillAndSign({
   controller,
@@ -166,15 +168,21 @@ export function FillAndSign({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
+    reader.onerror = () => s.set({ error: "The image could not be read." });
     reader.onload = async () => {
       const img = new Image();
+      img.onerror = () => s.set({ error: "The image could not be read." });
       img.onload = async () => {
         const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
+        const scale = Math.min(1, 4096 / Math.max(img.width, img.height));
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        } else {
+          s.set({ error: "The image could not be read." });
+          return;
         }
         const dataUrl = canvas.toDataURL("image/png");
         const name = file.name.replace(/\.[^.]+$/, "");
@@ -310,7 +318,7 @@ export function FillAndSign({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Fill and Sign">
+    <FeatureDialog title="Fill and Sign" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -405,6 +413,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "library" ? "active" : ""}
+            aria-pressed={tab === "library"}
             onClick={() => setTab("library")}
           >
             Saved Signatures
@@ -412,6 +421,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "draw" ? "active" : ""}
+            aria-pressed={tab === "draw"}
             onClick={() => setTab("draw")}
           >
             Draw
@@ -419,6 +429,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "type" ? "active" : ""}
+            aria-pressed={tab === "type"}
             onClick={() => setTab("type")}
           >
             Type
@@ -426,6 +437,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "import" ? "active" : ""}
+            aria-pressed={tab === "import"}
             onClick={() => setTab("import")}
           >
             Import
@@ -433,6 +445,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "marks" ? "active" : ""}
+            aria-pressed={tab === "marks"}
             onClick={() => setTab("marks")}
           >
             Quick Marks
@@ -465,9 +478,11 @@ export function FillAndSign({
               ) : (
                 <div className="sig-list">
                   {signatures.map((sig) => (
-                    <div
+                    <button
+                      type="button"
                       key={sig.id}
                       className={`sig-card ${selectedSig?.id === sig.id ? "selected" : ""}`}
+                      aria-pressed={selectedSig?.id === sig.id}
                       onClick={() => setSelectedSig(sig)}
                     >
                       <img src={sig.dataUrl} alt={sig.name} />
@@ -536,7 +551,7 @@ export function FillAndSign({
                           <Trash2 size={14} />
                         </button>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -702,12 +717,10 @@ export function FillAndSign({
             >
               <div>
                 <label className="setting-title">Page</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={s.info?.pages || 1}
+                <PageNumberInput
                   value={targetPage}
-                  onChange={(e) => setTargetPage(Number(e.target.value))}
+                  max={s.info?.pages || 1}
+                  onChange={setTargetPage}
                   className="text-input"
                 />
               </div>
@@ -774,6 +787,6 @@ export function FillAndSign({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

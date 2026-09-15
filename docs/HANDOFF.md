@@ -1,5 +1,24 @@
 # NavPDF handoff
 
+## Current September 14 worktree
+
+The active worktree is `fix/september-14-review-corrections` at `bf187654ec26d1e0e164e954570f1b7b4937a53a` with uncommitted implementation changes.
+Tranches 0 through 3 are implemented in source and Tranche 4 is in progress.
+Tranche 5 is in progress, Tranche 6 is pending, and Tranches 7 and 8 are partial.
+
+Current checks are 498 frontend unit tests passed across 79 files with 83.42% statement, 75.03% branch, 81.24% function and 86.26% line coverage, TypeScript passed, ESLint passed, formatting checks passed, 78 Rust tests passed with one constrained-volume test ignored, and Clippy passed with warnings denied.
+The current worktree also adds metadata editing, preferences, menus and shortcuts, page operations, tokenized OS open-with and drag-drop, XFDF exchange, comment threads, stamps, context-menu redaction, corpus-driven OCR WER/CER reporting, explicit fixture guards, acceptance command aliases, independent-tool discovery and a macOS acceptance workflow.
+PR #4's hosted run for the current pushed head passed every listed check except Cargo Deny.
+Cargo Deny failed before analysis because that run used the repository root `./Cargo.toml` instead of `src-tauri/Cargo.toml`.
+The local workflow correction is present but unpushed, so the hosted result has not been rerun.
+Native dialog, save/recovery, Preview and Acrobat checks for this source revision remain open.
+The current packaged app loads document metadata but leaves page rendering on a persistent spinner.
+The current package contains both the app and DMG, and `hdiutil verify` passed.
+The rebuilt executable SHA-256 is `f653c59f63585b775dccf4318ec669ca8dc973a57b57d26184d859618c010e4b`.
+The DMG SHA-256 is `19a191ef48a94cc21a8e335426c862ca6f9c0034fe7f6eeeb43c12f6ff8bb695`.
+The DMG verification CRC32 is `$8D90D7F1`.
+The remainder of this file is historical evidence from earlier builds and does not override the current checkpoint above.
+
 Current corrective review: see [PR-2-REVIEW.md](PR-2-REVIEW.md).
 The completion statements and hashes below predate corrections to signature storage, native revisions and real OCR.
 Phases 3, 4 and 6 are reopened in the delivery tracker; Phase 9 remains partial.

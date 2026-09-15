@@ -1,5 +1,5 @@
-//! IPC for the local PDF engine. Document bytes are staged in memory under opaque ids, so
-//! typed JSON commands never carry large payloads, and passwords never travel in headers.
+//! IPC for the local PDF engine. Large document bodies use raw IPC payloads under opaque ids,
+//! while small typed command metadata stays in JSON and passwords never travel in headers.
 
 use super::{document, payload, AppState};
 use crate::engine::{compress, edit, protect, prune, redact, sign};
@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tauri::ipc::{Request, Response};
 use tauri::{AppHandle, Manager, State};
+use zeroize::Zeroizing;
 
 /// Staged buffers kept at once; the oldest is dropped when a new one arrives.
 const MAX_STAGED_BUFFERS: usize = 8;
@@ -356,7 +357,7 @@ pub(super) fn adopt_protected_source(
 pub async fn engine_unlock(
     app: AppHandle,
     document_id: String,
-    password: String,
+    password: Zeroizing<String>,
 ) -> Result<String, String> {
     let state = app.state::<AppState>();
     let doc = document(&state, &document_id)?;
@@ -381,7 +382,7 @@ pub async fn engine_unlock(
 #[tauri::command]
 pub async fn engine_choose_certificate(
     app: AppHandle,
-    password: String,
+    password: Zeroizing<String>,
 ) -> Result<Option<sign::CertificateSummary>, String> {
     let Some(file) = rfd::AsyncFileDialog::new()
         .add_filter("Certificate", &["p12", "pfx"])

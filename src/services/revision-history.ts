@@ -13,6 +13,11 @@ const copyRevision = (revision: DocumentRevision): DocumentRevision => ({
   bytes: new Uint8Array(revision.bytes),
 });
 
+export interface RevisionHistoryOptions {
+  maxEntries?: number;
+  maxBytes?: number;
+}
+
 /**
  * Bounded, byte-backed history for mutations that replace the PDF.js proxy.
  * PDF.js keeps its own editor history for a live editor. This class covers
@@ -21,14 +26,20 @@ const copyRevision = (revision: DocumentRevision): DocumentRevision => ({
  */
 export class RevisionHistory {
   private readonly limit: number;
+  private readonly maxBytes: number;
   private past: DocumentRevision[] = [];
   private future: DocumentRevision[] = [];
   private current: DocumentRevision | null = null;
   private savedRevisionId: string | null = null;
   private sequence = 0;
 
-  constructor(limit = 20) {
-    this.limit = Math.max(1, limit);
+  constructor(options: number | RevisionHistoryOptions = 20) {
+    const maxEntries = typeof options === "number" ? options : (options.maxEntries ?? 20);
+    this.limit = Math.max(1, maxEntries);
+    this.maxBytes =
+      typeof options === "number"
+        ? Number.POSITIVE_INFINITY
+        : Math.max(1, options.maxBytes ?? Number.POSITIVE_INFINITY);
   }
 
   clear() {
@@ -39,7 +50,9 @@ export class RevisionHistory {
   }
 
   getCurrent(): DocumentRevision | null {
-    return this.current ? copyRevision(this.current) : null;
+    // Revision bytes are immutable by convention after they enter the history.
+    // Returning the retained object avoids another full-document allocation on every lookup.
+    return this.current;
   }
 
   seed(
@@ -132,7 +145,20 @@ export class RevisionHistory {
 
   private pushPast(revision: DocumentRevision) {
     this.past.push(copyRevision(revision));
-    if (this.past.length > this.limit) this.past.shift();
+    this.trim();
+  }
+
+  private trim() {
+    while (this.past.length > this.limit) this.past.shift();
+    while (this.totalBytes() > this.maxBytes && this.past.length > 0) this.past.shift();
+    while (this.totalBytes() > this.maxBytes && this.future.length > 0) this.future.pop();
+  }
+
+  private totalBytes() {
+    return [this.current, ...this.past, ...this.future].reduce(
+      (total, revision) => total + (revision?.bytes.byteLength ?? 0),
+      0,
+    );
   }
 
   private withIdentity(

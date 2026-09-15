@@ -3,8 +3,9 @@ import { native, printDocument } from "../../services/native";
 import { Printer, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import { extractPages } from "../../services/document-commands";
-import { parsePageRange, type RangeMode } from "./print-range";
+import { parsePageRange, type RangeMode } from "./page-range";
 import type { ViewerController } from "../viewer/controller";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function PrintDialog({
   controller,
@@ -107,7 +108,7 @@ export function PrintDialog({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Print document">
+    <FeatureDialog title="Print document" onClose={onClose} busy={printing}>
       <div className="modal-dialog print-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -183,6 +184,6 @@ export function PrintDialog({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

@@ -9,7 +9,7 @@ use commands::*;
 use std::{collections::HashMap, fs, sync::Mutex};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-    Emitter, Manager,
+    DragDropEvent, Emitter, Manager,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -29,22 +29,41 @@ pub fn run() {
                 .unwrap_or_default();
             app.manage(AppState {
                 documents: Mutex::new(HashMap::new()),
+                pending_open_tokens: Mutex::new(HashMap::new()),
                 local: Mutex::new(local),
                 root,
                 dirty: Mutex::new(false),
                 saving: Mutex::new(false),
                 engine: commands::engine::EngineState::default(),
             });
+            let open = MenuItemBuilder::with_id("open", "Open PDF...")
+                .accelerator("CmdOrCtrl+O")
+                .build(app)?;
+            let save = MenuItemBuilder::with_id("save", "Save")
+                .accelerator("CmdOrCtrl+S")
+                .build(app)?;
+            let save_as = MenuItemBuilder::with_id("save-as", "Save As...")
+                .accelerator("CmdOrCtrl+Shift+S")
+                .build(app)?;
+            let print = MenuItemBuilder::with_id("print", "Print...")
+                .accelerator("CmdOrCtrl+P")
+                .build(app)?;
+            let close = MenuItemBuilder::with_id("home", "Close document")
+                .accelerator("CmdOrCtrl+W")
+                .build(app)?;
             let file = SubmenuBuilder::new(app, "File")
-                .text("open", "Open PDF...")
-                .text("save", "Save")
-                .text("save-as", "Save As...")
+                .items(&[&open, &save, &save_as, &print])
                 .separator()
-                .text("home", "Close document")
+                .item(&close)
                 .build()?;
+            let undo = MenuItemBuilder::with_id("undo", "Undo")
+                .accelerator("CmdOrCtrl+Z")
+                .build(app)?;
+            let redo = MenuItemBuilder::with_id("redo", "Redo")
+                .accelerator("CmdOrCtrl+Shift+Z")
+                .build(app)?;
             let edit = SubmenuBuilder::new(app, "Edit")
-                .text("undo", "Undo")
-                .text("redo", "Redo")
+                .items(&[&undo, &redo])
                 .separator()
                 // WebKit text fields only receive Cut and Paste through these responder items.
                 .cut()
@@ -52,17 +71,29 @@ pub fn run() {
                 .paste()
                 .select_all()
                 .build()?;
+            let find = MenuItemBuilder::with_id("find", "Search Document")
+                .accelerator("CmdOrCtrl+F")
+                .build(app)?;
             let view = SubmenuBuilder::new(app, "View")
                 .text("zoom-in", "Zoom In")
                 .text("zoom-out", "Zoom Out")
                 .text("fit-page", "Fit Page")
                 .text("fit-width", "Fit Width")
                 .separator()
-                .text("find", "Search Document")
+                .item(&find)
                 .build()?;
             let annotate = SubmenuBuilder::new(app, "Annotate")
                 .text("highlight", "Highlight")
                 .text("select", "Select Text")
+                .build()?;
+            let organize = SubmenuBuilder::new(app, "Organize")
+                .text("organize", "Organize Pages...")
+                .build()?;
+            let tools = SubmenuBuilder::new(app, "Tools")
+                .text("tools:add-text", "Edit PDF")
+                .text("tools:add-image", "Add Image")
+                .text("tools:annotations", "Comment")
+                .text("tools:redact", "Redact")
                 .build()?;
             // The predefined macOS Quit item calls NSApplication.terminate directly,
             // bypassing the runtime's cancellable exit event.
@@ -80,7 +111,7 @@ pub fn run() {
                 .build()?;
             app.set_menu(
                 MenuBuilder::new(app)
-                    .items(&[&settings, &file, &edit, &view, &annotate])
+                    .items(&[&settings, &file, &edit, &view, &annotate, &organize, &tools])
                     .build()?,
             )?;
             let window =
@@ -105,6 +136,13 @@ pub fn run() {
                         // most recent dirty-state IPC has not reached Rust yet.
                         api.prevent_close();
                         let _ = app_handle.emit("close-requested", ());
+                    } else if let tauri::WindowEvent::DragDrop(DragDropEvent::Drop {
+                        paths, ..
+                    }) = event
+                    {
+                        if let Some(path) = paths.iter().next().cloned() {
+                            commands::register_open_path(&app_handle, path);
+                        }
                     }
                 });
             }
@@ -119,6 +157,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_document,
+            open_document_from_token,
+            open_external_url,
             import_document,
             print_document,
             open_recent,
@@ -160,8 +200,16 @@ pub fn run() {
         ])
         .build(tauri::generate_context!());
     match result {
-        Ok(app) => app.run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+        Ok(app) => app.run(|app, event| match event {
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+            tauri::RunEvent::Opened { urls } => {
+                if let Some(url) = urls.into_iter().next() {
+                    if let Ok(path) = url.to_file_path() {
+                        commands::register_open_path(app, path);
+                    }
+                }
+            }
+            tauri::RunEvent::ExitRequested { api, .. } => {
                 let state = app.state::<AppState>();
                 let pending = state.dirty.lock().map(|v| *v).unwrap_or(true)
                     || state.saving.lock().map(|v| *v).unwrap_or(true);
@@ -170,6 +218,7 @@ pub fn run() {
                     let _ = app.emit("close-requested", ());
                 }
             }
+            _ => {}
         }),
         Err(error) => {
             eprintln!("NavPDF could not initialize its desktop runtime: {error}");

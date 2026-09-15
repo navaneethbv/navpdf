@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { requireFixture } from "../helpers/fixtures";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 
@@ -17,7 +18,7 @@ vi.mock("../../src/services/native", () => ({
 import { LocalRangeTransport, loadPdf } from "../../src/services/pdf";
 
 beforeAll(async () => {
-  source.bytes = new Uint8Array(await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")));
+  source.bytes = new Uint8Array(await readFile(requireFixture("reader-5.pdf")));
 });
 
 describe("LocalRangeTransport", () => {
@@ -31,6 +32,7 @@ describe("LocalRangeTransport", () => {
       initial as Uint8Array<ArrayBuffer>,
       () => {},
     );
+    expect(transport.progressiveDone).toBe(false);
     transport.onDataRange = (begin: number, chunk: Uint8Array) => {
       received.push({ begin, chunk });
     };

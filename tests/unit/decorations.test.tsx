@@ -9,12 +9,18 @@ import {
 } from "../../src/services/document-commands";
 import { PDFDocument } from "pdf-lib";
 import type { ViewerController } from "../../src/features/viewer/controller";
+import { useWorkspace } from "../../src/stores/workspace";
 
 describe("DecorationsDialog and decoration commands", () => {
   let samplePdf: Uint8Array;
 
   beforeEach(async () => {
     samplePdf = await createBlankDocument(3, 600, 800);
+    useWorkspace.getState().set({
+      document: { id: "decorations", name: "decorations.pdf", size: samplePdf.length },
+      info: { pages: 3, encrypted: false, title: "", author: "", version: "1.7" },
+      page: 1,
+    });
   });
 
   describe("applyDocumentDecorations", () => {
@@ -164,6 +170,38 @@ describe("DecorationsDialog and decoration commands", () => {
         );
         expect(onClose).toHaveBeenCalled();
       });
+    });
+
+    it("rejects an unmatched custom range without replacing the document", () => {
+      const mockController = {
+        pdf: { saveDocument: vi.fn().mockResolvedValue(samplePdf) },
+        replaceWithBytes: vi.fn().mockResolvedValue(undefined),
+      } as unknown as ViewerController;
+
+      render(<DecorationsDialog controller={mockController} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("Custom Range"));
+      fireEvent.change(screen.getByPlaceholderText("e.g. 1-3, 5"), {
+        target: { value: "99" },
+      });
+
+      expect(screen.getByRole("alert").textContent).toContain("No pages match");
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 0 Pages" }));
+      expect(mockController.replaceWithBytes).not.toHaveBeenCalled();
+    });
+
+    it("labels the apply action with the selected page count", () => {
+      const mockController = {
+        pdf: { saveDocument: vi.fn().mockResolvedValue(samplePdf) },
+        replaceWithBytes: vi.fn().mockResolvedValue(undefined),
+      } as unknown as ViewerController;
+
+      render(<DecorationsDialog controller={mockController} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("Custom Range"));
+      fireEvent.change(screen.getByPlaceholderText("e.g. 1-3, 5"), {
+        target: { value: "1-3" },
+      });
+
+      expect(screen.getByRole("button", { name: "Apply to 3 Pages" })).toBeTruthy();
     });
   });
 });

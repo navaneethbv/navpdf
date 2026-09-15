@@ -14,6 +14,7 @@ import { native } from "../../services/native";
 import { editPage, ENGINE_UNAVAILABLE, inspectPage } from "../../services/engine";
 import type { EditReport, EditRequest, PageObjects } from "../../types/engine";
 import { placePageBoxes, type ViewerLike } from "../redact/redaction-marks";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 /** Largest replacement image edge; larger images are scaled down before embedding. */
 const MAX_IMAGE_EDGE = 4096;
@@ -56,6 +57,7 @@ export function ObjectEditor({
   const viewer = controller?.viewer as unknown as ViewerLike | undefined;
   const pdf = controller?.pdf;
   const page = s.page;
+  const revision = s.revision;
 
   const scanPage = useCallback(async () => {
     if (!pdf || !native) return;
@@ -70,7 +72,7 @@ export function ObjectEditor({
       setWorking(false);
     }
     // The store setter is stable; the scan depends on the active revision and page.
-  }, [pdf, page]);
+  }, [pdf, page, revision]);
 
   useEffect(() => {
     void scanPage();
@@ -97,8 +99,6 @@ export function ObjectEditor({
       setReport(result.report);
       if (result.bytes) {
         await controller.replaceWithBytes(result.bytes, result.report.message);
-        const rescanned = await inspectPage(await controller.pdf.saveDocument(), scan.page);
-        setScan(rescanned);
         setSelectedId(null);
       }
     } catch (error) {
@@ -119,12 +119,7 @@ export function ObjectEditor({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Edit Existing Content"
-    >
+    <FeatureDialog title="Edit Existing Content" onClose={onClose} busy={working}>
       <div className="modal-dialog wide">
         <div className="modal-header">
           <div className="modal-title">
@@ -285,6 +280,6 @@ export function ObjectEditor({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

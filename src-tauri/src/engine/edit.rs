@@ -377,10 +377,19 @@ pub fn apply(
             let op = &ops[index];
             ops[index] = match op.operator.as_str() {
                 "'" => Operation::new("'", vec![string]),
-                "\"" => Operation::new(
-                    "\"",
-                    vec![op.operands[0].clone(), op.operands[1].clone(), string],
-                ),
+                "\"" => {
+                    let word_spacing = op
+                        .operands
+                        .first()
+                        .cloned()
+                        .ok_or("Malformed quote text operator: missing word spacing.")?;
+                    let char_spacing = op
+                        .operands
+                        .get(1)
+                        .cloned()
+                        .ok_or("Malformed quote text operator: missing character spacing.")?;
+                    Operation::new("\"", vec![word_spacing, char_spacing, string])
+                }
                 _ => Operation::new("Tj", vec![string]),
             };
             report.message = "Text replaced.".into();

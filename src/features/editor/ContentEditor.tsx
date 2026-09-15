@@ -10,6 +10,8 @@ import {
   type StandardFontFamily,
 } from "../../services/document-commands";
 import { fromTopLeftVisual } from "../../services/pdf/page-box";
+import { PageNumberInput } from "../../components/PageNumberInput";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function ContentEditor({
   controller,
@@ -111,11 +113,10 @@ export function ContentEditor({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label={type === "text" ? "Add Text" : "Add Image"}
+    <FeatureDialog
+      title={type === "text" ? "Add Text" : "Add Image"}
+      onClose={onClose}
+      busy={saving}
     >
       <div className="modal-dialog">
         <div className="modal-header">
@@ -131,12 +132,10 @@ export function ContentEditor({
         <div className="modal-body">
           <div className="setting-group">
             <label className="setting-title">Target Page</label>
-            <input
-              type="number"
-              min={1}
-              max={s.info?.pages || 1}
+            <PageNumberInput
               value={targetPage}
-              onChange={(e) => setTargetPage(Number(e.target.value))}
+              max={s.info?.pages || 1}
+              onChange={setTargetPage}
               className="text-input"
             />
           </div>
@@ -325,6 +324,6 @@ export function ContentEditor({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

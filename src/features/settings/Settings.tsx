@@ -87,6 +87,24 @@ export function Settings() {
           Remember last page
         </label>
         <h3>General & privacy</h3>
+        <label>
+          Default save behavior
+          <select
+            value={preferences.saveBehavior}
+            onChange={(e) => patch({ saveBehavior: e.target.value as Preferences["saveBehavior"] })}
+          >
+            <option value="ask">Ask before replacing a file</option>
+            <option value="save-as">Always save a copy</option>
+          </select>
+        </label>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={preferences.confirmOnDelete}
+            onChange={(e) => patch({ confirmOnDelete: e.target.checked })}
+          />{" "}
+          Confirm before deleting pages or annotations
+        </label>
         <label className="check-label">
           <input
             type="checkbox"
@@ -106,7 +124,52 @@ export function Settings() {
         <label className="check-label">
           <input type="checkbox" checked={false} disabled /> Allow network access
         </label>
-        <p className="muted">Network access is off. This version has no network features.</p>
+        <p className="muted">Network access is disabled by the application policy.</p>
+        <h3>Editing</h3>
+        <div className="form-columns">
+          <label>
+            Default annotation color
+            <input
+              type="color"
+              value={preferences.annotationColor}
+              onChange={(e) => patch({ annotationColor: e.target.value })}
+            />
+          </label>
+          <label>
+            Default stroke width
+            <input
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={preferences.annotationStrokeWidth}
+              onChange={(e) =>
+                patch({ annotationStrokeWidth: Math.max(1, Math.min(20, Number(e.target.value))) })
+              }
+            />
+          </label>
+        </div>
+        <h3>OCR</h3>
+        <div className="form-columns">
+          <label>
+            Default language
+            <input
+              value={preferences.ocrLanguage}
+              onChange={(e) => patch({ ocrLanguage: e.target.value })}
+              maxLength={16}
+            />
+          </label>
+          <label>
+            Default page scope
+            <select
+              value={preferences.ocrScope}
+              onChange={(e) => patch({ ocrScope: e.target.value as Preferences["ocrScope"] })}
+            >
+              <option value="current">Current page</option>
+              <option value="all">All pages</option>
+            </select>
+          </label>
+        </div>
         {error && (
           <p role="alert" className="error-text">
             {error}

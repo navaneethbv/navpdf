@@ -11,6 +11,7 @@ import {
   verifySignatures,
 } from "../../services/engine";
 import type { CertificateSummary, Certification, SignatureInfo } from "../../types/engine";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 const CERTIFICATION_OPTIONS: [Certification, string][] = [
   ["none", "Do not certify"],
@@ -134,12 +135,7 @@ export function CertificateSignature({
   );
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Certificate Signature"
-    >
+    <FeatureDialog title="Certificate Signature" onClose={onClose} busy={working}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -310,6 +306,6 @@ export function CertificateSignature({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

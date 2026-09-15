@@ -7,7 +7,7 @@
 **Architecture:** Corrections stay inside the existing boundaries: pdf-lib writers in `src/services/document-commands.ts` (to be split by domain), PDF.js viewer wiring in `src/features/viewer/controller.ts` (to gain a mutation queue), native ownership behind typed IPC in `src-tauri/src/commands/`, and the lopdf engine in `src-tauri/src/engine/`.
 Every persisted change gains a regression that inspects saved bytes independently, and every reopened phase gate is re-recorded with fixture, action, result and hash.
 
-**Tech Stack:** Tauri 2, Rust 1.88, React 19, TypeScript 6, Zustand 5, pdfjs-dist 6.3.289, pdf-lib 1.17.1, lopdf 0.45, Vitest 5, happy-dom.
+**Tech Stack:** Tauri 2, Rust 1.89, React 19, TypeScript 6, Zustand 5, pdfjs-dist 6.3.289, pdf-lib 1.17.1, lopdf 0.45, Vitest 5, happy-dom.
 
 **Spec:** [REVIEW-2026-09-14.md](REVIEW-2026-09-14.md) (finding IDs referenced below), [PRODUCT-SPEC.txt](PRODUCT-SPEC.txt), [DELIVERY-PHASES.md](DELIVERY-PHASES.md).
 
@@ -15,7 +15,7 @@ Every persisted change gains a regression that inspects saved bytes independentl
 
 Copied from `CLAUDE.md` and the review; every task inherits them.
 
-- Node 24 and an installed Rust toolchain compatible with `rust-version = "1.88"`; use `npm ci`.
+- Node 24 and an installed Rust toolchain compatible with `rust-version = "1.89"`; use `npm ci`.
 - Run before every handoff: `npm run lint`, `npm run typecheck`, `npm run test:coverage`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`, `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`, `git diff --check`.
 - Coverage thresholds stay at lines 80, functions 80, branches 75, statements 80 (`vite.config.ts:16-31`).
 - Keep `AGENTS.md` and `CLAUDE.md` byte-identical; verify with `cmp AGENTS.md CLAUDE.md`.
@@ -28,6 +28,28 @@ Copied from `CLAUDE.md` and the review; every task inherits them.
 - Use synthetic fixtures under `tests/pdf-fixtures/` for destructive tests; manual artifacts go under ignored `output/`.
 - Do not advertise placeholders or disabled controls as completed features.
 - Each task ends with an independently testable deliverable; each task's checks pass before the next task starts.
+
+## Current implementation status
+
+This status is for the uncommitted September 14 worktree and is based on current source inspection.
+
+| Scope | Status | Evidence or open gate |
+| --- | --- | --- |
+| Tranche 0 | Complete | Guardrails and CI configuration are implemented; hosted rerun is pending. |
+| Tranche 1 | Complete | Data-safety corrections and focused regressions are implemented; native workflows remain open. |
+| Tranche 2 | Complete | Tasks 2.1 through 2.7 are implemented; packaged placement and redaction checks remain open. |
+| Tranche 3 | Complete in source | Tasks 3.1 through 3.8 are implemented; native dialogs and keyboard walkthrough remain open. |
+| Tranche 4 | In progress | Fixture guards, the PDF artifact inspection helper, corpus-driven OCR metrics, acceptance aliases, tool discovery and macOS CI are implemented; hosted checks and the remaining artifact audit are open. |
+| Tranche 5 | In progress | Metadata editing, preferences, menus and shortcuts, page operations, tokenized OS open-with and drag-drop, XFDF exchange, comment threads, stamps and context-menu redaction are implemented; forms editing, crop and transform controls, image replacement, signature placement rotation, protection parity and native checks remain open. |
+| Tranche 6 | Pending | Structural refactors have not been completed. |
+| Tranche 7 | Partial | View modes, navigation, page labels and the external-link trust prompt are implemented; sidebar parity, advanced forms, measurement, print options, reflow, read-aloud, high contrast and independent Acrobat checks remain open. |
+| Tranche 8 | Partial | Revision-history byte bounds, PDF.js scripting restrictions and reproducible memory probe and driver scripts are implemented; native memory budgets, renderer revision ownership, range recycling, canvas eviction and hardened entitlements remain open. |
+
+The current local baseline is 498 frontend tests passing across 79 files with 83.42% statement, 75.03% branch, 81.24% function and 86.26% line coverage.
+The 78 Rust tests pass with one constrained-volume test ignored, TypeScript passes, ESLint passes, formatting checks pass and Clippy passes with warnings denied.
+Phase 7 and Phase 10 acceptance each pass 55 of 55 checks.
+Phase 8 passes 11 of 12 checks because Quick Look produces no rendered output in this noninteractive environment.
+The current handoff still requires native rendering, independent-reader, hosted CI and the remaining documentation integrity checks from the current source revision.
 
 ## File structure decisions
 

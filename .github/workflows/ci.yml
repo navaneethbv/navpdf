@@ -111,6 +111,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: src-tauri/Cargo.toml
 
   rust:
     name: Rust Linux (test + clippy)
@@ -172,3 +174,29 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev
       - run: cargo build --manifest-path src-tauri/Cargo.toml
+
+  acceptance-macos:
+    name: Native acceptance scripts
+    runs-on: macos-14
+    needs: [test, build, rust-macos]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install independent PDF and certificate tools
+        run: |
+          brew install poppler nss
+          echo "$(brew --prefix nss)/bin" >> "$GITHUB_PATH"
+      - run: npm ci
+      - run: npm run acceptance:check-tools
+      - run: npm run acceptance:licenses
+      - run: npm run acceptance:phase7
+      - run: npm run acceptance:phase8
+      - run: npm run acceptance:phase10
+      - run: cargo build --manifest-path src-tauri/Cargo.toml --example ocr_cli
+      - run: npm run acceptance:ocr

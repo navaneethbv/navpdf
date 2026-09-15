@@ -11,7 +11,7 @@ Both files are maintained source documents, not generated files.
 
 Read `docs/DELIVERY-PHASES.md` for the active phase, acceptance gates, recorded defects and next task.
 Read `docs/PRODUCT-SPEC.txt` for product requirements and `docs/IMPLEMENTATION-ROADMAP-2026-09-12.md` for detailed capability plans.
-Use `docs/PR-1-REVIEW.md`, `docs/VERIFICATION.md` and `docs/HANDOFF.md` for dated evidence and limitations.
+Use `docs/PR-1-REVIEW.md`, `docs/PR-2-REVIEW.md`, `REVIEW-2026-09-14.md`, `docs/VERIFICATION.md` and `docs/HANDOFF.md` for dated evidence and limitations.
 Check current source before relying on historical architecture or completion claims.
 Inspect `git status --short` before editing and preserve all pre-existing work.
 Do not reset, clean, stash or overwrite someone else's changes to simplify the task.
@@ -37,12 +37,16 @@ Near context limits, checkpoint files, commands, evidence, blockers and next ste
 ## Repository map and boundaries
 
 - `src/app/`: application shell and document-session lifecycle.
+- `src/components/`: shared dialogs, inputs, error boundaries and interaction primitives.
 - `src/stores/workspace.ts`: serializable UI state and preferences.
 - `src/features/viewer/`: PDF.js viewer, annotations, navigation and rendering integration.
 - `src/features/`: page tools, editing, forms, signatures, exports and other feature UI.
+- `src/types/` and `src/utils/`: shared contracts and small pure helpers.
 - `src/services/`: PDF loading, typed document commands and native IPC adapters.
 - `src-tauri/src/commands/`: native document ownership and IPC commands.
+- `src-tauri/src/engine/`: native lopdf validation and document mutations.
 - `src-tauri/src/filesystem/`: snapshots, validation and atomic persistence.
+- `src-tauri/src/ocr/`, `src-tauri/src/signatures/` and `src-tauri/src/logging/`: local OCR, protected signature storage and privacy-safe diagnostics.
 - `src-tauri/src/security/`: native input and range boundaries.
 - `tests/unit/` and `tests/integration/`: frontend behavior, contracts and PDF round trips.
 - `tests/pdf-fixtures/` and `scripts/`: synthetic corpus and fixture generators.
@@ -152,4 +156,3 @@ Update relevant delivery and verification documents when scope, capabilities or 
 In long Markdown edits, put each full sentence on its own physical line while preserving normal lists, tables and code blocks.
 Never use the em dash character in output or authored text.
 Keep final handoffs concise: what changed, what passed, what remains and any exact blocker.
-

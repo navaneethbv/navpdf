@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentLoadingTask } from "pdfjs-dist";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -17,6 +17,7 @@ export function useDocumentSession(controller: ViewerController | null) {
   const task = useRef<PDFDocumentLoadingTask | null>(null),
     loading = useRef<PDFDocumentLoadingTask | null>(null),
     lock = useRef(false),
+    pendingOpen = useRef(false),
     openingCancelled = useRef(false);
   const report = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -29,7 +30,15 @@ export function useDocumentSession(controller: ViewerController | null) {
   useEffect(() => {
     void desktop
       .localState()
-      .then((local) => useWorkspace.getState().set({ local, layout: local.preferences.layout }))
+      .then((local) =>
+        useWorkspace.getState().set({
+          local,
+          layout: local.preferences.layout,
+          highlightColor: local.preferences.annotationColor,
+          inkColor: local.preferences.annotationColor,
+          inkWidth: local.preferences.annotationStrokeWidth,
+        }),
+      )
       .catch(report);
   }, [report]);
   const refreshLocal = useCallback(async () => {
@@ -40,6 +49,10 @@ export function useDocumentSession(controller: ViewerController | null) {
       if (!controller) return false;
       if (lock.current) {
         await desktop.releaseDocument(descriptor.id);
+        useWorkspace.getState().set({
+          error: "Open is already in progress.",
+          status: "Open is already in progress.",
+        });
         return false;
       }
       const previousState = useWorkspace.getState();
@@ -47,12 +60,14 @@ export function useDocumentSession(controller: ViewerController | null) {
       openingCancelled.current = false;
       useWorkspace.getState().set({ busy: true, error: "", status: "Opening PDF..." });
       let candidate: PDFDocumentLoadingTask | null = null;
+      let failedDuringLoad = false;
       const previousPdf = controller.pdf;
       try {
         candidate = await loadPdf(
           descriptor,
           (submit, reason) => setPassword({ name: descriptor.name, reason, submit }),
           (error) => {
+            failedDuringLoad = true;
             report(error);
             void loading.current?.destroy();
           },
@@ -146,7 +161,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         useWorkspace.getState().set(previousState);
         if (previousPdf) controller.goTo(previousState.page);
         setPassword(null);
-        if (!openingCancelled.current) report(error);
+        if (!openingCancelled.current && !failedDuringLoad) report(error);
         useWorkspace.getState().set({
           status: openingCancelled.current ? "Opening cancelled" : "Unable to open PDF",
         });
@@ -235,12 +250,44 @@ export function useDocumentSession(controller: ViewerController | null) {
   const open = useCallback(
     (file?: File) =>
       guard(() => {
+        if (pendingOpen.current) {
+          useWorkspace.getState().set({
+            error: "Open is already in progress.",
+            status: "Open is already in progress.",
+          });
+          return;
+        }
+        pendingOpen.current = true;
         void desktop
           .openDocument(file)
           .then((descriptor) => {
             if (descriptor) return load(descriptor);
           })
-          .catch(report);
+          .catch(report)
+          .finally(() => {
+            pendingOpen.current = false;
+          });
+      }),
+    [guard, load, report],
+  );
+  const openToken = useCallback(
+    (token: string) =>
+      guard(() => {
+        if (pendingOpen.current) {
+          useWorkspace.getState().set({
+            error: "Open is already in progress.",
+            status: "Open is already in progress.",
+          });
+          return;
+        }
+        pendingOpen.current = true;
+        void desktop
+          .openDocumentFromToken(token)
+          .then((descriptor) => load(descriptor))
+          .catch(report)
+          .finally(() => {
+            pendingOpen.current = false;
+          });
       }),
     [guard, load, report],
   );
@@ -292,6 +339,22 @@ export function useDocumentSession(controller: ViewerController | null) {
       }),
     [controller, guard, load, report],
   );
+  useEffect(() => {
+    if (!desktop.native) return;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen<{ token?: string; error?: string }>("open-token", ({ payload }) => {
+      if (payload.error) report(payload.error);
+      else if (payload.token) openToken(payload.token);
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [openToken, report]);
   useEffect(() => {
     if (!desktop.native) return;
     const interval = setInterval(() => {
@@ -348,33 +411,55 @@ export function useDocumentSession(controller: ViewerController | null) {
       unlisten?.();
     };
   }, [guard, report]);
-  return {
-    open,
-    recent,
-    save,
-    home,
-    recover,
-    load,
-    report,
-    refreshLocal,
-    password,
-    cancelPassword: () => {
-      openingCancelled.current = true;
-      setPassword(null);
-      void loading.current?.destroy();
-    },
-    confirm,
-    cancelConfirm: () => setConfirm(null),
-    discardAndContinue: () => {
-      const action = confirm;
-      setConfirm(null);
-      action?.();
-    },
-    saveAndContinue: async () => {
-      const action = confirm;
-      // Close the prompt first so a save that opens another dialog is not hidden behind it.
-      setConfirm(null);
-      if (await save()) action?.();
-    },
-  };
+  const cancelPassword = useCallback(() => {
+    openingCancelled.current = true;
+    setPassword(null);
+    void loading.current?.destroy();
+  }, []);
+  const cancelConfirm = useCallback(() => setConfirm(null), []);
+  const discardAndContinue = useCallback(() => {
+    const action = confirm;
+    setConfirm(null);
+    action?.();
+  }, [confirm]);
+  const saveAndContinue = useCallback(async () => {
+    const action = confirm;
+    setConfirm(null);
+    if (await save()) action?.();
+  }, [confirm, save]);
+
+  return useMemo(
+    () => ({
+      open,
+      recent,
+      save,
+      home,
+      recover,
+      load,
+      report,
+      refreshLocal,
+      password,
+      cancelPassword,
+      confirm,
+      cancelConfirm,
+      discardAndContinue,
+      saveAndContinue,
+    }),
+    [
+      open,
+      recent,
+      save,
+      home,
+      recover,
+      load,
+      report,
+      refreshLocal,
+      password,
+      cancelPassword,
+      confirm,
+      cancelConfirm,
+      discardAndContinue,
+      saveAndContinue,
+    ],
+  );
 }

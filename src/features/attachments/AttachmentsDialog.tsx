@@ -13,6 +13,7 @@ import {
   MAX_ATTACHMENT_SIZE_BYTES,
   type EmbeddedAttachmentSummary,
 } from "../../services/document-commands";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 interface AttachmentItem extends EmbeddedAttachmentSummary {
   data?: Uint8Array;
@@ -28,18 +29,22 @@ export function AttachmentsDialog({
   const s = useWorkspace();
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!controller?.pdf) return;
     let active = true;
+    setLoadError(null);
     controller.pdf
       .saveDocument()
       .then((bytes) => listEmbeddedAttachments(bytes))
       .then((items) => {
         if (active) setAttachments(items);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) setLoadError("Attachments could not be read.");
+      });
     return () => {
       active = false;
     };
@@ -126,7 +131,7 @@ export function AttachmentsDialog({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="PDF Attachments">
+    <FeatureDialog title="PDF Attachments" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -156,7 +161,11 @@ export function AttachmentsDialog({
           </div>
 
           <div className="attachments-list">
-            {attachments.length === 0 ? (
+            {loadError ? (
+              <p className="error-text" role="alert">
+                {loadError}
+              </p>
+            ) : attachments.length === 0 ? (
               <p className="empty-message">No embedded attachments in this document.</p>
             ) : (
               attachments.map((att, idx) => (
@@ -205,6 +214,6 @@ export function AttachmentsDialog({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

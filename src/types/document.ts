@@ -23,6 +23,12 @@ export interface Preferences {
   autosave: boolean;
   recentFiles: boolean;
   networkAccess: boolean;
+  saveBehavior: "ask" | "save-as";
+  confirmOnDelete: boolean;
+  annotationColor: string;
+  annotationStrokeWidth: number;
+  ocrLanguage: string;
+  ocrScope: "current" | "all";
 }
 export interface RecentDocument {
   id: string;
@@ -68,6 +74,13 @@ export interface Comment {
   vertices?: number[][];
   callout?: number[];
   stampName?: string;
+  replyTo?: string;
+  reviewState?: "Accepted" | "Rejected" | "Cancelled" | "Completed";
+}
+export interface SelectedTextGeometry {
+  page: number;
+  quads: { x1: number; y1: number; x2: number; y2: number }[];
+  text: string;
 }
 export interface DocumentInfo {
   pages: number;
@@ -86,4 +99,10 @@ export const defaultPreferences: Preferences = {
   autosave: true,
   recentFiles: true,
   networkAccess: false,
+  saveBehavior: "ask",
+  confirmOnDelete: true,
+  annotationColor: "#f5cf58",
+  annotationStrokeWidth: 2,
+  ocrLanguage: "en-US",
+  ocrScope: "current",
 };

@@ -9,6 +9,7 @@ import { Properties } from "../features/annotations/Properties";
 import { Home } from "../features/home/Home";
 import { Settings } from "../features/settings/Settings";
 import { Dialog } from "../components/Dialog";
+import { RootErrorBoundary } from "../components/RootErrorBoundary";
 import { ToolErrorBoundary } from "../components/ToolErrorBoundary";
 import { native } from "../services/native";
 import { Toolbar, Statusbar } from "./Toolbar";
@@ -36,6 +37,7 @@ import { ProtectDialog } from "../features/protect/ProtectDialog";
 import { CertificateSignature } from "../features/signatures/CertificateSignature";
 import { DesignTools } from "../features/design/DesignTools";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
+import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
 export default function App() {
   const [controller, setController] = useState<ViewerController | null>(null),
@@ -60,8 +62,9 @@ export default function App() {
   }, [controller, s.layout]);
   useEffect(() => {
     function key(event: KeyboardEvent) {
-      if (s.settingsOpen || session.password || session.confirm) return;
-      if (s.busy) {
+      const state = useWorkspace.getState();
+      if (state.settingsOpen || session.password || session.confirm) return;
+      if (state.busy) {
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
@@ -73,35 +76,66 @@ export default function App() {
         (event.target instanceof HTMLElement && event.target.isContentEditable);
       if ((event.ctrlKey || event.metaKey) && !editable) {
         const action = event.key.toLowerCase();
-        if (["o", "s", "f", "0", "+", "=", "-"].includes(action)) {
+        if (["o", "s", "f", "p", "w", "z", ",", "0", "+", "=", "-"].includes(action)) {
           event.preventDefault();
           if (action === "o") open();
           if (action === "s") void session.save(event.shiftKey);
-          if (action === "f" && s.document) s.set({ sidebar: "search" });
+          if (action === "f" && state.document) state.set({ sidebar: "search" });
+          if (action === "p" && state.document) state.set({ activeModal: "print" });
+          if (action === "w") session.home();
+          if (action === "z") {
+            if (event.shiftKey) controller?.redo();
+            else controller?.undo();
+          }
+          if (action === ",") state.set({ settingsOpen: true });
           if (action === "0") controller?.zoom("page-fit");
-          if (action === "+" || action === "=") controller?.zoom((s.zoom / 100) * 1.15);
-          if (action === "-") controller?.zoom(s.zoom / 100 / 1.15);
+          if (action === "+" || action === "=") controller?.zoom((state.zoom / 100) * 1.15);
+          if (action === "-") controller?.zoom(state.zoom / 100 / 1.15);
         }
+      }
+      if (!editable && event.key === "Home" && controller?.pdf) {
+        event.preventDefault();
+        controller.goToFirst();
+      }
+      if (!editable && event.key === "End" && controller?.pdf) {
+        event.preventDefault();
+        controller.goToLast();
+      }
+      if (
+        !editable &&
+        state.selectedAnnotationId &&
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+      ) {
+        event.preventDefault();
+        const distance = event.shiftKey ? 10 : 1;
+        const dx =
+          event.key === "ArrowLeft" ? -distance : event.key === "ArrowRight" ? distance : 0;
+        const dy = event.key === "ArrowDown" ? -distance : event.key === "ArrowUp" ? distance : 0;
+        void controller?.moveSelectedAnnotation(dx, dy);
       }
       if (
         !editable &&
         (event.key === "Delete" || event.key === "Backspace") &&
-        s.selectedAnnotationId
+        state.selectedAnnotationId
       ) {
         event.preventDefault();
         void controller?.deleteSelectedAnnotation();
         return;
       }
-      if (!editable && event.key === "Escape" && !s.busy) {
-        if (s.selectedAnnotationId) {
-          s.set({ selectedAnnotationId: null, hasSelection: false });
+      if (!editable && event.key === "Escape" && !state.busy) {
+        if (state.readMode) {
+          state.set({ readMode: false });
+          return;
+        }
+        if (state.selectedAnnotationId) {
+          state.set({ selectedAnnotationId: null, hasSelection: false });
         }
         controller?.setTool("select");
       }
     }
     window.addEventListener("keydown", key, true);
     function warn(event: BeforeUnloadEvent) {
-      if (s.dirty) {
+      if (useWorkspace.getState().dirty) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -111,12 +145,13 @@ export default function App() {
       window.removeEventListener("keydown", key, true);
       window.removeEventListener("beforeunload", warn);
     };
-  }, [s, session, controller, open]);
+  }, [session, controller, open]);
   useEffect(() => {
     if (!native) return;
     let cleanup: (() => void) | undefined;
     let disposed = false;
     void listen<string>("menu-action", ({ payload }) => {
+      const state = useWorkspace.getState();
       switch (payload) {
         case "open":
           open();
@@ -127,8 +162,14 @@ export default function App() {
         case "save-as":
           void session.save(true);
           break;
+        case "print":
+          if (state.document) state.set({ activeModal: "print" });
+          break;
         case "home":
           session.home();
+          break;
+        case "organize":
+          if (state.document) state.set({ activeModal: "page-workspace" });
           break;
         case "undo":
           controller?.undo();
@@ -137,16 +178,28 @@ export default function App() {
           controller?.redo();
           break;
         case "find":
-          s.set({ sidebar: "search" });
+          state.set({ sidebar: "search" });
           break;
         case "settings":
-          s.set({ settingsOpen: true });
+          state.set({ settingsOpen: true });
           break;
         case "highlight":
-          if (!s.info?.encrypted) controller?.setTool("highlight");
+          if (!state.info?.encrypted) controller?.setTool("highlight");
           break;
         case "select":
           controller?.setTool("select");
+          break;
+        case "tools:add-text":
+          if (state.document) state.set({ activeModal: "add-text" });
+          break;
+        case "tools:add-image":
+          if (state.document) state.set({ activeModal: "add-image" });
+          break;
+        case "tools:annotations":
+          if (state.document) state.set({ activeModal: "annotations" });
+          break;
+        case "tools:redact":
+          if (state.document) state.set({ activeModal: "redact" });
           break;
         case "fit-page":
           controller?.zoom("page-fit");
@@ -155,10 +208,10 @@ export default function App() {
           controller?.zoom("page-width");
           break;
         case "zoom-in":
-          controller?.zoom((s.zoom / 100) * 1.15);
+          controller?.zoom((state.zoom / 100) * 1.15);
           break;
         case "zoom-out":
-          controller?.zoom(s.zoom / 100 / 1.15);
+          controller?.zoom(state.zoom / 100 / 1.15);
           break;
       }
     }).then((fn) => {
@@ -169,9 +222,11 @@ export default function App() {
       disposed = true;
       cleanup?.();
     };
-  }, [controller, s, session, open]);
+  }, [controller, session, open]);
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell ${s.readMode ? "read-mode" : ""} ${s.nightMode ? "night-mode" : ""}`}
+    >
       <Toolbar
         controller={controller}
         open={open}
@@ -204,11 +259,17 @@ export default function App() {
           </button>
         </div>
       )}
-      <div className={`workspace ${s.document ? "has-document" : ""}`} inert={s.busy}>
-        {s.document && controller && <Sidebar controller={controller} />}
-        <ViewerHost controller={controller} onReady={ready} />
-        {s.document && controller && <Properties controller={controller} />}
-      </div>
+      <RootErrorBoundary
+        controller={controller}
+        document={s.document}
+        resetKey={s.document?.id ?? "home"}
+      >
+        <div className={`workspace ${s.document ? "has-document" : ""}`} inert={s.busy}>
+          {s.document && controller && <Sidebar controller={controller} />}
+          <ViewerHost controller={controller} onReady={ready} />
+          {s.document && controller && <Properties controller={controller} />}
+        </div>
+      </RootErrorBoundary>
       {!s.document && (
         <Home
           open={open}
@@ -220,7 +281,7 @@ export default function App() {
       )}
       <Statusbar controller={controller} />
       {s.busy && (
-        <div className="busy-indicator" aria-live="polite">
+        <div className="busy-indicator" aria-hidden="true">
           <LoaderCircle size={16} className="spinner" />
           {s.status}
         </div>
@@ -413,6 +474,9 @@ export default function App() {
         )}
         {s.activeModal === "assistant" && (
           <AssistantPanel controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "properties" && (
+          <PropertiesDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
       </ToolErrorBoundary>
     </div>

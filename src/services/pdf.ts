@@ -20,7 +20,11 @@ export class LocalRangeTransport extends PDFDataRangeTransport {
     initial: Uint8Array<ArrayBuffer>,
     private failure: (error: Error) => void,
   ) {
-    super(descriptor.size, initial, true, descriptor.name);
+    // The initial bytes are only a prefix. Marking the transport as
+    // progressively complete makes PDF.js treat the prefix as the whole
+    // stream and can leave page rendering waiting on data that will never be
+    // requested.
+    super(descriptor.size, initial, false, descriptor.name);
   }
   override requestDataRange(begin: number, end: number) {
     // A coalesced PDF.js range request must receive one contiguous response.
@@ -58,9 +62,11 @@ export async function loadPdf(
     disableAutoFetch: true,
     disableStream: true,
     enableXfa: false,
+    isEvalSupported: false,
+    enableScripting: false,
     useSystemFonts: true,
     useWasm: true,
-  });
+  } as Parameters<typeof getDocument>[0]);
   task.onPassword = onPassword;
   return task;
 }
@@ -71,7 +77,9 @@ export function loadPdfFromBytes(bytes: Uint8Array<ArrayBuffer>) {
     ...pdfAssets,
     data: bytes,
     enableXfa: false,
+    isEvalSupported: false,
+    enableScripting: false,
     useSystemFonts: true,
     useWasm: true,
-  });
+  } as Parameters<typeof getDocument>[0]);
 }

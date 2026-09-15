@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ExportDialog } from "../../src/features/convert/ExportDialog";
 import type { ViewerController } from "../../src/features/viewer/controller";
@@ -8,6 +8,13 @@ describe("ExportDialog Hardening (P6.5)", () => {
   let mockController: ViewerController;
 
   beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      fillStyle: "",
+      fillRect: vi.fn(),
+    } as never);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/png;base64,fixture",
+    );
     mockController = {
       pdf: {
         numPages: 3,
@@ -27,6 +34,10 @@ describe("ExportDialog Hardening (P6.5)", () => {
         ),
       },
     } as unknown as ViewerController;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("renders format selection and default scope", () => {

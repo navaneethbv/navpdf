@@ -91,6 +91,48 @@ describe("ViewerHost", () => {
     expect(container.querySelector(".pdf-container.hand-tool")).toBeTruthy();
     expect(screen.getByLabelText("PDF document")).toBeTruthy();
   });
+
+  it("prompts before an external link can leave the document", () => {
+    const onReady = vi.fn();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<ViewerHost onReady={onReady} />);
+    const frame = screen.getByLabelText("PDF document");
+    const anchor = document.createElement("a");
+    anchor.href = "https://example.org/reference";
+    frame.append(anchor);
+    const click = fireEvent.click(anchor);
+    expect(click).toBe(false);
+    expect(screen.getByRole("dialog", { name: "Open external link" })).toBeTruthy();
+    expect(screen.getByText("https://example.org/reference")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/allow this host/i));
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(open).toHaveBeenCalledWith(
+      "https://example.org/reference",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    const second = document.createElement("a");
+    second.href = "https://example.org/second";
+    frame.append(second);
+    fireEvent.click(second);
+    expect(open).toHaveBeenCalledWith(
+      "https://example.org/second",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+
+  it("shows a blocked message for unsafe external link schemes", () => {
+    render(<ViewerHost onReady={() => {}} />);
+    const frame = screen.getByLabelText("PDF document");
+    const anchor = document.createElement("a");
+    anchor.href = "javascript:alert(1)";
+    frame.append(anchor);
+    fireEvent.click(anchor);
+    expect(screen.getByRole("alert").textContent).toMatch(/blocked unsafe URI scheme/i);
+    expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+  });
 });
 
 it("fits the first visible document and preserves later user zoom", () => {

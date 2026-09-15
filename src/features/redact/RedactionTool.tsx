@@ -54,7 +54,16 @@ export function RedactionTool({
 }) {
   const s = useWorkspace();
   const ids = useId();
-  const [marks, setMarks] = useState<Mark[]>([]);
+  const [marks, setMarks] = useState<Mark[]>(() =>
+    s.redactionSelection.flatMap((selection) =>
+      selection.quads.map((rect) => ({
+        id: crypto.randomUUID(),
+        page: selection.page,
+        rect: [rect.x1, rect.y1, rect.x2, rect.y2] as PdfRect,
+        source: "drawn" as const,
+      })),
+    ),
+  );
   const [terms, setTerms] = useState<string[]>([]);
   const [term, setTerm] = useState("");
   const [options, setOptions] = useState(DEFAULT_SANITIZE_OPTIONS);
@@ -67,6 +76,8 @@ export function RedactionTool({
   const job = useRef<string | null>(null);
   const viewer = controller?.viewer as unknown as ViewerLike | undefined;
   const pageCount = s.info?.pages ?? 1;
+
+  useEffect(() => () => useWorkspace.getState().set({ redactionSelection: [] }), []);
 
   useEffect(
     () =>

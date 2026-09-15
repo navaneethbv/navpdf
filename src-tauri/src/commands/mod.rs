@@ -21,8 +21,10 @@ use tauri::{
     AppHandle, Emitter, Manager, State, WebviewWindow,
 };
 use tempfile::NamedTempFile;
+use url::Url;
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
     pub theme: String,
@@ -32,6 +34,12 @@ pub struct Preferences {
     pub autosave: bool,
     pub recent_files: bool,
     pub network_access: bool,
+    pub save_behavior: String,
+    pub confirm_on_delete: bool,
+    pub annotation_color: String,
+    pub annotation_stroke_width: f32,
+    pub ocr_language: String,
+    pub ocr_scope: String,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -43,6 +51,12 @@ impl Default for Preferences {
             autosave: true,
             recent_files: true,
             network_access: false,
+            save_behavior: "ask".into(),
+            confirm_on_delete: true,
+            annotation_color: "#f5cf58".into(),
+            annotation_stroke_width: 2.0,
+            ocr_language: "en-US".into(),
+            ocr_scope: "current".into(),
         }
     }
 }
@@ -119,11 +133,19 @@ pub struct RedactionAudit {
 }
 pub struct AppState {
     pub documents: Mutex<HashMap<String, Arc<Opened>>>,
+    pub pending_open_tokens: Mutex<HashMap<String, PathBuf>>,
     pub local: Mutex<LocalData>,
     pub root: PathBuf,
     pub dirty: Mutex<bool>,
     pub saving: Mutex<bool>,
     pub engine: engine::EngineState,
+}
+const MAX_PENDING_OPEN_TOKENS: usize = 32;
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenTokenEvent {
+    pub token: Option<String>,
+    pub error: Option<String>,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -298,6 +320,98 @@ pub async fn open_document(app: AppHandle) -> Result<Option<Descriptor>, String>
         .await
         .map_err(|_| "Opening the PDF failed.")?
         .map(Some)
+}
+
+fn is_pdf_path(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+}
+
+/// Convert a path delivered by the operating system into a single-use opaque token.
+/// The renderer never receives or submits the source path.
+pub fn register_open_path(app: &AppHandle, path: PathBuf) {
+    let event = if !is_pdf_path(&path) {
+        OpenTokenEvent {
+            token: None,
+            error: Some("Only PDF files can be opened.".into()),
+        }
+    } else {
+        let token = uuid::Uuid::new_v4().to_string();
+        let registered = app
+            .state::<AppState>()
+            .pending_open_tokens
+            .lock()
+            .map(|mut tokens| {
+                if tokens.len() >= MAX_PENDING_OPEN_TOKENS {
+                    false
+                } else {
+                    tokens.insert(token.clone(), path).is_none()
+                }
+            })
+            .unwrap_or(false);
+        if registered {
+            OpenTokenEvent {
+                token: Some(token),
+                error: None,
+            }
+        } else {
+            OpenTokenEvent {
+                token: None,
+                error: Some("The file could not be queued for opening.".into()),
+            }
+        }
+    };
+    let _ = app.emit("open-token", event);
+}
+
+#[tauri::command]
+pub async fn open_document_from_token(app: AppHandle, token: String) -> Result<Descriptor, String> {
+    let path = app
+        .state::<AppState>()
+        .pending_open_tokens
+        .lock()
+        .map_err(|_| "Open queue unavailable.")?
+        .remove(&token)
+        .ok_or("This open request has expired or was already used.")?;
+    if !is_pdf_path(&path) {
+        return Err("Only PDF files can be opened.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || opened(&app.state::<AppState>(), path, true))
+        .await
+        .map_err(|_| "Opening the PDF failed.")?
+}
+
+pub fn validate_external_url(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    let parsed = Url::parse(trimmed).map_err(|_| "Malformed external link.".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https" | "mailto") {
+        return Err("Only http, https, and mailto links can be opened.".into());
+    }
+    Ok(parsed.to_string())
+}
+
+#[tauri::command]
+pub async fn open_external_url(url: String) -> Result<(), String> {
+    let url = validate_external_url(&url)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        let result = std::process::Command::new("open").arg(&url).status();
+        #[cfg(target_os = "windows")]
+        let result = std::process::Command::new("explorer").arg(&url).status();
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let result = std::process::Command::new("xdg-open").arg(&url).status();
+        #[cfg(not(any(unix, target_os = "windows")))]
+        let result: std::io::Result<std::process::ExitStatus> =
+            Err(std::io::Error::other("unsupported platform"));
+        result
+            .map_err(|_| "The system could not open this link.".to_string())?
+            .success()
+            .then_some(())
+            .ok_or_else(|| "The system could not open this link.".to_string())
+    })
+    .await
+    .map_err(|_| "The system link task failed.".to_string())?
 }
 #[tauri::command]
 pub async fn open_recent(app: AppHandle, id: String) -> Result<Descriptor, String> {
@@ -557,6 +671,8 @@ fn commit_revision(
     bytes: &[u8],
     pages: u32,
 ) -> Result<CommitRevisionResult, String> {
+    filesystem::validate_pdf_structure(bytes, pages).map_err(|err| err.for_commit())?;
+
     // Keep the base check and publication under one lock so competing commits cannot both succeed.
     let mut current = doc
         .current_revision
@@ -565,7 +681,6 @@ fn commit_revision(
     if current.revision_id != base_revision_id {
         return Err("Stale base revision. The document has been modified elsewhere.".into());
     }
-    filesystem::validate_pdf_structure(bytes, pages).map_err(|err| err.for_commit())?;
     let sensitive = *doc
         .sensitive
         .lock()
@@ -632,22 +747,27 @@ fn verify_redactions(bytes: &[u8], audit: Option<&redact::AuditSpec>) -> Result<
 }
 
 #[tauri::command]
-pub fn get_revision(state: State<AppState>, id: String) -> Result<RevisionStatus, String> {
+pub async fn get_revision(app: AppHandle, id: String) -> Result<RevisionStatus, String> {
+    let state = app.state::<AppState>();
     let doc = document(&state, &id)?;
-    let current = doc
-        .current_revision
-        .lock()
-        .map_err(|_| "Revision state unavailable.")?;
-    let saved = doc
-        .saved_revision
-        .lock()
-        .map_err(|_| "Saved revision state unavailable.")?;
-    Ok(RevisionStatus {
-        current_revision_id: current.revision_id.clone(),
-        saved_revision_id: saved.clone(),
-        page_count: current.page_count,
-        is_dirty: current.revision_id != *saved,
+    tauri::async_runtime::spawn_blocking(move || {
+        let current = doc
+            .current_revision
+            .lock()
+            .map_err(|_| "Revision state unavailable.")?;
+        let saved = doc
+            .saved_revision
+            .lock()
+            .map_err(|_| "Saved revision state unavailable.")?;
+        Ok(RevisionStatus {
+            current_revision_id: current.revision_id.clone(),
+            saved_revision_id: saved.clone(),
+            page_count: current.page_count,
+            is_dirty: current.revision_id != *saved,
+        })
     })
+    .await
+    .map_err(|_| "The revision state could not be read.")?
 }
 #[tauri::command]
 pub fn local_state(state: State<AppState>) -> Result<serde_json::Value, String> {
@@ -676,6 +796,13 @@ pub fn save_preferences(
     }
     if !["page-fit", "page-width", "1", "1.5", "2"].contains(&preferences.default_zoom.as_str()) {
         return Err("Invalid default zoom.".into());
+    }
+    if !["ask", "save-as"].contains(&preferences.save_behavior.as_str())
+        || !["current", "all"].contains(&preferences.ocr_scope.as_str())
+        || !preferences.annotation_color.starts_with('#')
+        || !(1.0..=20.0).contains(&preferences.annotation_stroke_width)
+    {
+        return Err("Invalid preference value.".into());
     }
     preferences.network_access = false;
     let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
@@ -855,10 +982,30 @@ mod tests {
     use lopdf::dictionary;
 
     #[test]
+    fn operating_system_open_tokens_accept_only_pdf_paths() {
+        assert!(is_pdf_path(std::path::Path::new("report.PDF")));
+        assert!(is_pdf_path(std::path::Path::new("/tmp/report.pdf")));
+        assert!(!is_pdf_path(std::path::Path::new("report.pdf.exe")));
+        assert!(!is_pdf_path(std::path::Path::new("report.txt")));
+    }
+
+    #[test]
+    fn external_url_policy_allows_web_and_mail_links_only() {
+        assert_eq!(
+            validate_external_url(" https://example.org/a ").unwrap(),
+            "https://example.org/a"
+        );
+        assert!(validate_external_url("mailto:person@example.org").is_ok());
+        assert!(validate_external_url("file:///tmp/private.pdf").is_err());
+        assert!(validate_external_url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
     fn generated_document_owns_private_snapshot_and_requires_save_as() {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
+            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -882,6 +1029,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
+            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -961,6 +1109,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
+            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -991,6 +1140,7 @@ mod tests {
     fn test_state(root: &std::path::Path) -> AppState {
         AppState {
             documents: Mutex::new(HashMap::new()),
+            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.to_path_buf(),
             dirty: Mutex::new(false),
@@ -1153,10 +1303,10 @@ pub async fn print_document(app: AppHandle, request: Request<'_>) -> Result<bool
 }
 
 #[tauri::command]
-pub async fn ocr_recognize_page(
-    image_bytes: Vec<u8>,
-    options: crate::ocr::OcrOptions,
-) -> Result<crate::ocr::OcrPageResult, String> {
+pub async fn ocr_recognize_page(request: Request<'_>) -> Result<crate::ocr::OcrPageResult, String> {
+    let image_bytes = payload(&request).map_err(|_| "Invalid OCR image payload.".to_string())?;
+    let options: crate::ocr::OcrOptions = serde_json::from_str(&header(&request, "x-ocr-options")?)
+        .map_err(|_| "Invalid OCR options.".to_string())?;
     tauri::async_runtime::spawn_blocking(move || crate::ocr::recognize_page(&image_bytes, &options))
         .await
         .map_err(|_| "OCR recognition task failed.".to_string())?

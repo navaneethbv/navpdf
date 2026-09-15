@@ -5,6 +5,8 @@ import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { addFormField, type FormFieldDefinition } from "../../services/document-commands";
 import { fromTopLeftVisual } from "../../services/pdf/page-box";
+import { PageNumberInput } from "../../components/PageNumberInput";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function FormManager({
   controller,
@@ -98,12 +100,7 @@ export function FormManager({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Prepare Form Fields"
-    >
+    <FeatureDialog title="Prepare Form Fields" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -122,6 +119,7 @@ export function FormManager({
               <button
                 type="button"
                 className={fieldType === "text" ? "active" : ""}
+                aria-pressed={fieldType === "text"}
                 onClick={() => setFieldType("text")}
               >
                 <Type size={15} /> Text Input
@@ -129,6 +127,7 @@ export function FormManager({
               <button
                 type="button"
                 className={fieldType === "checkbox" ? "active" : ""}
+                aria-pressed={fieldType === "checkbox"}
                 onClick={() => setFieldType("checkbox")}
               >
                 <CheckSquare size={15} /> Checkbox
@@ -136,6 +135,7 @@ export function FormManager({
               <button
                 type="button"
                 className={fieldType === "radio" ? "active" : ""}
+                aria-pressed={fieldType === "radio"}
                 onClick={() => setFieldType("radio")}
               >
                 <CircleDot size={15} /> Radio
@@ -143,6 +143,7 @@ export function FormManager({
               <button
                 type="button"
                 className={fieldType === "dropdown" ? "active" : ""}
+                aria-pressed={fieldType === "dropdown"}
                 onClick={() => setFieldType("dropdown")}
               >
                 <List size={15} /> Dropdown
@@ -150,6 +151,7 @@ export function FormManager({
               <button
                 type="button"
                 className={fieldType === "button" ? "active" : ""}
+                aria-pressed={fieldType === "button"}
                 onClick={() => setFieldType("button")}
               >
                 <MousePointerClick size={15} /> Button
@@ -222,12 +224,10 @@ export function FormManager({
 
           <div className="setting-group">
             <label className="setting-title">Page</label>
-            <input
-              type="number"
-              min={1}
-              max={s.info?.pages || 1}
+            <PageNumberInput
               value={targetPage}
-              onChange={(e) => setTargetPage(Number(e.target.value))}
+              max={s.info?.pages || 1}
+              onChange={setTargetPage}
               className="text-input"
             />
           </div>
@@ -304,6 +304,6 @@ export function FormManager({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

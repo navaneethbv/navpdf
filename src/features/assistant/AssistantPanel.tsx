@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BookOpen, Info, Search, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export interface Passage {
   page: number;
@@ -107,12 +108,7 @@ export function AssistantPanel({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Find and Cite Passages"
-    >
+    <FeatureDialog title="Find and Cite Passages" onClose={onClose} busy={!!progress}>
       <div className="modal-dialog assistant-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -203,6 +199,6 @@ export function AssistantPanel({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

@@ -10,6 +10,7 @@ import {
   newJobId,
 } from "../../services/engine";
 import type { CompressionPreset, CompressionReport, EngineResult } from "../../types/engine";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 const PRESETS: { id: CompressionPreset; label: string; description: string }[] = [
   {
@@ -49,6 +50,8 @@ export function CompressDialog({
   const s = useWorkspace();
   const [preset, setPreset] = useState<CompressionPreset>("balanced");
   const [running, setRunning] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const applyingRef = useRef(false);
   const [result, setResult] = useState<EngineResult<CompressionReport> | null>(null);
   const job = useRef<string | null>(null);
   const report = result?.report;
@@ -84,7 +87,9 @@ export function CompressDialog({
   };
 
   const apply = async () => {
-    if (!controller || !result?.bytes || !report) return;
+    if (applyingRef.current || !controller || !result?.bytes || !report) return;
+    applyingRef.current = true;
+    setApplying(true);
     try {
       const saved = report.beforeBytes - report.afterBytes;
       const label = PRESETS.find((item) => item.id === report.preset)?.label ?? "";
@@ -95,13 +100,16 @@ export function CompressDialog({
       onClose();
     } catch (error) {
       s.set({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      applyingRef.current = false;
+      setApplying(false);
     }
   };
 
   const change = report ? report.afterBytes - report.beforeBytes : 0;
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Compress PDF">
+    <FeatureDialog title="Compress PDF" onClose={onClose} busy={running || applying}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -191,7 +199,7 @@ export function CompressDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button onClick={onClose} className="button-secondary" disabled={running || applying}>
             {report ? "Done" : "Close"}
           </button>
           {running ? (
@@ -199,7 +207,7 @@ export function CompressDialog({
               Cancel Analysis
             </button>
           ) : result?.bytes ? (
-            <button onClick={() => void apply()} className="button-primary">
+            <button onClick={() => void apply()} disabled={applying} className="button-primary">
               <Check size={16} /> Apply Compressed Version
             </button>
           ) : (
@@ -213,6 +221,6 @@ export function CompressDialog({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

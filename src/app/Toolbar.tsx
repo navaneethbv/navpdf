@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
   Save,
@@ -26,6 +27,8 @@ import {
   EyeOff,
   Layers,
   Lock,
+  RotateCw,
+  Moon,
 } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
@@ -56,33 +59,38 @@ export function Toolbar({
           <span>N</span>NavPDF
         </button>
         <span className="titlebar-divider" />
-        <nav className="mode-nav-tabs" role="tablist" aria-label="Tool modes">
+        <nav className="mode-nav-tabs" aria-label="Tool modes">
           <button
             className={`mode-tab ${s.toolMode === "all" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "all"}
             onClick={() => toggleMode("all")}
           >
             All tools
           </button>
           <button
             className={`mode-tab ${s.toolMode === "edit" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "edit"}
             onClick={() => toggleMode("edit")}
           >
             Edit
           </button>
           <button
             className={`mode-tab ${s.toolMode === "convert" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "convert"}
             onClick={() => toggleMode("convert")}
           >
             Convert
           </button>
           <button
             className={`mode-tab ${s.toolMode === "esign" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "esign"}
             onClick={() => toggleMode("esign")}
           >
             E-Sign
           </button>
           <button
             className={`mode-tab ${s.toolMode === "create" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "create"}
             onClick={() => toggleMode("create")}
           >
             Create
@@ -208,7 +216,10 @@ export function Toolbar({
               aria-pressed={s.tool === "signature"}
               className={s.tool === "signature" ? "active" : ""}
               disabled={disabled}
-              onClick={() => s.set({ activeModal: "fill-sign" })}
+              onClick={() => {
+                s.set({ activeModal: "fill-sign", tool: "signature" });
+                controller?.setTool("signature");
+              }}
             >
               <PenLine size={18} />
             </button>
@@ -217,7 +228,10 @@ export function Toolbar({
               aria-pressed={s.activeSnapshot}
               className={s.activeSnapshot ? "active" : ""}
               disabled={disabled}
-              onClick={() => s.set({ activeSnapshot: true, tool: "snapshot" })}
+              onClick={() => {
+                s.set({ activeSnapshot: true, tool: "snapshot" });
+                controller?.setTool("snapshot");
+              }}
             >
               <Camera size={18} />
             </button>
@@ -295,6 +309,30 @@ export function Toolbar({
               <option value="spread">Two pages</option>
             </select>
             <button
+              aria-label="Rotate view clockwise"
+              title="Rotate view clockwise"
+              disabled={disabled}
+              onClick={() => controller?.rotateView(90)}
+            >
+              <RotateCw size={17} />
+            </button>
+            <button
+              aria-label={s.nightMode ? "Disable night mode" : "Enable night mode"}
+              title="Night mode"
+              disabled={disabled}
+              onClick={() => s.set({ nightMode: !s.nightMode })}
+            >
+              <Moon size={17} />
+            </button>
+            <button
+              aria-label={s.readMode ? "Exit read mode" : "Enter read mode"}
+              title="Read mode"
+              disabled={disabled}
+              onClick={() => s.set({ readMode: !s.readMode })}
+            >
+              <Eye size={17} />
+            </button>
+            <button
               aria-label="Find in PDF"
               title="Find (⌘F)"
               disabled={disabled}
@@ -313,6 +351,27 @@ export function Toolbar({
 }
 export function Statusbar({ controller }: { controller: ViewerController | null }) {
   const s = useWorkspace();
+  const pageInputRef = useRef<HTMLInputElement>(null);
+  const [pageInputValue, setPageInputValue] = useState(String(s.page));
+
+  useEffect(() => {
+    if (document.activeElement !== pageInputRef.current)
+      setPageInputValue(s.pageLabels?.[s.page - 1] ?? String(s.page));
+  }, [s.page, s.pageLabels]);
+
+  const commitPageInput = () => {
+    if (!pageInputValue.trim()) {
+      setPageInputValue(String(s.page));
+      return;
+    }
+    if (controller?.goToPage) {
+      controller.goToPage(pageInputValue);
+    } else {
+      const page = Number(pageInputValue);
+      if (Number.isFinite(page)) controller?.goTo(page);
+    }
+  };
+
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -360,15 +419,17 @@ export function Statusbar({ controller }: { controller: ViewerController | null 
           <label>
             Page
             <input
-              key={s.page}
+              ref={pageInputRef}
               aria-label="Page number"
-              type="number"
-              min={1}
-              max={s.info?.pages}
-              defaultValue={s.page}
-              onBlur={(e) => controller?.goTo(Number(e.target.value) || 1)}
+              type="text"
+              value={pageInputValue}
+              onChange={(e) => setPageInputValue(e.target.value)}
+              onBlur={commitPageInput}
               onKeyDown={(e) => {
-                if (e.key === "Enter") controller?.goTo(Number(e.currentTarget.value) || 1);
+                if (e.key === "Enter") {
+                  commitPageInput();
+                  e.currentTarget.blur();
+                }
               }}
             />
             <span>of {s.info?.pages}</span>

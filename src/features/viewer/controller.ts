@@ -22,6 +22,7 @@ import type {
   Bookmark,
   Comment,
   ShapeKind,
+  SelectedTextGeometry,
 } from "../../types/document";
 import type { DocumentRevision } from "../../types/operations";
 import { useWorkspace } from "../../stores/workspace";
@@ -105,6 +106,7 @@ export class ViewerController {
   constructor(
     readonly container: HTMLDivElement,
     element: HTMLDivElement,
+    private readonly onExternalLink?: (url: string) => void,
   ) {
     this.links.externalLinkEnabled = false;
     this.viewer = new PDFViewer({
@@ -155,7 +157,7 @@ export class ViewerController {
           error: `Text selection could not be prepared: ${String(error)}`,
         });
     });
-    on("pagerendered", () => {
+    on("pagerendered", ({ error }: { error?: unknown } = {}) => {
       const state = useWorkspace.getState();
       state.set({
         renderedPages: this.container.querySelectorAll("canvas").length,
@@ -163,6 +165,12 @@ export class ViewerController {
           ? { firstRenderMs: Math.round(performance.now() - this.started) }
           : {}),
       });
+      if (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        state.set({
+          error: `Page ${this.viewer.currentPageNumber} could not be rendered: ${message}`,
+        });
+      }
     });
     on("annotationeditoruimanager", ({ uiManager }: { uiManager: AnnotationEditorUIManager }) => {
       this.editor = uiManager;
@@ -216,7 +224,11 @@ export class ViewerController {
       "click",
       (event) => {
         const anchor = (event.target as Element).closest("a");
-        if (anchor && !anchor.classList.contains("internalLink")) event.preventDefault();
+        if (anchor && !anchor.classList.contains("internalLink")) {
+          event.preventDefault();
+          const url = anchor.getAttribute("href") ?? anchor.href;
+          if (url) this.onExternalLink?.(url);
+        }
       },
       { capture: true, signal: this.abort.signal },
     );
@@ -230,6 +242,9 @@ export class ViewerController {
     this.contexts.clear();
     this.storageModified = false;
     this.pdf = pdf;
+    const pageLabels =
+      typeof pdf.getPageLabels === "function" ? await pdf.getPageLabels().catch(() => null) : null;
+    useWorkspace.getState().set({ pageLabels });
     this.links.setDocument(pdf);
     this.find.setDocument(pdf);
     this.viewer.setDocument(pdf);
@@ -526,8 +541,47 @@ export class ViewerController {
   }
   setLayout(layout: Layout) {
     this.viewer.scrollMode = layout === "single" ? ScrollMode.PAGE : ScrollMode.VERTICAL;
-    this.viewer.spreadMode = layout === "spread" ? SpreadMode.ODD : SpreadMode.NONE;
-    useWorkspace.getState().set({ layout });
+    const configured = useWorkspace.getState().spread;
+    const spread = layout === "spread" && configured === "none" ? "odd" : configured;
+    this.viewer.spreadMode = layout === "spread" ? this.spreadMode(spread) : SpreadMode.NONE;
+    useWorkspace.getState().set({ layout, spread });
+  }
+  private spreadMode(spread: "none" | "odd" | "even") {
+    if (spread === "even") return SpreadMode.EVEN;
+    if (spread === "odd") return SpreadMode.ODD;
+    return SpreadMode.NONE;
+  }
+  setSpread(spread: "none" | "odd" | "even") {
+    this.viewer.spreadMode = this.spreadMode(spread);
+    useWorkspace.getState().set({ spread });
+  }
+  rotateView(delta: 90 | -90) {
+    const current = useWorkspace.getState().viewRotation;
+    const next = ((current + delta + 360) % 360) as 0 | 90 | 180 | 270;
+    this.viewer.pagesRotation = next;
+    useWorkspace.getState().set({ viewRotation: next });
+  }
+  goToFirst() {
+    this.goTo(1);
+  }
+  goToLast() {
+    if (this.pdf) this.goTo(this.pdf.numPages);
+  }
+  goToPage(labelOrNumber: string | number) {
+    if (typeof labelOrNumber === "string") {
+      const label = labelOrNumber.trim();
+      const labelIndex =
+        useWorkspace.getState().pageLabels?.findIndex((item) => item === label) ?? -1;
+      if (labelIndex >= 0) {
+        this.goTo(labelIndex + 1);
+        return;
+      }
+      const parsed = Number(label);
+      if (!Number.isFinite(parsed)) return;
+      this.goTo(parsed);
+      return;
+    }
+    this.goTo(labelOrNumber);
   }
   setTool(tool: Tool) {
     if (!this.pdf) return;
@@ -618,9 +672,9 @@ export class ViewerController {
       await this.replaceWithBytes(shaped, status, { preMutationBytes: bytes });
     });
   }
-  async addTextMarkup(kind: TextMarkupKind) {
+  async readSelectedTextGeometry(): Promise<SelectedTextGeometry[]> {
     if (!this.pdf) throw new Error("Open a PDF before adding an annotation.");
-    const selection = await readTextSelectionGeometry(this.container, async (pageNumber) => {
+    return readTextSelectionGeometry(this.container, async (pageNumber) => {
       const viewport = (await this.pdf!.getPage(pageNumber)).getViewport({
         scale: 1,
       });
@@ -633,6 +687,10 @@ export class ViewerController {
         },
       };
     });
+  }
+  async addTextMarkup(kind: TextMarkupKind) {
+    if (!this.pdf) throw new Error("Open a PDF before adding an annotation.");
+    const selection = await this.readSelectedTextGeometry();
     if (selection.length === 0)
       throw new Error("Select text on the page before adding this annotation.");
     const status =
@@ -1063,6 +1121,9 @@ export class ViewerController {
           rect?: number[];
           lineCoordinates?: number[];
           lineEndings?: string[];
+          name?: string;
+          inReplyTo?: string;
+          state?: string;
           quadPoints?: number[];
           color?: ArrayLike<number>;
           opacity?: number;
@@ -1075,7 +1136,8 @@ export class ViewerController {
           a.subtype === "StrikeOut" ||
           a.subtype === "Square" ||
           a.subtype === "Circle" ||
-          a.subtype === "Line"
+          a.subtype === "Line" ||
+          a.subtype === "Stamp"
         ) {
           const id = a.annotationName || a.id;
           let isArrow = false;
@@ -1158,6 +1220,15 @@ export class ViewerController {
             type: commentType,
             text: a.contentsObj?.str || `${commentType} annotation`,
           };
+          if (a.subtype === "Stamp") comment.stampName = a.name;
+          if (a.inReplyTo) comment.replyTo = a.inReplyTo;
+          if (
+            a.state === "Accepted" ||
+            a.state === "Rejected" ||
+            a.state === "Cancelled" ||
+            a.state === "Completed"
+          )
+            comment.reviewState = a.state;
           if (a.rect?.length === 4 && a.rect.every(finite))
             comment.rect = [a.rect[0], a.rect[1], a.rect[2], a.rect[3]];
           if (pdfLibLine) {

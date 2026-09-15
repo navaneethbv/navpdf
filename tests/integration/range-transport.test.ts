@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { requireFixture } from "../helpers/fixtures";
 const reads = vi.hoisted(() => ({
   bytes: new Uint8Array(),
   requests: [] as [number, number][],
@@ -41,7 +42,7 @@ describe("local byte range transport", () => {
     expect(reads.requests.every(([begin, end]) => end - begin <= 1024 * 1024)).toBe(true);
   });
   it("loads and extracts remote pages through the same range adapter as the desktop app", async () => {
-    reads.bytes = new Uint8Array(await readFile("tests/pdf-fixtures/reader-1000.pdf"));
+    reads.bytes = new Uint8Array(await readFile(requireFixture("reader-1000.pdf")));
     reads.requests = [];
     const errors: Error[] = [];
     const task = await loadPdf(

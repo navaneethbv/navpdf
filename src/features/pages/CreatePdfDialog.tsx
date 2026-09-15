@@ -7,8 +7,9 @@ import {
   describeStructureLoss,
   mergeDocuments,
 } from "../../services/document-commands";
-import { parsePageRange } from "./print-range";
+import { parsePageRange } from "./page-range";
 import type { MergeInputItem } from "../../types/operations";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export interface CombineEntry {
   id: string;
@@ -57,6 +58,7 @@ export function CreatePdfDialog({
   }, [items]);
 
   const handleCreateBlank = async () => {
+    if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50) return;
     setCreating(true);
     try {
       const width = pageSize === "a4" ? 595.28 : 612;
@@ -147,7 +149,7 @@ export function CreatePdfDialog({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Create PDF">
+    <FeatureDialog title="Create PDF" onClose={onClose} busy={creating}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -162,12 +164,14 @@ export function CreatePdfDialog({
         <div className="tab-buttons-bar">
           <button
             className={`tab-button ${tab === "blank" ? "active" : ""}`}
+            aria-pressed={tab === "blank"}
             onClick={() => setTab("blank")}
           >
             <FilePlus size={15} /> Blank Document
           </button>
           <button
             className={`tab-button ${tab === "combine" ? "active" : ""}`}
+            aria-pressed={tab === "combine"}
             onClick={() => setTab("combine")}
           >
             <Combine size={15} /> Combine Multiple Files
@@ -185,7 +189,7 @@ export function CreatePdfDialog({
                   min={1}
                   max={50}
                   value={pageCount}
-                  onChange={(e) => setPageCount(Number(e.target.value))}
+                  onChange={(e) => setPageCount(e.target.value === "" ? 0 : Number(e.target.value))}
                   className="text-input"
                 />
               </div>
@@ -282,7 +286,12 @@ export function CreatePdfDialog({
           </button>
           <button
             onClick={tab === "blank" ? handleCreateBlank : handleCombineFiles}
-            disabled={creating || (tab === "combine" && items.length === 0)}
+            disabled={
+              creating ||
+              (tab === "blank" &&
+                (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50)) ||
+              (tab === "combine" && items.length === 0)
+            }
             className="button-primary"
           >
             <Check size={16} />{" "}
@@ -290,6 +299,6 @@ export function CreatePdfDialog({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

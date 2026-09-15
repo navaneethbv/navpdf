@@ -20,10 +20,10 @@ import {
   popGraphicsState,
   PDFOperator,
 } from "pdf-lib";
-import { appendTaggedStream, removeTaggedStreams } from "./pdf/content-streams";
-import { stripExternalPageLinks } from "./pdf/link-targets";
-import { walkEmbeddedFiles } from "./pdf/name-tree";
-import { visibleBox, clampRectToBox } from "./pdf/page-box";
+import { appendTaggedStream, removeTaggedStreams } from "./pdf/content-streams.ts";
+import { stripExternalPageLinks } from "./pdf/link-targets.ts";
+import { walkEmbeddedFiles } from "./pdf/name-tree.ts";
+import { visibleBox, clampRectToBox } from "./pdf/page-box.ts";
 import type { ShapeKind } from "../types/document";
 import type { MergeInputItem, OperationManifestItem, OcrPageResult } from "../types/operations";
 
@@ -201,6 +201,118 @@ export async function addStickyNote(
   context.assign(popupRef, popup);
   page.node.addAnnot(textRef);
   page.node.addAnnot(popupRef);
+  return doc.save();
+}
+
+export interface ReplyInput {
+  parentId: string;
+  contents: string;
+  author?: string;
+  id?: string;
+}
+
+/** Add a standard PDF reply linked to an existing markup annotation. */
+export async function addReply(pdfBytes: Uint8Array, input: ReplyInput): Promise<Uint8Array> {
+  if (!input.contents.trim()) throw new Error("A reply needs some text.");
+  const doc = await PDFDocument.load(pdfBytes);
+  const found = findAnnotation(doc, input.parentId);
+  if (!found) throw new Error("The parent annotation no longer exists.");
+  const target = found.annotation.lookupMaybe(PDFName.of("Rect"), PDFArray)?.asRectangle();
+  if (!target) throw new Error("The parent annotation has no usable bounds.");
+  const context = doc.context;
+  const parentEntry = found.annots.get(found.index);
+  const reply = context.obj({
+    Type: "Annot",
+    Subtype: "Text",
+    Rect: [
+      target.x,
+      target.y,
+      target.x + Math.min(24, target.width),
+      target.y + Math.min(24, target.height),
+    ],
+    F: 4,
+    P: found.page.ref,
+    IRT: parentEntry,
+    RT: PDFName.of("R"),
+    NM: PDFString.of(input.id ?? annotationId()),
+    T: PDFString.of(input.author ?? "NavPDF"),
+    Contents: PDFString.of(input.contents.trim()),
+    M: PDFString.of(toPdfDate()),
+  });
+  found.page.node.addAnnot(context.register(reply));
+  return doc.save();
+}
+
+export type ReviewState = "Accepted" | "Rejected" | "Cancelled" | "Completed";
+
+/** Persist a PDF review state annotation linked to an existing comment. */
+export async function setReviewState(
+  pdfBytes: Uint8Array,
+  annotationIdValue: string,
+  state: ReviewState,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const found = findAnnotation(doc, annotationIdValue);
+  if (!found) throw new Error("The annotation no longer exists.");
+  const target = found.annotation.lookupMaybe(PDFName.of("Rect"), PDFArray)?.asRectangle();
+  if (!target) throw new Error("The annotation has no usable bounds.");
+  const context = doc.context;
+  const stateAnnotation = context.obj({
+    Type: "Annot",
+    Subtype: "Text",
+    Rect: [target.x, target.y, target.x + 1, target.y + 1],
+    F: 4,
+    P: found.page.ref,
+    IRT: found.annots.get(found.index),
+    RT: PDFName.of("Group"),
+    State: PDFName.of(state),
+    StateModel: PDFName.of("Review"),
+    NM: PDFString.of(annotationId()),
+    Contents: PDFString.of(`${state} ${annotationIdValue}`),
+    M: PDFString.of(toPdfDate()),
+  });
+  found.page.node.addAnnot(context.register(stateAnnotation));
+  return doc.save();
+}
+
+export interface StampInput {
+  page: number;
+  rect: [number, number, number, number];
+  name?: string;
+  contents?: string;
+  id?: string;
+}
+
+/** Add a standard named stamp annotation with a bounded rectangle. */
+export async function addStampAnnotation(
+  pdfBytes: Uint8Array,
+  input: StampInput,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const pageIndex = input.page - 1;
+  if (pageIndex < 0 || pageIndex >= doc.getPageCount())
+    throw new Error("Stamp page is outside the document.");
+  const page = doc.getPage(pageIndex);
+  const box = visibleBox(page);
+  const [x1, y1, x2, y2] = input.rect;
+  const left = clamp(Math.min(x1, x2), box.x, box.x + box.width);
+  const bottom = clamp(Math.min(y1, y2), box.y, box.y + box.height);
+  const right = clamp(Math.max(x1, x2), box.x, box.x + box.width);
+  const top = clamp(Math.max(y1, y2), box.y, box.y + box.height);
+  if (right <= left || top <= bottom) throw new Error("Stamp must have a visible size.");
+  const context = doc.context;
+  const stamp = context.obj({
+    Type: "Annot",
+    Subtype: "Stamp",
+    Rect: [left, bottom, right, top],
+    Name: PDFName.of(input.name ?? "Approved"),
+    F: 4,
+    P: page.ref,
+    NM: PDFString.of(input.id ?? annotationId()),
+    Contents: PDFString.of(input.contents ?? input.name ?? "Approved"),
+    M: PDFString.of(toPdfDate()),
+  });
+  page.node.addAnnot(context.register(stamp));
   return doc.save();
 }
 
@@ -628,6 +740,66 @@ export async function reorderPages(pdfBytes: Uint8Array, newOrder: number[]): Pr
   }
   reordered.forEach((page, i) => doc.insertPage(i, page));
   return doc.save();
+}
+
+/** Duplicate selected pages in their original order, including page resources and annotations. */
+export async function duplicatePages(
+  pdfBytes: Uint8Array,
+  pageIndices: number[],
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const selected = [...new Set(pageIndices)]
+    .filter((index) => index >= 0 && index < doc.getPageCount())
+    .sort((a, b) => a - b);
+  let offset = 0;
+  for (const originalIndex of selected) {
+    const sourceIndex = originalIndex + offset;
+    const [copy] = await doc.copyPages(doc, [sourceIndex]);
+    doc.insertPage(sourceIndex + 1, copy);
+    offset++;
+  }
+  return doc.save();
+}
+
+/** Insert pages copied from another PDF without carrying external page links across documents. */
+export async function insertDocumentPages(
+  pdfBytes: Uint8Array,
+  otherBytes: Uint8Array,
+  atIndex: number,
+  pageIndices?: number[],
+): Promise<Uint8Array> {
+  const destination = await PDFDocument.load(pdfBytes);
+  const source = await PDFDocument.load(otherBytes);
+  const all = source.getPageIndices();
+  const selected = (pageIndices ?? all).filter((index) => index >= 0 && index < all.length);
+  if (selected.length === 0) throw new Error("No valid pages selected to insert.");
+  stripExternalPageLinks(source, new Set(selected));
+  const copied = await destination.copyPages(source, selected);
+  const index = Math.max(0, Math.min(atIndex, destination.getPageCount()));
+  copied.forEach((page, offset) => destination.insertPage(index + offset, page));
+  return destination.save();
+}
+
+/** Replace one page while retaining the destination page count and surrounding page order. */
+export async function replacePage(
+  pdfBytes: Uint8Array,
+  pageIndex: number,
+  otherBytes: Uint8Array,
+  otherPageIndex = 0,
+): Promise<Uint8Array> {
+  const destination = await PDFDocument.load(pdfBytes);
+  const source = await PDFDocument.load(otherBytes);
+  if (pageIndex < 0 || pageIndex >= destination.getPageCount()) {
+    throw new Error("Destination page is outside the document.");
+  }
+  if (otherPageIndex < 0 || otherPageIndex >= source.getPageCount()) {
+    throw new Error("Source page is outside the document.");
+  }
+  stripExternalPageLinks(source, new Set([otherPageIndex]));
+  const [replacement] = await destination.copyPages(source, [otherPageIndex]);
+  destination.removePage(pageIndex);
+  destination.insertPage(pageIndex, replacement);
+  return destination.save();
 }
 
 export async function extractPages(

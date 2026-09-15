@@ -6,7 +6,8 @@ const ROW = 187;
 export function Thumbnails({ controller }: { controller: ViewerController }) {
   const page = useWorkspace((s) => s.page),
     count = useWorkspace((s) => s.info?.pages || 0),
-    revision = useWorkspace((s) => s.revision);
+    revision = useWorkspace((s) => s.revision),
+    labels = useWorkspace((s) => s.pageLabels);
   const [scroll, setScroll] = useState(0),
     [height, setHeight] = useState(650);
   const ref = useRef<HTMLDivElement>(null);
@@ -42,7 +43,7 @@ export function Thumbnails({ controller }: { controller: ViewerController }) {
             onClick={() => controller.goTo(i + 1)}
           >
             <ThumbCanvas pdf={controller.pdf} page={i + 1} revision={revision} />
-            <span>{i + 1}</span>
+            <span>{labels?.[i] ?? i + 1}</span>
           </button>
         ))}
       </div>

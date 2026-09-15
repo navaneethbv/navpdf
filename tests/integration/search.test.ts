@@ -5,10 +5,11 @@ import { expect, it, vi } from "vitest";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { EventBus, PDFLinkService, PDFFindController } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import { positionSearchCursor } from "../../src/features/search/select-result";
+import { requireFixture } from "../helpers/fixtures";
 GlobalWorkerOptions.workerSrc = resolve("node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
 it("searches case/whole words and moves to an exact occurrence without breaking Next", async () => {
   const task = getDocument({
-    data: new Uint8Array(await readFile("tests/pdf-fixtures/reader-5.pdf")),
+    data: new Uint8Array(await readFile(requireFixture("reader-5.pdf"))),
     useSystemFonts: true,
   });
   const pdf = await task.promise;

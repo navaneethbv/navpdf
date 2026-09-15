@@ -16,6 +16,7 @@ import {
   openDocument,
   openRecent,
   openRecovery,
+  ocrRecognizePage,
   readRange,
   releaseDocument,
   rememberPage,
@@ -97,6 +98,15 @@ describe("native service Tauri paths", () => {
     await expect(openRecent("r")).resolves.toMatchObject({ id: "r" });
     await discardRecovery("n1");
     expect(invoke).toHaveBeenCalledWith("discard_recovery", { id: "n1" });
+  });
+
+  it("sends OCR pixels as a raw body with typed options in a header", async () => {
+    const image = new Uint8Array([137, 80, 78, 71]);
+    const options = { pageIndex: 2, language: "en-US", fastMode: true };
+    await ocrRecognizePage(image, options);
+    expect(invoke).toHaveBeenCalledWith("ocr_recognize_page", image, {
+      headers: { "x-ocr-options": JSON.stringify(options) },
+    });
   });
 });
 

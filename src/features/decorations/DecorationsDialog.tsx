@@ -11,6 +11,8 @@ import {
 } from "../../services/document-commands";
 import { native } from "../../services/native";
 import { pruneDocument } from "../../services/engine";
+import { parsePageRange } from "../pages/page-range";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function DecorationsDialog({
   controller,
@@ -58,27 +60,22 @@ export function DecorationsDialog({
 
   const [applying, setApplying] = useState(false);
 
-  const parsedPageRange = useMemo(() => {
-    if (pageScope === "all" || !customRange.trim()) return undefined;
-    const pages: number[] = [];
-    const total = s.info?.pages || 1;
-    const parts = customRange.split(",");
-    for (const part of parts) {
-      const trimmed = part.trim();
-      if (trimmed.includes("-")) {
-        const [start, end] = trimmed.split("-").map(Number);
-        if (!isNaN(start) && !isNaN(end)) {
-          for (let p = Math.min(start, end); p <= Math.max(start, end); p++) {
-            if (p >= 1 && p <= total) pages.push(p);
-          }
-        }
-      } else {
-        const p = Number(trimmed);
-        if (!isNaN(p) && p >= 1 && p <= total) pages.push(p);
-      }
+  const pageRange = useMemo(() => {
+    if (pageScope === "all") return { pages: undefined, error: undefined };
+    try {
+      return {
+        pages: parsePageRange(customRange, s.info?.pages || 1).map((page) => page + 1),
+        error: undefined,
+      };
+    } catch (error) {
+      return {
+        pages: undefined,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
-    return pages.length > 0 ? Array.from(new Set(pages)) : undefined;
   }, [pageScope, customRange, s.info?.pages]);
+  const parsedPageRange = pageRange.pages;
+  const pageRangeError = pageRange.error;
 
   const hexToRgb = (hex: string): [number, number, number] => {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -88,7 +85,7 @@ export function DecorationsDialog({
   };
 
   const handleApply = async () => {
-    if (!controller?.pdf) return;
+    if (!controller?.pdf || pageRangeError) return;
     setApplying(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
@@ -156,7 +153,7 @@ export function DecorationsDialog({
   };
 
   const handleRemoveDecorations = async () => {
-    if (!controller?.pdf) return;
+    if (!controller?.pdf || pageRangeError) return;
     setApplying(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
@@ -185,12 +182,7 @@ export function DecorationsDialog({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Document Decorations"
-    >
+    <FeatureDialog title="Document Decorations" onClose={onClose} busy={applying}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -205,21 +197,28 @@ export function DecorationsDialog({
         <div className="tab-buttons-bar">
           <button
             className={tab === "watermark" ? "active" : ""}
+            aria-pressed={tab === "watermark"}
             onClick={() => setTab("watermark")}
           >
             <Droplets size={15} /> Watermark
           </button>
           <button
             className={tab === "header-footer" ? "active" : ""}
+            aria-pressed={tab === "header-footer"}
             onClick={() => setTab("header-footer")}
           >
             <Heading size={15} /> Header & Footer
           </button>
-          <button className={tab === "bates" ? "active" : ""} onClick={() => setTab("bates")}>
+          <button
+            className={tab === "bates" ? "active" : ""}
+            aria-pressed={tab === "bates"}
+            onClick={() => setTab("bates")}
+          >
             <Hash size={15} /> Bates Numbers
           </button>
           <button
             className={tab === "background" ? "active" : ""}
+            aria-pressed={tab === "background"}
             onClick={() => setTab("background")}
           >
             <Layers size={15} /> Background
@@ -481,14 +480,21 @@ export function DecorationsDialog({
               </label>
             </div>
             {pageScope === "custom" && (
-              <input
-                type="text"
-                placeholder="e.g. 1-3, 5"
-                value={customRange}
-                onChange={(e) => setCustomRange(e.target.value)}
-                className="text-input"
-                style={{ marginTop: "8px" }}
-              />
+              <>
+                <input
+                  type="text"
+                  placeholder="e.g. 1-3, 5"
+                  value={customRange}
+                  onChange={(e) => setCustomRange(e.target.value)}
+                  className="text-input"
+                  style={{ marginTop: "8px" }}
+                />
+                {pageRangeError && (
+                  <p className="field-error" role="alert">
+                    {pageRangeError}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -510,11 +516,15 @@ export function DecorationsDialog({
               Cancel
             </button>
             <button onClick={handleApply} disabled={applying} className="button-primary">
-              {applying ? "Applying..." : "Apply to All Pages"}
+              {applying
+                ? "Applying..."
+                : pageScope === "all"
+                  ? "Apply to All Pages"
+                  : `Apply to ${parsedPageRange?.length ?? 0} Pages`}
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

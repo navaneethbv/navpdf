@@ -15,7 +15,17 @@ import type { ViewerController } from "../viewer/controller";
 import { ocrGetEngineInfo, ocrRecognizePage } from "../../services/native";
 import { applyOcrSearchableLayer, detectExistingText } from "../../services/document-commands";
 import type { OcrEngineInfo, OcrPageResult } from "../../types/operations";
-import { parsePageRange } from "../pages/print-range";
+import { parsePageRange } from "../pages/page-range";
+import { FeatureDialog } from "../../components/FeatureDialog";
+
+function languageName(code: string): string {
+  try {
+    const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+    return displayNames.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
 
 export function OcrPanel({
   controller,
@@ -29,7 +39,7 @@ export function OcrPanel({
   const [engineError, setEngineError] = useState<string | null>(null);
   const [targetScope, setTargetScope] = useState<"current" | "all" | "range">("current");
   const [customRange, setCustomRange] = useState("");
-  const [selectedLang, setSelectedLang] = useState("en-US");
+  const [selectedLang, setSelectedLang] = useState(s.local.preferences.ocrLanguage);
   const [mode, setMode] = useState<"searchable" | "extract">("searchable");
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [hasExistingWarning, setHasExistingWarning] = useState(false);
@@ -47,15 +57,18 @@ export function OcrPanel({
     ocrGetEngineInfo()
       .then((info) => {
         setEngineInfo(info);
-        if (info.supportedLanguages.length > 0) {
-          setSelectedLang(info.supportedLanguages[0]);
-        }
+        const preferred = s.local.preferences.ocrLanguage;
+        setSelectedLang(
+          info.supportedLanguages.includes(preferred)
+            ? preferred
+            : (info.supportedLanguages[0] ?? preferred),
+        );
       })
       .catch((err: unknown) => setEngineError(err instanceof Error ? err.message : String(err)));
     return () => {
       cancelledRef.current = true;
     };
-  }, []);
+  }, [s.local.preferences.ocrLanguage]);
 
   const getTargetPages = (): number[] => {
     if (targetScope === "current") {
@@ -198,7 +211,7 @@ export function OcrPanel({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Scan & OCR">
+    <FeatureDialog title="Scan & OCR" onClose={onClose} busy={running}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -227,7 +240,8 @@ export function OcrPanel({
             >
               <ShieldCheck size={16} color="#16a34a" />
               <span>
-                <strong>{engineInfo.engineName}</strong> &bull; 100% Offline & Private
+                <strong>{engineInfo.engineName}</strong> &bull;{" "}
+                {engineInfo.isOffline ? "100% Offline" : "Local"} &amp; Private
               </span>
             </div>
           )}
@@ -294,6 +308,7 @@ export function OcrPanel({
             <div className="tab-buttons-bar">
               <button
                 className={targetScope === "current" ? "active" : ""}
+                aria-pressed={targetScope === "current"}
                 onClick={() => setTargetScope("current")}
                 disabled={running}
               >
@@ -301,6 +316,7 @@ export function OcrPanel({
               </button>
               <button
                 className={targetScope === "all" ? "active" : ""}
+                aria-pressed={targetScope === "all"}
                 onClick={() => setTargetScope("all")}
                 disabled={running}
               >
@@ -308,6 +324,7 @@ export function OcrPanel({
               </button>
               <button
                 className={targetScope === "range" ? "active" : ""}
+                aria-pressed={targetScope === "range"}
                 onClick={() => setTargetScope("range")}
                 disabled={running}
               >
@@ -335,7 +352,7 @@ export function OcrPanel({
             >
               {(engineInfo?.supportedLanguages || ["en-US"]).map((lang) => (
                 <option key={lang} value={lang}>
-                  {lang}
+                  {languageName(lang)}
                 </option>
               ))}
             </select>
@@ -346,6 +363,7 @@ export function OcrPanel({
             <div className="tab-buttons-bar">
               <button
                 className={mode === "searchable" ? "active" : ""}
+                aria-pressed={mode === "searchable"}
                 onClick={() => setMode("searchable")}
                 disabled={running}
               >
@@ -353,6 +371,7 @@ export function OcrPanel({
               </button>
               <button
                 className={mode === "extract" ? "active" : ""}
+                aria-pressed={mode === "extract"}
                 onClick={() => setMode("extract")}
                 disabled={running}
               >
@@ -465,6 +484,6 @@ export function OcrPanel({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

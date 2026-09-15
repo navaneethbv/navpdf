@@ -19,6 +19,12 @@ export function Dialog({
   useEffect(() => {
     ref.current?.showModal();
     const d = ref.current;
+    const focus = () => {
+      const target = d?.querySelector<HTMLElement>("[autofocus]");
+      target?.focus();
+    };
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
+    else queueMicrotask(focus);
     return () => d?.close();
   }, []);
   return (

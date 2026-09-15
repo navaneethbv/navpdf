@@ -174,6 +174,25 @@ describe("OfficeExport", () => {
     await vi.waitFor(() => expect(click).toHaveBeenCalled());
     click.mockRestore();
   });
+
+  it("exports only the selected Office page range", async () => {
+    seedDocument(3);
+    const controller = layoutPages([["first"], ["second"], ["third"]]);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<OfficeExport controller={controller as never} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByText("Custom range"));
+    fireEvent.change(screen.getByLabelText("Office export page range"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(screen.getByText("Export File"));
+
+    await vi.waitFor(() => expect(click).toHaveBeenCalled());
+    expect(controller.pdf.getPage).toHaveBeenCalledWith(2);
+    expect(controller.pdf.getPage).not.toHaveBeenCalledWith(1);
+    expect(controller.pdf.getPage).not.toHaveBeenCalledWith(3);
+    click.mockRestore();
+  });
 });
 
 describe("OcrPanel", () => {

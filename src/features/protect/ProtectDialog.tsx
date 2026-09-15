@@ -5,6 +5,7 @@ import type { ViewerController } from "../viewer/controller";
 import { discardRecovery, markDirty, native } from "../../services/native";
 import { ENGINE_UNAVAILABLE, saveProtectedCopy, unlockDocument } from "../../services/engine";
 import type { PermissionRequest } from "../../types/engine";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 const ALL_PERMISSIONS: PermissionRequest = {
   print: true,
@@ -205,7 +206,7 @@ export function ProtectDialog({
   );
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label={title}>
+    <FeatureDialog title={title} onClose={onClose} busy={working}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -340,6 +341,6 @@ export function ProtectDialog({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

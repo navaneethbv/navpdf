@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Download, FileText, Image as ImageIcon, X, Sliders } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { downloadBlob, safeFileName } from "../../utils/download";
-import { parsePageRange } from "../pages/print-range";
+import { parsePageRange } from "../pages/page-range";
+import { FeatureDialog } from "../../components/FeatureDialog";
+
+const MAX_EXPORT_PIXELS = 32 * 1024 * 1024;
 
 export function ExportDialog({
   controller,
@@ -20,6 +23,7 @@ export function ExportDialog({
   const [quality, setQuality] = useState(0.92);
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const cancelled = useRef(false);
 
   const totalPages = s.info?.pages || 1;
   const baseName = safeFileName((s.document?.name || "document").replace(/\.pdf$/i, ""));
@@ -36,6 +40,7 @@ export function ExportDialog({
 
   const handleExportText = async () => {
     if (!controller?.pdf) return;
+    cancelled.current = false;
     setExporting(true);
     setProgress(10);
     try {
@@ -46,6 +51,7 @@ export function ExportDialog({
 
       const textChunks: string[] = [];
       for (let i = 0; i < targetIndices.length; i++) {
+        if (cancelled.current) return;
         const pageNum = targetIndices[i] + 1;
         setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
         const page = await controller.pdf.getPage(pageNum);
@@ -77,6 +83,8 @@ export function ExportDialog({
         textChunks.push(`--- Page ${pageNum} ---\n\n${pageText}\n\n`);
       }
 
+      if (cancelled.current) return;
+
       const fullText = textChunks.join("\n");
       downloadBlob(new Blob([fullText], { type: "text/plain;charset=utf-8" }), `${baseName}.txt`);
       s.set({
@@ -95,6 +103,7 @@ export function ExportDialog({
 
   const handleExportImage = async () => {
     if (!controller?.pdf) return;
+    cancelled.current = false;
     setExporting(true);
     setProgress(10);
     try {
@@ -108,13 +117,14 @@ export function ExportDialog({
       const mime = format === "jpg" ? "image/jpeg" : "image/png";
 
       for (let i = 0; i < targetIndices.length; i++) {
+        if (cancelled.current) return;
         const pageNum = targetIndices[i] + 1;
         setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
         const page = await controller.pdf.getPage(pageNum);
         const viewport = page.getViewport({ scale });
 
-        // Memory boundary guard: prevent dimension overflow (> 8192px)
-        if (viewport.width > 8192 || viewport.height > 8192) {
+        const pixelArea = Math.ceil(viewport.width) * Math.ceil(viewport.height);
+        if (pixelArea > MAX_EXPORT_PIXELS || viewport.width > 8192 || viewport.height > 8192) {
           throw new Error(
             `Export resolution too high: page ${pageNum} would exceed maximum dimensions.`,
           );
@@ -124,31 +134,32 @@ export function ExportDialog({
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext("2d");
-        if (ctx) {
-          // Draw white background for JPEGs to prevent black transparency
-          if (format === "jpg") {
-            ctx.fillStyle = "#ffffff";
-            if (typeof ctx.fillRect === "function") {
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
+        if (!ctx) throw new Error("The page could not be rendered for export.");
+        // Draw white background for JPEGs to prevent black transparency
+        if (format === "jpg") {
+          ctx.fillStyle = "#ffffff";
+          if (typeof ctx.fillRect === "function") {
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
           }
-          // @ts-expect-error PDF.js render
-          await page.render({ canvasContext: ctx, viewport }).promise;
         }
+        // @ts-expect-error PDF.js render
+        await page.render({ canvasContext: ctx, viewport }).promise;
 
-        let dataUrl = "";
+        if (cancelled.current) return;
+
         try {
-          dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
-        } catch {
-          dataUrl = "";
+          const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
+          if (!dataUrl) throw new Error("The image could not be exported.");
+          const a = document.createElement("a");
+          a.href = dataUrl;
+          a.download = `${baseName}-page-${pageNum}.${format}`;
+          a.click();
+        } catch (error) {
+          if (error instanceof Error && error.message === "The image could not be exported.") {
+            throw error;
+          }
+          throw new Error("The image could not be exported.", { cause: error });
         }
-        if (!dataUrl) {
-          dataUrl = `data:${mime};base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
-        }
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `${baseName}-page-${pageNum}.${format}`;
-        a.click();
       }
 
       s.set({
@@ -162,8 +173,15 @@ export function ExportDialog({
     }
   };
 
+  const cancelExport = () => {
+    if (!exporting) return;
+    cancelled.current = true;
+    setExporting(false);
+    s.set({ status: "Export cancelled. No additional pages were downloaded." });
+  };
+
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Export Document">
+    <FeatureDialog title="Export Document" onClose={onClose} busy={exporting}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -181,6 +199,7 @@ export function ExportDialog({
             <div className="tab-buttons-bar">
               <button
                 className={format === "txt" ? "active" : ""}
+                aria-pressed={format === "txt"}
                 onClick={() => setFormat("txt")}
                 disabled={exporting}
               >
@@ -188,6 +207,7 @@ export function ExportDialog({
               </button>
               <button
                 className={format === "png" ? "active" : ""}
+                aria-pressed={format === "png"}
                 onClick={() => setFormat("png")}
                 disabled={exporting}
               >
@@ -195,6 +215,7 @@ export function ExportDialog({
               </button>
               <button
                 className={format === "jpg" ? "active" : ""}
+                aria-pressed={format === "jpg"}
                 onClick={() => setFormat("jpg")}
                 disabled={exporting}
               >
@@ -208,6 +229,7 @@ export function ExportDialog({
             <div className="tab-buttons-bar">
               <button
                 className={scope === "all" ? "active" : ""}
+                aria-pressed={scope === "all"}
                 onClick={() => setScope("all")}
                 disabled={exporting}
               >
@@ -215,6 +237,7 @@ export function ExportDialog({
               </button>
               <button
                 className={scope === "current" ? "active" : ""}
+                aria-pressed={scope === "current"}
                 onClick={() => setScope("current")}
                 disabled={exporting}
               >
@@ -222,6 +245,7 @@ export function ExportDialog({
               </button>
               <button
                 className={scope === "range" ? "active" : ""}
+                aria-pressed={scope === "range"}
                 onClick={() => setScope("range")}
                 disabled={exporting}
               >
@@ -329,6 +353,11 @@ export function ExportDialog({
           <button onClick={onClose} className="button-secondary" disabled={exporting}>
             Cancel
           </button>
+          {exporting && (
+            <button onClick={cancelExport} className="button-secondary">
+              Cancel export
+            </button>
+          )}
           <button
             onClick={format === "txt" ? handleExportText : handleExportImage}
             disabled={exporting}
@@ -338,6 +367,6 @@ export function ExportDialog({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

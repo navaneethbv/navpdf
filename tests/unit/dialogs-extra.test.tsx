@@ -277,6 +277,17 @@ describe("ContentEditor extras", () => {
 });
 
 describe("CreatePdfDialog extras", () => {
+  it("disables blank-document creation outside the supported page count", () => {
+    render(<CreatePdfDialog onLoad={vi.fn()} onClose={vi.fn()} />);
+    const pageCount = screen.getByDisplayValue("1");
+    const create = screen.getByRole("button", { name: "Create PDF" });
+
+    fireEvent.change(pageCount, { target: { value: "0" } });
+    expect(create.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(pageCount, { target: { value: "51" } });
+    expect(create.hasAttribute("disabled")).toBe(true);
+  });
+
   it("supports US Letter sizes and removes queued files", async () => {
     const onLoad = vi.fn();
     render(<CreatePdfDialog onLoad={onLoad} onClose={() => {}} />);

@@ -1,5 +1,44 @@
 # Verification ledger
 
+## September 14 current worktree checkpoint
+
+The current worktree is `fix/september-14-review-corrections` at source revision `bf187654ec26d1e0e164e954570f1b7b4937a53a` with additional uncommitted implementation and documentation changes.
+The source review and implementation plan are [REVIEW-2026-09-14.md](REVIEW-2026-09-14.md) and [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md).
+
+| Check | Current result |
+| --- | --- |
+| Frontend unit suite and coverage | 498 tests across 79 files passed; 83.42% statements, 75.03% branches, 81.24% functions and 86.26% lines. |
+| TypeScript | Passed after the current shell, dialog, OCR and fixture changes. |
+| ESLint | Passed after the current script and corpus changes. |
+| Rust tests | 78 passed; 1 constrained-volume disk-full test remains ignored. |
+| Rust Clippy | Passed with `--all-targets -- -D warnings`. |
+| Formatting and repository parity | Prettier, Rustfmt, `git diff --check` and `cmp AGENTS.md CLAUDE.md` passed. |
+| Acceptance tool discovery | All eight local tools were found by `npm run acceptance:check-tools`. |
+| Hosted CI | PR #4's current pushed head passed every listed check except Cargo Deny, which failed before analysis because the workflow used `./Cargo.toml` instead of `src-tauri/Cargo.toml`; the local workflow fix is unpushed. |
+| Native UI and package | The app bundle and DMG rebuilt successfully, and `hdiutil verify` passed; page rendering remains on a persistent spinner after metadata loads. |
+
+The rebuilt app bundle is `src-tauri/target/release/bundle/macos/NavPDF.app`.
+Its executable SHA-256 is `f653c59f63585b775dccf4318ec669ca8dc973a57b57d26184d859618c010e4b`.
+The DMG is `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+Its SHA-256 is `19a191ef48a94cc21a8e335426c862ca6f9c0034fe7f6eeeb43c12f6ff8bb695`.
+`hdiutil verify` reports a valid checksum with CRC32 `$8D90D7F1`.
+
+Task 3.8 now includes duplicate-open protection, stable event subscriptions, guarded preference parsing, password-dialog focus and a root Save a copy recovery boundary.
+Task 4.2 now uses an explicit `requireFixture` helper for integration and PDF transport fixture consumers.
+Task 4.3 now drives the OCR acceptance script from `ocr-evaluation-corpus.json`, computes WER and CER, validates OCR bounding boxes and writes `output/ocr-review/corpus-report.json`.
+Task 4.4 now exposes acceptance commands, checks independent tool availability and adds a macOS workflow that runs the Phase 7, Phase 8, Phase 10, license and OCR acceptance scripts.
+
+Task 5.1 now provides Document Properties editing through `src/features/document/PropertiesDialog.tsx` and `src/services/pdf/metadata.ts`.
+The saved output contains synchronized Info and XMP metadata, covered by `tests/unit/pdf-metadata.test.ts` and `tests/unit/properties-dialog.test.tsx`.
+
+The OCR corpus script and macOS workflow still require execution on macOS with the native OCR example and independent tools available.
+Coverage artifact assertions and randomized suite runs remain open.
+Native packaged UI acceptance, Preview and Acrobat reopen checks, and hosted rerun remain open.
+
+The current acceptance results are 55 of 55 Phase 7 checks, 11 of 12 Phase 8 checks, and 55 of 55 Phase 10 checks.
+The Phase 8 exception is Quick Look output in the noninteractive environment.
+The OCR script reports zero of six samples because Apple Vision returned no recognized text for the generated images.
+
 ## September 14 implementation plan, Tranches 0 to 2
 
 This entry records local evidence for Tranches 0 to 2 of [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md) on `fix/september-14-review-corrections`, based on `4f667c1`.

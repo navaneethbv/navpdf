@@ -9,6 +9,8 @@ import {
   type LinkAnnotationOptions,
 } from "../../services/document-commands";
 import { fromTopLeftVisual } from "../../services/pdf/page-box";
+import { PageNumberInput } from "../../components/PageNumberInput";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function LinkDialog({
   controller,
@@ -77,12 +79,7 @@ export function LinkDialog({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add Link Annotation"
-    >
+    <FeatureDialog title="Add Link Annotation" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -95,11 +92,16 @@ export function LinkDialog({
         </div>
 
         <div className="tab-buttons-bar">
-          <button className={linkType === "url" ? "active" : ""} onClick={() => setLinkType("url")}>
+          <button
+            className={linkType === "url" ? "active" : ""}
+            aria-pressed={linkType === "url"}
+            onClick={() => setLinkType("url")}
+          >
             <ExternalLink size={15} /> External URL
           </button>
           <button
             className={linkType === "page" ? "active" : ""}
+            aria-pressed={linkType === "page"}
             onClick={() => setLinkType("page")}
           >
             <Bookmark size={15} /> Page Jump
@@ -109,12 +111,10 @@ export function LinkDialog({
         <div className="modal-body">
           <div className="setting-group">
             <label className="setting-title">Placement Page</label>
-            <input
-              type="number"
-              min={1}
-              max={s.info?.pages || 1}
+            <PageNumberInput
               value={placementPage}
-              onChange={(e) => setPlacementPage(Number(e.target.value))}
+              max={s.info?.pages || 1}
+              onChange={setPlacementPage}
               className="text-input"
             />
           </div>
@@ -153,12 +153,10 @@ export function LinkDialog({
           ) : (
             <div className="setting-group">
               <label className="setting-title">Jump to Page Number</label>
-              <input
-                type="number"
-                min={1}
-                max={s.info?.pages || 1}
+              <PageNumberInput
                 value={targetPage}
-                onChange={(e) => setTargetPage(Number(e.target.value))}
+                max={s.info?.pages || 1}
+                onChange={setTargetPage}
                 className="text-input"
               />
             </div>
@@ -222,6 +220,6 @@ export function LinkDialog({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

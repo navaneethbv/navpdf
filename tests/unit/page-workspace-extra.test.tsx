@@ -5,6 +5,7 @@ import { PDFDocument } from "pdf-lib";
 import { PageWorkspace } from "../../src/features/pages/PageWorkspace";
 import { createBlankDocument } from "../../src/services/document-commands";
 import { useWorkspace } from "../../src/stores/workspace";
+import { PageNumberInput } from "../../src/components/PageNumberInput";
 
 const TINY_PNG = new Uint8Array(
   Buffer.from(
@@ -195,5 +196,69 @@ describe("PageWorkspace selection and moves", () => {
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalled();
     });
+  });
+
+  it("reports incomplete split ranges and guards a running split", async () => {
+    seedDocument();
+    const controller = await mockController();
+    const firstRender = render(
+      <PageWorkspace controller={controller as never} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByText("Split"));
+    fireEvent.change(screen.getByDisplayValue("1-2, 3-4"), {
+      target: { value: "3-" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Execute Split" }));
+    await vi.waitFor(() => {
+      expect(useWorkspace.getState().error).toBe("Incomplete range");
+    });
+    expect(controller.replaceWithBytes).not.toHaveBeenCalled();
+    firstRender.unmount();
+
+    let release: (value: Uint8Array) => void = () => {};
+    const pendingController = {
+      pdf: {
+        saveDocument: vi.fn(
+          () =>
+            new Promise<Uint8Array>((resolve) => {
+              release = resolve;
+            }),
+        ),
+        numPages: 4,
+      },
+      replaceWithBytes: vi.fn(),
+    };
+    useWorkspace.getState().reset();
+    seedDocument();
+    render(<PageWorkspace controller={pendingController as never} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Split"));
+    fireEvent.click(screen.getByRole("button", { name: "Execute Split" }));
+    expect(screen.getByRole("button", { name: "Splitting..." }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(useWorkspace.getState().busy).toBe(true);
+    release(await createBlankDocument(4));
+  });
+
+  it("falls back to the current page when a page input is cleared", () => {
+    const onChange = vi.fn();
+    render(<PageNumberInput value={4} max={10} onChange={onChange} aria-label="Page number" />);
+    fireEvent.change(screen.getByLabelText("Page number"), { target: { value: "" } });
+    expect(onChange).toHaveBeenCalledWith(4);
+    expect(
+      onChange.mock.calls.some(([value]) => typeof value === "number" && Number.isNaN(value)),
+    ).toBe(false);
+    fireEvent.change(screen.getByLabelText("Page number"), { target: { value: "not-a-number" } });
+    expect(onChange).toHaveBeenLastCalledWith(4);
+    render(
+      <PageNumberInput
+        value={Number.NaN}
+        min={Number.NaN}
+        max={Number.POSITIVE_INFINITY}
+        onChange={onChange}
+        aria-label="Fallback page"
+      />,
+    );
+    expect((screen.getByLabelText("Fallback page") as HTMLInputElement).value).toBe("1");
   });
 });

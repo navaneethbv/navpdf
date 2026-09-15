@@ -126,6 +126,15 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       disabled: !hasDoc,
     },
     {
+      id: "document-properties",
+      label: "Document Properties",
+      description: "Edit title, author, subject, keywords, and PDF metadata",
+      category: "edit",
+      icon: FileText,
+      action: () => s.set({ activeModal: "properties" }),
+      disabled: !hasDoc,
+    },
+    {
       id: "add-image",
       label: "Add Image",
       description: "Insert PNG or JPEG images with resize and position controls",
@@ -278,7 +287,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       description: "Place signature, initials, text, checkmarks, and dots",
       category: "forms",
       icon: PenLine,
-      action: () => s.set({ activeModal: "fill-sign" }),
+      action: () => s.set({ activeModal: "fill-sign", tool: "signature" }),
       disabled: !hasDoc,
     },
     {
@@ -296,7 +305,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       description: "Manage drawn, typed, or uploaded signatures locally",
       category: "forms",
       icon: Stamp,
-      action: () => s.set({ activeModal: "fill-sign" }),
+      action: () => s.set({ activeModal: "fill-sign", tool: "signature" }),
     },
     // Protect & Redact
     {
@@ -336,7 +345,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       action: () => s.set({ activeModal: "create-pdf" }),
     },
     {
-      id: "ai-summary",
+      id: "find-passages",
       label: "Find and Cite Passages",
       description: "Find passages containing your words and jump to cited pages",
       category: "ai",

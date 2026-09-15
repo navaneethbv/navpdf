@@ -22,6 +22,17 @@ export async function openDocument(file?: File): Promise<DocumentDescriptor | nu
   files.set(id, file);
   return { id, name: file.name, size: file.size };
 }
+export async function openDocumentFromToken(token: string): Promise<DocumentDescriptor> {
+  if (!native) throw new Error("Operating-system open events require the native application.");
+  return invoke<DocumentDescriptor>("open_document_from_token", { token });
+}
+export async function openExternalUrl(url: string): Promise<void> {
+  if (native) {
+    await invoke("open_external_url", { url });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 export async function openRecent(id: string) {
   return invoke<DocumentDescriptor>("open_recent", { id });
 }
@@ -66,9 +77,19 @@ export async function saveDocument(
 export async function localState(): Promise<LocalState> {
   if (native) return invoke("local_state");
   const raw = localStorage.getItem("navpdf-preferences");
+  let stored: unknown;
+  if (raw) {
+    try {
+      stored = JSON.parse(raw);
+    } catch {
+      stored = undefined;
+    }
+  }
   return {
     preferences: raw
-      ? { ...defaultPreferences, ...JSON.parse(raw), networkAccess: false }
+      ? stored && typeof stored === "object"
+        ? { ...defaultPreferences, ...(stored as Partial<Preferences>), networkAccess: false }
+        : defaultPreferences
       : defaultPreferences,
     recents: [],
     recoveries: [],
@@ -270,9 +291,8 @@ export async function ocrRecognizePage(
   options: OcrOptions,
 ): Promise<OcrPageResult> {
   if (native) {
-    return invoke<OcrPageResult>("ocr_recognize_page", {
-      imageBytes: Array.from(imageBytes),
-      options,
+    return invoke<OcrPageResult>("ocr_recognize_page", imageBytes, {
+      headers: { "x-ocr-options": JSON.stringify(options) },
     });
   }
   throw new Error("OCR requires the native macOS application.");

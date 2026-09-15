@@ -4,6 +4,7 @@ use lopdf::encryption::crypt_filters::{Aes256CryptFilter, CryptFilter};
 use lopdf::{Document, EncryptionState, EncryptionVersion, Object, Permissions, StringFormat};
 use serde::Deserialize;
 use std::{collections::BTreeMap, sync::Arc};
+use zeroize::Zeroizing;
 
 const MAX_PASSWORD_BYTES: usize = 127;
 const VALIDATION_FAILED: &str = "The protected copy failed validation and was not saved.";
@@ -77,16 +78,16 @@ impl PermissionRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProtectionRequest {
-    pub user_password: String,
-    pub owner_password: String,
+    pub user_password: Zeroizing<String>,
+    pub owner_password: Zeroizing<String>,
     pub permissions: PermissionRequest,
 }
 
 impl ProtectionRequest {
     pub fn user_only(password: impl Into<String>) -> Self {
         Self {
-            user_password: password.into(),
-            owner_password: String::new(),
+            user_password: password.into().into(),
+            owner_password: String::new().into(),
             permissions: PermissionRequest::all(),
         }
     }
@@ -162,8 +163,8 @@ mod key_length_tests {
             page_document("BT /F1 12 Tf 72 700 Td (Key length) Tj ET", dictionary! {});
         let source = crate::engine::save(&mut doc).unwrap();
         let request = ProtectionRequest {
-            user_password: "synthetic-open".into(),
-            owner_password: String::new(),
+            user_password: "synthetic-open".to_string().into(),
+            owner_password: String::new().into(),
             permissions: PermissionRequest::all(),
         };
         let output = protect(&source, &request, 1).unwrap();
@@ -189,13 +190,13 @@ mod key_length_tests {
 }
 
 /// The permissions password that protection will use, after validating the request.
-pub fn owner_password(request: &ProtectionRequest) -> Result<String, String> {
+pub fn owner_password(request: &ProtectionRequest) -> Result<Zeroizing<String>, String> {
     let (user, owner) = (&request.user_password, &request.owner_password);
-    if user.is_empty() {
-        return Err("Enter the password that will be required to open the copy.".into());
-    }
     if user.len() > MAX_PASSWORD_BYTES || owner.len() > MAX_PASSWORD_BYTES {
         return Err("Passwords can be at most 127 bytes long.".into());
+    }
+    if user.is_empty() {
+        return Err("Enter the password that will be required to open the copy.".into());
     }
     if request.permissions.all_granted() {
         return Ok(if owner.is_empty() {
@@ -311,8 +312,8 @@ mod tests {
 
     fn request(user: &str, owner: &str, permissions: PermissionRequest) -> ProtectionRequest {
         ProtectionRequest {
-            user_password: user.into(),
-            owner_password: owner.into(),
+            user_password: user.to_string().into(),
+            owner_password: owner.to_string().into(),
             permissions,
         }
     }

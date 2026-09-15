@@ -19,6 +19,11 @@ interface Workspace {
   page: number;
   zoom: number;
   layout: Layout;
+  viewRotation: 0 | 90 | 180 | 270;
+  spread: "none" | "odd" | "even";
+  readMode: boolean;
+  nightMode: boolean;
+  pageLabels: string[] | null;
   tool: Tool;
   sidebar: SidebarTab;
   dirty: boolean;
@@ -38,6 +43,7 @@ interface Workspace {
   results: SearchResult[];
   bookmarks: Bookmark[];
   comments: Comment[];
+  redactionSelection: import("../types/document").SelectedTextGeometry[];
   selectedAnnotationId: string | null;
   renderedPages: number;
   firstRenderMs: number | null;
@@ -65,6 +71,11 @@ const cleanDocument = {
   hasDigitalSignature: false,
   formNotice: null,
   revision: 0,
+  viewRotation: 0,
+  spread: "none",
+  readMode: false,
+  nightMode: false,
+  pageLabels: null,
   editingAllowed: true,
   dirty: false,
   canUndo: false,
@@ -72,6 +83,7 @@ const cleanDocument = {
   hasSelection: false,
   bookmarks: [],
   comments: [],
+  redactionSelection: [],
   selectedAnnotationId: null,
   results: [],
   searchCount: 0,

@@ -26,6 +26,7 @@ import {
   applyOcrSearchableLayer,
 } from "../../src/services/document-commands";
 import type { OcrPageResult } from "../../src/types/operations";
+import { requireFixture } from "../helpers/fixtures";
 GlobalWorkerOptions.workerSrc = resolve("node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
 const options = {
   standardFontDataUrl: resolve("node_modules/pdfjs-dist/standard_fonts") + "/",
@@ -34,7 +35,7 @@ const options = {
 async function open(name: string) {
   return getDocument({
     ...options,
-    data: new Uint8Array(await readFile(resolve("tests/pdf-fixtures", name))),
+    data: new Uint8Array(await readFile(requireFixture(name))),
   }).promise;
 }
 beforeAll(async () => {
@@ -226,7 +227,7 @@ describe("real PDF parsing and saving", () => {
     }
   });
   it("authors text, checkbox, radio group, dropdown, and button widgets and roundtrips their values", async () => {
-    let bytes = new Uint8Array(await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")));
+    let bytes = new Uint8Array(await readFile(requireFixture("reader-5.pdf")));
     bytes = await addFormField(bytes, {
       type: "text",
       name: "AuthorText",
@@ -370,7 +371,7 @@ describe("special document corpus", () => {
     }
   });
   it("preserves declared structures and annotations through combined form fill, sticky note, reorder, rotate roundtrip", async () => {
-    const rawBytes = new Uint8Array(await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")));
+    const rawBytes = new Uint8Array(await readFile(requireFixture("reader-5.pdf")));
     const noted = await addStickyNote(rawBytes, {
       page: 1,
       x: 100,
@@ -407,7 +408,7 @@ describe("special document corpus", () => {
     }
   });
   it("preserves inserted text, headers, bates numbering, links, and attachments across roundtrip", async () => {
-    const rawBytes = new Uint8Array(await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")));
+    const rawBytes = new Uint8Array(await readFile(requireFixture("reader-5.pdf")));
 
     // 1. Insert multiline text
     const withText = await insertTextContent(rawBytes, {
@@ -496,7 +497,7 @@ describe("special document corpus", () => {
   });
 
   it("Phase 6 OCR searchable layer roundtrip on scanned fixture", async () => {
-    const fixturePath = resolve("tests/pdf-fixtures/ocr-scans.pdf");
+    const fixturePath = requireFixture("ocr-scans.pdf");
     const scanBytes = new Uint8Array(await readFile(fixturePath));
 
     // Initially, page 1 is an image-only scan with no digital text

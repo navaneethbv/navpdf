@@ -21,6 +21,9 @@ import {
   extractPages,
   insertBlankPage,
   insertImagePage,
+  duplicatePages,
+  insertDocumentPages,
+  replacePage,
   cropPages,
   splitDocument,
   describeStructureLoss,
@@ -32,6 +35,7 @@ import { downloadBytes } from "../../utils/download";
 import { native } from "../../services/native";
 import { pruneDocument } from "../../services/engine";
 import type { ViewerController } from "../viewer/controller";
+import { parsePageRange } from "./page-range";
 
 export function PageWorkspace({
   controller,
@@ -54,6 +58,8 @@ export function PageWorkspace({
   const [showSplit, setShowSplit] = useState(false);
   const [splitRange, setSplitRange] = useState("1-2, 3-4");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const replacePdfInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [structureLoss, setStructureLoss] = useState("");
 
@@ -216,6 +222,52 @@ export function PageWorkspace({
     s.set({ page: at + 1 });
   };
 
+  const handleDuplicate = async () => {
+    if (selected.length === 0) return;
+    await mutate(
+      (bytes) => duplicatePages(bytes, selected),
+      `Duplicated ${selected.length} page(s)`,
+      {
+        pageMapping: computeInsertMapping(
+          totalPages,
+          selected[selected.length - 1] + 1,
+          selected.length,
+        ),
+      },
+    );
+  };
+
+  const handleImportPdf = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    action: "insert" | "replace",
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !controller?.pdf) return;
+    try {
+      const other = new Uint8Array(await file.arrayBuffer());
+      const current = await controller.pdf.saveDocument();
+      const output =
+        action === "insert"
+          ? await insertDocumentPages(
+              current,
+              other,
+              selected.length ? selected[0] + 1 : totalPages,
+            )
+          : await replacePage(current, selected[0] ?? 0, other);
+      await controller.replaceWithBytes(
+        output,
+        action === "insert" ? "PDF pages inserted" : "Page replaced",
+        {
+          preMutationBytes: current,
+        },
+      );
+      s.set({ status: action === "insert" ? "PDF pages inserted" : "Page replaced" });
+    } catch (error) {
+      s.set({ error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
   const handleInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -247,18 +299,11 @@ export function PageWorkspace({
   };
 
   const handleSplit = async () => {
-    if (!controller?.pdf) return;
+    if (!controller?.pdf || busy) return;
+    setBusy(true);
+    s.set({ busy: true, status: "Splitting document..." });
     try {
-      const ranges = splitRange.split(",").map((r) => {
-        const parts = r
-          .trim()
-          .split("-")
-          .map((n) => parseInt(n, 10) - 1);
-        if (parts.length === 1) return [parts[0]];
-        const start = Math.max(0, parts[0]);
-        const end = Math.min(totalPages - 1, parts[1]);
-        return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      });
+      const ranges = splitRange.split(",").map((range) => parsePageRange(range, totalPages));
       const currentBytes = await controller.pdf.saveDocument();
       const files = await splitDocument(currentBytes, ranges);
       files.forEach((fileBytes, i) => downloadBytes(fileBytes, `split-part-${i + 1}.pdf`));
@@ -266,6 +311,9 @@ export function PageWorkspace({
       s.set({ status: `Document split into ${files.length} parts` });
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+      s.set({ busy: false });
     }
   };
 
@@ -418,6 +466,30 @@ export function PageWorkspace({
             <span>Blank</span>
           </button>
           <button
+            title="Duplicate selected pages"
+            onClick={() => void handleDuplicate()}
+            disabled={selected.length === 0 || busy}
+          >
+            <Plus size={17} />
+            <span>Duplicate</span>
+          </button>
+          <button
+            title="Insert pages from a PDF"
+            onClick={() => pdfInputRef.current?.click()}
+            disabled={busy}
+          >
+            <Plus size={17} />
+            <span>Insert PDF</span>
+          </button>
+          <button
+            title="Replace the selected page"
+            onClick={() => replacePdfInputRef.current?.click()}
+            disabled={selected.length !== 1 || busy}
+          >
+            <ImageIcon size={17} />
+            <span>Replace</span>
+          </button>
+          <button
             title="Insert Image as Page"
             onClick={() => fileInputRef.current?.click()}
             disabled={busy}
@@ -431,6 +503,20 @@ export function PageWorkspace({
             accept="image/png, image/jpeg"
             style={{ display: "none" }}
             onChange={handleInsertImage}
+          />
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(event) => void handleImportPdf(event, "insert")}
+          />
+          <input
+            ref={replacePdfInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(event) => void handleImportPdf(event, "replace")}
           />
           <button
             title="Crop Page"
@@ -490,7 +576,9 @@ export function PageWorkspace({
             Page ranges (e.g. 1-2, 3-5):
             <input type="text" value={splitRange} onChange={(e) => setSplitRange(e.target.value)} />
           </label>
-          <button onClick={handleSplit}>Execute Split</button>
+          <button onClick={handleSplit} disabled={busy}>
+            {busy ? "Splitting..." : "Execute Split"}
+          </button>
           <button onClick={() => setShowSplit(false)}>Cancel</button>
         </div>
       )}
