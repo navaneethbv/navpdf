@@ -119,6 +119,16 @@ export function ViewerHost({
       controller.destroy();
     };
   }, [onReady]);
+  useEffect(() => {
+    if (!hasDocument || !controller) return;
+    // The native WebKit view becomes measurable one frame after the session
+    // publishes its document. PDF.js can otherwise leave the first page in
+    // its loading state after it was attached while the frame was hidden.
+    const frame = requestAnimationFrame(() => {
+      if (typeof controller.viewer.update === "function") controller.viewer.update();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [controller, hasDocument]);
   return (
     <div className={`viewer-frame ${hasDocument ? "" : "hidden"}`}>
       <div

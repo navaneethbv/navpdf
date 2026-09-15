@@ -14,7 +14,7 @@ import {
   Lock,
   Clock,
 } from "lucide-react";
-import { PDFDocument, rgb } from "pdf-lib";
+import { degrees, PDFDocument, rgb } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import { FeatureDialog } from "../../components/FeatureDialog";
 import type { ViewerController } from "../viewer/controller";
@@ -57,6 +57,7 @@ export function FillAndSign({
   const [posX, setPosX] = useState(60);
   const [posY, setPosY] = useState(150);
   const [sigWidth, setSigWidth] = useState(160);
+  const [sigRotation, setSigRotation] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -237,6 +238,7 @@ export function FillAndSign({
         y: rect.y,
         width: rect.width,
         height: rect.height,
+        rotate: degrees(sigRotation),
       });
 
       const newBytes = await doc.save();
@@ -751,6 +753,23 @@ export function FillAndSign({
                     max={400}
                     value={sigWidth}
                     onChange={(e) => setSigWidth(Number(e.target.value))}
+                    className="text-input"
+                  />
+                </div>
+              )}
+              {tab === "library" && (
+                <div>
+                  <label className="setting-title" htmlFor="signature-rotation">
+                    Rotation (degrees)
+                  </label>
+                  <input
+                    id="signature-rotation"
+                    type="number"
+                    min={-180}
+                    max={180}
+                    step={1}
+                    value={sigRotation}
+                    onChange={(e) => setSigRotation(Number(e.target.value))}
                     className="text-input"
                   />
                 </div>

@@ -18,6 +18,16 @@ export interface RevisionHistoryOptions {
   maxBytes?: number;
 }
 
+const defaultRevisionBudget = () => {
+  const deviceMemory =
+    typeof navigator !== "undefined" &&
+    typeof (navigator as Navigator & { deviceMemory?: number }).deviceMemory === "number" &&
+    Number.isFinite((navigator as Navigator & { deviceMemory?: number }).deviceMemory)
+      ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory!
+      : 4;
+  return Math.min(512 * 1024 * 1024, Math.max(64 * 1024 * 1024, deviceMemory * 64 * 1024 * 1024));
+};
+
 /**
  * Bounded, byte-backed history for mutations that replace the PDF.js proxy.
  * PDF.js keeps its own editor history for a live editor. This class covers
@@ -33,13 +43,13 @@ export class RevisionHistory {
   private savedRevisionId: string | null = null;
   private sequence = 0;
 
-  constructor(options: number | RevisionHistoryOptions = 20) {
+  constructor(options: number | RevisionHistoryOptions = {}) {
     const maxEntries = typeof options === "number" ? options : (options.maxEntries ?? 20);
     this.limit = Math.max(1, maxEntries);
     this.maxBytes =
       typeof options === "number"
         ? Number.POSITIVE_INFINITY
-        : Math.max(1, options.maxBytes ?? Number.POSITIVE_INFINITY);
+        : Math.max(1, options.maxBytes ?? defaultRevisionBudget());
   }
 
   clear() {

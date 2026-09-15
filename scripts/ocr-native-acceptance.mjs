@@ -128,7 +128,12 @@ for (const sample of corpus.samples) {
       await applyOcrSearchableLayer(source, [{ ...result, pageIndex: 0 }]),
     );
     const extracted = execFileSync("pdftotext", [savedPath, "-"], { encoding: "utf8" });
-    const extractedWer = errorRate(sample.referenceText, extracted, words);
+    // Existing digital text remains part of the saved document and is expected
+    // in an independent text extraction of the searchable output.
+    const expectedExtractedText = sample.hasExistingText
+      ? `${sample.digitalText} ${sample.referenceText}`
+      : sample.referenceText;
+    const extractedWer = errorRate(expectedExtractedText, extracted, words);
     const beforePng = `${directory}/${sample.id}-before`;
     const afterPng = `${directory}/${sample.id}-after`;
     for (const [file, output] of [

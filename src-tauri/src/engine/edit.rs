@@ -61,6 +61,10 @@ pub enum EditRequest {
         width: usize,
         height: usize,
     },
+    TransformImage {
+        object_id: String,
+        cm: [f64; 6],
+    },
 }
 
 impl EditRequest {
@@ -68,7 +72,8 @@ impl EditRequest {
         match self {
             Self::ReplaceText { object_id, .. }
             | Self::DeleteObject { object_id }
-            | Self::ReplaceImage { object_id, .. } => object_id,
+            | Self::ReplaceImage { object_id, .. }
+            | Self::TransformImage { object_id, .. } => object_id,
         }
     }
 }
@@ -306,6 +311,27 @@ pub fn apply(
     .ok_or(STALE)?;
     let mut report = EditReport::default();
     match (request, &item.kind) {
+        (EditRequest::TransformImage { cm, .. }, ItemKind::Image { .. }) => {
+            if !cm.iter().all(|value| value.is_finite())
+                || cm[0].hypot(cm[1]) > 10_000.0
+                || cm[2].hypot(cm[3]) > 10_000.0
+                || (cm[0] * cm[3] - cm[1] * cm[2]).abs() < 1e-8
+            {
+                return Err("The image transform is invalid or collapses the image.".into());
+            }
+            let matrix = cm.iter().map(|value| Object::Real(*value as f32)).collect();
+            let original = ops[index].clone();
+            ops.splice(
+                index..=index,
+                [
+                    Operation::new("q", vec![]),
+                    Operation::new("cm", matrix),
+                    original,
+                    Operation::new("Q", vec![]),
+                ],
+            );
+            report.message = "Image transform applied on this page only.".into();
+        }
         (
             EditRequest::ReplaceText { text, preview, .. },
             ItemKind::Text {
@@ -648,6 +674,24 @@ mod tests {
                 .bbox[0]
         };
         assert!((keep_x(&deleted) - keep_x(&source)).abs() < 1e-3);
+
+        let transform = EditRequest::TransformImage {
+            object_id: image_object.id.clone(),
+            cm: [0.0, 1.0, -1.0, 0.0, 220.0, 40.0],
+        };
+        let (transformed, report) = apply(&source, 1, &transform, None).unwrap();
+        assert!(report.applied && report.message.contains("transform"));
+        let transformed = transformed.unwrap();
+        let transformed_doc = crate::engine::load(&transformed).unwrap();
+        let transformed_ops =
+            crate::engine::page_operations(&transformed_doc, transformed_doc.get_pages()[&1])
+                .unwrap();
+        assert!(transformed_ops.iter().any(|op| op.operator == "q"));
+        assert!(transformed_ops.iter().any(|op| {
+            op.operator == "cm"
+                && op.operands.first().and_then(number) == Some(0.0)
+                && op.operands.get(1).and_then(number) == Some(1.0)
+        }));
 
         let replace = EditRequest::ReplaceImage {
             object_id: image_object.id.clone(),

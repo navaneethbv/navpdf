@@ -40,15 +40,18 @@ export function validateProtection(
   confirmPermissions: string,
   permissions: PermissionRequest,
 ): string | null {
-  if (!openPassword) return "Enter a password that will be required to open the copy.";
-  if (openPassword !== confirmOpen) return "The open passwords do not match.";
   if (
     byteLength(openPassword) > MAX_PASSWORD_BYTES ||
     byteLength(permissionsPassword) > MAX_PASSWORD_BYTES
   )
     return "Passwords can be at most 127 bytes long.";
   const restricted = Object.values(permissions).some((allowed) => !allowed);
-  if (restricted || permissionsPassword) {
+  if (!openPassword && !permissionsPassword)
+    return "Enter a password, or use a separate permissions password for an open-without-password copy.";
+  if (!openPassword && !restricted)
+    return "An open-without-password copy must restrict at least one permission.";
+  if (openPassword && openPassword !== confirmOpen) return "The open passwords do not match.";
+  if (restricted || permissionsPassword || !openPassword) {
     if (!permissionsPassword)
       return "Set a permissions password so the restrictions can be enforced.";
     if (permissionsPassword === openPassword)
@@ -256,8 +259,9 @@ export function ProtectDialog({
                 </div>
               )}
               <p className="field-hint">
-                The copy is encrypted with AES-256 and checked by reopening it with each password
-                before it replaces anything. The open document stays unencrypted in NavPDF.
+                The copy is encrypted with AES-256 and checked before it replaces anything. Leave
+                the open password empty to create a copy that opens without a password while the
+                separate permissions password protects its restrictions.
               </p>
               {field("open", "Open password", openPassword, setOpenPassword)}
               {field("confirm-open", "Confirm open password", confirmOpen, setConfirmOpen)}

@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { PDFDocument } from "pdf-lib";
 import { FormManager } from "../../src/features/forms/FormManager";
+import { addFormField, createBlankDocument } from "../../src/services/document-commands";
 import { FillAndSign } from "../../src/features/signatures/FillAndSign";
 import { useWorkspace } from "../../src/stores/workspace";
 import * as docCommands from "../../src/services/document-commands";
@@ -89,6 +91,102 @@ describe("FormManager", () => {
     await waitFor(() => {
       expect(useWorkspace.getState().error).toBe("Duplicate field name");
     });
+  });
+
+  it("loads, updates, and deletes an existing text field", async () => {
+    let bytes = await addFormField(await createBlankDocument(1, 600, 800), {
+      type: "text",
+      name: "ExistingName",
+      page: 1,
+      x: 50,
+      y: 100,
+      width: 200,
+      height: 24,
+      defaultValue: "Before",
+    });
+    const view = {
+      pdf: { saveDocument: vi.fn(async () => bytes) },
+      replaceWithBytes: vi.fn(async (next: Uint8Array) => {
+        bytes = next;
+      }),
+    };
+    render(<FormManager controller={view as never} onClose={() => {}} />);
+
+    await waitFor(() => expect(screen.getByTestId("existing-form-fields")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Existing field value"), {
+      target: { value: "After" },
+    });
+    fireEvent.click(screen.getAllByText("Required")[0]);
+    fireEvent.click(screen.getByText("Save Field"));
+    await waitFor(() => expect(view.replaceWithBytes).toHaveBeenCalledTimes(1));
+
+    let doc = await PDFDocument.load(bytes);
+    expect(doc.getForm().getTextField("ExistingName").getText()).toBe("After");
+    expect(doc.getForm().getTextField("ExistingName").isRequired()).toBe(true);
+
+    fireEvent.click(screen.getByText("Delete Field"));
+    await waitFor(() => expect(view.replaceWithBytes).toHaveBeenCalledTimes(2));
+    doc = await PDFDocument.load(bytes);
+    expect(doc.getForm().getFields()).toHaveLength(0);
+  });
+
+  it("enumerates checkbox, choice, radio, and button fields", async () => {
+    let bytes = await createBlankDocument(1, 600, 800);
+    bytes = await addFormField(bytes, {
+      type: "checkbox",
+      name: "ExistingCheck",
+      page: 1,
+      x: 50,
+      y: 100,
+      width: 20,
+      height: 20,
+    });
+    bytes = await addFormField(bytes, {
+      type: "dropdown",
+      name: "ExistingChoice",
+      page: 1,
+      x: 50,
+      y: 140,
+      width: 200,
+      height: 24,
+      options: ["One", "Two"],
+    });
+    bytes = await addFormField(bytes, {
+      type: "radio",
+      name: "ExistingRadio",
+      page: 1,
+      x: 50,
+      y: 180,
+      width: 20,
+      height: 20,
+      defaultValue: "Yes",
+    });
+    bytes = await addFormField(bytes, {
+      type: "button",
+      name: "ExistingButton",
+      page: 1,
+      x: 50,
+      y: 220,
+      width: 90,
+      height: 28,
+      label: "Submit",
+    });
+    const view = { pdf: { saveDocument: vi.fn(async () => bytes) }, replaceWithBytes: vi.fn() };
+    render(<FormManager controller={view as never} onClose={() => {}} />);
+
+    const select = await screen.findByLabelText("Existing Fields");
+    expect(select.textContent).toContain("ExistingCheck (checkbox)");
+    expect(select.textContent).toContain("ExistingChoice (choice)");
+    expect(select.textContent).toContain("ExistingRadio (choice)");
+    expect(select.textContent).toContain("ExistingButton (button)");
+    fireEvent.change(select, { target: { value: "ExistingCheck" } });
+    expect(screen.getByText("Checked")).toBeTruthy();
+    fireEvent.change(select, { target: { value: "ExistingChoice" } });
+    expect(screen.getByLabelText("Existing field value")).toBeTruthy();
+    fireEvent.change(select, { target: { value: "ExistingRadio" } });
+    expect(screen.getByLabelText("Existing field value")).toBeTruthy();
+    fireEvent.change(select, { target: { value: "ExistingButton" } });
+    expect(screen.queryByText("Save Field")).toBeNull();
   });
 });
 

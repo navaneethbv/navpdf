@@ -50,7 +50,7 @@ export function Thumbnails({ controller }: { controller: ViewerController }) {
     </div>
   );
 }
-function ThumbCanvas({
+export function ThumbCanvas({
   pdf,
   page,
   revision,
@@ -62,7 +62,10 @@ function ThumbCanvas({
   const ref = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (!pdf) return;
+    if (!pdf || typeof pdf.getPage !== "function") {
+      setFailed(true);
+      return;
+    }
     setFailed(false);
     let cancelled = false,
       render: RenderTask | undefined;

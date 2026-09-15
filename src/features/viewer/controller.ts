@@ -121,7 +121,10 @@ export class ViewerController {
       maxCanvasPixels: 8_000_000,
       maxCanvasDim: 8192,
       capCanvasAreaFactor: 150,
-      enableDetailCanvas: true,
+      // WKWebView does not reliably complete PDF.js detail-canvas rendering.
+      // The regular page canvas is sufficient at the bounded zoom levels used
+      // by NavPDF and avoids leaving the loading icon over a finished page.
+      enableDetailCanvas: false,
       enablePermissions: true,
       enableAutoLinking: false,
       imagesRightClickMinSize: -1,
@@ -136,6 +139,13 @@ export class ViewerController {
       if (this.container.clientWidth > 0 && this.container.clientHeight > 0) {
         this.viewer.currentScaleValue = useWorkspace.getState().local.preferences.defaultZoom;
       }
+      // PDF.js can receive pagesinit while the native WebKit view is still
+      // completing its first layout pass. Re-run visibility and render
+      // prioritization after that pass so the initial page is not left with a
+      // loading icon indefinitely.
+      requestAnimationFrame(() => {
+        if (typeof this.viewer.update === "function") this.viewer.update();
+      });
     });
     on("pagechanging", ({ pageNumber }: { pageNumber: number }) => {
       useWorkspace.getState().set({ page: pageNumber });

@@ -1,9 +1,32 @@
+use std::ffi::{CStr, CString};
+
 use super::{OcrEngineInfo, OcrLine, OcrOptions, OcrPageResult, OcrWord};
-use objc2::{rc::autoreleasepool, AllocAnyThread};
-use objc2_foundation::{NSArray, NSData, NSDictionary, NSString};
-use objc2_vision::{
-    VNImageRequestHandler, VNRecognizeTextRequest, VNRequest, VNRequestTextRecognitionLevel,
-};
+use objc2::rc::autoreleasepool;
+use objc2_vision::VNRecognizeTextRequest;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct VisionResponse {
+    lines: Option<Vec<VisionLine>>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VisionLine {
+    text: String,
+    confidence: f32,
+    bbox: [f32; 4],
+}
+
+unsafe extern "C" {
+    fn navpdf_vision_recognize(
+        image: *const u8,
+        image_length: usize,
+        language: *const std::ffi::c_char,
+        fast_mode: i32,
+    ) -> *mut std::ffi::c_char;
+    fn navpdf_vision_free(result: *mut std::ffi::c_char);
+}
 
 pub fn info() -> Result<OcrEngineInfo, String> {
     autoreleasepool(|_| {
@@ -20,78 +43,73 @@ pub fn info() -> Result<OcrEngineInfo, String> {
 }
 
 pub fn recognize(image: &[u8], options: &OcrOptions) -> Result<OcrPageResult, String> {
-    autoreleasepool(|_| {
-        let request = VNRecognizeTextRequest::new();
-        request.setRecognitionLevel(if options.fast_mode.unwrap_or(false) {
-            VNRequestTextRecognitionLevel::Fast
-        } else {
-            VNRequestTextRecognitionLevel::Accurate
-        });
-        let language = options.language.as_deref().unwrap_or("en-US");
-        let supported = unsafe { request.supportedRecognitionLanguagesAndReturnError() }
+    let language = options.language.as_deref().unwrap_or("en-US");
+    let supported =
+        unsafe { VNRecognizeTextRequest::new().supportedRecognitionLanguagesAndReturnError() }
             .map_err(|_| "Unable to query installed OCR languages.")?;
-        if !supported.iter().any(|s| s.to_string() == language) {
-            return Err("The selected OCR language is unavailable on this Mac.".into());
-        }
-        request.setRecognitionLanguages(&NSArray::from_retained_slice(&[NSString::from_str(
-            language,
-        )]));
-        let handler = VNImageRequestHandler::initWithData_options(
-            VNImageRequestHandler::alloc(),
-            &NSData::with_bytes(image),
-            &NSDictionary::new(),
-        );
-        let requests = NSArray::<VNRequest>::from_slice(&[&request]);
-        handler
-            .performRequests_error(&requests)
-            .map_err(|_| "Apple Vision could not recognize this image.")?;
-        let observations = request
-            .results()
-            .ok_or("OCR returned no result collection.")?;
-        let mut lines = Vec::new();
-        for observation in observations.iter() {
-            let candidates = observation.topCandidates(1);
-            let Some(candidate) = candidates.firstObject() else {
-                continue;
-            };
-            let text = candidate.string().to_string();
-            let rect = unsafe { observation.boundingBox() };
-            let bbox = [
-                rect.origin.x as f32,
-                rect.origin.y as f32,
-                rect.size.width as f32,
-                rect.size.height as f32,
-            ];
-            let confidence = candidate.confidence();
-            // Preserve Vision's measured line rectangle instead of inventing word positions.
-            let words = vec![OcrWord {
-                text: text.clone(),
-                confidence,
-                bbox,
-            }];
-            lines.push(OcrLine {
-                text,
-                confidence,
-                bbox,
-                words,
-            });
-        }
-        let full_text = lines
-            .iter()
-            .map(|l| l.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        let mean_confidence = if lines.is_empty() {
-            0.0
-        } else {
-            lines.iter().map(|l| l.confidence).sum::<f32>() / lines.len() as f32
-        };
-        Ok(OcrPageResult {
-            page_index: options.page_index,
-            language: language.into(),
-            lines,
-            full_text,
-            mean_confidence,
+    if !supported.iter().any(|s| s.to_string() == language) {
+        return Err("The selected OCR language is unavailable on this Mac.".into());
+    }
+
+    let language_c = CString::new(language)
+        .map_err(|_| "The selected OCR language contains an invalid character.")?;
+    let result = unsafe {
+        navpdf_vision_recognize(
+            image.as_ptr(),
+            image.len(),
+            language_c.as_ptr(),
+            i32::from(options.fast_mode.unwrap_or(false)),
+        )
+    };
+    if result.is_null() {
+        return Err("Apple Vision did not return a result.".into());
+    }
+    let json = unsafe {
+        let bytes = CStr::from_ptr(result).to_bytes();
+        let json = std::str::from_utf8(bytes)
+            .map(str::to_owned)
+            .map_err(|_| "Apple Vision returned invalid result data.");
+        navpdf_vision_free(result);
+        json?
+    };
+    let response: VisionResponse =
+        serde_json::from_str(&json).map_err(|_| "Apple Vision returned malformed result data.")?;
+    if let Some(error) = response.error {
+        return Err(format!(
+            "Apple Vision could not recognize this image: {error}"
+        ));
+    }
+    let lines = response
+        .lines
+        .ok_or("Apple Vision returned no result collection.")?
+        .into_iter()
+        .map(|line| OcrLine {
+            text: line.text.clone(),
+            confidence: line.confidence,
+            bbox: line.bbox,
+            // Vision returns line-level observations, so keep word geometry conservative.
+            words: vec![OcrWord {
+                text: line.text,
+                confidence: line.confidence,
+                bbox: line.bbox,
+            }],
         })
+        .collect::<Vec<_>>();
+    let full_text = lines
+        .iter()
+        .map(|line| line.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mean_confidence = if lines.is_empty() {
+        0.0
+    } else {
+        lines.iter().map(|line| line.confidence).sum::<f32>() / lines.len() as f32
+    };
+    Ok(OcrPageResult {
+        page_index: options.page_index,
+        language: language.into(),
+        lines,
+        full_text,
+        mean_confidence,
     })
 }

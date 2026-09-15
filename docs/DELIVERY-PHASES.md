@@ -343,3 +343,47 @@ P10.6 specialist media (audio, video, 3D) and article threads are declined per A
 P10.7 external design tool integrations are declined per ADR 0010; standard exports retain accurate non-marketing labels.
 Adversarial acceptance `node scripts/phase10-acceptance.mjs` passed 55 of 55 checks.
 The suite verified RSA and ECDSA P-256 signatures, legacy 3DES PKCS #12 keystores, DocMDP certification, countersigning, byte-range tampering detection, and appended content invalidation against independent poppler `pdfsig` in an isolated NSS database, OpenSSL CMS byte-range verification, and NavPDF native verification.
+
+## September 15, 2026 correction checkpoint
+
+The September 14 review corrections now include the native hardening work in Tasks 2.7 and the approved editor parity subset.
+
+Native OCR acceptance passed all 6 corpus samples through the Swift Apple Vision bridge on macOS.
+
+The bridge avoids the Rust autorelease-pool failure observed in the original Vision path and keeps recognition local to the device.
+
+Native rendering was rechecked from a single fresh packaged NavPDF process with the 500-page text fixture.
+
+The page canvas and thumbnails rendered visibly without the persistent PDF.js loading spinner.
+
+PDF.js is configured for the WKWebView path with DOM canvases, disabled offscreen and image decoder paths, disabled WASM, hardware accelerated canvas rendering, disabled detail canvases, and an explicit post-layout viewer update.
+
+Forms editing now enumerates existing text, checkbox, choice, radio and button fields, updates values and flags, deletes fields, and creates signature widgets.
+
+Crop controls now accept position and size and clamp the result to the visible page box.
+
+Inserted images, existing image objects, and Fill & Sign appearances now expose rotation or transform controls with persisted PDF output.
+
+Protection now supports a distinct permissions password with a restricted open-without-password copy and validates encrypted output before replacing a destination.
+
+Native staging and revision history budgets now use machine-relative limits with hard caps.
+
+Local verification passed 504 frontend tests across 80 files with coverage at 83.39% statements, 75.01% branches, 81.18% functions, and 86.20% lines.
+
+Rust verification passed 80 tests with one constrained-volume test ignored and Clippy passed with warnings denied.
+
+Phase 7 acceptance passed 55 of 55 checks, Phase 8 acceptance passed 12 of 12 checks, Phase 10 acceptance passed 55 of 55 checks, and the OCR corpus passed 6 of 6 samples.
+
+The final local package contains src-tauri/target/release/bundle/macos/NavPDF.app and src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg.
+
+The executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
+
+The DMG SHA-256 is 9183379ea6631cde2ce5d9f19fe95f4071fe10037ab08f922975870032935e92.
+
+hdiutil verify reports a valid DMG with CRC32 $0797E84E.
+
+Preview and Acrobat reopen checks for this final source revision remain open.
+
+Full Tranche 6 domain refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
+
+The Cargo Deny workflow now points at src-tauri/Cargo.toml and will be rechecked by the hosted run after this push.

@@ -513,4 +513,34 @@ describe("existing content editor", () => {
       /PNG or JPEG/,
     );
   });
+
+  it("applies rotation, scale, and translation to an existing image", async () => {
+    seed();
+    const view = controller();
+    engine.inspectPage.mockResolvedValue(objects);
+    engine.editPage.mockResolvedValueOnce({
+      bytes: new Uint8Array([3]),
+      report: {
+        applied: true,
+        message: "Image transform applied.",
+        widthBefore: null,
+        widthAfter: null,
+        missingCharacters: [],
+      },
+    });
+    render(<ObjectEditor controller={view as never} onClose={() => {}} />);
+    fireEvent.click(await screen.findByText("Image 2×2 px (shared)"));
+    fireEvent.change(screen.getByLabelText("Rotation (degrees)"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("Scale"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("Move X (pt)"), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText("Move Y (pt)"), { target: { value: "18" } });
+    fireEvent.click(screen.getByText("Apply Image Transform"));
+    await vi.waitFor(() => expect(view.replaceWithBytes).toHaveBeenCalled());
+    expect(engine.editPage).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      1,
+      expect.objectContaining({ type: "transformImage", objectId: "abc:9" }),
+      undefined,
+    );
+  });
 });

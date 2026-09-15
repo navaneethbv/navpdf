@@ -138,4 +138,15 @@ describe("RevisionHistory", () => {
       }),
     ).toThrow(/Stale base revision/);
   });
+
+  it("uses a machine-relative default byte budget when available", () => {
+    Object.defineProperty(navigator, "deviceMemory", {
+      configurable: true,
+      value: 8,
+    });
+    const history = new RevisionHistory();
+    history.seed({ bytes: new Uint8Array([1]), numPages: 1, description: "Initial" });
+    expect(history.getCurrent()?.bytes).toEqual(new Uint8Array([1]));
+    delete (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  });
 });

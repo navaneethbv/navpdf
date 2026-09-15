@@ -101,6 +101,7 @@ describe("ContentEditor and content commands", () => {
         imageType: "png",
         preserveAspectRatio: true,
         opacity: 0.9,
+        rotationDegrees: 90,
       });
 
       expect(output.length).toBeGreaterThan(samplePdf.length);

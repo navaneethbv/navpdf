@@ -2712,11 +2712,13 @@ name = "navpdf"
 version = "0.2.0"
 dependencies = [
  "aes-gcm",
+ "cc",
  "cms",
  "const-oid 0.9.6",
  "der",
  "getrandom 0.4.3",
  "jpeg-encoder",
+ "libc",
  "lopdf",
  "objc2",
  "objc2-app-kit",

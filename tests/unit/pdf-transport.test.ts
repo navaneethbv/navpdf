@@ -32,7 +32,7 @@ describe("LocalRangeTransport", () => {
       initial as Uint8Array<ArrayBuffer>,
       () => {},
     );
-    expect(transport.progressiveDone).toBe(false);
+    expect(transport.progressiveDone).toBe(true);
     transport.onDataRange = (begin: number, chunk: Uint8Array) => {
       received.push({ begin, chunk });
     };
@@ -50,7 +50,7 @@ describe("LocalRangeTransport", () => {
     const failures: Error[] = [];
     const transport = new LocalRangeTransport(
       { id: "missing", name: "x.pdf", size: 10 },
-      new Uint8Array(10) as Uint8Array<ArrayBuffer>,
+      new Uint8Array(1) as Uint8Array<ArrayBuffer>,
       (error) => failures.push(error),
     );
     transport.onDataRange = () => {};

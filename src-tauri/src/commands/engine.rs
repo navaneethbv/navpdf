@@ -20,8 +20,36 @@ use zeroize::Zeroizing;
 const MAX_STAGED_BUFFERS: usize = 8;
 /// A document plus one bounded decoded image may be staged without allowing unbounded renderer
 /// requests to retain multiple gigabytes of native memory.
-const MAX_STAGED_BYTES: u64 = filesystem::MAX_FILE_BYTES + 256 * 1024 * 1024;
+const MAX_STAGED_BYTES_CAP: u64 = filesystem::MAX_FILE_BYTES + 256 * 1024 * 1024;
 const STATE_UNAVAILABLE: &str = "The local engine state is unavailable.";
+
+#[cfg(target_os = "macos")]
+fn physical_memory_bytes() -> Option<u64> {
+    let name = b"hw.memsize\0";
+    let mut memory = 0_u64;
+    let mut size = std::mem::size_of::<u64>();
+    let result = unsafe {
+        libc::sysctlbyname(
+            name.as_ptr().cast(),
+            (&mut memory as *mut u64).cast(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    (result == 0 && size == std::mem::size_of::<u64>() && memory > 0).then_some(memory)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn physical_memory_bytes() -> Option<u64> {
+    None
+}
+
+fn max_staged_bytes() -> u64 {
+    physical_memory_bytes()
+        .map(|memory| (memory / 4).clamp(filesystem::MAX_FILE_BYTES, MAX_STAGED_BYTES_CAP))
+        .unwrap_or(MAX_STAGED_BYTES_CAP)
+}
 
 #[derive(Default)]
 struct Buffers {
@@ -40,7 +68,7 @@ pub struct EngineState {
 
 impl EngineState {
     fn stage(&self, bytes: Vec<u8>) -> Result<String, String> {
-        self.stage_with_budget(bytes, MAX_STAGED_BYTES)
+        self.stage_with_budget(bytes, max_staged_bytes())
     }
 
     fn stage_with_budget(&self, bytes: Vec<u8>, budget: u64) -> Result<String, String> {
@@ -535,5 +563,12 @@ mod tests {
         assert!(engine.take(&first).is_err());
         assert_eq!(*engine.take(&second).unwrap(), vec![3, 4]);
         assert!(engine.stage_with_budget(vec![0; 4], 3).is_err());
+    }
+
+    #[test]
+    fn staged_budget_respects_file_limit_and_machine_cap() {
+        let budget = max_staged_bytes();
+        assert!(budget >= filesystem::MAX_FILE_BYTES);
+        assert!(budget <= MAX_STAGED_BYTES_CAP);
     }
 }

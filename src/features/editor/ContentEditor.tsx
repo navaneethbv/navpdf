@@ -34,6 +34,7 @@ export function ContentEditor({
   const [posY, setPosY] = useState(50);
   const [preserveAspectRatio, setPreserveAspectRatio] = useState(true);
   const [imageOpacity, setImageOpacity] = useState(1);
+  const [imageRotation, setImageRotation] = useState(0);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -101,6 +102,7 @@ export function ContentEditor({
         imageType: isPng ? "png" : "jpg",
         preserveAspectRatio,
         opacity: imageOpacity,
+        rotationDegrees: imageRotation,
       });
 
       await controller.replaceWithBytes(newBytes, "Image inserted into document");
@@ -285,6 +287,22 @@ export function ContentEditor({
                   step="0.05"
                   value={imageOpacity}
                   onChange={(e) => setImageOpacity(Number(e.target.value))}
+                />
+              </div>
+
+              <div className="setting-group">
+                <label className="setting-title" htmlFor="insert-image-rotation">
+                  Rotation (degrees)
+                </label>
+                <input
+                  id="insert-image-rotation"
+                  type="number"
+                  min={-360}
+                  max={360}
+                  step={1}
+                  value={imageRotation}
+                  onChange={(e) => setImageRotation(Number(e.target.value))}
+                  className="text-input"
                 />
               </div>
 

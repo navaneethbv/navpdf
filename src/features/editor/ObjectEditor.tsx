@@ -4,6 +4,7 @@ import {
   Image as ImageIcon,
   RefreshCw,
   Replace,
+  RotateCw,
   Trash2,
   Type,
   X,
@@ -50,6 +51,10 @@ export function ObjectEditor({
   const [scan, setScan] = useState<PageObjects | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [imageRotation, setImageRotation] = useState(0);
+  const [imageScale, setImageScale] = useState(1);
+  const [imageOffsetX, setImageOffsetX] = useState(0);
+  const [imageOffsetY, setImageOffsetY] = useState(0);
   const [report, setReport] = useState<EditReport | null>(null);
   const [working, setWorking] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -116,6 +121,30 @@ export function ObjectEditor({
     } catch (error) {
       s.set({ error: errorText(error) });
     }
+  };
+
+  const transformImage = () => {
+    if (!selected || selected.kind !== "image") return;
+    const [x0, y0, x1, y1] = selected.bbox;
+    const centerX = (x0 + x1) / 2;
+    const centerY = (y0 + y1) / 2;
+    const radians = (imageRotation * Math.PI) / 180;
+    const a = imageScale * Math.cos(radians);
+    const b = imageScale * Math.sin(radians);
+    const c = -imageScale * Math.sin(radians);
+    const d = imageScale * Math.cos(radians);
+    void run({
+      type: "transformImage",
+      objectId: selected.id,
+      cm: [
+        a,
+        b,
+        c,
+        d,
+        centerX - a * centerX - c * centerY + imageOffsetX,
+        centerY - b * centerX - d * centerY + imageOffsetY,
+      ],
+    });
   };
 
   return (
@@ -247,6 +276,70 @@ export function ObjectEditor({
                     onClick={() => fileInput.current?.click()}
                   >
                     <ImageIcon size={15} /> Replace Image…
+                  </button>
+                  <div className="settings-row">
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-rotation`}>
+                        Rotation (degrees)
+                      </label>
+                      <input
+                        id={`${ids}-rotation`}
+                        className="text-input"
+                        type="number"
+                        min={-180}
+                        max={180}
+                        value={imageRotation}
+                        disabled={working}
+                        onChange={(event) => setImageRotation(Number(event.target.value))}
+                      />
+                    </div>
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-scale`}>
+                        Scale
+                      </label>
+                      <input
+                        id={`${ids}-scale`}
+                        className="text-input"
+                        type="number"
+                        min={0.1}
+                        max={4}
+                        step={0.05}
+                        value={imageScale}
+                        disabled={working}
+                        onChange={(event) => setImageScale(Number(event.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <div className="settings-row">
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-offset-x`}>
+                        Move X (pt)
+                      </label>
+                      <input
+                        id={`${ids}-offset-x`}
+                        className="text-input"
+                        type="number"
+                        value={imageOffsetX}
+                        disabled={working}
+                        onChange={(event) => setImageOffsetX(Number(event.target.value))}
+                      />
+                    </div>
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-offset-y`}>
+                        Move Y (pt)
+                      </label>
+                      <input
+                        id={`${ids}-offset-y`}
+                        className="text-input"
+                        type="number"
+                        value={imageOffsetY}
+                        disabled={working}
+                        onChange={(event) => setImageOffsetY(Number(event.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <button className="button-secondary" disabled={working} onClick={transformImage}>
+                    <RotateCw size={15} /> Apply Image Transform
                   </button>
                 </>
               )}

@@ -86,3 +86,33 @@ Bundle identifier: `local.navpdf.reader`.
 - Text replacement is scoped to simple font replacements without paragraph reflow; CID composite fonts, Type 3 fonts, and characters missing from embedded subsets are safely refused.
 - Office exports are generated from extracted PDF text and table structures; direct reverse Office-to-PDF import is not delivered.
 - External cloud integrations, remote signing servers, and third-party AI models remain declined in adherence to privacy and offline safety standards.
+
+## Current September 15 handoff
+
+The active branch is fix/september-14-review-corrections.
+
+The current implementation includes the review hardening, native OCR bridge, image and signature transforms, forms editing, crop positioning, protection parity, viewer rendering hardening, and machine-relative native budgets.
+
+Native OCR acceptance is 6 of 6 samples.
+
+Native rendering was verified from one fresh packaged process with the 500-page fixture, and the page canvas and thumbnails were visible without the previous persistent spinner.
+
+The final local app executable is src-tauri/target/release/bundle/macos/NavPDF.app.
+
+The final local DMG is src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg.
+
+The executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
+
+The DMG SHA-256 is 9183379ea6631cde2ce5d9f19fe95f4071fe10037ab08f922975870032935e92.
+
+The DMG passed hdiutil verify with CRC32 $0797E84E.
+
+Local tests and acceptance suites pass as recorded in docs/VERIFICATION.md.
+
+Preview and Acrobat reopen checks for the final source revision remain unverified.
+
+Full Tranche 6 structural refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
+
+The Cargo Deny workflow correction is included in the branch and will be validated by the hosted run after push.
+
+The root planning files DELIVERY-PHASES.md, IMPLEMENTATION-PLAN-2026-09-14.md, and REVIEW-2026-09-14.md remain untracked source material and must not be included in the commit.

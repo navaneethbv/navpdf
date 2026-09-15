@@ -5,7 +5,10 @@ import {
   PDFString,
   PDFDict,
   PDFNumber,
+  PDFCheckBox,
+  PDFDropdown,
   PDFRadioGroup,
+  PDFTextField,
   PDFArray,
   PDFRef,
   PDFObject,
@@ -859,6 +862,16 @@ export async function cropPages(
   pageIndices: number[],
   cropBox: { x?: number; y?: number; width: number; height: number },
 ): Promise<Uint8Array> {
+  if (
+    !finite(cropBox.width) ||
+    !finite(cropBox.height) ||
+    cropBox.width <= 0 ||
+    cropBox.height <= 0 ||
+    (cropBox.x !== undefined && !finite(cropBox.x)) ||
+    (cropBox.y !== undefined && !finite(cropBox.y))
+  ) {
+    throw new Error("Crop dimensions must be positive finite values.");
+  }
   const doc = await PDFDocument.load(pdfBytes);
   const total = doc.getPageCount();
   const indexSet = new Set(pageIndices.filter((i) => i >= 0 && i < total));
@@ -872,6 +885,9 @@ export async function cropPages(
         cropBox.y !== undefined && cropBox.y >= box.y ? cropBox.y : box.y + (cropBox.y ?? 0);
       const targetW = Math.min(cropBox.width, Math.max(0, box.x + box.width - originX));
       const targetH = Math.min(cropBox.height, Math.max(0, box.y + box.height - originY));
+      if (targetW <= 0 || targetH <= 0) {
+        throw new Error("The crop rectangle does not intersect the selected page.");
+      }
       page.setCropBox(originX, originY, targetW, targetH);
     }
   }
@@ -1073,7 +1089,7 @@ export async function describeStructureLoss(sources: Uint8Array[]): Promise<stri
 }
 
 export interface FormFieldDefinition {
-  type: "text" | "checkbox" | "radio" | "dropdown" | "button";
+  type: "text" | "checkbox" | "radio" | "dropdown" | "button" | "signature";
   name: string;
   page: number;
   x: number;
@@ -1175,8 +1191,97 @@ export async function addFormField(
       width,
       height,
     });
+  } else if (definition.type === "signature") {
+    if (form.getFieldMaybe(name)) {
+      throw new Error(`A form field named "${name}" already exists.`);
+    }
+    const context = doc.context;
+    const appearance = context.formXObject([], {
+      BBox: context.obj([0, 0, width, height]),
+      Resources: context.obj({}),
+    });
+    const appearanceRef = context.register(appearance);
+    const field = context.obj({
+      Type: "Annot",
+      Subtype: "Widget",
+      FT: "Sig",
+      T: PDFString.of(name),
+      F: 4,
+      Rect: context.obj([x, y, x + width, y + height]),
+      P: page.ref,
+      AP: context.obj({ N: appearanceRef }),
+    });
+    const fieldRef = context.register(field);
+    doc.catalog.getOrCreateAcroForm().addField(fieldRef);
+    const annots = page.node.Annots() ?? context.obj([]);
+    annots.push(fieldRef);
+    page.node.set(PDFName.of("Annots"), annots);
   }
 
+  return doc.save();
+}
+
+export interface FormFieldUpdate {
+  name: string;
+  value?: string;
+  checked?: boolean;
+  required?: boolean;
+  readOnly?: boolean;
+}
+
+/** Update an existing standard AcroForm field while preserving its widget. */
+export async function updateFormField(
+  pdfBytes: Uint8Array<ArrayBuffer>,
+  update: FormFieldUpdate,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const form = doc.getForm();
+  const name = update.name.trim();
+  const field = form.getFieldMaybe(name);
+  if (!field) throw new Error(`Form field "${name}" was not found.`);
+
+  if (update.required !== undefined) {
+    if (update.required) field.enableRequired();
+    else field.disableRequired();
+  }
+  if (update.readOnly !== undefined) {
+    if (update.readOnly) field.enableReadOnly();
+    else field.disableReadOnly();
+  }
+
+  if (field instanceof PDFTextField && update.value !== undefined) {
+    field.setText(update.value);
+  } else if (field instanceof PDFCheckBox && update.checked !== undefined) {
+    if (update.checked) field.check();
+    else field.uncheck();
+  } else if (field instanceof PDFRadioGroup && update.value !== undefined) {
+    if (!field.getOptions().includes(update.value)) {
+      throw new Error(`The radio option "${update.value}" is not available.`);
+    }
+    field.select(update.value);
+  } else if (field instanceof PDFDropdown && update.value !== undefined) {
+    if (!field.getOptions().includes(update.value)) {
+      throw new Error(`The dropdown option "${update.value}" is not available.`);
+    }
+    field.select(update.value);
+  } else if (update.value !== undefined && !(field instanceof PDFTextField)) {
+    throw new Error(`Form field "${name}" does not accept text values.`);
+  }
+
+  return doc.save();
+}
+
+/** Remove an existing field and all of its widgets from a PDF. */
+export async function deleteFormField(
+  pdfBytes: Uint8Array<ArrayBuffer>,
+  name: string,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const form = doc.getForm();
+  const normalizedName = name.trim();
+  const field = form.getFieldMaybe(normalizedName);
+  if (!field) throw new Error(`Form field "${normalizedName}" was not found.`);
+  form.removeField(field);
   return doc.save();
 }
 
@@ -1343,6 +1448,7 @@ export interface InsertImageOptions {
   maxHeight?: number;
   opacity?: number;
   preserveAspectRatio?: boolean;
+  rotationDegrees?: number;
 }
 
 /** Insert PNG/JPEG image with aspect-ratio preservation and custom position. */
@@ -1393,6 +1499,7 @@ export async function insertImageContent(
       ? clamp(options.y, box.y, box.y + box.height - drawHeight)
       : box.y + (box.height - drawHeight) / 2;
   const opacity = options.opacity !== undefined ? clamp(options.opacity, 0, 1) : 1;
+  const rotationDegrees = clamp(options.rotationDegrees ?? 0, -360, 360);
 
   page.drawImage(img, {
     x: drawX,
@@ -1400,6 +1507,7 @@ export async function insertImageContent(
     width: drawWidth,
     height: drawHeight,
     opacity,
+    rotate: degrees(rotationDegrees),
   });
 
   return doc.save();

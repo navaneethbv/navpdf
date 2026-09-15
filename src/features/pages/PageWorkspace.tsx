@@ -36,6 +36,7 @@ import { native } from "../../services/native";
 import { pruneDocument } from "../../services/engine";
 import type { ViewerController } from "../viewer/controller";
 import { parsePageRange } from "./page-range";
+import { ThumbCanvas } from "../viewer/Thumbnails";
 
 export function PageWorkspace({
   controller,
@@ -54,6 +55,8 @@ export function PageWorkspace({
   const [busy, setBusy] = useState(false);
   const [cropWidth, setCropWidth] = useState(500);
   const [cropHeight, setCropHeight] = useState(700);
+  const [cropX, setCropX] = useState(0);
+  const [cropY, setCropY] = useState(0);
   const [showCrop, setShowCrop] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
   const [splitRange, setSplitRange] = useState("1-2, 3-4");
@@ -288,8 +291,8 @@ export function PageWorkspace({
     await mutate(
       (bytes) =>
         cropPages(bytes, selected, {
-          x: 0,
-          y: 0,
+          x: cropX,
+          y: cropY,
           width: cropWidth,
           height: cropHeight,
         }),
@@ -565,6 +568,14 @@ export function PageWorkspace({
               onChange={(e) => setCropHeight(Number(e.target.value))}
             />
           </label>
+          <label>
+            X (pt):
+            <input type="number" value={cropX} onChange={(e) => setCropX(Number(e.target.value))} />
+          </label>
+          <label>
+            Y (pt):
+            <input type="number" value={cropY} onChange={(e) => setCropY(Number(e.target.value))} />
+          </label>
           <button onClick={handleCrop}>Apply Crop</button>
           <button onClick={() => setShowCrop(false)}>Cancel</button>
         </div>
@@ -625,9 +636,7 @@ export function PageWorkspace({
               }}
             >
               <div className="page-card-preview">
-                <div className="page-card-placeholder">
-                  <span>Page {pageNum + 1}</span>
-                </div>
+                <ThumbCanvas pdf={controller?.pdf} page={pageNum + 1} revision={s.revision} />
                 {isSelected && (
                   <div className="page-selected-badge">
                     <Check size={14} />

@@ -462,3 +462,43 @@ DMG integrity was independently verified using `hdiutil verify`.
 All local automated checks pass: 61 frontend test files (406 tests) with full coverage, 58 Rust tests with 1 constrained disk-full test ignored, Clippy clean with zero warnings, and passing acceptance suites for Phase 7 (55/55), Phase 8 (12/12), and Phase 10 (55/55).
 
 See [PR-1-REVIEW.md](PR-1-REVIEW.md) for milestone disposition and remaining implementation limitations.
+
+### September 15, 2026 review correction verification
+
+The final correction work was verified from the current worktree after the native OCR bridge, viewer hardening, forms editing, crop and transform controls, signature rotation, protection parity, and machine-relative native budgets were implemented.
+
+npm run test:coverage passed 504 tests across 80 files.
+
+Coverage was 83.39% statements, 75.01% branches, 81.18% functions, and 86.20% lines.
+
+npm run lint, npm run typecheck, npm run build, cargo fmt --manifest-path src-tauri/Cargo.toml -- --check, cargo test --manifest-path src-tauri/Cargo.toml, and cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings passed.
+
+Rust tests reported 80 passed, 0 failed, and 1 ignored because the real disk-full test requires a disposable constrained volume.
+
+npm run acceptance:ocr passed 6 of 6 native Vision samples and wrote output/ocr-review/corpus-report.json.
+
+npm run acceptance:phase7 passed 55 of 55 checks.
+
+npm run acceptance:phase8 passed 12 of 12 checks.
+
+npm run acceptance:phase10 passed 55 of 55 checks.
+
+npm run acceptance:licenses wrote output/release/licenses.json with 372 resolved crates and 27 production npm packages.
+
+npm run acceptance:check-tools found all required independent validation tools.
+
+A fresh single-process launch of the final packaged application opened phase1-recovery-saved-20260913.pdf, rendered the visible page canvas and thumbnails, and showed no persistent loading spinner.
+
+The native rendering check used the exact app bundle at src-tauri/target/release/bundle/macos/NavPDF.app.
+
+Preview and Acrobat reopen verification for this final source revision was not completed.
+
+The final package executable SHA-256 is 3a41a7783f1b1a710beb141d2dd7d33c14d3b1cbe0a21fb7f6e40a434f8f59b1.
+
+The final package DMG SHA-256 is 9183379ea6631cde2ce5d9f19fe95f4071fe10037ab08f922975870032935e92.
+
+hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg reported a valid checksum with CRC32 $0797E84E.
+
+The hosted Cargo Deny failure from the prior run was caused by the workflow using the repository root manifest.
+
+The workflow correction now uses src-tauri/Cargo.toml and requires a fresh hosted check after the final push.

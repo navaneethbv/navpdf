@@ -196,7 +196,17 @@ pub fn owner_password(request: &ProtectionRequest) -> Result<Zeroizing<String>, 
         return Err("Passwords can be at most 127 bytes long.".into());
     }
     if user.is_empty() {
-        return Err("Enter the password that will be required to open the copy.".into());
+        if owner.is_empty() {
+            return Err(
+                "Enter an open password or a separate permissions password for this copy.".into(),
+            );
+        }
+        if request.permissions.all_granted() {
+            return Err(
+                "An open-without-password copy must restrict at least one permission.".into(),
+            );
+        }
+        return Ok(owner.clone());
     }
     if request.permissions.all_granted() {
         return Ok(if owner.is_empty() {
@@ -222,15 +232,24 @@ pub fn validate_protected(
     owner: &str,
     expected_pages: u32,
 ) -> Result<(), String> {
-    let locked = Document::load_mem(bytes).map_err(|_| VALIDATION_FAILED)?;
-    if !locked.trailer.has(b"Encrypt") || !locked.get_pages().is_empty() {
+    let loaded = Document::load_mem(bytes).map_err(|_| VALIDATION_FAILED)?;
+    if !loaded.is_encrypted() && !loaded.was_encrypted() {
         return Err(VALIDATION_FAILED.into());
     }
-    for password in [user, owner] {
-        let opened = open_with_password(bytes, password).map_err(|_| VALIDATION_FAILED)?;
-        if expected_pages == 0 || opened.get_pages().len() != expected_pages as usize {
-            return Err(VALIDATION_FAILED.into());
-        }
+    let opened = open_with_password(bytes, user).map_err(|_| VALIDATION_FAILED)?;
+    if expected_pages == 0 || opened.get_pages().len() != expected_pages as usize {
+        return Err(VALIDATION_FAILED.into());
+    }
+    if user.is_empty() {
+        // lopdf's loader tries an empty password before the supplied password. When the
+        // user password is intentionally empty, that fallback makes it impossible to
+        // independently authenticate the owner password through the loader. The encrypted
+        // state and page-count checks above still verify that this is an encrypted copy.
+        return Ok(());
+    }
+    let opened = open_with_password(bytes, owner).map_err(|_| VALIDATION_FAILED)?;
+    if opened.get_pages().len() != expected_pages as usize {
+        return Err(VALIDATION_FAILED.into());
     }
     let wrong = format!("{user}\u{1}wrong");
     if open_with_password(bytes, &wrong).is_ok() {
@@ -374,6 +393,19 @@ mod tests {
             .contains("did not unlock"));
         assert!(unlock(&output, "owner-pass").is_ok());
         assert!(unlock(&fixture(), "owner-pass").is_err());
+    }
+
+    #[test]
+    fn permissions_only_protection_opens_without_a_user_password() {
+        let restricted = PermissionRequest {
+            print: true,
+            copy: false,
+            ..PermissionRequest::default()
+        };
+        let output = protect(&fixture(), &request("", "owner-pass", restricted), 1).unwrap();
+        assert!(open_with_password(&output, "").is_ok());
+        assert!(open_with_password(&output, "owner-pass").is_ok());
+        assert!(validate_protected(&output, "", "owner-pass", 1).is_ok());
     }
 
     #[test]
