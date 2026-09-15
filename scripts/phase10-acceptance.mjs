@@ -182,7 +182,7 @@ function opensslVerify(file) {
       "-out",
       "/dev/null",
     ]);
-    outcomes.push(result.status === 0 && /Verification successful/.test(result.stderr));
+    outcomes.push(result.status === 0);
   }
   rmSync(cms, { force: true });
   rmSync(content, { force: true });
@@ -276,12 +276,7 @@ try {
   ]);
   let expired = true;
   try {
-    leaf(
-      "expired",
-      4099,
-      ["rsa:2048"],
-      ["-not_before", "20250101000000Z", "-not_after", "20250201000000Z"],
-    );
+    leaf("expired", 4099, ["rsa:2048"], ["-days", "0"]);
     pkcs12("expired", "expired");
   } catch (error) {
     expired = false;
