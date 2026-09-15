@@ -2,10 +2,7 @@
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
-import {
-  getDocument,
-  GlobalWorkerOptions,
-} from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { StandardFonts } from "pdf-lib";
 import {
   placePageBoxes,
@@ -13,9 +10,7 @@ import {
   viewportToPdfRect,
 } from "../../src/features/redact/redaction-marks";
 
-GlobalWorkerOptions.workerSrc = resolve(
-  "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
-);
+GlobalWorkerOptions.workerSrc = resolve("node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
 
 it("places page boxes with real pdf.js viewports at every rotation", async () => {
   const source = await PDFDocument.create();
@@ -29,13 +24,11 @@ it("places page boxes with real pdf.js viewports at every rotation", async () =>
     const viewport = page.getViewport({ scale: 1.5, rotation });
     const div = document.createElement("div");
     const viewer = { getPageView: () => ({ div, viewport }) };
-    const cleanup = placePageBoxes(viewer, [
-      { page: 1, rect, className: "redaction-mark" },
-    ]);
+    const cleanup = placePageBoxes(viewer, [{ page: 1, rect, className: "redaction-mark" }]);
     const box = div.querySelector<HTMLElement>(".redaction-mark");
     expect(box).not.toBeNull();
-    const [left, top, width, height] = ["left", "top", "width", "height"].map(
-      (key) => Number.parseFloat(box!.style.getPropertyValue(key)),
+    const [left, top, width, height] = ["left", "top", "width", "height"].map((key) =>
+      Number.parseFloat(box!.style.getPropertyValue(key)),
     );
     const [expectedWidth, expectedHeight] = rotation % 180 === 0 ? [300, 36] : [36, 300];
     expect(width).toBeCloseTo(expectedWidth);

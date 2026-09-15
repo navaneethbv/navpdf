@@ -38,7 +38,13 @@ function unzip(bytes: Uint8Array) {
   return files;
 }
 
-const item = (str: string, x: number, y: number, size = 10, width = str.length * size * 0.5): TextItem => ({
+const item = (
+  str: string,
+  x: number,
+  y: number,
+  size = 10,
+  width = str.length * size * 0.5,
+): TextItem => ({
   str,
   transform: [size, 0, 0, size, x, y],
   width,
@@ -73,7 +79,10 @@ describe("layout reconstruction", () => {
   it("reads two text columns before moving across the gutter", () => {
     const items: TextItem[] = [];
     for (let row = 0; row < 12; row++) {
-      items.push(item(`Left ${row}`, 72, 700 - row * 14), item(`Right ${row}`, 340, 700 - row * 14));
+      items.push(
+        item(`Left ${row}`, 72, 700 - row * 14),
+        item(`Right ${row}`, 340, 700 - row * 14),
+      );
     }
     const layout = layoutPage(1, items, 612, 792);
     const order = layout.lines.map((line) => line.text);
@@ -83,12 +92,22 @@ describe("layout reconstruction", () => {
 
 describe("office packages", () => {
   const layouts = [
-    layoutPage(1, [item("Title & <Summary>", 72, 720, 24), item("Café résumé 日本", 72, 680)], 612, 792),
+    layoutPage(
+      1,
+      [item("Title & <Summary>", 72, 720, 24), item("Café résumé 日本", 72, 680)],
+      612,
+      792,
+    ),
     layoutPage(2, [item("Second page", 72, 700)], 612, 792),
   ];
 
   it("writes valid stored ZIP archives", () => {
-    const files = unzip(createZip([{ name: "a.txt", data: "hello" }, { name: "dir/ü.bin", data: new Uint8Array([0, 1, 2]) }]));
+    const files = unzip(
+      createZip([
+        { name: "a.txt", data: "hello" },
+        { name: "dir/ü.bin", data: new Uint8Array([0, 1, 2]) },
+      ]),
+    );
     expect(files.get("a.txt")).toBe("hello");
     expect([...files.keys()]).toEqual(["a.txt", "dir/ü.bin"]);
     expect(escapeXml('a<b>&"')).toBe("a&lt;b&gt;&amp;&quot;");
@@ -110,11 +129,17 @@ describe("office packages", () => {
     expect(cellValue("(42)")).toEqual({ kind: "number", value: -42 });
     expect(cellValue("2026-09-14")).toEqual({ kind: "date", value: 46279 });
     expect(cellValue("2026-02-30").kind).toBe("text");
-    expect(cellValue("=HYPERLINK(\"x\")").kind).toBe("text");
+    expect(cellValue('=HYPERLINK("x")').kind).toBe("text");
     expect(cellValue("(42").kind).toBe("text");
     const files = unzip(
       buildXlsx([
-        { name: "Page 1", rows: [["Name", "Amount", "When"], ["=cmd|' /C calc'!A0", "12", "2026-09-14"]] },
+        {
+          name: "Page 1",
+          rows: [
+            ["Name", "Amount", "When"],
+            ["=cmd|' /C calc'!A0", "12", "2026-09-14"],
+          ],
+        },
         { name: "Page 1", rows: [] },
       ]),
     );
@@ -127,7 +152,12 @@ describe("office packages", () => {
   });
 
   it("creates PPTX picture slides and editable text slides", () => {
-    const pictures = unzip(buildPptx([{ width: 612, height: 792, image: new Uint8Array([137, 80, 78, 71]) }], "Pictures"));
+    const pictures = unzip(
+      buildPptx(
+        [{ width: 612, height: 792, image: new Uint8Array([137, 80, 78, 71]) }],
+        "Pictures",
+      ),
+    );
     expect(pictures.get("ppt/presentation.xml")).toContain('<p:sldSz cx="7772400" cy="10058400"/>');
     expect(pictures.get("ppt/slides/slide1.xml")).toContain('<a:blip r:embed="rId2"/>');
     expect(pictures.has("ppt/media/page1.png")).toBe(true);
@@ -135,7 +165,11 @@ describe("office packages", () => {
     const text = unzip(
       buildPptx(
         [
-          { width: 612, height: 792, boxes: [{ x: 72, y: 700, size: 12, text: "Editable <line>" }] },
+          {
+            width: 612,
+            height: 792,
+            boxes: [{ x: 72, y: 700, size: 12, text: "Editable <line>" }],
+          },
           { width: 612, height: 792, boxes: [] },
         ],
         "Text",

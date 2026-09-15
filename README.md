@@ -39,7 +39,7 @@ See [the PR 2 corrective review](docs/PR-2-REVIEW.md) for reopened acceptance ga
 
 ## Run locally
 
-Prerequisites: Node.js 22.13 or newer, Rust 1.88 or newer, and Xcode Command Line Tools.
+Prerequisites: Node.js 24, Rust 1.89 or newer, and Xcode Command Line Tools.
 The application itself does not require Node, Python, or a local server after packaging.
 
 ```sh

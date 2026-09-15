@@ -48,7 +48,9 @@ function contentChunks(bytes) {
     let stop = end;
     while (stop > start && (bytes[stop - 1] === 0x0a || bytes[stop - 1] === 0x0d)) stop--;
     try {
-      chunks.push(inflateSync(bytes.subarray(start, stop), { finishFlush: constants.Z_SYNC_FLUSH }));
+      chunks.push(
+        inflateSync(bytes.subarray(start, stop), { finishFlush: constants.Z_SYNC_FLUSH }),
+      );
     } catch {
       // Not Flate data (for example JPEG); the raw bytes are already included.
     }
@@ -64,7 +66,8 @@ function decodedHexStrings(chunk) {
     const hex = match[1].replace(/\s+/g, "");
     const bytes = Buffer.from(hex.length % 2 ? `${hex}0` : hex, "hex");
     decoded.push(bytes);
-    if (bytes[0] === 0xfe && bytes[1] === 0xff) decoded.push(Buffer.from(bytes.subarray(2)).swap16());
+    if (bytes[0] === 0xfe && bytes[1] === 0xff)
+      decoded.push(Buffer.from(bytes.subarray(2)).swap16());
   }
   return decoded;
 }
@@ -104,7 +107,8 @@ async function regionMean(png, rect, dpi, pageHeight = 792) {
     .raw()
     .toBuffer({ resolveWithObject: true });
   let brightest = 0;
-  for (let i = 0; i < info.width * info.height * info.channels; i++) brightest = Math.max(brightest, data[i]);
+  for (let i = 0; i < info.width * info.height * info.channels; i++)
+    brightest = Math.max(brightest, data[i]);
   return brightest;
 }
 
@@ -124,12 +128,24 @@ async function redactionAcceptance(corpus) {
     },
     acknowledgeSignatures: false,
   });
-  record(scenario, "engine applied and self-audit passed", result.ok && result.report.audit.passed, result.ok ? JSON.stringify(result.report.audit) : result.error);
+  record(
+    scenario,
+    "engine applied and self-audit passed",
+    result.ok && result.report.audit.passed,
+    result.ok ? JSON.stringify(result.report.audit) : result.error,
+  );
   if (!result.ok) return;
   const source = await readFile(corpus.files.redaction);
   const sourceChunks = contentChunks(source);
-  const undetected = Object.values(CANARIES).filter((term) => term !== CANARIES.image && !containsTerm(sourceChunks, term));
-  record(scenario, "source still holds every canary before redaction", undetected.length === 0, undetected.length ? `scanner did not find ${undetected.join(", ")}` : "");
+  const undetected = Object.values(CANARIES).filter(
+    (term) => term !== CANARIES.image && !containsTerm(sourceChunks, term),
+  );
+  record(
+    scenario,
+    "source still holds every canary before redaction",
+    undetected.length === 0,
+    undetected.length ? `scanner did not find ${undetected.join(", ")}` : "",
+  );
   const bytes = await readFile(output);
   const chunks = contentChunks(bytes);
   for (const term of corpus.terms) {
@@ -138,13 +154,37 @@ async function redactionAcceptance(corpus) {
   const allText = run("pdftotext", ["-layout", output, "-"]).stdout;
   const pageOne = run("pdftotext", ["-f", "1", "-l", "1", "-layout", output, "-"]).stdout;
   const pageTwo = run("pdftotext", ["-f", "2", "-l", "2", "-layout", output, "-"]).stdout;
-  record(scenario, "pdftotext finds no audited canary", corpus.terms.every((term) => !allText.includes(term)));
-  record(scenario, "unmarked text survives on page 1", pageOne.includes("Public heading stays visible") && pageOne.includes("Client:"));
-  record(scenario, "shared form is removed on page 1 only", !pageOne.includes(CANARIES.shared) && pageTwo.includes(CANARIES.shared));
+  record(
+    scenario,
+    "pdftotext finds no audited canary",
+    corpus.terms.every((term) => !allText.includes(term)),
+  );
+  record(
+    scenario,
+    "unmarked text survives on page 1",
+    pageOne.includes("Public heading stays visible") && pageOne.includes("Client:"),
+  );
+  record(
+    scenario,
+    "shared form is removed on page 1 only",
+    !pageOne.includes(CANARIES.shared) && pageTwo.includes(CANARIES.shared),
+  );
   const info = run("pdfinfo", ["-meta", output]);
-  record(scenario, "pdfinfo shows no metadata canary", info.status === 0 && !info.stdout.includes(CANARIES.meta) && !info.stdout.includes(CANARIES.xmp), info.stderr.trim());
+  record(
+    scenario,
+    "pdfinfo shows no metadata canary",
+    info.status === 0 &&
+      !info.stdout.includes(CANARIES.meta) &&
+      !info.stdout.includes(CANARIES.xmp),
+    info.stderr.trim(),
+  );
   const attachments = run("pdfdetach", ["-list", output]).stdout;
-  record(scenario, "pdfdetach lists no embedded files", /0 embedded files/.test(attachments), attachments.trim());
+  record(
+    scenario,
+    "pdfdetach lists no embedded files",
+    /0 embedded files/.test(attachments),
+    attachments.trim(),
+  );
   const pages = run("pdfinfo", [output]).stdout;
   record(scenario, "page count preserved", /Pages:\s+2/.test(pages));
 
@@ -152,28 +192,52 @@ async function redactionAcceptance(corpus) {
   const rendered = await renderPage(output, 1, dpi);
   for (const [index, region] of corpus.regions.entries()) {
     const brightest = await regionMean(rendered, region.rect, dpi);
-    record(scenario, `rendered region ${index + 1} is black`, brightest <= 40, `brightest channel ${brightest}`);
+    record(
+      scenario,
+      `rendered region ${index + 1} is black`,
+      brightest <= 40,
+      `brightest channel ${brightest}`,
+    );
   }
   const imageDirectory = path.join(root, "redaction-images");
   await rm(imageDirectory, { recursive: true, force: true });
   await mkdir(imageDirectory, { recursive: true });
-  const listing = run("pdfimages", ["-list", "-f", "1", "-l", "1", output]).stdout.split("\n").slice(2).filter(Boolean);
+  const listing = run("pdfimages", ["-list", "-f", "1", "-l", "1", output])
+    .stdout.split("\n")
+    .slice(2)
+    .filter(Boolean);
   run("pdfimages", ["-png", "-f", "1", "-l", "1", output, path.join(imageDirectory, "img")]);
   const files = (await readdir(imageDirectory)).sort();
-  const colorImages = listing.map((line, index) => ({ type: line.trim().split(/\s+/)[2], file: files[index] })).filter((entry) => entry.type === "image");
+  const colorImages = listing
+    .map((line, index) => ({ type: line.trim().split(/\s+/)[2], file: files[index] }))
+    .filter((entry) => entry.type === "image");
   let darkest = 0;
   for (const entry of colorImages) {
     const stats = await sharp(path.join(imageDirectory, entry.file)).stats();
     darkest = Math.max(darkest, ...stats.channels.slice(0, 3).map((channel) => channel.max));
   }
-  record(scenario, "extracted image samples are blackened, not only covered", colorImages.length > 0 && darkest <= 48, `${colorImages.length} image(s), brightest sample ${darkest}`);
+  record(
+    scenario,
+    "extracted image samples are blackened, not only covered",
+    colorImages.length > 0 && darkest <= 48,
+    `${colorImages.length} image(s), brightest sample ${darkest}`,
+  );
   record(scenario, "output identity", true, `${bytes.length} bytes sha256 ${sha256(bytes)}`);
 }
 
 async function protectionAcceptance(corpus) {
   const scenario = "protection";
   const output = path.join(root, "protected-output.pdf");
-  const permissions = { print: true, printHighQuality: false, copy: false, modify: false, annotate: false, fillForms: true, assemble: false, accessibility: true };
+  const permissions = {
+    print: true,
+    printHighQuality: false,
+    copy: false,
+    modify: false,
+    annotate: false,
+    fillForms: true,
+    assemble: false,
+    accessibility: true,
+  };
   const result = await engine("protect", corpus.files.protection, output, {
     userPassword: "synthetic-open-4821",
     ownerPassword: "synthetic-owner-9377",
@@ -182,27 +246,79 @@ async function protectionAcceptance(corpus) {
   record(scenario, "engine protected and validated the copy", result.ok, result.error);
   if (!result.ok) return;
   const bytes = await readFile(output);
-  record(scenario, "plaintext marker absent from encrypted bytes", !containsTerm(contentChunks(bytes), "PROTECT-PAGE-1"));
+  record(
+    scenario,
+    "plaintext marker absent from encrypted bytes",
+    !containsTerm(contentChunks(bytes), "PROTECT-PAGE-1"),
+  );
   const locked = run("pdfinfo", [output]);
-  record(scenario, "pdfinfo refuses to open without a password", locked.status !== 0, locked.stderr.trim());
+  record(
+    scenario,
+    "pdfinfo refuses to open without a password",
+    locked.status !== 0,
+    locked.stderr.trim(),
+  );
   const wrong = run("pdfinfo", ["-upw", "wrong-password", output]);
   record(scenario, "pdfinfo rejects a wrong password", wrong.status !== 0, wrong.stderr.trim());
   const opened = run("pdfinfo", ["-upw", "synthetic-open-4821", output]);
-  record(scenario, "pdfinfo opens with the user password as AES-256", opened.status === 0 && /Encrypted:\s+yes/.test(opened.stdout) && /AES-256/.test(opened.stdout) && /Pages:\s+3/.test(opened.stdout), opened.stdout.split("\n").find((line) => line.startsWith("Encrypted")));
+  record(
+    scenario,
+    "pdfinfo opens with the user password as AES-256",
+    opened.status === 0 &&
+      /Encrypted:\s+yes/.test(opened.stdout) &&
+      /AES-256/.test(opened.stdout) &&
+      /Pages:\s+3/.test(opened.stdout),
+    opened.stdout.split("\n").find((line) => line.startsWith("Encrypted")),
+  );
   const owner = run("pdfinfo", ["-opw", "synthetic-owner-9377", output]);
-  record(scenario, "pdfinfo opens with the owner password", owner.status === 0 && /Pages:\s+3/.test(owner.stdout));
+  record(
+    scenario,
+    "pdfinfo opens with the owner password",
+    owner.status === 0 && /Pages:\s+3/.test(owner.stdout),
+  );
   // Permission flags are advisory; each reader decides whether to enforce them.
-  record(scenario, "pdfinfo reports the restricted permission flags", /copy:no/.test(opened.stdout) && /change:no/.test(opened.stdout) && /print:yes/.test(opened.stdout));
+  record(
+    scenario,
+    "pdfinfo reports the restricted permission flags",
+    /copy:no/.test(opened.stdout) &&
+      /change:no/.test(opened.stdout) &&
+      /print:yes/.test(opened.stdout),
+  );
   const userText = run("pdftotext", ["-upw", "synthetic-open-4821", output, "-"]);
-  record(scenario, "informational: poppler text extraction with the open password", true, userText.stdout.includes("PROTECT-PAGE-3") ? "poppler extracts text despite copy:no (advisory flag not enforced by this reader)" : "poppler refused extraction");
+  record(
+    scenario,
+    "informational: poppler text extraction with the open password",
+    true,
+    userText.stdout.includes("PROTECT-PAGE-3")
+      ? "poppler extracts text despite copy:no (advisory flag not enforced by this reader)"
+      : "poppler refused extraction",
+  );
   const ownerText = run("pdftotext", ["-opw", "synthetic-owner-9377", output, "-"]).stdout;
-  record(scenario, "pdftotext reads text with the owner password", ownerText.includes("PROTECT-PAGE-3"));
-  const refused = await engine("unlock", output, path.join(root, "unlocked-refused.pdf"), { password: "synthetic-open-4821" });
-  record(scenario, "user password cannot remove restrictions", !refused.ok && /owner/.test(refused.error), refused.error);
+  record(
+    scenario,
+    "pdftotext reads text with the owner password",
+    ownerText.includes("PROTECT-PAGE-3"),
+  );
+  const refused = await engine("unlock", output, path.join(root, "unlocked-refused.pdf"), {
+    password: "synthetic-open-4821",
+  });
+  record(
+    scenario,
+    "user password cannot remove restrictions",
+    !refused.ok && /owner/.test(refused.error),
+    refused.error,
+  );
   const unlockedPath = path.join(root, "unlocked-output.pdf");
-  const unlocked = await engine("unlock", output, unlockedPath, { password: "synthetic-owner-9377" });
+  const unlocked = await engine("unlock", output, unlockedPath, {
+    password: "synthetic-owner-9377",
+  });
   const plain = unlocked.ok ? run("pdftotext", [unlockedPath, "-"]).stdout : "";
-  record(scenario, "owner password unlocks to readable plaintext", unlocked.ok && plain.includes("PROTECT-PAGE-2"), unlocked.error);
+  record(
+    scenario,
+    "owner password unlocks to readable plaintext",
+    unlocked.ok && plain.includes("PROTECT-PAGE-2"),
+    unlocked.error,
+  );
   record(scenario, "output identity", true, `${bytes.length} bytes sha256 ${sha256(bytes)}`);
 }
 
@@ -210,7 +326,12 @@ async function compressionAcceptance(corpus) {
   for (const [scenario, input, preset, tolerance] of [
     ["compression balanced", corpus.files.compression, "balanced", 40],
     ["compression lossless", corpus.files.lossless, "lossless", 0],
-    ["compression lossless compact input", path.resolve("tests/pdf-fixtures/reader-100.pdf"), "lossless", 0],
+    [
+      "compression lossless compact input",
+      path.resolve("tests/pdf-fixtures/reader-100.pdf"),
+      "lossless",
+      0,
+    ],
   ]) {
     const output = path.join(root, `compressed-${preset}.pdf`);
     const result = await engine("compress", input, output, { preset });
@@ -220,28 +341,61 @@ async function compressionAcceptance(corpus) {
     }
     const { report } = result;
     const before = (await readFile(input)).length;
-    record(scenario, "reported input size matches the file", report.beforeBytes === before, `${report.beforeBytes} vs ${before}`);
+    record(
+      scenario,
+      "reported input size matches the file",
+      report.beforeBytes === before,
+      `${report.beforeBytes} vs ${before}`,
+    );
     if (!report.useful) {
       record(scenario, "no useful reduction keeps the original", true, report.message);
       continue;
     }
     const after = (await readFile(output)).length;
-    record(scenario, "reported output size matches the file", report.afterBytes === after, `${before} -> ${after} bytes (${((1 - after / before) * 100).toFixed(1)}% smaller)`);
-    record(scenario, "engine fidelity checks passed", report.checks.every((check) => check.passed));
+    record(
+      scenario,
+      "reported output size matches the file",
+      report.afterBytes === after,
+      `${before} -> ${after} bytes (${((1 - after / before) * 100).toFixed(1)}% smaller)`,
+    );
+    record(
+      scenario,
+      "engine fidelity checks passed",
+      report.checks.every((check) => check.passed),
+    );
     const pages = Number(/Pages:\s+(\d+)/.exec(run("pdfinfo", [input]).stdout)?.[1] ?? 0);
     const textBefore = run("pdftotext", ["-layout", input, "-"]).stdout;
     const textAfter = run("pdftotext", ["-layout", output, "-"]).stdout;
     record(scenario, "pdftotext output identical", textBefore === textAfter);
-    const fontsBefore = run("pdffonts", [input]).stdout.split("\n").slice(2).map((line) => line.split(/\s+/)[0]).sort().join();
-    const fontsAfter = run("pdffonts", [output]).stdout.split("\n").slice(2).map((line) => line.split(/\s+/)[0]).sort().join();
+    const fontsBefore = run("pdffonts", [input])
+      .stdout.split("\n")
+      .slice(2)
+      .map((line) => line.split(/\s+/)[0])
+      .sort()
+      .join();
+    const fontsAfter = run("pdffonts", [output])
+      .stdout.split("\n")
+      .slice(2)
+      .map((line) => line.split(/\s+/)[0])
+      .sort()
+      .join();
     record(scenario, "pdffonts lists the same fonts", fontsBefore === fontsAfter);
     for (const page of [1, Math.max(1, pages)]) {
-      const a = await sharp(await renderPage(input, page, 50)).raw().toBuffer();
-      const b = await sharp(await renderPage(output, page, 50)).raw().toBuffer();
+      const a = await sharp(await renderPage(input, page, 50))
+        .raw()
+        .toBuffer();
+      const b = await sharp(await renderPage(output, page, 50))
+        .raw()
+        .toBuffer();
       let total = 0;
       for (let i = 0; i < Math.min(a.length, b.length); i++) total += Math.abs(a[i] - b[i]);
       const mean = total / Math.max(1, Math.min(a.length, b.length));
-      record(scenario, `page ${page} renders within tolerance`, a.length === b.length && mean <= Math.max(tolerance / 10, 0.5), `mean absolute sample difference ${mean.toFixed(3)}`);
+      record(
+        scenario,
+        `page ${page} renders within tolerance`,
+        a.length === b.length && mean <= Math.max(tolerance / 10, 0.5),
+        `mean absolute sample difference ${mean.toFixed(3)}`,
+      );
     }
   }
 }
@@ -250,11 +404,20 @@ await rm(root, { recursive: true, force: true });
 await mkdir(root, { recursive: true });
 for (const tool of ["pdftotext", "pdfinfo", "pdfdetach", "pdfimages", "pdftoppm", "pdffonts"]) {
   if (run("which", [tool]).status !== 0) {
-    console.error(`Missing independent consumer: ${tool}. Install poppler-utils; acceptance cannot pass without it.`);
+    console.error(
+      `Missing independent consumer: ${tool}. Install poppler-utils; acceptance cannot pass without it.`,
+    );
     process.exit(2);
   }
 }
-const build = run("cargo", ["build", "--quiet", "--manifest-path", "src-tauri/Cargo.toml", "--example", "engine_cli"]);
+const build = run("cargo", [
+  "build",
+  "--quiet",
+  "--manifest-path",
+  "src-tauri/Cargo.toml",
+  "--example",
+  "engine_cli",
+]);
 if (build.status !== 0) {
   console.error(`The engine_cli example did not build:\n${build.stderr}`);
   process.exit(2);
@@ -265,5 +428,7 @@ await protectionAcceptance(corpus);
 await compressionAcceptance(corpus);
 await writeFile(path.join(root, "report.json"), `${JSON.stringify(results, null, 2)}\n`);
 const failed = results.filter((result) => !result.passed);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed. Report: output/phase7/report.json`);
+console.log(
+  `\n${results.length - failed.length}/${results.length} checks passed. Report: output/phase7/report.json`,
+);
 process.exit(failed.length ? 1 : 0);

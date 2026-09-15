@@ -124,6 +124,15 @@ describe("Safe links and attachments", () => {
       expect(sanitizeAttachmentFilename("...")).toBe("attachment.bin");
       expect(sanitizeAttachmentFilename("")).toBe("attachment.bin");
     });
+
+    it("strips bidirectional override and isolate characters that disguise extensions", () => {
+      // Built from code points so no invisible control character appears in this source file.
+      const [override, isolate, popIsolate] = [0x202e, 0x2066, 0x2069].map((code) =>
+        String.fromCharCode(code),
+      );
+      expect(sanitizeAttachmentFilename(`invoice${override}txt.exe`)).toBe("invoicetxt.exe");
+      expect(sanitizeAttachmentFilename(`${isolate}report${popIsolate}.pdf`)).toBe("report.pdf");
+    });
   });
 
   describe("embedded attachments lifecycle", () => {
@@ -155,9 +164,9 @@ describe("Safe links and attachments", () => {
     it("rejects attachments exceeding maximum size boundary (50MB)", async () => {
       // Mock large byte array length without allocating 50MB in RAM
       const fakeLarge = { length: MAX_ATTACHMENT_SIZE_BYTES + 1 } as unknown as Uint8Array;
-      await expect(
-        addEmbeddedAttachment(samplePdf, "huge.zip", fakeLarge),
-      ).rejects.toThrow(/Attachment exceeds maximum allowed size of 50 MB/);
+      await expect(addEmbeddedAttachment(samplePdf, "huge.zip", fakeLarge)).rejects.toThrow(
+        /Attachment exceeds maximum allowed size of 50 MB/,
+      );
     });
   });
 
@@ -171,9 +180,7 @@ describe("Safe links and attachments", () => {
         replaceWithBytes: vi.fn().mockResolvedValue(undefined),
       } as unknown as ViewerController;
 
-      render(
-        <LinkDialog controller={mockController} onClose={onClose} />,
-      );
+      render(<LinkDialog controller={mockController} onClose={onClose} />);
 
       const urlInput = screen.getByPlaceholderText("https://example.com");
       fireEvent.change(urlInput, { target: { value: "https://navpdf.org" } });
@@ -189,9 +196,7 @@ describe("Safe links and attachments", () => {
     });
 
     it("disables button when unsafe scheme is typed", () => {
-      render(
-        <LinkDialog controller={null} onClose={vi.fn()} />,
-      );
+      render(<LinkDialog controller={null} onClose={vi.fn()} />);
 
       const urlInput = screen.getByPlaceholderText("https://example.com");
       fireEvent.change(urlInput, { target: { value: "javascript:alert(1)" } });
@@ -212,9 +217,7 @@ describe("Safe links and attachments", () => {
         replaceWithBytes: vi.fn().mockResolvedValue(undefined),
       } as unknown as ViewerController;
 
-      render(
-        <AttachmentsDialog controller={mockController} onClose={onClose} />,
-      );
+      render(<AttachmentsDialog controller={mockController} onClose={onClose} />);
 
       expect(screen.getByText("File Attachments")).toBeDefined();
       expect(screen.getByText(/No embedded attachments/i)).toBeDefined();

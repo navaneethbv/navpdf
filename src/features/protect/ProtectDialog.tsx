@@ -3,12 +3,9 @@ import { AlertTriangle, Lock, Shield, Unlock, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { discardRecovery, markDirty, native } from "../../services/native";
-import {
-  ENGINE_UNAVAILABLE,
-  saveProtectedCopy,
-  unlockDocument,
-} from "../../services/engine";
+import { ENGINE_UNAVAILABLE, saveProtectedCopy, unlockDocument } from "../../services/engine";
 import type { PermissionRequest } from "../../types/engine";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 const ALL_PERMISSIONS: PermissionRequest = {
   print: true,
@@ -43,15 +40,18 @@ export function validateProtection(
   confirmPermissions: string,
   permissions: PermissionRequest,
 ): string | null {
-  if (!openPassword) return "Enter a password that will be required to open the copy.";
-  if (openPassword !== confirmOpen) return "The open passwords do not match.";
   if (
     byteLength(openPassword) > MAX_PASSWORD_BYTES ||
     byteLength(permissionsPassword) > MAX_PASSWORD_BYTES
   )
     return "Passwords can be at most 127 bytes long.";
   const restricted = Object.values(permissions).some((allowed) => !allowed);
-  if (restricted || permissionsPassword) {
+  if (!openPassword && !permissionsPassword)
+    return "Enter a password, or use a separate permissions password for an open-without-password copy.";
+  if (!openPassword && !restricted)
+    return "An open-without-password copy must restrict at least one permission.";
+  if (openPassword && openPassword !== confirmOpen) return "The open passwords do not match.";
+  if (restricted || permissionsPassword || !openPassword) {
     if (!permissionsPassword)
       return "Set a permissions password so the restrictions can be enforced.";
     if (permissionsPassword === openPassword)
@@ -62,8 +62,7 @@ export function validateProtection(
   return null;
 }
 
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function ProtectDialog({
   controller,
@@ -110,15 +109,12 @@ export function ProtectDialog({
       await controller.replaceWithBytes(bytes, "Unlocked for editing", {
         resetHistory: true,
       });
-      await discardRecovery().catch(() => {});
+      await discardRecovery(doc.id).catch(() => {});
       const state = useWorkspace.getState();
       state.set({
         dirty: false,
-        info: state.info
-          ? { ...state.info, encrypted: false, protectedSource: true }
-          : state.info,
-        status:
-          "Unlocked for editing. The file on disk stays password protected until you save.",
+        info: state.info ? { ...state.info, encrypted: false, protectedSource: true } : state.info,
+        status: "Unlocked for editing. The file on disk stays password protected until you save.",
       });
       controller.markSaved(bytes, controller.pdf?.numPages ?? pdf.numPages);
       await markDirty(false).catch(() => {});
@@ -173,7 +169,7 @@ export function ProtectDialog({
         });
         controller.markSaved(bytes, pdf.numPages);
         await markDirty(false).catch(() => {});
-        await discardRecovery().catch(() => {});
+        await discardRecovery(doc.id).catch(() => {});
       }
       state.set({
         status: result.replacedSource
@@ -195,12 +191,7 @@ export function ProtectDialog({
     await onSaveUnprotected();
   };
 
-  const field = (
-    suffix: string,
-    label: string,
-    value: string,
-    change: (value: string) => void,
-  ) => (
+  const field = (suffix: string, label: string, value: string, change: (value: string) => void) => (
     <div className="setting-group">
       <label className="setting-title" htmlFor={`${ids}-${suffix}`}>
         {label}
@@ -218,7 +209,7 @@ export function ProtectDialog({
   );
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label={title}>
+    <FeatureDialog title={title} onClose={onClose} busy={working}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -249,10 +240,9 @@ export function ProtectDialog({
               <div className="security-status-box">
                 <Lock size={20} />
                 <p>
-                  This PDF is password protected and opens read-only. Enter its
-                  password to create an editable working copy. If the PDF
-                  restricts changes, enter its permissions (owner) password.
-                  Recovery copies are not written for unlocked documents.
+                  This PDF is password protected and opens read-only. Enter its password to create
+                  an editable working copy. If the PDF restricts changes, enter its permissions
+                  (owner) password. Recovery copies are not written for unlocked documents.
                 </p>
               </div>
               {field("unlock", "Document password", unlockPassword, setUnlockPassword)}
@@ -263,23 +253,20 @@ export function ProtectDialog({
                 <div className="security-status-box">
                   <Lock size={20} />
                   <p>
-                    This working copy came from a password-protected file. Save
-                    a protected copy below, or explicitly save without
-                    protection.
+                    This working copy came from a password-protected file. Save a protected copy
+                    below, or explicitly save without protection.
                   </p>
                 </div>
               )}
               <p className="field-hint">
-                The copy is encrypted with AES-256 and checked by reopening it
-                with each password before it replaces anything. The open
-                document stays unencrypted in NavPDF.
+                The copy is encrypted with AES-256 and checked before it replaces anything. Leave
+                the open password empty to create a copy that opens without a password while the
+                separate permissions password protects its restrictions.
               </p>
               {field("open", "Open password", openPassword, setOpenPassword)}
               {field("confirm-open", "Confirm open password", confirmOpen, setConfirmOpen)}
               <fieldset className="permission-grid" disabled={working || !native}>
-                <legend className="setting-title">
-                  Allowed without the permissions password
-                </legend>
+                <legend className="setting-title">Allowed without the permissions password</legend>
                 {PERMISSION_LABELS.map(([key, label]) => (
                   <label key={key} className="checkbox-row">
                     <input
@@ -297,9 +284,8 @@ export function ProtectDialog({
                 ))}
               </fieldset>
               <p className="field-hint">
-                Readers that honor PDF permissions enforce these restrictions;
-                they do not stop someone who has the open password from
-                reading the content.
+                Readers that honor PDF permissions enforce these restrictions; they do not stop
+                someone who has the open password from reading the content.
               </p>
               {field(
                 "permissions",
@@ -359,6 +345,6 @@ export function ProtectDialog({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

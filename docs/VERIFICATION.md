@@ -1,5 +1,102 @@
 # Verification ledger
 
+## September 15 PR #4 follow-up review fixes
+
+The follow-up to `3d2f611` corrects image transforms by converting the requested page-space matrix into the current image coordinate system.
+The native engine reproduction previously moved an image 1,000 points when asked to move it 10 points.
+The saved-output regression now checks translation, rotation, and preservation of the same image on a second page.
+Coordinate comparisons allow 0.0001 points for PDF single-precision serialization.
+XFDF import retains text-markup quadrilaterals and rejects missing or malformed geometry, with reload assertions for highlights, underlines, and strikeouts.
+Dropdown and radio updates can clear selections and change flags without inventing an option value.
+
+Local validation passes ESLint, TypeScript, formatting, 510 frontend tests with coverage, production build, 80 Rust tests, Clippy with warnings denied, rustfmt, instruction-file parity, and diff whitespace checks.
+Coverage is 83.54% statements, 75.46% branches, 81.16% functions, and 86.37% lines.
+The existing constrained-volume Rust test remains ignored.
+The production build retains its existing large-chunk advisory.
+These checks use the native engine and PDF services; they do not establish packaged UI, Preview, or Acrobat acceptance.
+The packaged application and DMG were not rebuilt for this follow-up, so earlier artifact hashes do not identify these fixes.
+Hosted checks must run on the pushed follow-up revision.
+
+## September 15 current worktree checkpoint
+
+The pushed worktree is `fix/september-14-review-corrections` at source revision `d83f6d8271dd77c973df799f63dfecff14152128`.
+Only the three untracked root planning files remain outside the pushed tree.
+The source review and implementation plan are [REVIEW-2026-09-14.md](REVIEW-2026-09-14.md) and [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md).
+
+| Check | Current result |
+| --- | --- |
+| Frontend unit suite and coverage | 504 tests across 80 files passed; 83.39% statements, 75.01% branches, 81.18% functions and 86.20% lines. |
+| TypeScript | Passed after the current shell, dialog, OCR and fixture changes. |
+| ESLint | Passed after the current script and corpus changes. |
+| Rust tests | 80 passed; 1 constrained-volume disk-full test remains ignored. |
+| Rust Clippy | Passed with `--all-targets -- -D warnings`. |
+| Formatting and repository parity | Prettier, Rustfmt, `git diff --check` and `cmp AGENTS.md CLAUDE.md` passed. |
+| Acceptance tool discovery | All eight local tools were found by `npm run acceptance:check-tools`. |
+| Hosted CI | Run `35012242904` passed every listed check, including Cargo Deny, SonarCloud, frontend checks, Rust checks, Phase 7, Phase 8, Phase 10 and OCR acceptance. |
+| Native UI and package | The app bundle and DMG rebuilt successfully, `hdiutil verify` passed, and a fresh packaged process rendered the page and thumbnails without the previous persistent spinner. |
+
+The rebuilt app bundle is `src-tauri/target/release/bundle/macos/NavPDF.app`.
+Its executable SHA-256 is `9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4`.
+The DMG is `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+Its SHA-256 is `2904b2a5bcbbf680aff64ec8284e5e7553afdc0c579379818eb68e8f9f27c0a82`.
+`hdiutil verify` reports a valid checksum with CRC32 `$B4992B9A`.
+
+Task 3.8 now includes duplicate-open protection, stable event subscriptions, guarded preference parsing, password-dialog focus and a root Save a copy recovery boundary.
+Task 4.2 now uses an explicit `requireFixture` helper for integration and PDF transport fixture consumers.
+Task 4.3 now drives the OCR acceptance script from `ocr-evaluation-corpus.json`, computes WER and CER, validates OCR bounding boxes and writes `output/ocr-review/corpus-report.json`.
+Task 4.4 now exposes acceptance commands, checks independent tool availability and adds a macOS workflow that runs the Phase 7, Phase 8, Phase 10, license and OCR acceptance scripts.
+
+Task 5.1 now provides Document Properties editing through `src/features/document/PropertiesDialog.tsx` and `src/services/pdf/metadata.ts`.
+The saved output contains synchronized Info and XMP metadata, covered by `tests/unit/pdf-metadata.test.ts` and `tests/unit/properties-dialog.test.tsx`.
+
+The OCR corpus script and macOS workflow ran on macOS with the native OCR example and independent tools available.
+Native packaged UI acceptance passed for rendering. Preview and Acrobat reopen checks remain open.
+
+The current acceptance results are 55 of 55 Phase 7 checks, 12 of 12 Phase 8 checks, 55 of 55 Phase 10 checks and 6 of 6 OCR samples.
+
+## September 14 implementation plan, Tranches 0 to 2
+
+This entry records local evidence for Tranches 0 to 2 of [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md) on `fix/september-14-review-corrections`, based on `4f667c1`.
+An earlier progress report described Tranches 0 and 1 as complete and fully tested, but source inspection did not support that description.
+At the start of this checkpoint, typecheck failed with three errors in `controller.ts` and lint failed with four errors in new tests.
+The editing-permission test mocked an array where PDF.js returns a `Set`, which hid a runtime `TypeError` that left editing enabled on restricted documents.
+Two Rust tests for Tasks 1.3 and 1.9 re-implemented the production branch inside the test or deleted files the test itself created.
+They now call `adopt_protected_source`, `store_recovery` and `retire_recovery`.
+Task 1.7, most of Task 1.8 and the recovery isolation of Task 1.9 were missing and are now implemented.
+
+Deliberate differences from the plan text:
+
+- Recovery copies are stored as `recovery/<document id>.pdf` with one JSON sidecar per entry rather than a shared `manifest.json`, so each write and discard is independent. `local_state` returns the entries instead of a separate `list_recovery` command, and the single legacy `recovery.pdf` is migrated on first listing.
+- Comment exchange identity uses the PDF.js fingerprint when the info dictionary has no `/ID`, because no native snapshot hash is exposed to the renderer.
+- The save-time redaction audit (DS-12) arms only when a committed revision's SHA-256 matches the audited redaction output, so a failed attach never blocks saving the unredacted document. A successful save clears it, as the plan specifies.
+
+Behavior and limits of Task 2.7:
+
+- NAT-03: the term audit decodes one stream at a time. A counting-allocator regression keeps the peak under 3 MB while scanning 24 streams of 1 MB each; the previous implementation retained every decoded stream plus a lower-cased copy.
+- NAT-04: images with a color-key `/Mask` array are not decoded, so compression skips them and redaction removes such a placement entirely with a warning.
+- NAT-05: text whose character codes cannot be segmented blocks redaction when it lies within one font size of a region, and lopdf `extract_text` supplies a second decoder for audit terms. Glyphs later in the same text object that lie farther from a region are still positioned from estimated advances.
+- NAT-15: lopdf accepts a `startxref` one byte early, on the line break before `xref`, and records it as the section start. Signing now requires the declared offset to begin with `xref` or an `N G obj` header. The Keychain prompt limitation for ad-hoc signed builds remains for Task 4.5.
+- DS-12: the armed audit keeps the page numbers of the original redaction, so deleting or reordering pages before the next save can block that save until the document is redacted again. Terms are audited on every page regardless.
+
+| Check | Result |
+| --- | --- |
+| Node version | 24.18.1 |
+| ESLint and TypeScript | Passed |
+| Frontend coverage | 458 tests across 68 files passed; 84.08% statements, 75.73% branches, 82.97% functions, 86.66% lines |
+| Production build | Passed; existing large-chunk advisory remains |
+| Rust tests | 76 passed; 1 constrained-volume disk-full test ignored |
+| Clippy and rustfmt | Passed with `--all-targets -- -D warnings`; `cargo fmt --check` clean |
+| Rust 1.89 compile check | Blocked locally: rustc 1.89.0 fails linking the `proc-macro2` build script against the macOS 27 SDK with `ld: tapi error: malformed file`, before NavPDF code compiles; the hosted Ubuntu `rust-msrv` job is the MSRV evidence |
+| Phase 7 adversarial acceptance | 55/55 passed with the rebuilt `engine_cli` |
+| Whitespace and instruction parity | `git diff --check` and `cmp AGENTS.md CLAUDE.md` passed |
+| Prettier | 117 files did not match `.prettierrc`; a formatting-only commit follows this change |
+| cargo-deny | Not run locally because the tool is not installed; the hosted job is its first run |
+
+Not established by this entry:
+
+- No native check from Tasks 1.1 to 2.7 was performed, and the packaged app was not rebuilt or relaunched, so no executable hash is recorded.
+- Hosted CI results for this branch are recorded after the push.
+
 ## September 14 PR 3 CI correction
 
 The Rust job on `065349d` failed because the revision regression read `reader-5.pdf`, which is generated by the frontend pretest hook and absent from the separate Rust checkout.
@@ -380,3 +477,58 @@ DMG integrity was independently verified using `hdiutil verify`.
 All local automated checks pass: 61 frontend test files (406 tests) with full coverage, 58 Rust tests with 1 constrained disk-full test ignored, Clippy clean with zero warnings, and passing acceptance suites for Phase 7 (55/55), Phase 8 (12/12), and Phase 10 (55/55).
 
 See [PR-1-REVIEW.md](PR-1-REVIEW.md) for milestone disposition and remaining implementation limitations.
+
+### September 15, 2026 review correction verification
+
+The final correction work was verified from the current worktree after the native OCR bridge, viewer hardening, forms editing, crop and transform controls, signature rotation, protection parity, and machine-relative native budgets were implemented.
+
+npm run test:coverage passed 504 tests across 80 files.
+
+Coverage was 83.39% statements, 75.01% branches, 81.18% functions, and 86.20% lines.
+
+npm run lint, npm run typecheck, npm run build, cargo fmt --manifest-path src-tauri/Cargo.toml -- --check, cargo test --manifest-path src-tauri/Cargo.toml, and cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings passed.
+
+Rust tests reported 80 passed, 0 failed, and 1 ignored because the real disk-full test requires a disposable constrained volume.
+
+npm run acceptance:ocr passed 6 of 6 native Vision samples and wrote output/ocr-review/corpus-report.json.
+
+npm run acceptance:phase7 passed 55 of 55 checks.
+
+npm run acceptance:phase8 passed 12 of 12 checks.
+
+npm run acceptance:phase10 passed 55 of 55 checks.
+
+npm run acceptance:licenses wrote output/release/licenses.json with 372 resolved crates and 27 production npm packages.
+
+npm run acceptance:check-tools found all required independent validation tools.
+
+A fresh single-process launch of the final packaged application opened phase1-recovery-saved-20260913.pdf, rendered the visible page canvas and thumbnails, and showed no persistent loading spinner.
+
+The native rendering check used the exact app bundle at src-tauri/target/release/bundle/macos/NavPDF.app.
+
+Preview and Acrobat reopen verification for this final source revision was not completed.
+
+The final package executable SHA-256 is 9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4.
+
+The final package DMG SHA-256 is 2904b2a5bcbbf680aff64c8284e5e7553afdc0c579379818eb68e8f9f27c0a82.
+
+hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg reported a valid checksum with CRC32 $B4992B9A.
+
+The hosted run for commit 74974c9 confirmed the manifest path correction, then failed Cargo Deny on unallowed transitive license terms.
+
+The same hosted run failed the macOS Rust job because the linker could not resolve the synthetic swift_Builtin_float entry.
+
+The follow-up adds explicit transitive license allowances and a versioned JPEG IJG clarification, marks the private native package unpublished, and removes the redundant Swift runtime link entry.
+
+The local cargo-deny 0.18.4 full license check passes.
+
+Hosted run `35009656343` passed the normal frontend, Rust, SonarCloud and commit checks.
+It failed Cargo Deny on `RUSTSEC-2024-0370`, `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098` and `RUSTSEC-2025-0100`, all transitive advisories with no safe upgrade reported by the database.
+It also failed native acceptance because `reader-100.pdf` is generated by `npm run fixtures` and was not generated in that job.
+The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
+Hosted run `35012242904` passed all listed CI and native acceptance checks for this follow-up.
+
+The hosted Phase 10 checks then exposed more OpenSSL version drift because the runner rejected `x509 -not_before` and used different successful CMS output text.
+The script now uses the compatible `req -nodes` and `x509 -days 0` forms and checks the CMS process exit status.
+OpenSSL checks CMS and byte-range integrity with `-noverify`, while independent `pdfsig` checks the synthetic trust chain.
+Local Phase 10 acceptance passes 55 of 55 checks.

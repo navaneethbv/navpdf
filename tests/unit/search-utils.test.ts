@@ -59,9 +59,7 @@ describe("positionSearchCursor", () => {
 
   it("rejects missing matches and missing cursor state", () => {
     expect(positionSearchCursor(findWith([[]], {}), 1, 0)).toBe(false);
-    expect(
-      positionSearchCursor(findWith([[4]], undefined), 1, 0),
-    ).toBe(false);
+    expect(positionSearchCursor(findWith([[4]], undefined), 1, 0)).toBe(false);
     expect(positionSearchCursor(findWith([[4]], {}), 2, 0)).toBe(false);
   });
 });

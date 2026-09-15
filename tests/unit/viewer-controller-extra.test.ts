@@ -4,8 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   AnnotationEditorType: { NONE: 0, HIGHLIGHT: 1, FREETEXT: 2, INK: 3 },
   AnnotationMode: { ENABLE: 1 },
-  AnnotationEditorParamsType: { HIGHLIGHT_COLOR: 7 },
+  AnnotationEditorParamsType: {
+    HIGHLIGHT_COLOR: 7,
+    INK_COLOR: 8,
+    INK_THICKNESS: 9,
+    INK_OPACITY: 10,
+  },
   GlobalWorkerOptions: { workerSrc: "" },
+  PermissionFlag: { MODIFY_CONTENTS: 8 },
   PDFDataRangeTransport: class {},
   getDocument: vi.fn(),
 }));
@@ -139,28 +145,21 @@ describe("ViewerController bus reactions", () => {
     busHandlers.get("switchannotationeditorparams")!({ type: 7, value: "#fff" } as never);
     expect(editor.updateParams).toHaveBeenCalledWith(7, "#fff");
     busHandlers.get("switchannotationeditormode")!({ mode: 1 } as never);
-    expect(
-      (controller.viewer.annotationEditorMode as { mode: number }).mode,
-    ).toBe(1);
+    expect((controller.viewer.annotationEditorMode as { mode: number }).mode).toBe(1);
     busHandlers.get("switchannotationeditormode")!({ mode: 99 } as never);
-    expect(
-      (controller.viewer.annotationEditorMode as { mode: number }).mode,
-    ).toBe(1);
+    expect((controller.viewer.annotationEditorMode as { mode: number }).mode).toBe(1);
   });
 
   it("reports annotation storage failures while marking dirty", async () => {
     const pdf = makePdf();
-    vi.mocked(await import("../../src/services/native").then((m) => m.markDirty)).mockRejectedValueOnce(
-      new Error("ipc down"),
-    );
+    vi.mocked(
+      await import("../../src/services/native").then((m) => m.markDirty),
+    ).mockRejectedValueOnce(new Error("ipc down"));
     await controller.attach(pdf as never);
-    const storage = (pdf as { annotationStorage: Record<string, () => void> })
-      .annotationStorage;
+    const storage = (pdf as { annotationStorage: Record<string, () => void> }).annotationStorage;
     storage.onSetModified();
     await vi.waitFor(() => {
-      expect(useWorkspace.getState().error).toContain(
-        "Native change tracking is unavailable",
-      );
+      expect(useWorkspace.getState().error).toContain("Native change tracking is unavailable");
     });
     expect(useWorkspace.getState().dirty).toBe(true);
   });
@@ -184,7 +183,10 @@ describe("ViewerController search results", () => {
     const pdf = makePdf(2);
     pdf.getPage = vi.fn(async () => ({
       getTextContent: vi.fn(async () => ({
-        items: [{ str: "the quick brown river jumps ", hasEOL: false }, { str: "over the lazy river bank", hasEOL: true }],
+        items: [
+          { str: "the quick brown river jumps ", hasEOL: false },
+          { str: "over the lazy river bank", hasEOL: true },
+        ],
       })),
       getAnnotations: vi.fn(async () => []),
     }));
@@ -256,5 +258,72 @@ describe("ViewerController search results", () => {
     release();
     await pending;
     expect(useWorkspace.getState().comments).toEqual([]);
+  });
+
+  it("resets nativeCanUndo and nativeCanRedo in attach()", async () => {
+    // Set undo/redo flags
+    (controller as unknown as { nativeCanUndo: boolean; nativeCanRedo: boolean }).nativeCanUndo =
+      true;
+    (controller as unknown as { nativeCanUndo: boolean; nativeCanRedo: boolean }).nativeCanRedo =
+      true;
+    useWorkspace.getState().set({ canUndo: true, canRedo: true });
+
+    const pdf = makePdf(1);
+    await controller.attach(pdf as never);
+
+    expect((controller as unknown as { nativeCanUndo: boolean }).nativeCanUndo).toBe(false);
+    expect((controller as unknown as { nativeCanRedo: boolean }).nativeCanRedo).toBe(false);
+  });
+
+  it("disables editing and suppresses setTool mode throw when MODIFY_CONTENTS permission is absent", async () => {
+    const pdf = makePdf(1);
+    // PDF.js resolves a Set of granted flags; MODIFY_CONTENTS (8) is absent.
+    (pdf as unknown as { getPermissions: () => Promise<Set<number>> }).getPermissions = vi.fn(
+      async () => new Set([4, 16]),
+    );
+
+    await controller.attach(pdf as never);
+    expect(useWorkspace.getState().editingAllowed).toBe(false);
+
+    // Calling setTool("highlight") should not throw
+    expect(() => controller.setTool("highlight")).not.toThrow();
+  });
+
+  it("allows editing when permissions include MODIFY_CONTENTS or are unrestricted", async () => {
+    const restricted = makePdf(1);
+    (restricted as unknown as { getPermissions: () => Promise<Set<number>> }).getPermissions =
+      vi.fn(async () => new Set([4, 8]));
+    await controller.attach(restricted as never);
+    expect(useWorkspace.getState().editingAllowed).toBe(true);
+
+    useWorkspace.getState().set({ editingAllowed: false });
+    const open = makePdf(1);
+    (open as unknown as { getPermissions: () => Promise<null> }).getPermissions = vi.fn(
+      async () => null,
+    );
+    await controller.attach(open as never);
+    expect(useWorkspace.getState().editingAllowed).toBe(true);
+  });
+
+  it("dispatches INK_COLOR, INK_THICKNESS, and INK_OPACITY when tool is draw/ink", async () => {
+    const pdf = makePdf(1);
+    await controller.attach(pdf as never);
+
+    const updateParamsSpy = vi.fn();
+    (
+      controller as unknown as { editor: { updateParams: (type: number, val: unknown) => void } }
+    ).editor = {
+      updateParams: updateParamsSpy,
+    };
+
+    useWorkspace.getState().set({ tool: "draw" });
+    controller.setColor("#ff0000");
+    expect(updateParamsSpy).toHaveBeenCalledWith(8, "#ff0000"); // INK_COLOR: 8
+
+    controller.setWidth(5);
+    expect(updateParamsSpy).toHaveBeenCalledWith(9, 5); // INK_THICKNESS: 9
+
+    controller.setOpacity(0.8);
+    expect(updateParamsSpy).toHaveBeenCalledWith(10, 0.8); // INK_OPACITY: 10
   });
 });

@@ -1,27 +1,41 @@
+import { useState, useEffect } from "react";
 import { Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 export function Properties({ controller }: { controller: ViewerController }) {
   const s = useWorkspace();
   const selected = s.comments.find((comment) => comment.id === s.selectedAnnotationId);
-  const selectedShape = selected && ["Square", "Circle", "Line"].includes(selected.type)
-    ? selected
-    : null;
+  const selectedShape =
+    selected && ["Square", "Circle", "Line"].includes(selected.type) ? selected : null;
   const selectedColor = selectedShape?.color
     ? `#${selectedShape.color
-        .map((channel) => Math.round(channel * 255).toString(16).padStart(2, "0"))
+        .map((channel) =>
+          Math.round(channel * 255)
+            .toString(16)
+            .padStart(2, "0"),
+        )
         .join("")}`
     : s.inkColor;
+
+  const [localWidth, setLocalWidth] = useState<number>(selected?.width ?? s.inkWidth);
+  const [localOpacity, setLocalOpacity] = useState<number>(selected?.opacity ?? s.inkOpacity);
+  const [localText, setLocalText] = useState<string>(selected?.text ?? "");
+
+  useEffect(() => {
+    setLocalWidth(selected?.width ?? s.inkWidth);
+    setLocalOpacity(selected?.opacity ?? s.inkOpacity);
+    setLocalText(selected?.text ?? "");
+  }, [selected?.id, selected?.width, selected?.opacity, selected?.text, s.inkWidth, s.inkOpacity]);
   return (
     <aside className="properties">
       <h2>
         {selected
           ? "Annotation properties"
           : s.tool === "highlight"
-          ? "Highlight properties"
-          : s.tool === "shape"
-            ? "Shape properties"
-            : "Document"}
+            ? "Highlight properties"
+            : s.tool === "shape"
+              ? "Shape properties"
+              : "Document"}
       </h2>
       {selected ? (
         <>
@@ -34,8 +48,8 @@ export function Properties({ controller }: { controller: ViewerController }) {
           {selectedShape ? (
             <>
               <p className="muted">
-                Selected from the page or Comments. Changes are written as
-                standard PDF annotation properties.
+                Selected from the page or Comments. Changes are written as standard PDF annotation
+                properties.
               </p>
               <label className="color-label">
                 Stroke color
@@ -64,14 +78,15 @@ export function Properties({ controller }: { controller: ViewerController }) {
                   max="12"
                   step="0.5"
                   aria-label="Selected annotation width"
-                  value={selected.width ?? s.inkWidth}
-                  onChange={(event) =>
+                  value={localWidth}
+                  onChange={(event) => setLocalWidth(Number(event.target.value))}
+                  onPointerUp={() => {
                     void controller.updateSelectedAnnotation({
-                      width: Number(event.target.value),
-                    })
-                  }
+                      width: localWidth,
+                    });
+                  }}
                 />
-                <span>{(selected.width ?? s.inkWidth).toFixed(1)} pt</span>
+                <span>{localWidth.toFixed(1)} pt</span>
               </label>
               <label className="range-label">
                 Opacity
@@ -81,42 +96,73 @@ export function Properties({ controller }: { controller: ViewerController }) {
                   max="1"
                   step="0.05"
                   aria-label="Selected annotation opacity"
-                  value={selected.opacity ?? s.inkOpacity}
-                  onChange={(event) =>
+                  value={localOpacity}
+                  onChange={(event) => setLocalOpacity(Number(event.target.value))}
+                  onPointerUp={() => {
                     void controller.updateSelectedAnnotation({
-                      opacity: Number(event.target.value),
-                    })
-                  }
+                      opacity: localOpacity,
+                    });
+                  }}
                 />
-                <span>
-                  {Math.round((selected.opacity ?? s.inkOpacity) * 100)}%
-                </span>
+                <span>{Math.round(localOpacity * 100)}%</span>
               </label>
-              <div className="property-button-grid" role="group" aria-label="Move selected annotation">
-                <button className="button" onClick={() => void controller.moveSelectedAnnotation(-8, 0)}>
+              <div
+                className="property-button-grid"
+                role="group"
+                aria-label="Move selected annotation"
+              >
+                <button
+                  className="button"
+                  onClick={() => void controller.moveSelectedAnnotation(-8, 0)}
+                >
                   Move left
                 </button>
-                <button className="button" onClick={() => void controller.moveSelectedAnnotation(8, 0)}>
+                <button
+                  className="button"
+                  onClick={() => void controller.moveSelectedAnnotation(8, 0)}
+                >
                   Move right
                 </button>
-                <button className="button" onClick={() => void controller.moveSelectedAnnotation(0, 8)}>
+                <button
+                  className="button"
+                  onClick={() => void controller.moveSelectedAnnotation(0, 8)}
+                >
                   Move up
                 </button>
-                <button className="button" onClick={() => void controller.moveSelectedAnnotation(0, -8)}>
+                <button
+                  className="button"
+                  onClick={() => void controller.moveSelectedAnnotation(0, -8)}
+                >
                   Move down
                 </button>
               </div>
-              <div className="property-button-grid" role="group" aria-label="Resize selected annotation">
-                <button className="button" onClick={() => void controller.resizeSelectedAnnotation(8, 0)}>
+              <div
+                className="property-button-grid"
+                role="group"
+                aria-label="Resize selected annotation"
+              >
+                <button
+                  className="button"
+                  onClick={() => void controller.resizeSelectedAnnotation(8, 0)}
+                >
                   Widen
                 </button>
-                <button className="button" onClick={() => void controller.resizeSelectedAnnotation(-8, 0)}>
+                <button
+                  className="button"
+                  onClick={() => void controller.resizeSelectedAnnotation(-8, 0)}
+                >
                   Narrow
                 </button>
-                <button className="button" onClick={() => void controller.resizeSelectedAnnotation(0, 8)}>
+                <button
+                  className="button"
+                  onClick={() => void controller.resizeSelectedAnnotation(0, 8)}
+                >
                   Taller
                 </button>
-                <button className="button" onClick={() => void controller.resizeSelectedAnnotation(0, -8)}>
+                <button
+                  className="button"
+                  onClick={() => void controller.resizeSelectedAnnotation(0, -8)}
+                >
                   Shorter
                 </button>
               </div>
@@ -126,13 +172,16 @@ export function Properties({ controller }: { controller: ViewerController }) {
               Note text
               <textarea
                 aria-label="Selected note text"
-                value={selected.text}
+                value={localText}
                 rows={5}
-                onChange={(event) =>
-                  void controller.updateSelectedAnnotation({
-                    contents: event.target.value,
-                  })
-                }
+                onChange={(event) => setLocalText(event.target.value)}
+                onBlur={() => {
+                  if (localText !== selected.text) {
+                    void controller.updateSelectedAnnotation({
+                      contents: localText,
+                    });
+                  }
+                }}
               />
             </label>
           ) : (
@@ -153,8 +202,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
           </div>
           <h3>Mark what matters.</h3>
           <p className="muted">
-            Select text on the page to highlight it. You can also draw a
-            freehand highlight.
+            Select text on the page to highlight it. You can also draw a freehand highlight.
           </p>
           <label className="color-label">
             Color
@@ -177,8 +225,8 @@ export function Properties({ controller }: { controller: ViewerController }) {
             ))}
           </div>
           <p className="tip">
-            Highlights are embedded in your PDF when you save. Select a
-            highlight to change its color or delete it.
+            Highlights are embedded in your PDF when you save. Select a highlight to change its
+            color or delete it.
           </p>
           <button
             className="button"
@@ -195,8 +243,8 @@ export function Properties({ controller }: { controller: ViewerController }) {
           </div>
           <h3>Draw with intention.</h3>
           <p className="muted">
-            Drag on the page to add a {s.shapeKind.toLowerCase()} annotation.
-            Press Escape to leave drawing mode.
+            Drag on the page to add a {s.shapeKind.toLowerCase()} annotation. Press Escape to leave
+            drawing mode.
           </p>
           <label className="color-label">
             Stroke color
@@ -216,9 +264,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
               step="0.5"
               aria-label="Shape stroke width"
               value={s.inkWidth}
-              onChange={(e) =>
-                useWorkspace.getState().set({ inkWidth: Number(e.target.value) })
-              }
+              onChange={(e) => useWorkspace.getState().set({ inkWidth: Number(e.target.value) })}
             />
             <span>{s.inkWidth.toFixed(1)} pt</span>
           </label>
@@ -231,15 +277,13 @@ export function Properties({ controller }: { controller: ViewerController }) {
               step="0.05"
               aria-label="Shape opacity"
               value={s.inkOpacity}
-              onChange={(e) =>
-                useWorkspace.getState().set({ inkOpacity: Number(e.target.value) })
-              }
+              onChange={(e) => useWorkspace.getState().set({ inkOpacity: Number(e.target.value) })}
             />
             <span>{Math.round(s.inkOpacity * 100)}%</span>
           </label>
           <p className="tip">
-            Shapes are stored as standard PDF annotations and remain separate
-            from freehand ink and highlights.
+            Shapes are stored as standard PDF annotations and remain separate from freehand ink and
+            highlights.
           </p>
         </>
       ) : (
@@ -262,18 +306,15 @@ export function Properties({ controller }: { controller: ViewerController }) {
           </dl>
           {s.info?.encrypted && (
             <p className="tip">
-              <LockKeyhole size={16} /> This file is open for reading. Unlock
-              it from Password Protect to edit it or save a copy.
+              <LockKeyhole size={16} /> This file is open for reading. Unlock it from Password
+              Protect to edit it or save a copy.
             </p>
           )}
           {!s.info?.encrypted && (
             <div className="reader-hint">
               <Highlighter size={22} />
               <strong>A little clarity goes a long way.</strong>
-              <p>
-                Select Highlight to mark a passage, then save the PDF to keep
-                it.
-              </p>
+              <p>Select Highlight to mark a passage, then save the PDF to keep it.</p>
               <button
                 className="button"
                 disabled={s.busy || s.info?.encrypted}

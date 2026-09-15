@@ -3,6 +3,8 @@ import { Paperclip, Plus, Download, Trash2, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { downloadBlob } from "../../utils/download";
+import { native } from "../../services/native";
+import { pruneDocument } from "../../services/engine";
 import {
   listEmbeddedAttachments,
   addEmbeddedAttachment,
@@ -11,6 +13,7 @@ import {
   MAX_ATTACHMENT_SIZE_BYTES,
   type EmbeddedAttachmentSummary,
 } from "../../services/document-commands";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 interface AttachmentItem extends EmbeddedAttachmentSummary {
   data?: Uint8Array;
@@ -26,18 +29,22 @@ export function AttachmentsDialog({
   const s = useWorkspace();
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!controller?.pdf) return;
     let active = true;
+    setLoadError(null);
     controller.pdf
       .saveDocument()
       .then((bytes) => listEmbeddedAttachments(bytes))
       .then((items) => {
         if (active) setAttachments(items);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) setLoadError("Attachments could not be read.");
+      });
     return () => {
       active = false;
     };
@@ -63,10 +70,7 @@ export function AttachmentsDialog({
         bytes,
         `Attached by NavPDF on ${new Date().toLocaleDateString()}`,
       );
-      await controller.replaceWithBytes(
-        newBytes,
-        `File "${file.name}" attached to PDF`,
-      );
+      await controller.replaceWithBytes(newBytes, `File "${file.name}" attached to PDF`);
       setAttachments((prev) => [
         ...prev.filter((a) => a.name !== file.name),
         { name: file.name, size: file.size, data: bytes },
@@ -105,11 +109,19 @@ export function AttachmentsDialog({
     setSaving(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const newBytes = await deleteEmbeddedAttachment(currentBytes, item.name);
-      await controller.replaceWithBytes(
-        newBytes,
-        `Attachment "${item.name}" removed from PDF`,
-      );
+      let newBytes = await deleteEmbeddedAttachment(currentBytes, item.name);
+      if (native) {
+        try {
+          newBytes = await pruneDocument(newBytes);
+        } catch {
+          // ignore or fall back
+        }
+      } else {
+        s.set({
+          status: "Deleted objects remain in the file until saved from the desktop app.",
+        });
+      }
+      await controller.replaceWithBytes(newBytes, `Attachment "${item.name}" removed from PDF`);
       setAttachments((prev) => prev.filter((a) => a.name !== item.name));
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -119,12 +131,7 @@ export function AttachmentsDialog({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="PDF Attachments"
-    >
+    <FeatureDialog title="PDF Attachments" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -154,7 +161,11 @@ export function AttachmentsDialog({
           </div>
 
           <div className="attachments-list">
-            {attachments.length === 0 ? (
+            {loadError ? (
+              <p className="error-text" role="alert">
+                {loadError}
+              </p>
+            ) : attachments.length === 0 ? (
               <p className="empty-message">No embedded attachments in this document.</p>
             ) : (
               attachments.map((att, idx) => (
@@ -163,7 +174,11 @@ export function AttachmentsDialog({
                     <Paperclip size={16} />
                     <span className="attachment-name">{att.name}</span>
                     <span className="attachment-size">
-                      ({att.size !== undefined ? `${Math.round(att.size / 1024)} KB` : "unknown size"})
+                      (
+                      {att.size !== undefined
+                        ? `${Math.round(att.size / 1024)} KB`
+                        : "unknown size"}
+                      )
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: "6px" }}>
@@ -199,6 +214,6 @@ export function AttachmentsDialog({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

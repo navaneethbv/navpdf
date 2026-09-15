@@ -3,8 +3,9 @@ import { native, printDocument } from "../../services/native";
 import { Printer, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import { extractPages } from "../../services/document-commands";
-import { parsePageRange, type RangeMode } from "./print-range";
+import { parsePageRange, type RangeMode } from "./page-range";
 import type { ViewerController } from "../viewer/controller";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function PrintDialog({
   controller,
@@ -67,16 +68,10 @@ export function PrintDialog({
       controller.editor?.commitOrRemove();
       const bytes = await controller.pdf.saveDocument();
       const totalPages = controller.pdf.numPages;
-      const pages = parsePageRange(
-        rangeMode,
-        customRange,
-        s.page,
-        totalPages,
-      );
+      const pages = parsePageRange(rangeMode, customRange, s.page, totalPages);
       // Only rebuild the document when a subset was actually requested, so a
       // full-document print keeps the original structure intact.
-      const payload =
-        pages.length === totalPages ? bytes : await extractPages(bytes, pages);
+      const payload = pages.length === totalPages ? bytes : await extractPages(bytes, pages);
       if (native) {
         const printed = await printDocument(payload as Uint8Array<ArrayBuffer>, pages.length);
         s.set({ status: printed ? "Print operation completed" : "Print cancelled" });
@@ -113,7 +108,7 @@ export function PrintDialog({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Print document">
+    <FeatureDialog title="Print document" onClose={onClose} busy={printing}>
       <div className="modal-dialog print-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -169,8 +164,8 @@ export function PrintDialog({
           </div>
 
           <p className="field-hint">
-            Orientation, scale, and destination are chosen in the system print
-            dialog that opens next.
+            Orientation, scale, and destination are chosen in the system print dialog that opens
+            next.
           </p>
 
           {hasMixedDimensions && (
@@ -184,15 +179,11 @@ export function PrintDialog({
           <button onClick={onClose} className="button-secondary">
             Cancel
           </button>
-          <button
-            onClick={handlePrint}
-            disabled={printing}
-            className="button-primary"
-          >
+          <button onClick={handlePrint} disabled={printing} className="button-primary">
             {printing ? "Preparing..." : "Print"}
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

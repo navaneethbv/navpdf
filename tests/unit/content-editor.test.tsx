@@ -101,6 +101,7 @@ describe("ContentEditor and content commands", () => {
         imageType: "png",
         preserveAspectRatio: true,
         opacity: 0.9,
+        rotationDegrees: 90,
       });
 
       expect(output.length).toBeGreaterThan(samplePdf.length);
@@ -128,13 +129,7 @@ describe("ContentEditor and content commands", () => {
         replaceWithBytes: vi.fn(),
       } as unknown as ViewerController;
 
-      render(
-        <ContentEditor
-          controller={mockController}
-          type="text"
-          onClose={vi.fn()}
-        />,
-      );
+      render(<ContentEditor controller={mockController} type="text" onClose={vi.fn()} />);
 
       const textarea = screen.getByPlaceholderText(/Enter text to place on page/i);
       const insertBtn = screen.getByRole("button", { name: "Insert Text" }) as HTMLButtonElement;
@@ -165,13 +160,7 @@ describe("ContentEditor and content commands", () => {
         replaceWithBytes: vi.fn().mockResolvedValue(undefined),
       } as unknown as ViewerController;
 
-      render(
-        <ContentEditor
-          controller={mockController}
-          type="text"
-          onClose={onClose}
-        />,
-      );
+      render(<ContentEditor controller={mockController} type="text" onClose={onClose} />);
 
       const textarea = screen.getByPlaceholderText(/Enter text to place on page/i);
       fireEvent.change(textarea, { target: { value: "Valid Document Text" } });

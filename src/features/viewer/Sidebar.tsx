@@ -30,18 +30,12 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
     if (tab === "comments")
       void controller
         .readComments()
-        .catch(() =>
-          set({ error: "Comments could not be read from this PDF." }),
-        );
+        .catch(() => set({ error: "Comments could not be read from this PDF." }));
     if (tab !== "search") controller.closeSearch();
   }, [controller, tab, set]);
   return (
     <aside className="left-sidebar">
-      <div
-        className="sidebar-tabs"
-        role="tablist"
-        aria-label="Document navigation"
-      >
+      <div className="sidebar-tabs" role="tablist" aria-label="Document navigation">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -95,11 +89,7 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
             >
               <Download size={14} /> Export
             </button>
-            <button
-              type="button"
-              className="button"
-              onClick={() => importInput.current?.click()}
-            >
+            <button type="button" className="button" onClick={() => importInput.current?.click()}>
               <Upload size={14} /> Import
             </button>
             <input
@@ -141,8 +131,8 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
             ))
           ) : (
             <p className="empty-message">
-              No saved comments or highlights found. New highlights appear here
-              after saving and reopening.
+              No saved comments or highlights found. New highlights appear here after saving and
+              reopening.
             </p>
           )}
         </div>
@@ -150,13 +140,7 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
     </aside>
   );
 }
-function BookmarkTree({
-  nodes,
-  controller,
-}: {
-  nodes: Bookmark[];
-  controller: ViewerController;
-}) {
+function BookmarkTree({ nodes, controller }: { nodes: Bookmark[]; controller: ViewerController }) {
   return (
     <ul className="bookmarks">
       {nodes.map((node, i) => (
@@ -166,13 +150,11 @@ function BookmarkTree({
               onClick={() => {
                 const dest = node.destination;
                 if (!dest) return;
-                void controller.links
-                  .goToDestination(dest)
-                  .catch(() =>
-                    useWorkspace.getState().set({
-                      error: "This bookmark has an invalid destination.",
-                    }),
-                  );
+                void controller.links.goToDestination(dest).catch(() =>
+                  useWorkspace.getState().set({
+                    error: "This bookmark has an invalid destination.",
+                  }),
+                );
               }}
             >
               {node.title}

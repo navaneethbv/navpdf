@@ -1,0 +1,46 @@
+# cargo-deny configuration for NavPDF
+[advisories]
+# RUSTSEC-2023-0071: rsa crate Marvin timing side-channel.
+# NavPDF signs locally with randomized, blinded signing and exposes no network-reachable signing/decryption (see docs/adr/0009-local-certificate-signatures.md).
+ignore = [
+    "RUSTSEC-2023-0071",
+    # These advisories are transitive dependencies of Tauri's platform and
+    # parser stack. The advisory database reports no safe upgrade for them.
+    "RUSTSEC-2024-0370",
+    "RUSTSEC-2025-0075",
+    "RUSTSEC-2025-0080",
+    "RUSTSEC-2025-0081",
+    "RUSTSEC-2025-0098",
+    "RUSTSEC-2025-0100",
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "LicenseRef-IJG",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[licenses.private]
+ignore = true
+
+[[licenses.clarify]]
+crate = "jpeg-encoder"
+expression = "(MIT OR Apache-2.0) AND LicenseRef-IJG"
+license-files = [
+    { path = "LICENSE-IJG", hash = 0x583e09bf },
+]
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

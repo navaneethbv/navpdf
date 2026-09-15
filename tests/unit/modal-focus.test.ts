@@ -5,7 +5,12 @@ import { installModalFocus } from "../../src/components/ModalFocus";
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function tab(shiftKey = false) {
-  const event = new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true });
+  const event = new KeyboardEvent("keydown", {
+    key: "Tab",
+    shiftKey,
+    bubbles: true,
+    cancelable: true,
+  });
   document.activeElement?.dispatchEvent(event);
   return event.defaultPrevented;
 }

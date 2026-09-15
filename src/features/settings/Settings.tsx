@@ -15,8 +15,7 @@ export function Settings() {
     applyTheme(preferences.theme, media.matches);
     return () => applyTheme(persistedTheme, media.matches);
   }, [preferences.theme, persistedTheme]);
-  const patch = (value: Partial<Preferences>) =>
-    update({ ...preferences, ...value });
+  const patch = (value: Partial<Preferences>) => update({ ...preferences, ...value });
   return (
     <Dialog title="Settings" onClose={() => set({ settingsOpen: false })}>
       <form
@@ -41,17 +40,15 @@ export function Settings() {
           <select
             id="settings-theme"
             value={preferences.theme}
-            onChange={(e) =>
-              patch({ theme: e.target.value as Preferences["theme"] })
-            }
+            onChange={(e) => patch({ theme: e.target.value as Preferences["theme"] })}
           >
             <option value="system">System</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>
           <span className="field-hint">
-            System follows the macOS appearance. Light and dark keep NavPDF
-            consistent regardless of the system setting.
+            System follows the macOS appearance. Light and dark keep NavPDF consistent regardless of
+            the system setting.
           </span>
         </label>
         <h3>PDF viewing</h3>
@@ -73,9 +70,7 @@ export function Settings() {
             Page layout
             <select
               value={preferences.layout}
-              onChange={(e) =>
-                patch({ layout: e.target.value as Preferences["layout"] })
-              }
+              onChange={(e) => patch({ layout: e.target.value as Preferences["layout"] })}
             >
               <option value="continuous">Continuous</option>
               <option value="single">Single page</option>
@@ -92,6 +87,24 @@ export function Settings() {
           Remember last page
         </label>
         <h3>General & privacy</h3>
+        <label>
+          Default save behavior
+          <select
+            value={preferences.saveBehavior}
+            onChange={(e) => patch({ saveBehavior: e.target.value as Preferences["saveBehavior"] })}
+          >
+            <option value="ask">Ask before replacing a file</option>
+            <option value="save-as">Always save a copy</option>
+          </select>
+        </label>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={preferences.confirmOnDelete}
+            onChange={(e) => patch({ confirmOnDelete: e.target.checked })}
+          />{" "}
+          Confirm before deleting pages or annotations
+        </label>
         <label className="check-label">
           <input
             type="checkbox"
@@ -109,23 +122,61 @@ export function Settings() {
           Keep recent document history
         </label>
         <label className="check-label">
-          <input type="checkbox" checked={false} disabled /> Allow network
-          access
+          <input type="checkbox" checked={false} disabled /> Allow network access
         </label>
-        <p className="muted">
-          Network access is off. This version has no network features.
-        </p>
+        <p className="muted">Network access is disabled by the application policy.</p>
+        <h3>Editing</h3>
+        <div className="form-columns">
+          <label>
+            Default annotation color
+            <input
+              type="color"
+              value={preferences.annotationColor}
+              onChange={(e) => patch({ annotationColor: e.target.value })}
+            />
+          </label>
+          <label>
+            Default stroke width
+            <input
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={preferences.annotationStrokeWidth}
+              onChange={(e) =>
+                patch({ annotationStrokeWidth: Math.max(1, Math.min(20, Number(e.target.value))) })
+              }
+            />
+          </label>
+        </div>
+        <h3>OCR</h3>
+        <div className="form-columns">
+          <label>
+            Default language
+            <input
+              value={preferences.ocrLanguage}
+              onChange={(e) => patch({ ocrLanguage: e.target.value })}
+              maxLength={16}
+            />
+          </label>
+          <label>
+            Default page scope
+            <select
+              value={preferences.ocrScope}
+              onChange={(e) => patch({ ocrScope: e.target.value as Preferences["ocrScope"] })}
+            >
+              <option value="current">Current page</option>
+              <option value="all">All pages</option>
+            </select>
+          </label>
+        </div>
         {error && (
           <p role="alert" className="error-text">
             {error}
           </p>
         )}
         <div className="dialog-actions">
-          <button
-            type="button"
-            className="button"
-            onClick={() => set({ settingsOpen: false })}
-          >
+          <button type="button" className="button" onClick={() => set({ settingsOpen: false })}>
             Cancel
           </button>
           <button className="button primary">Save settings</button>

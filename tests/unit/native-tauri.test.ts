@@ -16,6 +16,7 @@ import {
   openDocument,
   openRecent,
   openRecovery,
+  ocrRecognizePage,
   readRange,
   releaseDocument,
   rememberPage,
@@ -35,7 +36,7 @@ beforeEach(() => {
       case "save_document":
         return { name: "saved.pdf", size: 9 };
       case "local_state":
-        return { preferences: {}, recents: [], recovery: null };
+        return { preferences: {}, recents: [], recoveries: [] };
       case "open_recovery":
         return { id: "rec", name: "rec.pdf", size: 10 };
       case "open_recent":
@@ -86,20 +87,26 @@ describe("native service Tauri paths", () => {
   });
 
   it("writes and opens recovery copies through IPC", async () => {
-    await writeRecovery(
-      { id: "n1", name: "n.pdf", size: 1 },
-      new Uint8Array([1, 2]),
-      2,
-    );
+    await writeRecovery({ id: "n1", name: "n.pdf", size: 1 }, new Uint8Array([1, 2]), 2);
     expect(invoke).toHaveBeenCalledWith(
       "write_recovery",
       new Uint8Array([1, 2]),
       expect.objectContaining({ headers: expect.anything() }),
     );
-    await expect(openRecovery()).resolves.toMatchObject({ id: "rec" });
+    await expect(openRecovery("rec")).resolves.toMatchObject({ id: "rec" });
+    expect(invoke).toHaveBeenCalledWith("open_recovery", { id: "rec" });
     await expect(openRecent("r")).resolves.toMatchObject({ id: "r" });
-    await discardRecovery();
-    expect(invoke).toHaveBeenCalledWith("discard_recovery");
+    await discardRecovery("n1");
+    expect(invoke).toHaveBeenCalledWith("discard_recovery", { id: "n1" });
+  });
+
+  it("sends OCR pixels as a raw body with typed options in a header", async () => {
+    const image = new Uint8Array([137, 80, 78, 71]);
+    const options = { pageIndex: 2, language: "en-US", fastMode: true };
+    await ocrRecognizePage(image, options);
+    expect(invoke).toHaveBeenCalledWith("ocr_recognize_page", image, {
+      headers: { "x-ocr-options": JSON.stringify(options) },
+    });
   });
 });
 

@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  createBlankDocument,
-  applyBatesNumbering,
-} from "../../src/services/document-commands";
+import { createBlankDocument, applyBatesNumbering } from "../../src/services/document-commands";
 import { PDFDocument } from "pdf-lib";
 
 describe("applyBatesNumbering", () => {

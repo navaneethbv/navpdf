@@ -25,10 +25,6 @@ export function downloadBlob(blob: Blob, fileName: string): void {
 }
 
 /** Convenience wrapper for the byte payloads the PDF pipeline produces. */
-export function downloadBytes(
-  bytes: Uint8Array,
-  fileName: string,
-  type = "application/pdf",
-): void {
+export function downloadBytes(bytes: Uint8Array, fileName: string, type = "application/pdf"): void {
   downloadBlob(new Blob([bytes as unknown as BlobPart], { type }), fileName);
 }

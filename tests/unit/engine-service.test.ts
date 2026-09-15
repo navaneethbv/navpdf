@@ -166,9 +166,7 @@ describe("engine service", () => {
     await expect(service.inspectPage(new Uint8Array([1]), 1)).rejects.toThrow(
       service.ENGINE_UNAVAILABLE,
     );
-    await expect(service.unlockDocument("doc", "pw")).rejects.toThrow(
-      service.ENGINE_UNAVAILABLE,
-    );
+    await expect(service.unlockDocument("doc", "pw")).rejects.toThrow(service.ENGINE_UNAVAILABLE);
     await expect(service.chooseCertificate("pw")).rejects.toThrow(service.ENGINE_UNAVAILABLE);
     await expect(service.verifySignatures("doc")).rejects.toThrow(service.ENGINE_UNAVAILABLE);
     await service.cancelEngineJob("job");

@@ -65,7 +65,7 @@ vi.mock("../../src/services/native", () => ({
       networkAccess: false,
     },
     recents: [],
-    recovery: null,
+    recoveries: [],
   })),
   openDocument: vi.fn(async () => null),
   openRecent: vi.fn(async () => null),
@@ -175,6 +175,27 @@ describe("App keyboard and menus", () => {
     expect(useWorkspace.getState().sidebar).toBe("search");
   });
 
+  it("handles page navigation, annotation nudging, deletion, and busy input", () => {
+    seedDocument();
+    render(<App />);
+    const key = (keyName: string, extra: object = {}) =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: keyName, bubbles: true, cancelable: true, ...extra }),
+      );
+    key("Home");
+    key("End");
+    act(() => useWorkspace.getState().set({ selectedAnnotationId: "annotation-1" }));
+    key("ArrowLeft", { shiftKey: true });
+    key("ArrowUp");
+    key("Delete");
+    expect(useWorkspace.getState().selectedAnnotationId).toBe("annotation-1");
+    key("Escape");
+    expect(useWorkspace.getState().selectedAnnotationId).toBeNull();
+    act(() => useWorkspace.getState().set({ busy: true }));
+    key("Home");
+    expect(useWorkspace.getState().busy).toBe(true);
+  });
+
   it("warns about unsaved changes before unload", () => {
     seedDocument();
     render(<App />);
@@ -198,6 +219,42 @@ describe("App keyboard and menus", () => {
       menu({ payload: "fit-width" });
       menu({ payload: "zoom-out" });
     });
+  });
+
+  it("routes organize, tool, view, annotation, and settings menu actions", () => {
+    seedDocument();
+    render(<App />);
+    const menu = menuHandler();
+    for (const action of [
+      "organize",
+      "tools:add-text",
+      "tools:add-image",
+      "tools:annotations",
+      "tools:redact",
+    ]) {
+      act(() => menu({ payload: action }));
+      expect(useWorkspace.getState().activeModal).toBe(
+        action === "organize"
+          ? "page-workspace"
+          : action === "tools:add-text"
+            ? "add-text"
+            : action === "tools:add-image"
+              ? "add-image"
+              : action === "tools:annotations"
+                ? "annotations"
+                : "redact",
+      );
+    }
+    act(() => {
+      menu({ payload: "find" });
+      menu({ payload: "fit-page" });
+      menu({ payload: "fit-width" });
+      menu({ payload: "highlight" });
+      menu({ payload: "select" });
+      menu({ payload: "settings" });
+    });
+    expect(useWorkspace.getState().sidebar).toBe("search");
+    expect(useWorkspace.getState().settingsOpen).toBe(true);
   });
 
   it("closes every modal through its close button", () => {

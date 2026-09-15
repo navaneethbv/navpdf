@@ -27,11 +27,27 @@ it("prints only the selected edited page through native IPC and reports cancella
     expect(commit).toHaveBeenCalledOnce();
     return bytes;
   });
-  act(() => useWorkspace.getState().set({ page: 2, info: {
-    pages: 2, encrypted: false, title: "", author: "", version: "1.7",
-  } }));
+  act(() =>
+    useWorkspace.getState().set({
+      page: 2,
+      info: {
+        pages: 2,
+        encrypted: false,
+        title: "",
+        author: "",
+        version: "1.7",
+      },
+    }),
+  );
   const onClose = vi.fn();
-  render(<PrintDialog controller={{ pdf: { numPages: 2, saveDocument: save }, editor: { commitOrRemove: commit } } as never} onClose={onClose} />);
+  render(
+    <PrintDialog
+      controller={
+        { pdf: { numPages: 2, saveDocument: save }, editor: { commitOrRemove: commit } } as never
+      }
+      onClose={onClose}
+    />,
+  );
   fireEvent.click(screen.getByText("Current page", { exact: false }));
   fireEvent.click(screen.getByText("Print", { exact: true }));
   await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());

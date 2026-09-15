@@ -1,10 +1,11 @@
-//! IPC for the local PDF engine. Document bytes are staged in memory under opaque ids, so
-//! typed JSON commands never carry large payloads, and passwords never travel in headers.
+//! IPC for the local PDF engine. Large document bodies use raw IPC payloads under opaque ids,
+//! while small typed command metadata stays in JSON and passwords never travel in headers.
 
 use super::{document, payload, AppState};
-use crate::engine::{compress, edit, protect, redact, sign};
+use crate::engine::{compress, edit, protect, prune, redact, sign};
 use crate::{filesystem, logging};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::Path;
@@ -13,13 +14,42 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tauri::ipc::{Request, Response};
 use tauri::{AppHandle, Manager, State};
+use zeroize::Zeroizing;
 
 /// Staged buffers kept at once; the oldest is dropped when a new one arrives.
 const MAX_STAGED_BUFFERS: usize = 8;
 /// A document plus one bounded decoded image may be staged without allowing unbounded renderer
 /// requests to retain multiple gigabytes of native memory.
-const MAX_STAGED_BYTES: u64 = filesystem::MAX_FILE_BYTES + 256 * 1024 * 1024;
+const MAX_STAGED_BYTES_CAP: u64 = filesystem::MAX_FILE_BYTES + 256 * 1024 * 1024;
 const STATE_UNAVAILABLE: &str = "The local engine state is unavailable.";
+
+#[cfg(target_os = "macos")]
+fn physical_memory_bytes() -> Option<u64> {
+    let name = b"hw.memsize\0";
+    let mut memory = 0_u64;
+    let mut size = std::mem::size_of::<u64>();
+    let result = unsafe {
+        libc::sysctlbyname(
+            name.as_ptr().cast(),
+            (&mut memory as *mut u64).cast(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    (result == 0 && size == std::mem::size_of::<u64>() && memory > 0).then_some(memory)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn physical_memory_bytes() -> Option<u64> {
+    None
+}
+
+fn max_staged_bytes() -> u64 {
+    physical_memory_bytes()
+        .map(|memory| (memory / 4).clamp(filesystem::MAX_FILE_BYTES, MAX_STAGED_BYTES_CAP))
+        .unwrap_or(MAX_STAGED_BYTES_CAP)
+}
 
 #[derive(Default)]
 struct Buffers {
@@ -38,7 +68,7 @@ pub struct EngineState {
 
 impl EngineState {
     fn stage(&self, bytes: Vec<u8>) -> Result<String, String> {
-        self.stage_with_budget(bytes, MAX_STAGED_BYTES)
+        self.stage_with_budget(bytes, max_staged_bytes())
     }
 
     fn stage_with_budget(&self, bytes: Vec<u8>, budget: u64) -> Result<String, String> {
@@ -189,6 +219,7 @@ pub async fn engine_redact(
 ) -> Result<EngineOutcome<redact::RedactionReport>, String> {
     let state = app.state::<AppState>();
     let doc = document(&state, &document_id)?;
+    let spec = redact::AuditSpec::from_request(&request)?;
     let bytes = state.engine.take(&input_id)?;
     let result = run_job(&app, &job_id, move |cancel| {
         redact::apply(&bytes, &request, cancel)
@@ -199,6 +230,12 @@ pub async fn engine_redact(
     // Neither a plain Save nor an implicit recovery cleanup may happen until the renderer has
     // attached this candidate and the replacement save has committed successfully.
     *doc.force_save_as.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
+    // The renderer re-serializes this output before saving. The audit arms when these exact
+    // bytes are committed as a revision and is re-run by every save until one succeeds.
+    doc.redaction_audit
+        .lock()
+        .map_err(|_| STATE_UNAVAILABLE)?
+        .candidate = Some((Sha256::digest(&output).to_vec(), spec));
     Ok(EngineOutcome {
         output_id: Some(state.engine.stage(output)?),
         report,
@@ -222,6 +259,18 @@ pub async fn engine_compress(
     let (output, report) = result?;
     let output_id = output.map(|bytes| state.engine.stage(bytes)).transpose()?;
     Ok(EngineOutcome { output_id, report })
+}
+
+#[tauri::command]
+pub async fn engine_prune(app: AppHandle, input_id: String) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || prune::prune(&bytes))
+        .await
+        .map_err(|_| "Pruning failed.".to_string())?;
+    logging::record(&state.root, "engine_prune", result.is_err());
+    let output = result?;
+    state.engine.stage(output)
 }
 
 #[tauri::command]
@@ -290,18 +339,16 @@ pub async fn engine_save_protected(
     } else {
         None
     };
+    let root = state.root.clone();
     let worker_doc = doc.clone();
+    let worker_id = document_id.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let output = protect::protect(&bytes, &request, expected_pages)?;
         let hash = filesystem::atomic_save_with(&target, &output, check.as_deref(), |candidate| {
             protect::validate_protected(candidate, &request.user_password, &owner, expected_pages)
         })?;
         if replaced_source {
-            *worker_doc.source.lock().map_err(|_| STATE_UNAVAILABLE)? = (target.clone(), hash);
-            *worker_doc
-                .force_save_as
-                .lock()
-                .map_err(|_| STATE_UNAVAILABLE)? = true;
+            adopt_protected_source(&worker_doc, &root, &worker_id, target.clone(), hash)?;
         }
         Ok::<_, String>(ProtectedSave {
             name: file_name(&target),
@@ -315,13 +362,30 @@ pub async fn engine_save_protected(
     result.map(Some)
 }
 
+/// After an in-place protected save the open document is an unlocked copy of an encrypted
+/// file: no working revision or recovery copy may remain, and a plain Save must ask for a name.
+pub(super) fn adopt_protected_source(
+    doc: &super::Opened,
+    root: &Path,
+    document_id: &str,
+    target: std::path::PathBuf,
+    hash: Vec<u8>,
+) -> Result<(), String> {
+    *doc.source.lock().map_err(|_| STATE_UNAVAILABLE)? = (target, hash);
+    for flag in [&doc.force_save_as, &doc.sensitive, &doc.source_encrypted] {
+        *flag.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
+    }
+    *doc.working_file.lock().map_err(|_| STATE_UNAVAILABLE)? = None;
+    super::recovery::discard(root, document_id)
+}
+
 /// Decrypts the open document's original bytes into an editable working copy. The session
 /// is marked sensitive so recovery copies and working-revision files are never written.
 #[tauri::command]
 pub async fn engine_unlock(
     app: AppHandle,
     document_id: String,
-    password: String,
+    password: Zeroizing<String>,
 ) -> Result<String, String> {
     let state = app.state::<AppState>();
     let doc = document(&state, &document_id)?;
@@ -336,6 +400,7 @@ pub async fn engine_unlock(
     let output = output?;
     *doc.sensitive.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
     *doc.force_save_as.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
+    *doc.source_encrypted.lock().map_err(|_| STATE_UNAVAILABLE)? = true;
     state.engine.stage(output)
 }
 
@@ -345,7 +410,7 @@ pub async fn engine_unlock(
 #[tauri::command]
 pub async fn engine_choose_certificate(
     app: AppHandle,
-    password: String,
+    password: Zeroizing<String>,
 ) -> Result<Option<sign::CertificateSummary>, String> {
     let Some(file) = rfd::AsyncFileDialog::new()
         .add_filter("Certificate", &["p12", "pfx"])
@@ -498,5 +563,12 @@ mod tests {
         assert!(engine.take(&first).is_err());
         assert_eq!(*engine.take(&second).unwrap(), vec![3, 4]);
         assert!(engine.stage_with_budget(vec![0; 4], 3).is_err());
+    }
+
+    #[test]
+    fn staged_budget_respects_file_limit_and_machine_cap() {
+        let budget = max_staged_bytes();
+        assert!(budget >= filesystem::MAX_FILE_BYTES);
+        assert!(budget <= MAX_STAGED_BYTES_CAP);
     }
 }

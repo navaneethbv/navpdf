@@ -23,6 +23,16 @@ pub struct SignatureAsset {
     pub created_at: u64,
 }
 
+/// Readable assets plus user-facing notes about entries that could not be read.
+#[derive(Clone, Serialize, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryListing {
+    pub assets: Vec<SignatureAsset>,
+    pub warnings: Vec<String>,
+}
+
+const ASSET_TYPES: [&str; 2] = ["signature", "initials"];
+
 pub struct SignatureStore {
     dir: PathBuf,
     key: [u8; 32],
@@ -52,21 +62,49 @@ impl SignatureStore {
         })
     }
 
-    pub fn list(&self) -> Result<Vec<SignatureAsset>, String> {
-        let mut results = Vec::new();
-        let entries = match fs::read_dir(&self.dir) {
-            Ok(iter) => iter,
-            Err(_) => return Err("Unable to read the signature library.".into()),
-        };
+    /// Lists every readable asset. Unreadable entries and failed legacy upgrades become
+    /// warnings without paths, so one bad file never hides the rest of the library.
+    pub fn list(&self) -> Result<LibraryListing, String> {
+        let entries =
+            fs::read_dir(&self.dir).map_err(|_| "Unable to read the signature library.")?;
+        let mut listing = LibraryListing::default();
+        let (mut unreadable, mut not_upgraded) = (0_usize, 0_usize);
         for entry in entries {
-            let entry = entry.map_err(|_| "Unable to read a signature library entry.")?;
+            let Ok(entry) = entry else {
+                unreadable += 1;
+                continue;
+            };
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("sig") {
-                results.push(self.read_asset(&path)?);
+            if path.extension().and_then(|e| e.to_str()) != Some("sig") {
+                continue;
+            }
+            match self.read_asset(&path) {
+                Ok((asset, current)) => {
+                    not_upgraded += usize::from(!current);
+                    listing.assets.push(asset);
+                }
+                Err(_) => unreadable += 1,
             }
         }
-        results.sort_by_key(|b| std::cmp::Reverse(b.created_at));
-        Ok(results)
+        match unreadable {
+            0 => {}
+            1 => listing
+                .warnings
+                .push("One saved signature could not be read.".into()),
+            count => listing
+                .warnings
+                .push(format!("{count} saved signatures could not be read.")),
+        }
+        if not_upgraded > 0 {
+            listing.warnings.push(
+                "Some saved signatures could not be upgraded to protected storage. NavPDF will retry next time."
+                    .into(),
+            );
+        }
+        listing
+            .assets
+            .sort_by_key(|asset| std::cmp::Reverse(asset.created_at));
+        Ok(listing)
     }
 
     pub fn save(
@@ -77,6 +115,9 @@ impl SignatureStore {
     ) -> Result<SignatureAsset, String> {
         if name.trim().is_empty() {
             return Err("Signature name cannot be empty.".into());
+        }
+        if !ASSET_TYPES.contains(&asset_type.as_str()) {
+            return Err("Invalid signature type.".into());
         }
         if data_url.len() > 8 * 1024 * 1024 || !data_url.starts_with("data:image/png;base64,") {
             return Err("Invalid signature image format.".into());
@@ -111,6 +152,9 @@ impl SignatureStore {
         // Validate the whole batch before writing any destination.
         for item in &items {
             validate_id(&item.id)?;
+            if !ASSET_TYPES.contains(&item.asset_type.as_str()) {
+                return Err("Invalid signature type.".into());
+            }
             if item.data_url.len() > 8 * 1024 * 1024
                 || !item.data_url.starts_with("data:image/png;base64,")
             {
@@ -122,7 +166,7 @@ impl SignatureStore {
             let target = self.dir.join(format!("{}.sig", item.id));
             self.write_asset(&target, &item)?;
             // Verify readability of the saved asset before confirming
-            let verified = self.read_asset(&target)?;
+            let (verified, _) = self.read_asset(&target)?;
             migrated.push(verified);
         }
         Ok(migrated)
@@ -154,7 +198,9 @@ impl SignatureStore {
         Ok(())
     }
 
-    fn read_asset(&self, path: &Path) -> Result<SignatureAsset, String> {
+    /// Reads one asset; the flag is false when a legacy asset could not be rewritten in the
+    /// current format.
+    fn read_asset(&self, path: &Path) -> Result<(SignatureAsset, bool), String> {
         let mut file = File::open(path).map_err(|_| "Unable to open asset.")?;
         if file
             .metadata()
@@ -176,11 +222,15 @@ impl SignatureStore {
         let asset: SignatureAsset =
             serde_json::from_slice(&decrypted).map_err(|_| "Invalid asset format.")?;
         if legacy {
-            // Upgrade with the same atomic writer; failed migration retains the old file.
-            self.write_asset(path, &asset)?;
-            return self.read_asset(path);
+            // Upgrade with the same atomic writer; a failed upgrade keeps the old file and
+            // still returns the decrypted asset.
+            let upgraded = self
+                .write_asset(path, &asset)
+                .and_then(|()| self.read_asset(path))
+                .is_ok_and(|(_, current)| current);
+            return Ok((asset, upgraded));
         }
-        Ok(asset)
+        Ok((asset, true))
     }
 }
 
@@ -377,11 +427,11 @@ mod tests {
             &serde_json::to_vec(&asset).unwrap(),
         );
         fs::write(&path, old).unwrap();
-        assert_eq!(store.list().unwrap(), vec![asset.clone()]);
+        assert_eq!(store.list().unwrap().assets, vec![asset.clone()]);
         let upgraded = fs::read(&path).unwrap();
         assert!(upgraded.starts_with(b"NAVSIG2\0"));
         assert!(open_payload(&derive_key(root.path()), &upgraded).is_err());
-        assert_eq!(store.list().unwrap(), vec![asset]);
+        assert_eq!(store.list().unwrap().assets, vec![asset]);
     }
 
     #[test]
@@ -421,7 +471,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
 
-        assert_eq!(store.list().unwrap().len(), 0);
+        assert_eq!(store.list().unwrap().assets.len(), 0);
 
         let saved = store
             .save(
@@ -434,7 +484,7 @@ mod tests {
         assert_eq!(saved.name, "My Signature");
         assert_eq!(saved.asset_type, "signature");
 
-        let list = store.list().unwrap();
+        let list = store.list().unwrap().assets;
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].id, saved.id);
         assert_eq!(list[0].name, "My Signature");
@@ -456,7 +506,7 @@ mod tests {
 
         // Delete test
         store.delete(&saved.id).unwrap();
-        assert_eq!(store.list().unwrap().len(), 0);
+        assert_eq!(store.list().unwrap().assets.len(), 0);
         assert!(!file_path.exists());
     }
 
@@ -479,8 +529,79 @@ mod tests {
         assert_eq!(migrated.len(), 1);
         assert_eq!(migrated[0].id, "legacy-1");
 
-        let list = store.list().unwrap();
+        let list = store.list().unwrap().assets;
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "Initials");
+    }
+
+    #[test]
+    fn corrupt_signature_file_does_not_block_valid_signatures() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+
+        let valid = store
+            .save(
+                "Valid Signature".into(),
+                "signature".into(),
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".into(),
+            )
+            .unwrap();
+
+        // Write a corrupt .sig file directly into the store directory
+        let corrupt_path = store.dir.join("corrupt.sig");
+        fs::write(&corrupt_path, b"not a valid encrypted signature file").unwrap();
+
+        // Listing should succeed, skipping the corrupt file and returning the valid one
+        let listing = store.list().unwrap();
+        assert_eq!(listing.assets.len(), 1);
+        assert_eq!(listing.assets[0].id, valid.id);
+        assert_eq!(listing.assets[0].name, "Valid Signature");
+        assert_eq!(listing.warnings, ["One saved signature could not be read."]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn legacy_assets_stay_listed_when_the_upgrade_cannot_be_written() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let store = SignatureStore::with_key(root.path(), [17; 32]).unwrap();
+        let asset = SignatureAsset {
+            id: "old".into(),
+            name: "Synthetic".into(),
+            asset_type: "initials".into(),
+            data_url: "data:image/png;base64,AA==".into(),
+            created_at: 1,
+        };
+        let legacy = encrypt_payload(
+            &derive_key(root.path()),
+            &serde_json::to_vec(&asset).unwrap(),
+        );
+        fs::write(store.dir.join("old.sig"), &legacy).unwrap();
+        fs::set_permissions(&store.dir, fs::Permissions::from_mode(0o500)).unwrap();
+        let listing = store.list();
+        fs::set_permissions(&store.dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let listing = listing.unwrap();
+        assert_eq!(listing.assets, vec![asset]);
+        assert_eq!(listing.warnings.len(), 1);
+        assert_eq!(fs::read(store.dir.join("old.sig")).unwrap(), legacy);
+    }
+
+    #[test]
+    fn unknown_asset_types_are_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+        let image = "data:image/png;base64,AA==";
+        assert!(store
+            .save("Name".into(), "bogus".into(), image.into())
+            .is_err());
+        let stamp = SignatureAsset {
+            id: "stamp".into(),
+            name: "Stamp".into(),
+            asset_type: "stamp".into(),
+            data_url: image.into(),
+            created_at: 0,
+        };
+        assert!(store.migrate(vec![stamp]).is_err());
+        assert!(store.list().unwrap().assets.is_empty());
     }
 }

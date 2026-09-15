@@ -22,7 +22,7 @@ Object.defineProperty(window, "matchMedia", {
 beforeEach(() => {
   useWorkspace.getState().reset();
   useWorkspace.getState().set({
-    local: { preferences: defaultPreferences, recents: [], recovery: null },
+    local: { preferences: defaultPreferences, recents: [], recoveries: [] },
   });
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.style.colorScheme = "";
@@ -131,8 +131,8 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: /Export/ }));
     expect(useWorkspace.getState().error).toBe("Export failed");
 
-    const file = new File(['bad'], "comments.json");
-    file.text = vi.fn(async () => 'bad');
+    const file = new File(["bad"], "comments.json");
+    file.text = vi.fn(async () => "bad");
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
 
@@ -148,9 +148,7 @@ describe("Sidebar", () => {
 
     useWorkspace.getState().set({ sidebar: "comments", comments: [] });
     rerender(<Sidebar controller={controller as never} />);
-    expect(
-      screen.getByText(/No saved comments or highlights found/),
-    ).toBeTruthy();
+    expect(screen.getByText(/No saved comments or highlights found/)).toBeTruthy();
   });
 });
 
@@ -168,7 +166,11 @@ describe("Thumbnails", () => {
     });
     const withPdf = {
       ...controller,
-      pdf: { getPage: vi.fn(async () => { throw new Error("no render"); }) },
+      pdf: {
+        getPage: vi.fn(async () => {
+          throw new Error("no render");
+        }),
+      },
     };
     render(<Thumbnails controller={withPdf as never} />);
     expect(screen.getByLabelText("Go to page 1")).toBeTruthy();
@@ -225,7 +227,10 @@ describe("Home", () => {
       local: {
         preferences: defaultPreferences,
         recents: [{ id: "r1", name: "old.pdf", openedAt: 1_700_000_000, page: 4 }],
-        recovery: { name: "unsaved.pdf", savedAt: 1_700_000_001 },
+        recoveries: [
+          { id: "rec-1", name: "unsaved.pdf", pages: 2, savedAt: 1_700_000_001 },
+          { id: "rec-2", name: "draft.pdf", pages: 1, savedAt: 1_700_000_000 },
+        ],
       },
     });
     render(<Home {...props} />);
@@ -233,8 +238,9 @@ describe("Home", () => {
     expect(props.open).toHaveBeenCalled();
     fireEvent.click(screen.getByText("old.pdf"));
     expect(props.recent).toHaveBeenCalledWith("r1", 4);
-    fireEvent.click(screen.getByText("Open recovery"));
-    expect(props.recover).toHaveBeenCalled();
+    expect(screen.getByText("Recover unsaved documents")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Open recovery for draft.pdf"));
+    expect(props.recover).toHaveBeenCalledWith("rec-2");
   });
 
   it("shows the empty-recents hint when history is disabled", () => {
@@ -242,7 +248,7 @@ describe("Home", () => {
       local: {
         preferences: { ...defaultPreferences, recentFiles: false },
         recents: [],
-        recovery: null,
+        recoveries: [],
       },
     });
     render(
@@ -285,7 +291,7 @@ describe("Settings", () => {
       local: {
         preferences: { ...defaultPreferences, theme: "light" },
         recents: [],
-        recovery: null,
+        recoveries: [],
       },
       settingsOpen: true,
     });

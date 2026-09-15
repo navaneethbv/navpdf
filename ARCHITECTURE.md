@@ -3,6 +3,7 @@
 ## Scope and sequencing
 
 The accepted product specification is stored verbatim in [docs/PRODUCT-SPEC.txt](docs/PRODUCT-SPEC.txt).
+The current September 14 implementation status and open acceptance gates are recorded in [docs/DELIVERY-PHASES.md](docs/DELIVERY-PHASES.md) and [docs/VERIFICATION.md](docs/VERIFICATION.md).
 Its final instruction is to implement Phase 1 first, then progress through the remaining phases only after the reader foundation is proven.
 This milestone implements the Tauri reader and the additional persisted-highlight acceptance journey explicitly requested at the end of that specification.
 The earlier Electron/Python prototype is preserved in Git history; it is not the architecture or feature-completion evidence for this implementation.
@@ -58,16 +59,17 @@ A highlight is written into the PDF, not retained only as an overlay or app data
 The native layer validates serialized output with the permissively licensed Rust `lopdf` parser before any target is replaced.
 Encrypted PDFs can be read after entering the password; annotation saving to encrypted documents is deliberately not enabled until the encryption-preserving editing path is verified in a later phase.
 
-The editing boundary will accept typed commands with explicit capabilities and preserve the current source until a successful save.
-Later phases evaluate qpdf for page transformations, encryption and structural optimization; PDFium for native content and form operations; and pdf-lib for limited creation and page composition in a worker.
+The editing boundary accepts typed commands with explicit capabilities and preserves the current source until a successful save.
+pdf-lib remains behind domain helpers for annotations, forms, page composition, decorations, OCR layers and metadata.
+The Rust lopdf engine owns protection, compression, existing-object edits, redaction and certificate signing.
 No library is assumed to support arbitrary existing-text reflow or secure redaction merely because it can draw on a page.
+The maintenance boundary and exit path are recorded in [ADR 0011](docs/adr/0011-pdf-lib-maintenance-and-exit.md).
 MuPDF requires a separate redistribution decision and is not bundled into this permissive foundation.
 
 ## Undo and redo
 
-The Phase 1 annotation editor uses PDF.js's command manager, including undo, redo, deletion and annotation property edits.
-The application wraps edit/save lifecycle events and tracks unsaved annotation state.
-Later non-annotation commands will implement execute, undo and redo at the document-session boundary, using transaction snapshots or inverse operations according to engine support.
+The PDF.js annotation editor provides its native undo and redo state, while the controller serializes document mutations through `MutationQueue`.
+The session also records bounded revision snapshots for local undo and redo of pdf-lib and native engine operations.
 History is session-local, and a document replacement must not silently discard unsaved edits.
 
 ## File saving and recovery
@@ -86,18 +88,18 @@ The home screen exposes recovery explicitly instead of restoring a document with
 
 ## OCR strategy
 
-OCR is a later phase, exposed through a platform-independent service returning text, bounding boxes, language, orientation and confidence.
-Evaluate Apple Vision on macOS against Tesseract using the same scanned fixtures; no quality advantage is claimed without a measured comparison.
-Tesseract is the portable baseline, while OCRmyPDF is a reference for searchable text layers and preprocessing but brings a larger Python and native-dependency distribution.
-Preprocessing operates on a recognition copy, and the original scan remains visually unchanged unless enhancement is explicitly selected.
+macOS OCR invokes Apple Vision through the native `AppleVisionEngine` and returns text, bounding boxes, language, orientation and confidence.
+The browser preview and unsupported platforms report that the local engine is unavailable.
+The acceptance corpus measures word error rate, character error rate and box geometry instead of substituting fixed sample text.
 OCR results become invisible PDF text rather than replacing scans with visible recognized text.
+The current environment still has an open native OCR gate because the six generated samples returned no recognized text.
 
 ## Security and privacy
 
 Production content security policy permits bundled assets, local worker resources and Tauri IPC only.
 No HTTP client plugin, shell plugin, arbitrary file-read command, external opener or remote font/CDN is exposed.
 Network access defaults to off and remains unavailable in this milestone.
-Native navigation handlers reject external destinations.
+Native navigation handlers reject external destinations and PDF scripting remains disabled.
 Native commands validate identifiers, ranges, size limits, destination selection and document lifecycle.
 Passwords remain in memory and are excluded from logs, preferences, recovery and recent-file metadata.
 The logs record timestamp, severity, component, operation and a native backtrace on save errors, never document text or document filesystem paths.
@@ -123,9 +125,10 @@ Performance evidence reports measured time and live canvas counts separately fro
 | Tauri 2 | MIT/Apache-2.0; actively maintained desktop framework | Rust shell using WKWebView on macOS, portable architecture for WebView2 and WebKitGTK. |
 | PDF.js / pdfjs-dist 6.3.289 | Apache-2.0; package updated August 2026 | Adopt for rendering, text, search and verified annotation persistence; all assets bundled locally. |
 | lopdf | MIT; current Rust library | Adopt for structural validation of saved PDFs, not rendering or arbitrary text layout. |
-| qpdf | Apache-2.0; maintained native C++ project | Candidate for later structure, encryption, page and compression operations; not a rasterizer or paragraph editor. |
-| PDFium | BSD-style core with third-party notices; maintained in Chromium ecosystem | Candidate for later native content manipulation; native builds, wrappers and platform binaries require explicit packaging work. |
-| pdf-lib 1.17.1 | MIT; latest npm release is from 2021 and registry modified May 2022 | Limited, isolated candidate for creation/composition and test fixtures; stale release cadence and encryption limitations rule out making it the sole production editing engine. |
+| qpdf | Apache-2.0; maintained native C++ project | Not selected for the current native engine boundary. |
+| PDFium | BSD-style core with third-party notices; maintained in Chromium ecosystem | Deferred because the lopdf engine now owns the required native mutation paths. |
+| pdf-lib 1.17.1 | MIT; stale release cadence and encryption limitations | Bounded writer for annotations, forms, page composition, decorations, OCR layers and metadata under ADR 0011. |
+| lopdf | MIT; current Rust library | Native structural validation and engine for protection, compression, edits, redaction and signing. |
 | MuPDF / PyMuPDF | AGPL or commercial licensing | Strong editing/redaction engine, but excluded from the new distributable until licensing is deliberately resolved. |
 | Tesseract | Apache-2.0; maintained, cross-platform OCR | Portable OCR candidate requiring language assets and measured scan accuracy. |
 | OCRmyPDF | MPL-2.0 application plus separately licensed dependencies | Mature OCR pipeline reference; distribution and subprocess complexity exceed the Phase 1 need. |
@@ -154,7 +157,8 @@ PDF.js is pinned because exact occurrence navigation synchronizes its exposed se
 
 ## Known milestone limitations
 
-Phase 1 does not claim the Phase 2 through Phase 8 feature inventory is complete.
-Arbitrary existing-text editing, image manipulation, secure redaction, compression, OCR execution, certificate signatures and advanced form creation are not exposed as working tools.
+The September 14 worktree implements Tranches 0 through 3 in source and has started Tranche 5 with metadata editing.
+Native rendering, DMG customization, independent-reader acceptance, hosted CI and the remaining specification, parity and memory tranches remain open.
+Arbitrary existing-text reflow, certified signatures, Acrobat parity and machine-relative memory budgets are not claimed as complete.
 A signed and notarized public installer requires a valid distribution identity; a local macOS app can be built and tested without claiming notarization.
 Cross-platform architecture does not imply Windows or Linux runtime acceptance has been performed.

@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFNumber,
-  PDFString,
-} from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString } from "pdf-lib";
 import sharp from "sharp";
 import {
   createBlankDocument,
@@ -52,9 +45,7 @@ describe("document commands & page operations", () => {
     const doc = await PDFDocument.load(deleted);
     expect(doc.getPageCount()).toBe(2);
 
-    await expect(deletePages(bytes, [0, 1, 2])).rejects.toThrow(
-      /Cannot delete all pages/,
-    );
+    await expect(deletePages(bytes, [0, 1, 2])).rejects.toThrow(/Cannot delete all pages/);
   });
 
   it("reorders pages correctly", async () => {
@@ -102,12 +93,8 @@ describe("document commands & page operations", () => {
   it("rejects invalid merge, reorder, extract, and split inputs", async () => {
     await expect(mergeDocuments([])).rejects.toThrow(/At least one document/);
     const bytes = await createBlankDocument(3);
-    await expect(reorderPages(bytes, [0, 1])).rejects.toThrow(
-      /must match document page count/,
-    );
-    await expect(extractPages(bytes, [9, 10])).rejects.toThrow(
-      /No valid pages/,
-    );
+    await expect(reorderPages(bytes, [0, 1])).rejects.toThrow(/must match document page count/);
+    await expect(extractPages(bytes, [9, 10])).rejects.toThrow(/No valid pages/);
     expect(await splitDocument(bytes, [[9], []])).toHaveLength(0);
   });
 
@@ -152,12 +139,7 @@ describe("document commands & page operations", () => {
     const fromPng = await createDocumentFromImage(new Uint8Array(png), "png");
     expect((await PDFDocument.load(fromPng)).getPageCount()).toBe(1);
     const bytes = await createBlankDocument(1);
-    const withPage = await insertImagePage(
-      bytes,
-      1,
-      new Uint8Array(png),
-      "png",
-    );
+    const withPage = await insertImagePage(bytes, 1, new Uint8Array(png), "png");
     expect((await PDFDocument.load(withPage)).getPageCount()).toBe(2);
   });
 
@@ -175,12 +157,7 @@ describe("document commands & page operations", () => {
     const fromJpg = await createDocumentFromImage(new Uint8Array(jpeg), "jpg");
     expect((await PDFDocument.load(fromJpg)).getPageCount()).toBe(1);
     const bytes = await createBlankDocument(1);
-    const withPage = await insertImagePage(
-      bytes,
-      -5,
-      new Uint8Array(jpeg),
-      "jpg",
-    );
+    const withPage = await insertImagePage(bytes, -5, new Uint8Array(jpeg), "jpg");
     expect((await PDFDocument.load(withPage)).getPageCount()).toBe(2);
   });
 
@@ -209,18 +186,10 @@ describe("document commands & page operations", () => {
     expect(annots.size()).toBe(2);
     const first = annots.lookup(0, PDFDict);
     const second = annots.lookup(1, PDFDict);
-    expect(first.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe(
-      "/Underline",
-    );
-    expect(second.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe(
-      "/StrikeOut",
-    );
-    expect(first.lookup(PDFName.of("NM"), PDFString).asString()).toBe(
-      "markup-1",
-    );
-    expect(first.lookup(PDFName.of("Contents"), PDFString).asString()).toBe(
-      "marked text",
-    );
+    expect(first.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe("/Underline");
+    expect(second.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe("/StrikeOut");
+    expect(first.lookup(PDFName.of("NM"), PDFString).asString()).toBe("markup-1");
+    expect(first.lookup(PDFName.of("Contents"), PDFString).asString()).toBe("marked text");
   });
 
   it("writes a standard sticky note and rejects empty contents", async () => {
@@ -235,12 +204,10 @@ describe("document commands & page operations", () => {
     const doc = await PDFDocument.load(noted);
     const annot = doc.getPage(0).node.Annots()!.lookup(0, PDFDict);
     expect(annot.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe("/Text");
-    expect(annot.lookup(PDFName.of("Contents"), PDFString).asString()).toBe(
-      "Review this section",
+    expect(annot.lookup(PDFName.of("Contents"), PDFString).asString()).toBe("Review this section");
+    await expect(addStickyNote(bytes, { page: 1, x: 0, y: 0, contents: " " })).rejects.toThrow(
+      /needs some text/,
     );
-    await expect(
-      addStickyNote(bytes, { page: 1, x: 0, y: 0, contents: " " }),
-    ).rejects.toThrow(/needs some text/);
   });
 
   it("writes interoperable shapes with drawing properties", async () => {
@@ -283,27 +250,15 @@ describe("document commands & page operations", () => {
     const circle = annots.lookup(1, PDFDict);
     const line = annots.lookup(2, PDFDict);
     const arrow = annots.lookup(3, PDFDict);
-    expect(square.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe(
-      "/Square",
-    );
-    expect(circle.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe(
-      "/Circle",
-    );
-    expect(line.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe(
-      "/Line",
-    );
-    expect(arrow.lookup(PDFName.of("LE"), PDFArray).get(1).toString()).toBe(
-      "/OpenArrow",
-    );
-    expect(square.lookup(PDFName.of("NM"), PDFString).asString()).toBe(
-      "shape-square",
-    );
-    expect(square.lookup(PDFName.of("CA"), PDFNumber).asNumber()).toBeCloseTo(
-      0.65,
-    );
-    expect(square.lookup(PDFName.of("BS"), PDFDict)
-      .lookup(PDFName.of("W"), PDFNumber)
-      .asNumber()).toBeCloseTo(4);
+    expect(square.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe("/Square");
+    expect(circle.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe("/Circle");
+    expect(line.lookup(PDFName.of("Subtype"), PDFName).asString()).toBe("/Line");
+    expect(arrow.lookup(PDFName.of("LE"), PDFArray).get(1).toString()).toBe("/OpenArrow");
+    expect(square.lookup(PDFName.of("NM"), PDFString).asString()).toBe("shape-square");
+    expect(square.lookup(PDFName.of("CA"), PDFNumber).asNumber()).toBeCloseTo(0.65);
+    expect(
+      square.lookup(PDFName.of("BS"), PDFDict).lookup(PDFName.of("W"), PDFNumber).asNumber(),
+    ).toBeCloseTo(4);
   });
 
   it("updates and deletes an annotation by its stable name", async () => {
@@ -329,9 +284,9 @@ describe("document commands & page operations", () => {
       width: 180,
       height: 180,
     });
-    expect(annotation.lookup(PDFName.of("BS"), PDFDict)
-      .lookup(PDFName.of("W"), PDFNumber)
-      .asNumber()).toBe(5);
+    expect(
+      annotation.lookup(PDFName.of("BS"), PDFDict).lookup(PDFName.of("W"), PDFNumber).asNumber(),
+    ).toBe(5);
     expect(annotation.lookup(PDFName.of("CA"), PDFNumber).asNumber()).toBe(0.45);
     const deleted = await deleteAnnotation(updated, "shape-edit");
     expect((await PDFDocument.load(deleted)).getPage(0).node.Annots()).toBeUndefined();
@@ -354,7 +309,10 @@ describe("document commands & page operations", () => {
     const bytes = await createBlankDocument(5);
     const results = await splitDocumentWithManifest(
       bytes,
-      [[0, 1], [2, 3, 4]],
+      [
+        [0, 1],
+        [2, 3, 4],
+      ],
       "custom-part",
     );
     expect(results).toHaveLength(2);
@@ -379,5 +337,152 @@ describe("document commands & page operations", () => {
 
     // Reorder: permutation of [2, 0, 1]
     expect(computeReorderMapping([2, 0, 1])).toEqual([2, 0, 1]);
+  });
+
+  it("preserves arrow endpoint order, line endings, and adjusts /Rect with margin >= 6 + arrowheadSize", async () => {
+    // Arrow drawn right-to-left: start at [400, 500], end at [100, 500]
+    const bytes = await addShapeAnnotation(await createBlankDocument(1), {
+      page: 1,
+      kind: "Arrow",
+      start: [400, 500],
+      end: [100, 500],
+      width: 12,
+      id: "arrow-1",
+    });
+
+    const docBefore = await PDFDocument.load(bytes);
+    const annotBefore = docBefore.getPage(0).node.Annots()!.lookup(0, PDFDict);
+    const leBefore = annotBefore.lookup(PDFName.of("LE"), PDFArray);
+    expect(leBefore.lookup(0, PDFName).decodeText()).toBe("None");
+    expect(leBefore.lookup(1, PDFName).decodeText()).toBe("OpenArrow");
+
+    // Update with dx: 10
+    const moved = await updateAnnotation(bytes, {
+      id: "arrow-1",
+      dx: 10,
+    });
+
+    const docAfter = await PDFDocument.load(moved);
+    const annotAfter = docAfter.getPage(0).node.Annots()!.lookup(0, PDFDict);
+    const leAfter = annotAfter.lookup(PDFName.of("LE"), PDFArray);
+    expect(leAfter.lookup(0, PDFName).decodeText()).toBe("None");
+    expect(leAfter.lookup(1, PDFName).decodeText()).toBe("OpenArrow");
+
+    const lineAfter = annotAfter.lookup(PDFName.of("L"), PDFArray);
+    expect((lineAfter.get(0) as PDFNumber).asNumber()).toBe(410);
+    expect((lineAfter.get(1) as PDFNumber).asNumber()).toBe(500);
+    expect((lineAfter.get(2) as PDFNumber).asNumber()).toBe(110);
+    expect((lineAfter.get(3) as PDFNumber).asNumber()).toBe(500);
+
+    const rectAfter = annotAfter.lookup(PDFName.of("Rect"), PDFArray).asRectangle();
+    // width is 12 pt, margin must be >= 6 + arrowheadSize (where arrowheadSize >= 10)
+    // start x=410, end x=110, so minX <= 110 - margin, maxX >= 410 + margin
+    const margin = 110 - rectAfter.x;
+    expect(margin).toBeGreaterThanOrEqual(16);
+  });
+
+  it("deleting a Text annotation with /Popup removes the popup and reply annotations with /IRT", async () => {
+    const bytes = await addStickyNote(await createBlankDocument(1), {
+      page: 1,
+      x: 100,
+      y: 200,
+      contents: "Parent note",
+      id: "parent-note",
+    });
+
+    const doc = await PDFDocument.load(bytes);
+    const page = doc.getPage(0);
+    const annots = page.node.Annots()!;
+    expect(annots.size()).toBeGreaterThanOrEqual(2); // Text annot and its Popup
+
+    // Add a reply annotation with IRT pointing to parent-note
+    const replyAnnot = doc.context.obj({
+      Type: "Annot",
+      Subtype: "Text",
+      Rect: [100, 200, 120, 220],
+      Contents: PDFString.of("Reply text"),
+      IRT: annots.get(0), // points to parent
+      NM: PDFString.of("reply-note"),
+    });
+    page.node.addAnnot(doc.context.register(replyAnnot));
+    const withReply = await doc.save();
+
+    const docWithReply = await PDFDocument.load(withReply);
+    expect(docWithReply.getPage(0).node.Annots()!.size()).toBeGreaterThanOrEqual(3);
+
+    const deleted = await deleteAnnotation(withReply, "parent-note");
+    const docAfterDelete = await PDFDocument.load(deleted);
+    // Both parent, its popup, and the reply annotation must be removed
+    expect(docAfterDelete.getPage(0).node.Annots()).toBeUndefined();
+  });
+
+  it("resolves annotation by 12R1, annot_7, and constrains duplicate NM to comment page", async () => {
+    const bytes = await createBlankDocument(2);
+    const doc = await PDFDocument.load(bytes);
+    const page1 = doc.getPage(0);
+    const page2 = doc.getPage(1);
+
+    // Add annot on page 1 with NM "dup-nm"
+    const a1 = doc.context.obj({
+      Type: "Annot",
+      Subtype: "Text",
+      Rect: [50, 50, 70, 70],
+      NM: PDFString.of("dup-nm"),
+      Contents: PDFString.of("Page 1 Note"),
+    });
+    page1.node.addAnnot(doc.context.register(a1));
+
+    // Add annot on page 2 with duplicate NM "dup-nm"
+    const a2 = doc.context.obj({
+      Type: "Annot",
+      Subtype: "Text",
+      Rect: [50, 50, 70, 70],
+      NM: PDFString.of("dup-nm"),
+      Contents: PDFString.of("Page 2 Note"),
+    });
+    page2.node.addAnnot(doc.context.register(a2));
+
+    const saved = await doc.save();
+
+    // Updating "dup-nm" with page: 2 should update Page 2 note, not Page 1
+    const updated = await updateAnnotation(saved, {
+      id: "dup-nm",
+      page: 2,
+      contents: "Page 2 Note Updated",
+    });
+
+    const docUpdated = await PDFDocument.load(updated);
+    const p1Annot = docUpdated.getPage(0).node.Annots()!.lookup(0, PDFDict);
+    const p2Annot = docUpdated.getPage(1).node.Annots()!.lookup(0, PDFDict);
+    expect(p1Annot.lookup(PDFName.of("Contents"), PDFString).asString()).toBe("Page 1 Note");
+    expect(p2Annot.lookup(PDFName.of("Contents"), PDFString).asString()).toBe(
+      "Page 2 Note Updated",
+    );
+  });
+
+  it("creates annotations with /P, /M, /CreationDate and sticky notes with /Popup", async () => {
+    const bytes = await addStickyNote(await createBlankDocument(1), {
+      page: 1,
+      x: 100,
+      y: 200,
+      contents: "Test sticky note",
+      id: "meta-note",
+    });
+
+    const doc = await PDFDocument.load(bytes);
+    const page = doc.getPage(0);
+    const annots = page.node.Annots()!;
+    const textAnnot = annots.lookup(0, PDFDict);
+
+    expect(textAnnot.get(PDFName.of("P"))).toBeDefined();
+    expect(textAnnot.get(PDFName.of("M"))).toBeDefined();
+    expect(textAnnot.get(PDFName.of("CreationDate"))).toBeDefined();
+
+    const popupRef = textAnnot.get(PDFName.of("Popup"));
+    expect(popupRef).toBeInstanceOf(PDFRef);
+
+    const popupAnnot = annots.lookup(1, PDFDict);
+    expect(popupAnnot.lookup(PDFName.of("Subtype"), PDFName).decodeText()).toBe("Popup");
+    expect(popupAnnot.get(PDFName.of("Parent"))).toEqual(annots.get(0));
   });
 });

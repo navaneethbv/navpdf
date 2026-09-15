@@ -14,8 +14,9 @@ import {
   Lock,
   Clock,
 } from "lucide-react";
-import { PDFDocument, rgb } from "pdf-lib";
+import { degrees, PDFDocument, rgb } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
+import { FeatureDialog } from "../../components/FeatureDialog";
 import type { ViewerController } from "../viewer/controller";
 import {
   fetchSignatureLibrary,
@@ -26,7 +27,9 @@ import {
   getSessionSignatures,
   getLegacyPlaintextSignatures,
 } from "../../services/signature-store";
+import { fromTopLeftVisual } from "../../services/pdf/page-box";
 import type { SavedSignature } from "../../services/native";
+import { PageNumberInput } from "../../components/PageNumberInput";
 
 export function FillAndSign({
   controller,
@@ -50,18 +53,21 @@ export function FillAndSign({
   const [sigType, setSigType] = useState<"signature" | "initials">("signature");
   const [legacyMigrationPrompt, setLegacyMigrationPrompt] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
+  const [storeWarnings, setStoreWarnings] = useState<string[]>([]);
   const [posX, setPosX] = useState(60);
   const [posY, setPosY] = useState(150);
   const [sigWidth, setSigWidth] = useState(160);
+  const [sigRotation, setSigRotation] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isDrawing = useRef(false);
 
   const refreshLibrary = async () => {
-    const { signatures: list, error } = await fetchSignatureLibrary();
+    const { signatures: list, error, warnings } = await fetchSignatureLibrary();
     setSignatures(list);
-    if (error) setStoreError(error);
+    setStoreError(error);
+    setStoreWarnings(warnings);
   };
 
   useEffect(() => {
@@ -144,7 +150,12 @@ export function FillAndSign({
       ctx.fillText(typedName, 20, 75);
     }
     const dataUrl = canvas.toDataURL("image/png");
-    const { signature, error } = await persistOrStageSignature(typedName, sigType, dataUrl, sessionOnly);
+    const { signature, error } = await persistOrStageSignature(
+      typedName,
+      sigType,
+      dataUrl,
+      sessionOnly,
+    );
     if (error) {
       s.set({ error });
       return;
@@ -158,19 +169,30 @@ export function FillAndSign({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
+    reader.onerror = () => s.set({ error: "The image could not be read." });
     reader.onload = async () => {
       const img = new Image();
+      img.onerror = () => s.set({ error: "The image could not be read." });
       img.onload = async () => {
         const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
+        const scale = Math.min(1, 4096 / Math.max(img.width, img.height));
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        } else {
+          s.set({ error: "The image could not be read." });
+          return;
         }
         const dataUrl = canvas.toDataURL("image/png");
         const name = file.name.replace(/\.[^.]+$/, "");
-        const { signature, error } = await persistOrStageSignature(name, sigType, dataUrl, sessionOnly);
+        const { signature, error } = await persistOrStageSignature(
+          name,
+          sigType,
+          dataUrl,
+          sessionOnly,
+        );
         if (error) {
           s.set({ error });
           return;
@@ -204,17 +226,19 @@ export function FillAndSign({
 
       const pageIndex = Math.max(0, Math.min(targetPage - 1, doc.getPageCount() - 1));
       const page = doc.getPage(pageIndex);
-      const { height } = page.getSize();
 
       const width = sigWidth;
       const aspect = img.height / img.width;
       const sigHeight = width * aspect;
 
+      const rect = fromTopLeftVisual(page, posX, posY, width, sigHeight);
+
       page.drawImage(img, {
-        x: posX,
-        y: Math.max(10, height - posY - sigHeight),
-        width,
-        height: sigHeight,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        rotate: degrees(sigRotation),
       });
 
       const newBytes = await doc.save();
@@ -235,9 +259,9 @@ export function FillAndSign({
       const doc = await PDFDocument.load(currentBytes);
       const pageIndex = Math.max(0, Math.min(targetPage - 1, doc.getPageCount() - 1));
       const page = doc.getPage(pageIndex);
-      const { height } = page.getSize();
-      const y = Math.max(20, height - posY);
-      const x = posX;
+      const rect = fromTopLeftVisual(page, posX, posY, 24, 24);
+      const x = rect.x;
+      const y = rect.y + rect.height;
 
       if (symbol === "check") {
         page.drawLine({
@@ -286,10 +310,7 @@ export function FillAndSign({
       }
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(
-        newBytes,
-        `Mark (${symbol}) placed on document`,
-      );
+      await controller.replaceWithBytes(newBytes, `Mark (${symbol}) placed on document`);
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -299,12 +320,7 @@ export function FillAndSign({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Fill and Sign"
-    >
+    <FeatureDialog title="Fill and Sign" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -331,7 +347,8 @@ export function FillAndSign({
           >
             <AlertTriangle size={18} color="#dc641e" />
             <span>
-              This document contains an existing digital signature. Placing appearances or edits will invalidate it.
+              This document contains an existing digital signature. Placing appearances or edits
+              will invalidate it.
             </span>
           </div>
         )}
@@ -350,7 +367,8 @@ export function FillAndSign({
               <strong>Plaintext signatures detected</strong>
             </div>
             <p style={{ margin: "0 0 10px 0" }}>
-              Previous versions stored reusable signatures unencrypted in local storage. Would you like to migrate them to OS-protected encrypted storage?
+              Previous versions stored reusable signatures unencrypted in local storage. Would you
+              like to migrate them to OS-protected encrypted storage?
             </p>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
@@ -385,11 +403,19 @@ export function FillAndSign({
             {storeError}
           </div>
         )}
+        {storeWarnings.length > 0 && (
+          <div className="signature-warnings" data-testid="signature-warnings">
+            {storeWarnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        )}
 
         <div className="tab-buttons-bar">
           <button
             type="button"
             className={tab === "library" ? "active" : ""}
+            aria-pressed={tab === "library"}
             onClick={() => setTab("library")}
           >
             Saved Signatures
@@ -397,6 +423,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "draw" ? "active" : ""}
+            aria-pressed={tab === "draw"}
             onClick={() => setTab("draw")}
           >
             Draw
@@ -404,6 +431,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "type" ? "active" : ""}
+            aria-pressed={tab === "type"}
             onClick={() => setTab("type")}
           >
             Type
@@ -411,6 +439,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "import" ? "active" : ""}
+            aria-pressed={tab === "import"}
             onClick={() => setTab("import")}
           >
             Import
@@ -418,6 +447,7 @@ export function FillAndSign({
           <button
             type="button"
             className={tab === "marks" ? "active" : ""}
+            aria-pressed={tab === "marks"}
             onClick={() => setTab("marks")}
           >
             Quick Marks
@@ -450,16 +480,18 @@ export function FillAndSign({
               ) : (
                 <div className="sig-list">
                   {signatures.map((sig) => (
-                    <div
+                    <button
+                      type="button"
                       key={sig.id}
                       className={`sig-card ${selectedSig?.id === sig.id ? "selected" : ""}`}
+                      aria-pressed={selectedSig?.id === sig.id}
                       onClick={() => setSelectedSig(sig)}
                     >
                       <img src={sig.dataUrl} alt={sig.name} />
                       <div className="sig-meta">
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span>{sig.name}</span>
-                          {sig.sessionOnly ? (
+                          {sig.storage === "session" ? (
                             <span
                               title="Session-only (in memory)"
                               style={{
@@ -473,6 +505,23 @@ export function FillAndSign({
                               }}
                             >
                               <Clock size={10} /> Session
+                            </span>
+                          ) : sig.storage === "legacy" ? (
+                            <span
+                              title="Unprotected legacy storage (not encrypted by OS)"
+                              data-testid="unprotected-badge"
+                              style={{
+                                fontSize: "10px",
+                                padding: "1px 4px",
+                                borderRadius: "3px",
+                                background: "rgba(220, 38, 38, 0.15)",
+                                color: "var(--color-danger, #dc2626)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "2px",
+                              }}
+                            >
+                              <AlertTriangle size={10} /> Unprotected
                             </span>
                           ) : (
                             <span
@@ -504,7 +553,7 @@ export function FillAndSign({
                           <Trash2 size={14} />
                         </button>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -513,7 +562,9 @@ export function FillAndSign({
 
           {(tab === "draw" || tab === "type" || tab === "import") && (
             <div style={{ marginBottom: "12px", display: "flex", gap: "20px" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
+              >
                 <input
                   type="radio"
                   name="sigType"
@@ -522,7 +573,9 @@ export function FillAndSign({
                 />
                 Signature
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
+              >
                 <input
                   type="radio"
                   name="sigType"
@@ -666,12 +719,10 @@ export function FillAndSign({
             >
               <div>
                 <label className="setting-title">Page</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={s.info?.pages || 1}
+                <PageNumberInput
                   value={targetPage}
-                  onChange={(e) => setTargetPage(Number(e.target.value))}
+                  max={s.info?.pages || 1}
+                  onChange={setTargetPage}
                   className="text-input"
                 />
               </div>
@@ -706,6 +757,23 @@ export function FillAndSign({
                   />
                 </div>
               )}
+              {tab === "library" && (
+                <div>
+                  <label className="setting-title" htmlFor="signature-rotation">
+                    Rotation (degrees)
+                  </label>
+                  <input
+                    id="signature-rotation"
+                    type="number"
+                    min={-180}
+                    max={180}
+                    step={1}
+                    value={sigRotation}
+                    onChange={(e) => setSigRotation(Number(e.target.value))}
+                    className="text-input"
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -717,7 +785,8 @@ export function FillAndSign({
               lineHeight: 1.4,
             }}
           >
-            Notice: Signature appearances placed on the document are graphical representations, not cryptographic X.509 digital certificate signatures.
+            Notice: Signature appearances placed on the document are graphical representations, not
+            cryptographic X.509 digital certificate signatures.
           </div>
         </div>
 
@@ -737,6 +806,6 @@ export function FillAndSign({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

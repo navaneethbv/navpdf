@@ -25,6 +25,31 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: git diff --check
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=high
 
   typecheck:
     name: Typecheck
@@ -70,8 +95,27 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  rust-fmt:
+    name: Rust (fmt check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+  rust-deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: src-tauri/Cargo.toml
+
   rust:
-    name: Rust (test + clippy)
+    name: Rust Linux (test + clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -95,3 +139,65 @@ jobs:
           workspaces: src-tauri
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  rust-macos:
+    name: Rust macOS (test + clippy)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  rust-msrv:
+    name: Rust MSRV check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.89"
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+      - run: cargo build --manifest-path src-tauri/Cargo.toml
+
+  acceptance-macos:
+    name: Native acceptance scripts
+    runs-on: macos-14
+    needs: [test, build, rust-macos]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install independent PDF and certificate tools
+        run: |
+          brew install poppler nss
+          echo "$(brew --prefix nss)/bin" >> "$GITHUB_PATH"
+      - run: npm ci
+      - run: npm run acceptance:check-tools
+      - run: npm run acceptance:licenses
+      - run: npm run fixtures
+      - run: npm run acceptance:phase7
+      - run: npm run acceptance:phase8
+      - run: npm run acceptance:phase10
+      - run: cargo build --manifest-path src-tauri/Cargo.toml --example ocr_cli
+      - run: npm run acceptance:ocr

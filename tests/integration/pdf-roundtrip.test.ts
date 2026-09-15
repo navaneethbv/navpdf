@@ -1,14 +1,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFNumber,
-  PDFRawStream,
-} from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream } from "pdf-lib";
 import {
   AnnotationEditorType,
   getDocument,
@@ -29,12 +22,12 @@ import {
   addLinkAnnotation,
   addEmbeddedAttachment,
   extractEmbeddedAttachment,
+  extractPages,
   applyOcrSearchableLayer,
 } from "../../src/services/document-commands";
 import type { OcrPageResult } from "../../src/types/operations";
-GlobalWorkerOptions.workerSrc = resolve(
-  "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
-);
+import { requireFixture } from "../helpers/fixtures";
+GlobalWorkerOptions.workerSrc = resolve("node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
 const options = {
   standardFontDataUrl: resolve("node_modules/pdfjs-dist/standard_fonts") + "/",
   useSystemFonts: false,
@@ -42,32 +35,27 @@ const options = {
 async function open(name: string) {
   return getDocument({
     ...options,
-    data: new Uint8Array(await readFile(resolve("tests/pdf-fixtures", name))),
+    data: new Uint8Array(await readFile(requireFixture(name))),
   }).promise;
 }
 beforeAll(async () => {
   await mkdir("output", { recursive: true });
 });
 describe("real PDF parsing and saving", () => {
-  it.each([5, 100, 500, 1000])(
-    "reads first and last pages of a %i-page PDF",
-    async (count) => {
-      const pdf = await open(`reader-${count}.pdf`);
-      try {
-        expect(pdf.numPages).toBe(count);
-        for (const index of [1, count]) {
-          const page = await pdf.getPage(index);
-          const content = await page.getTextContent();
-          const text = content.items
-            .map((item) => ("str" in item ? item.str : ""))
-            .join(" ");
-          expect(text).toContain(`NEEDLE-${String(index).padStart(4, "0")}`);
-        }
-      } finally {
-        await pdf.loadingTask.destroy();
+  it.each([5, 100, 500, 1000])("reads first and last pages of a %i-page PDF", async (count) => {
+    const pdf = await open(`reader-${count}.pdf`);
+    try {
+      expect(pdf.numPages).toBe(count);
+      for (const index of [1, count]) {
+        const page = await pdf.getPage(index);
+        const content = await page.getTextContent();
+        const text = content.items.map((item) => ("str" in item ? item.str : "")).join(" ");
+        expect(text).toContain(`NEEDLE-${String(index).padStart(4, "0")}`);
       }
-    },
-  );
+    } finally {
+      await pdf.loadingTask.destroy();
+    }
+  });
   it("saves a standard highlight and preserves all 500 pages and text", async () => {
     const pdf = await open("reader-500.pdf");
     try {
@@ -89,9 +77,7 @@ describe("real PDF parsing and saving", () => {
         const page = await reopened.getPage(1);
         const annotations = await page.getAnnotations();
         expect(annotations).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ subtype: "Highlight" }),
-          ]),
+          expect.arrayContaining([expect.objectContaining({ subtype: "Highlight" })]),
         );
         const text = (await page.getTextContent()).items
           .map((item) => ("str" in item ? item.str : ""))
@@ -123,9 +109,30 @@ describe("real PDF parsing and saving", () => {
         quadPoints: null,
         outlines: {
           outline: [
-            NaN, NaN, NaN, NaN, 52.85, 580.9, NaN, NaN, NaN, NaN, 348.74,
-            580.9, NaN, NaN, NaN, NaN, 348.74, 592.92, NaN, NaN, NaN, NaN,
-            52.85, 592.92,
+            NaN,
+            NaN,
+            NaN,
+            NaN,
+            52.85,
+            580.9,
+            NaN,
+            NaN,
+            NaN,
+            NaN,
+            348.74,
+            580.9,
+            NaN,
+            NaN,
+            NaN,
+            NaN,
+            348.74,
+            592.92,
+            NaN,
+            NaN,
+            NaN,
+            NaN,
+            52.85,
+            592.92,
           ],
           points: [[52.85, 586.9, 348.74, 586.9]],
         },
@@ -142,10 +149,7 @@ describe("real PDF parsing and saving", () => {
 
       const saved = await PDFDocument.load(bytes);
       const annotation = (pageIndex: number) =>
-        saved
-          .getPage(pageIndex)
-          .node.lookup(PDFName.of("Annots"), PDFArray)
-          .lookup(0, PDFDict);
+        saved.getPage(pageIndex).node.lookup(PDFName.of("Annots"), PDFArray).lookup(0, PDFDict);
       const number = (dict: PDFDict, key: string) =>
         dict.lookup(PDFName.of(key), PDFNumber).asNumber();
 
@@ -176,12 +180,10 @@ describe("real PDF parsing and saving", () => {
       const reopened = await getDocument({ ...options, data: bytes }).promise;
       try {
         expect(await (await reopened.getPage(1)).getAnnotations()).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ subtype: "Ink", it: "InkHighlight" }),
-          ]),
+          expect.arrayContaining([expect.objectContaining({ subtype: "Ink", it: "InkHighlight" })]),
         );
-        const pageText = (await (await reopened.getPage(1)).getTextContent())
-          .items.map((item) => ("str" in item ? item.str : ""))
+        const pageText = (await (await reopened.getPage(1)).getTextContent()).items
+          .map((item) => ("str" in item ? item.str : ""))
           .join(" ");
         expect(pageText).toContain("persistent highlight");
       } finally {
@@ -214,9 +216,9 @@ describe("real PDF parsing and saving", () => {
       const saved = await pdf.saveDocument();
       const reopened = await getDocument({ ...options, data: saved }).promise;
       try {
-        expect(
-          (await reopened.getFieldObjects())?.get("ReaderName")?.[1],
-        ).toMatchObject({ value: "Existing form value" });
+        expect((await reopened.getFieldObjects())?.get("ReaderName")?.[1]).toMatchObject({
+          value: "Existing form value",
+        });
       } finally {
         await reopened.loadingTask.destroy();
       }
@@ -225,9 +227,7 @@ describe("real PDF parsing and saving", () => {
     }
   });
   it("authors text, checkbox, radio group, dropdown, and button widgets and roundtrips their values", async () => {
-    let bytes = new Uint8Array(
-      await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")),
-    );
+    let bytes = new Uint8Array(await readFile(requireFixture("reader-5.pdf")));
     bytes = await addFormField(bytes, {
       type: "text",
       name: "AuthorText",
@@ -324,9 +324,7 @@ describe("real PDF parsing and saving", () => {
 });
 describe("special document corpus", () => {
   it("requests a password and rejects an incorrect password", async () => {
-    const bytes = new Uint8Array(
-      await readFile("tests/pdf-fixtures/encrypted.pdf"),
-    );
+    const bytes = new Uint8Array(await readFile("tests/pdf-fixtures/encrypted.pdf"));
     const task = getDocument({ ...options, data: bytes });
     const reasons: number[] = [];
     task.onPassword = (submit, reason) => {
@@ -366,18 +364,14 @@ describe("special document corpus", () => {
         ]),
       );
       expect(await pdf.getOutline()).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ title: "Embedded text" }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ title: "Embedded text" })]),
       );
     } finally {
       await pdf.loadingTask.destroy();
     }
   });
   it("preserves declared structures and annotations through combined form fill, sticky note, reorder, rotate roundtrip", async () => {
-    const rawBytes = new Uint8Array(
-      await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")),
-    );
+    const rawBytes = new Uint8Array(await readFile(requireFixture("reader-5.pdf")));
     const noted = await addStickyNote(rawBytes, {
       page: 1,
       x: 100,
@@ -414,9 +408,7 @@ describe("special document corpus", () => {
     }
   });
   it("preserves inserted text, headers, bates numbering, links, and attachments across roundtrip", async () => {
-    const rawBytes = new Uint8Array(
-      await readFile(resolve("tests/pdf-fixtures/reader-5.pdf")),
-    );
+    const rawBytes = new Uint8Array(await readFile(requireFixture("reader-5.pdf")));
 
     // 1. Insert multiline text
     const withText = await insertTextContent(rawBytes, {
@@ -469,16 +461,10 @@ describe("special document corpus", () => {
       "Phase 5 audit record",
     );
 
-    await writeFile(
-      "output/phase5-placement-decoration-roundtrip.pdf",
-      withAttachment,
-    );
+    await writeFile("output/phase5-placement-decoration-roundtrip.pdf", withAttachment);
 
     // Verify independent extraction and structure
-    const extractedData = await extractEmbeddedAttachment(
-      withAttachment,
-      "audit-manifest.txt",
-    );
+    const extractedData = await extractEmbeddedAttachment(withAttachment, "audit-manifest.txt");
     expect(extractedData).not.toBeNull();
     expect(Array.from(extractedData!)).toEqual(Array.from(attachmentContent));
 
@@ -511,7 +497,7 @@ describe("special document corpus", () => {
   });
 
   it("Phase 6 OCR searchable layer roundtrip on scanned fixture", async () => {
-    const fixturePath = resolve("tests/pdf-fixtures/ocr-scans.pdf");
+    const fixturePath = requireFixture("ocr-scans.pdf");
     const scanBytes = new Uint8Array(await readFile(fixturePath));
 
     // Initially, page 1 is an image-only scan with no digital text
@@ -565,5 +551,44 @@ describe("special document corpus", () => {
     } finally {
       await reopened.loadingTask.destroy();
     }
+  });
+
+  it("extracts a single page from a document with cross-page links without leaking unreferenced pages (DS-03)", async () => {
+    const doc = await PDFDocument.create();
+    const page1 = doc.addPage([300, 400]);
+    const page2 = doc.addPage([300, 400]);
+
+    // Cross-page link on page 1 targeting page 2
+    const dest = doc.context.obj([
+      page2.ref,
+      PDFName.of("XYZ"),
+      PDFNumber.of(0),
+      PDFNumber.of(0),
+      PDFNumber.of(0),
+    ]);
+    const link = doc.context.obj({
+      Type: "Annot",
+      Subtype: "Link",
+      Rect: [10, 10, 50, 20],
+      Dest: dest,
+    });
+    const linkRef = doc.context.register(link);
+    page1.node.set(PDFName.of("Annots"), doc.context.obj([linkRef]));
+
+    const inputBytes = await doc.save();
+    const extractedBytes = await extractPages(inputBytes, [0]);
+
+    // Verify extracted document has exactly 1 page dictionary in its saved objects
+    const extractedDoc = await PDFDocument.load(extractedBytes);
+    expect(extractedDoc.getPageCount()).toBe(1);
+
+    const pageObjectCount = extractedDoc.context.enumerateIndirectObjects().filter(([, obj]) => {
+      if (obj instanceof PDFDict) {
+        const type = obj.lookupMaybe(PDFName.of("Type"), PDFName);
+        return type?.asString() === "/Page";
+      }
+      return false;
+    }).length;
+    expect(pageObjectCount).toBe(1);
   });
 });

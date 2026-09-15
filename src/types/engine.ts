@@ -39,6 +39,7 @@ export interface RedactionReport {
   removedImages: number;
   removedPaths: number;
   removedAnnotations: number;
+  hiddenAnnotationsRemoved: number;
   removedFormFields: number;
   rewrittenForms: number;
   sanitized: string[];
@@ -114,7 +115,12 @@ export interface PageObjects {
 export type EditRequest =
   | { type: "replaceText"; objectId: string; text: string; preview?: boolean }
   | { type: "deleteObject"; objectId: string }
-  | { type: "replaceImage"; objectId: string; width: number; height: number };
+  | { type: "replaceImage"; objectId: string; width: number; height: number }
+  | {
+      type: "transformImage";
+      objectId: string;
+      cm: [number, number, number, number, number, number];
+    };
 
 export interface EditReport {
   applied: boolean;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentLoadingTask } from "pdfjs-dist";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -17,6 +17,7 @@ export function useDocumentSession(controller: ViewerController | null) {
   const task = useRef<PDFDocumentLoadingTask | null>(null),
     loading = useRef<PDFDocumentLoadingTask | null>(null),
     lock = useRef(false),
+    pendingOpen = useRef(false),
     openingCancelled = useRef(false);
   const report = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -30,9 +31,13 @@ export function useDocumentSession(controller: ViewerController | null) {
     void desktop
       .localState()
       .then((local) =>
-        useWorkspace
-          .getState()
-          .set({ local, layout: local.preferences.layout }),
+        useWorkspace.getState().set({
+          local,
+          layout: local.preferences.layout,
+          highlightColor: local.preferences.annotationColor,
+          inkColor: local.preferences.annotationColor,
+          inkWidth: local.preferences.annotationStrokeWidth,
+        }),
       )
       .catch(report);
   }, [report]);
@@ -44,22 +49,25 @@ export function useDocumentSession(controller: ViewerController | null) {
       if (!controller) return false;
       if (lock.current) {
         await desktop.releaseDocument(descriptor.id);
+        useWorkspace.getState().set({
+          error: "Open is already in progress.",
+          status: "Open is already in progress.",
+        });
         return false;
       }
       const previousState = useWorkspace.getState();
       lock.current = true;
       openingCancelled.current = false;
-      useWorkspace
-        .getState()
-        .set({ busy: true, error: "", status: "Opening PDF..." });
+      useWorkspace.getState().set({ busy: true, error: "", status: "Opening PDF..." });
       let candidate: PDFDocumentLoadingTask | null = null;
+      let failedDuringLoad = false;
       const previousPdf = controller.pdf;
       try {
         candidate = await loadPdf(
           descriptor,
-          (submit, reason) =>
-            setPassword({ name: descriptor.name, reason, submit }),
+          (submit, reason) => setPassword({ name: descriptor.name, reason, submit }),
           (error) => {
+            failedDuringLoad = true;
             report(error);
             void loading.current?.destroy();
           },
@@ -67,9 +75,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         loading.current = candidate;
         candidate.onProgress = ({ percent }: { percent: number }) => {
           if (loading.current === candidate && Number.isFinite(percent))
-            useWorkspace
-              .getState()
-              .set({ status: `Opening PDF... ${percent}%` });
+            useWorkspace.getState().set({ status: `Opening PDF... ${percent}%` });
         };
         const loaded = await candidate.promise;
         setPassword(null);
@@ -101,17 +107,20 @@ export function useDocumentSession(controller: ViewerController | null) {
             controller.clearRevisionHistory?.();
           }
         }
-        if (recovering || descriptor.unsaved)
-          controller.markUnsavedRevision?.();
+        if (recovering || descriptor.unsaved) controller.markUnsavedRevision?.();
 
         // Commit before retiring any previous resource. Cleanup errors cannot
         // roll back to a proxy that has already been destroyed.
-        const bookmarks = useWorkspace.getState().bookmarks;
+        // attach() read these from the candidate; reset() must not discard them.
+        const { bookmarks, comments, formNotice, hasDigitalSignature } = useWorkspace.getState();
         task.current = candidate;
         useWorkspace.getState().reset();
         useWorkspace.getState().set({
           document: descriptor,
           bookmarks,
+          comments,
+          formNotice,
+          hasDigitalSignature,
           dirty: recovering || !!descriptor.unsaved,
           info: {
             pages: loaded.numPages,
@@ -125,9 +134,10 @@ export function useDocumentSession(controller: ViewerController | null) {
         });
         controller.goTo(initialPage);
         await desktop.markDirty(recovering || !!descriptor.unsaved).catch(report);
-        if (!recovering) await desktop.discardRecovery().catch(report);
         await refreshLocal().catch(report);
         if (previous && previous.id !== descriptor.id) {
+          // The dirty guard already saved or discarded the previous document's changes.
+          await desktop.discardRecovery(previous.id).catch(report);
           await desktop.releaseDocument(previous.id).catch(report);
         }
         await controller.releaseRevision().catch(report);
@@ -151,11 +161,9 @@ export function useDocumentSession(controller: ViewerController | null) {
         useWorkspace.getState().set(previousState);
         if (previousPdf) controller.goTo(previousState.page);
         setPassword(null);
-        if (!openingCancelled.current) report(error);
+        if (!openingCancelled.current && !failedDuringLoad) report(error);
         useWorkspace.getState().set({
-          status: openingCancelled.current
-            ? "Opening cancelled"
-            : "Unable to open PDF",
+          status: openingCancelled.current ? "Opening cancelled" : "Unable to open PDF",
         });
         return false;
       } finally {
@@ -170,8 +178,7 @@ export function useDocumentSession(controller: ViewerController | null) {
     async (saveAs = false, unprotected = false) => {
       const state = useWorkspace.getState();
       const pdf = controller?.pdf ?? null;
-      if (!controller || !pdf || !state.document || lock.current)
-        return false;
+      if (!controller || !pdf || !state.document || lock.current) return false;
       if (state.info?.encrypted) {
         report(
           "This password-protected PDF opens read-only. Unlock it from Password Protect before editing or saving. Your original is unchanged.",
@@ -192,15 +199,13 @@ export function useDocumentSession(controller: ViewerController | null) {
         error: "",
         status: "Validating and saving PDF...",
       });
+      let dirtyBeforeSave = state.dirty;
       try {
         controller.editor?.commitOrRemove();
+        // Committing a pending editor can itself mark the document dirty.
+        dirtyBeforeSave = useWorkspace.getState().dirty;
         const bytes = await pdf.saveDocument();
-        const result = await desktop.saveDocument(
-          state.document,
-          bytes,
-          pdf.numPages,
-          saveAs,
-        );
+        const result = await desktop.saveDocument(state.document, bytes, pdf.numPages, saveAs);
         if (!result) {
           state.set({ status: "Save cancelled" });
           return false;
@@ -214,9 +219,7 @@ export function useDocumentSession(controller: ViewerController | null) {
             name: result.name,
             size: result.size,
           },
-          ...(unprotected && state.info
-            ? { info: { ...state.info, protectedSource: false } }
-            : {}),
+          ...(unprotected && state.info ? { info: { ...state.info, protectedSource: false } } : {}),
         });
         controller.markSaved?.(bytes, pdf.numPages);
         await desktop.markDirty(false);
@@ -225,10 +228,12 @@ export function useDocumentSession(controller: ViewerController | null) {
       } catch (error) {
         report(error);
         state.set({
-          dirty: true,
-          status: "Save failed; changes are still in this workspace",
+          dirty: dirtyBeforeSave,
+          status: dirtyBeforeSave
+            ? "Save failed; changes are still in this workspace"
+            : "Save failed. The document is unchanged.",
         });
-        void desktop.markDirty(true).catch(report);
+        void desktop.markDirty(dirtyBeforeSave).catch(report);
         return false;
       } finally {
         lock.current = false;
@@ -245,12 +250,44 @@ export function useDocumentSession(controller: ViewerController | null) {
   const open = useCallback(
     (file?: File) =>
       guard(() => {
+        if (pendingOpen.current) {
+          useWorkspace.getState().set({
+            error: "Open is already in progress.",
+            status: "Open is already in progress.",
+          });
+          return;
+        }
+        pendingOpen.current = true;
         void desktop
           .openDocument(file)
           .then((descriptor) => {
             if (descriptor) return load(descriptor);
           })
-          .catch(report);
+          .catch(report)
+          .finally(() => {
+            pendingOpen.current = false;
+          });
+      }),
+    [guard, load, report],
+  );
+  const openToken = useCallback(
+    (token: string) =>
+      guard(() => {
+        if (pendingOpen.current) {
+          useWorkspace.getState().set({
+            error: "Open is already in progress.",
+            status: "Open is already in progress.",
+          });
+          return;
+        }
+        pendingOpen.current = true;
+        void desktop
+          .openDocumentFromToken(token)
+          .then((descriptor) => load(descriptor))
+          .catch(report)
+          .finally(() => {
+            pendingOpen.current = false;
+          });
       }),
     [guard, load, report],
   );
@@ -260,10 +297,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         void desktop
           .openRecent(id)
           .then((descriptor) =>
-            load(
-              descriptor,
-              useWorkspace.getState().local.preferences.rememberPage ? page : 1,
-            ),
+            load(descriptor, useWorkspace.getState().local.preferences.rememberPage ? page : 1),
           )
           .catch(report);
       }),
@@ -280,17 +314,17 @@ export function useDocumentSession(controller: ViewerController | null) {
           if (doc) await desktop.releaseDocument(doc.id);
           useWorkspace.getState().reset();
           await desktop.markDirty(false);
-          await desktop.discardRecovery();
+          if (doc) await desktop.discardRecovery(doc.id);
           await refreshLocal();
         })().catch(report);
       }),
     [controller, guard, report, refreshLocal],
   );
   const recover = useCallback(
-    () =>
+    (id: string) =>
       guard(() => {
         void desktop
-          .openRecovery()
+          .openRecovery(id)
           .then((descriptor) => load(descriptor, 1, true))
           .then((opened) => {
             if (!opened) return;
@@ -307,6 +341,22 @@ export function useDocumentSession(controller: ViewerController | null) {
   );
   useEffect(() => {
     if (!desktop.native) return;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen<{ token?: string; error?: string }>("open-token", ({ payload }) => {
+      if (payload.error) report(payload.error);
+      else if (payload.token) openToken(payload.token);
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [openToken, report]);
+  useEffect(() => {
+    if (!desktop.native) return;
     const interval = setInterval(() => {
       const state = useWorkspace.getState();
       if (
@@ -315,6 +365,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         state.info?.encrypted ||
         state.info?.protectedSource ||
         !state.document ||
+        state.busy ||
         !controller?.pdf ||
         lock.current
       )
@@ -322,22 +373,24 @@ export function useDocumentSession(controller: ViewerController | null) {
       lock.current = true;
       const descriptor = state.document;
       const active = controller.pdf;
-      state.set({ busy: true, status: "Saving recovery..." });
+      // Autosave never sets busy, so typing and open dialogs keep focus while it runs.
+      const previousStatus = state.status;
+      const autosaveStatus = "Saving recovery copy...";
+      state.set({ status: autosaveStatus });
       void active
         .saveDocument()
-        .then((bytes) =>
-          desktop.writeRecovery(descriptor, bytes, active.numPages),
-        )
-        .catch(report)
+        .then((bytes) => desktop.writeRecovery(descriptor, bytes, active.numPages))
+        .catch((err) => {
+          console.warn("Autosave recovery write failed:", err);
+        })
         .finally(() => {
           lock.current = false;
-          useWorkspace
-            .getState()
-            .set({ busy: false, status: "Unsaved changes" });
+          if (useWorkspace.getState().status === autosaveStatus)
+            useWorkspace.getState().set({ status: previousStatus });
         });
     }, 10000);
     return () => clearInterval(interval);
-  }, [controller, report]);
+  }, [controller]);
   useEffect(() => {
     if (!desktop.native) return;
     let unlisten: (() => void) | undefined;
@@ -345,7 +398,8 @@ export function useDocumentSession(controller: ViewerController | null) {
     void listen("close-requested", () => {
       if (!useWorkspace.getState().busy)
         guard(() => {
-          void desktop.discardRecovery().catch(() => {});
+          const id = useWorkspace.getState().document?.id;
+          if (id) void desktop.discardRecovery(id).catch(() => {});
           void invoke("close_window").catch(report);
         });
     }).then((fn) => {
@@ -357,34 +411,55 @@ export function useDocumentSession(controller: ViewerController | null) {
       unlisten?.();
     };
   }, [guard, report]);
-  return {
-    open,
-    recent,
-    save,
-    home,
-    recover,
-    load,
-    report,
-    refreshLocal,
-    password,
-    cancelPassword: () => {
-      openingCancelled.current = true;
-      setPassword(null);
-      void loading.current?.destroy();
-    },
-    confirm,
-    cancelConfirm: () => setConfirm(null),
-    discardAndContinue: () => {
-      const action = confirm;
-      setConfirm(null);
-      action?.();
-    },
-    saveAndContinue: async () => {
-      if (await save()) {
-        const action = confirm;
-        setConfirm(null);
-        action?.();
-      }
-    },
-  };
+  const cancelPassword = useCallback(() => {
+    openingCancelled.current = true;
+    setPassword(null);
+    void loading.current?.destroy();
+  }, []);
+  const cancelConfirm = useCallback(() => setConfirm(null), []);
+  const discardAndContinue = useCallback(() => {
+    const action = confirm;
+    setConfirm(null);
+    action?.();
+  }, [confirm]);
+  const saveAndContinue = useCallback(async () => {
+    const action = confirm;
+    setConfirm(null);
+    if (await save()) action?.();
+  }, [confirm, save]);
+
+  return useMemo(
+    () => ({
+      open,
+      recent,
+      save,
+      home,
+      recover,
+      load,
+      report,
+      refreshLocal,
+      password,
+      cancelPassword,
+      confirm,
+      cancelConfirm,
+      discardAndContinue,
+      saveAndContinue,
+    }),
+    [
+      open,
+      recent,
+      save,
+      home,
+      recover,
+      load,
+      report,
+      refreshLocal,
+      password,
+      cancelPassword,
+      confirm,
+      cancelConfirm,
+      discardAndContinue,
+      saveAndContinue,
+    ],
+  );
 }

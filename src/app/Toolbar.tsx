@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
   Save,
@@ -25,6 +26,9 @@ import {
   Eye,
   EyeOff,
   Layers,
+  Lock,
+  RotateCw,
+  Moon,
 } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
@@ -55,33 +59,38 @@ export function Toolbar({
           <span>N</span>NavPDF
         </button>
         <span className="titlebar-divider" />
-        <nav className="mode-nav-tabs" role="tablist" aria-label="Tool modes">
+        <nav className="mode-nav-tabs" aria-label="Tool modes">
           <button
             className={`mode-tab ${s.toolMode === "all" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "all"}
             onClick={() => toggleMode("all")}
           >
             All tools
           </button>
           <button
             className={`mode-tab ${s.toolMode === "edit" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "edit"}
             onClick={() => toggleMode("edit")}
           >
             Edit
           </button>
           <button
             className={`mode-tab ${s.toolMode === "convert" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "convert"}
             onClick={() => toggleMode("convert")}
           >
             Convert
           </button>
           <button
             className={`mode-tab ${s.toolMode === "esign" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "esign"}
             onClick={() => toggleMode("esign")}
           >
             E-Sign
           </button>
           <button
             className={`mode-tab ${s.toolMode === "create" ? "active" : ""}`}
+            aria-pressed={s.toolMode === "create"}
             onClick={() => toggleMode("create")}
           >
             Create
@@ -90,9 +99,7 @@ export function Toolbar({
         <span className="titlebar-divider" />
         <div className="document-title">
           {s.document?.name || "Local workspace"}
-          {s.dirty && (
-            <span className="dirty-indicator" title="Unsaved changes" />
-          )}
+          {s.dirty && <span className="dirty-indicator" title="Unsaved changes" />}
         </div>
         <div className="titlebar-space" />
         <span className="privacy-label">
@@ -118,12 +125,7 @@ export function Toolbar({
       {s.quickRailVisible && (
         <div className="main-toolbar" role="toolbar" aria-label="PDF tools">
           <div className="toolbar-group">
-            <button
-              title="Open (⌘O)"
-              aria-label="Open PDF"
-              onClick={open}
-              disabled={s.busy}
-            >
+            <button title="Open (⌘O)" aria-label="Open PDF" onClick={open} disabled={s.busy}>
               <FolderOpen size={18} />
               <span>Open</span>
             </button>
@@ -214,7 +216,10 @@ export function Toolbar({
               aria-pressed={s.tool === "signature"}
               className={s.tool === "signature" ? "active" : ""}
               disabled={disabled}
-              onClick={() => s.set({ activeModal: "fill-sign" })}
+              onClick={() => {
+                s.set({ activeModal: "fill-sign", tool: "signature" });
+                controller?.setTool("signature");
+              }}
             >
               <PenLine size={18} />
             </button>
@@ -223,7 +228,10 @@ export function Toolbar({
               aria-pressed={s.activeSnapshot}
               className={s.activeSnapshot ? "active" : ""}
               disabled={disabled}
-              onClick={() => s.set({ activeSnapshot: true, tool: "snapshot" })}
+              onClick={() => {
+                s.set({ activeSnapshot: true, tool: "snapshot" });
+                controller?.setTool("snapshot");
+              }}
             >
               <Camera size={18} />
             </button>
@@ -242,114 +250,165 @@ export function Toolbar({
               <Printer size={18} />
             </button>
           </div>
-        <div className="toolbar-group zoom-controls">
-          <button
-            aria-label="Zoom out"
-            disabled={disabled || s.zoom <= 25}
-            onClick={() => controller?.zoom(s.zoom / 100 / 1.15)}
-          >
-            <Minus size={16} />
-          </button>
-          <select
-            aria-label="Zoom percentage"
-            value={s.zoom}
-            disabled={disabled}
-            onChange={(e) => controller?.zoom(Number(e.target.value) / 100)}
-          >
-            {[
-              ...new Set([
-                25,
-                50,
-                75,
-                100,
-                125,
-                150,
-                200,
-                300,
-                400,
-                500,
-                s.zoom,
-              ]),
-            ]
-              .sort((a, b) => a - b)
-              .map((n) => (
-                <option value={n} key={n}>
-                  {n}%
-                </option>
-              ))}
-          </select>
-          <button
-            aria-label="Zoom in"
-            disabled={disabled || s.zoom >= 500}
-            onClick={() => controller?.zoom((s.zoom / 100) * 1.15)}
-          >
-            <Plus size={16} />
-          </button>
-          <button
-            aria-label="Fit width"
-            title="Fit width"
-            disabled={disabled}
-            onClick={() => controller?.zoom("page-width")}
-          >
-            <MoveHorizontal size={18} />
-          </button>
-          <button
-            aria-label="Fit page"
-            title="Fit page (⌘0)"
-            disabled={disabled}
-            onClick={() => controller?.zoom("page-fit")}
-          >
-            <Scan size={18} />
-          </button>
+          <div className="toolbar-group zoom-controls">
+            <button
+              aria-label="Zoom out"
+              disabled={disabled || s.zoom <= 25}
+              onClick={() => controller?.zoom(s.zoom / 100 / 1.15)}
+            >
+              <Minus size={16} />
+            </button>
+            <select
+              aria-label="Zoom percentage"
+              value={s.zoom}
+              disabled={disabled}
+              onChange={(e) => controller?.zoom(Number(e.target.value) / 100)}
+            >
+              {[...new Set([25, 50, 75, 100, 125, 150, 200, 300, 400, 500, s.zoom])]
+                .sort((a, b) => a - b)
+                .map((n) => (
+                  <option value={n} key={n}>
+                    {n}%
+                  </option>
+                ))}
+            </select>
+            <button
+              aria-label="Zoom in"
+              disabled={disabled || s.zoom >= 500}
+              onClick={() => controller?.zoom((s.zoom / 100) * 1.15)}
+            >
+              <Plus size={16} />
+            </button>
+            <button
+              aria-label="Fit width"
+              title="Fit width"
+              disabled={disabled}
+              onClick={() => controller?.zoom("page-width")}
+            >
+              <MoveHorizontal size={18} />
+            </button>
+            <button
+              aria-label="Fit page"
+              title="Fit page (⌘0)"
+              disabled={disabled}
+              onClick={() => controller?.zoom("page-fit")}
+            >
+              <Scan size={18} />
+            </button>
+          </div>
+          <div className="toolbar-space" />
+          <div className="toolbar-group">
+            <select
+              aria-label="Page layout"
+              disabled={disabled}
+              value={s.layout}
+              onChange={(e) => controller?.setLayout(e.target.value as Layout)}
+            >
+              <option value="continuous">Continuous</option>
+              <option value="single">Single page</option>
+              <option value="spread">Two pages</option>
+            </select>
+            <button
+              aria-label="Rotate view clockwise"
+              title="Rotate view clockwise"
+              disabled={disabled}
+              onClick={() => controller?.rotateView(90)}
+            >
+              <RotateCw size={17} />
+            </button>
+            <button
+              aria-label={s.nightMode ? "Disable night mode" : "Enable night mode"}
+              title="Night mode"
+              disabled={disabled}
+              onClick={() => s.set({ nightMode: !s.nightMode })}
+            >
+              <Moon size={17} />
+            </button>
+            <button
+              aria-label={s.readMode ? "Exit read mode" : "Enter read mode"}
+              title="Read mode"
+              disabled={disabled}
+              onClick={() => s.set({ readMode: !s.readMode })}
+            >
+              <Eye size={17} />
+            </button>
+            <button
+              aria-label="Find in PDF"
+              title="Find (⌘F)"
+              disabled={disabled}
+              onClick={() => s.set({ sidebar: "search" })}
+            >
+              <Search size={18} />
+            </button>
+            <button aria-label="Close document" disabled={disabled} onClick={home}>
+              <Home size={17} />
+            </button>
+          </div>
         </div>
-        <div className="toolbar-space" />
-        <div className="toolbar-group">
-          <select
-            aria-label="Page layout"
-            disabled={disabled}
-            value={s.layout}
-            onChange={(e) => controller?.setLayout(e.target.value as Layout)}
-          >
-            <option value="continuous">Continuous</option>
-            <option value="single">Single page</option>
-            <option value="spread">Two pages</option>
-          </select>
-          <button
-            aria-label="Find in PDF"
-            title="Find (⌘F)"
-            disabled={disabled}
-            onClick={() => s.set({ sidebar: "search" })}
-          >
-            <Search size={18} />
-          </button>
-          <button
-            aria-label="Close document"
-            disabled={disabled}
-            onClick={home}
-          >
-            <Home size={17} />
-          </button>
-        </div>
-      </div>
       )}
     </>
   );
 }
-export function Statusbar({
-  controller,
-}: {
-  controller: ViewerController | null;
-}) {
+export function Statusbar({ controller }: { controller: ViewerController | null }) {
   const s = useWorkspace();
+  const pageInputRef = useRef<HTMLInputElement>(null);
+  const [pageInputValue, setPageInputValue] = useState(String(s.page));
+
+  useEffect(() => {
+    if (document.activeElement !== pageInputRef.current)
+      setPageInputValue(s.pageLabels?.[s.page - 1] ?? String(s.page));
+  }, [s.page, s.pageLabels]);
+
+  const commitPageInput = () => {
+    if (!pageInputValue.trim()) {
+      setPageInputValue(String(s.page));
+      return;
+    }
+    if (controller?.goToPage) {
+      controller.goToPage(pageInputValue);
+    } else {
+      const page = Number(pageInputValue);
+      if (Number.isFinite(page)) controller?.goTo(page);
+    }
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <footer className="statusbar">
       <span className={`status-light ${s.busy ? "working" : ""}`} />
-      <span role="status">
-        {s.busy ? s.status : s.dirty ? "Unsaved changes" : s.status}
-      </span>
+      <span role="status">{s.status}</span>
       <div className="statusbar-space" />
       {s.document && (
         <>
+          {s.info?.encrypted && (
+            <span
+              className="statusbar-item"
+              title="Document is encrypted"
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              <Lock size={13} /> Protected
+            </span>
+          )}
+          {s.hasDigitalSignature && (
+            <span
+              className="statusbar-item"
+              title="Document contains a digital signature"
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              <ShieldCheck size={13} /> Signed
+            </span>
+          )}
+          {s.document.size > 0 && (
+            <span className="statusbar-item" title={`File size: ${s.document.size} bytes`}>
+              {formatSize(s.document.size)}
+            </span>
+          )}
+          <span className="status-separator" />
           <button
             aria-label="Previous page"
             disabled={s.page === 1 || s.busy}
@@ -360,16 +419,17 @@ export function Statusbar({
           <label>
             Page
             <input
-              key={s.page}
+              ref={pageInputRef}
               aria-label="Page number"
-              type="number"
-              min={1}
-              max={s.info?.pages}
-              defaultValue={s.page}
-              onBlur={(e) => controller?.goTo(Number(e.target.value) || 1)}
+              type="text"
+              value={pageInputValue}
+              onChange={(e) => setPageInputValue(e.target.value)}
+              onBlur={commitPageInput}
               onKeyDown={(e) => {
-                if (e.key === "Enter")
-                  controller?.goTo(Number(e.currentTarget.value) || 1);
+                if (e.key === "Enter") {
+                  commitPageInput();
+                  e.currentTarget.blur();
+                }
               }}
             />
             <span>of {s.info?.pages}</span>

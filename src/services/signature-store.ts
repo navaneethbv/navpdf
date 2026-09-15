@@ -19,14 +19,15 @@ export function clearSessionSignatures(): void {
 export async function fetchSignatureLibrary(): Promise<{
   signatures: SavedSignature[];
   error: string | null;
+  warnings: string[];
 }> {
   const sessionList = Array.from(sessionSignatures.values());
   const legacy = getLegacyPlaintextSignatures();
   try {
     const persistent = await loadSignatures();
-    const combined = [...sessionList, ...persistent, ...legacy];
+    const combined = [...sessionList, ...persistent.assets, ...legacy];
     combined.sort((a, b) => b.createdAt - a.createdAt);
-    return { signatures: combined, error: null };
+    return { signatures: combined, error: null, warnings: persistent.warnings };
   } catch (err) {
     // If native storage fails, do not silently fail; expose session and legacy assets and report error
     const combined = [...sessionList, ...legacy];
@@ -36,6 +37,7 @@ export async function fetchSignatureLibrary(): Promise<{
         err instanceof Error
           ? err.message
           : "Secure signature storage is unavailable. Only session-only signatures can be created.",
+      warnings: [],
     };
   }
 }
@@ -53,6 +55,7 @@ export async function persistOrStageSignature(
       type,
       dataUrl,
       createdAt: Math.floor(Date.now() / 1000),
+      storage: "session",
       sessionOnly: true,
     };
     sessionSignatures.set(sessionSig.id, sessionSig);
@@ -70,19 +73,14 @@ export async function persistOrStageSignature(
         type,
         dataUrl,
         createdAt: 0,
+        storage: "session",
       },
-      error:
-        err instanceof Error
-          ? err.message
-          : "Failed to persist signature in secure storage.",
+      error: err instanceof Error ? err.message : "Failed to persist signature in secure storage.",
     };
   }
 }
 
-export async function removeSignature(
-  id: string,
-  sessionOnly?: boolean,
-): Promise<void> {
+export async function removeSignature(id: string, sessionOnly?: boolean): Promise<void> {
   if (sessionOnly || sessionSignatures.has(id)) {
     sessionSignatures.delete(id);
     return;
@@ -117,15 +115,26 @@ export function getLegacyPlaintextSignatures(): SavedSignature[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.map((item) => ({
-      id: item.id || crypto.randomUUID(),
+      id: item.id || `legacy-${stableSignatureId(item)}`,
       name: item.name || "Signature",
       type: item.type === "initials" ? "initials" : "signature",
       dataUrl: item.dataUrl || "",
       createdAt: item.createdAt || Math.floor(Date.now() / 1000),
+      storage: "legacy" as const,
     }));
   } catch {
     return [];
   }
+}
+
+function stableSignatureId(item: { name?: string; type?: string; dataUrl?: string }) {
+  const input = `${item.name ?? "Signature"}\u0000${item.type ?? "signature"}\u0000${item.dataUrl ?? ""}`;
+  let hash = 2166136261;
+  for (let offset = 0; offset < input.length; offset++) {
+    hash ^= input.charCodeAt(offset);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 export async function migrateLegacySignatures(

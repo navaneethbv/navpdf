@@ -7,6 +7,42 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 15 current implementation checkpoint
+
+PR #4 follow-up review corrections fix page-space image transforms, preserve XFDF text-markup quadrilaterals, and allow clearing dropdown and radio selections while updating field flags.
+The follow-up passes 510 frontend tests and 80 Rust tests, with the existing constrained-volume test ignored.
+Saved-output regressions cover these defects; packaged UI and independent-reader acceptance for this follow-up remain open.
+See the follow-up section in `docs/VERIFICATION.md` for the verification boundary.
+
+This checkpoint supersedes the stale progress table below for the pushed worktree on `fix/september-14-review-corrections`.
+
+| Tranche | Current source status | Evidence or open gate |
+| --- | --- | --- |
+| 0 | Complete | Node 24, Rust 1.89, CI guardrails and the `src-tauri/Cargo.toml` Cargo Deny manifest path are configured and pass hosted validation. |
+| 1 | Complete and tested | Data-safety corrections and regressions are present; the required local frontend and Rust checks pass. |
+| 2 | Complete in source | Tasks 2.1 through 2.7 are implemented, including mutation serialization, page-box geometry, comment identity, permission handling, redaction safeguards and native rendering recovery. |
+| 3 | Implemented in source | Tasks 3.1 through 3.8 are covered by the frontend suite; keyboard-only and native dialog checks remain open. |
+| 4 | In progress | Fixture guards, the PDF artifact inspection helper, corpus-driven OCR reporting, acceptance commands and a macOS acceptance job are present and pass hosted validation; Preview and Acrobat reopen checks remain open. |
+| 5 | Partial | Forms editing, crop positioning, image transforms, inserted-image rotation, signature rotation and protection parity are implemented; broader content parity and independent-reader checks remain open. |
+| 6 | Pending | Structural refactors remain open. |
+| 7 | Partial | View modes, navigation, page labels, existing-content editing, protection and redaction are implemented; most Acrobat parity and independent-reader checks remain open. |
+| 8 | Partial | Revision history and native staging use machine-relative byte budgets; native revision recycling and the remaining performance gates remain open. |
+
+Current local evidence is 504 tests passing across 80 frontend files with 83.39% statement, 75.01% branch, 81.18% function and 86.20% line coverage.
+TypeScript, ESLint, formatting checks, 80 Rust tests with one constrained-volume test ignored, and Clippy with warnings denied pass locally.
+The production app bundle and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` build successfully.
+The current executable SHA-256 is `9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4`.
+The current DMG SHA-256 is `2904b2a5bcbbf680aff64ec8284e5e7553afdc0c579379818eb68e8f9f27c0a82`.
+`hdiutil verify` reports a valid DMG checksum with CRC32 `$B4992B9A`.
+Native rendering was verified from one fresh packaged process with the page canvas and thumbnails visible without the previous persistent spinner.
+Native OCR acceptance passed all six Apple Vision samples.
+Phase 7 acceptance passed 55 of 55 checks locally after the fixture generation step was added to the macOS workflow.
+Hosted run `35012242904` passed Cargo Deny, frontend checks, Rust tests and Clippy, SonarCloud, Phase 7, Phase 8, Phase 10 and the six-sample OCR acceptance.
+The run also verified that the workflow generates its required PDF fixtures before native acceptance.
+Preview and Acrobat reopen checks for the final source revision remain open.
+PR #4 remains open and draft. Its GitHub merge state is mergeable but blocked by repository policy.
+No merge or deployment claim is made for this branch.
+
 ## September 14 PR 2 corrective review
 
 This review supersedes the earlier blanket completion claims below.
@@ -16,6 +52,24 @@ Phases 3, 4, and 6 are reopened pending the checks and native acceptance recorde
 Historical test counts and package hashes below do not establish acceptance of these corrections.
 Phase 6's previous corpus accuracy claim is withdrawn: its tests compared hard-coded identical strings and its runtime returned sample text.
 Full completion of all ten phases is not established.
+
+## September 14 codebase review
+
+A full source review at `4f667c1` is recorded in [REVIEW-2026-09-14.md](REVIEW-2026-09-14.md) with finding ids by area and a specification gap table.
+Its corrective and feature work is sequenced in [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md).
+The review found two data-loss defects that affect Phases 5 and 3: repeated decoration or Bates application deletes original page content, and editor mode switches clear the dirty flag while form edits are pending.
+
+Progress on branch `fix/september-14-review-corrections`, recorded September 14, 2026:
+
+| Tranche | Automated status | Native acceptance |
+| --- | --- | --- |
+| 0: environment and guardrails | Implemented; hosted CI result pending the first push | Not applicable |
+| 1: data-safety corrections (Tasks 1.1 to 1.9) | Implemented with regressions; local checks pass | Not run; every task's native check is open |
+| 2: mutation correctness and geometry (Tasks 2.1 to 2.7) | Implemented with regressions; local checks and Phase 7 acceptance pass | Not run; placement and redaction native checks are open |
+
+Evidence, deliberate deviations from the plan text and remaining limits are recorded in [VERIFICATION.md](VERIFICATION.md).
+Phase 5 completion is not established until Task 1.1's native check is recorded, and Phases 3, 4 and 6 remain reopened.
+Next task: the Tranche 1 and 2 native checks, then Tranche 3 (dialog robustness and accessibility).
 
 ## Working agreement
 
@@ -295,3 +349,62 @@ P10.6 specialist media (audio, video, 3D) and article threads are declined per A
 P10.7 external design tool integrations are declined per ADR 0010; standard exports retain accurate non-marketing labels.
 Adversarial acceptance `node scripts/phase10-acceptance.mjs` passed 55 of 55 checks.
 The suite verified RSA and ECDSA P-256 signatures, legacy 3DES PKCS #12 keystores, DocMDP certification, countersigning, byte-range tampering detection, and appended content invalidation against independent poppler `pdfsig` in an isolated NSS database, OpenSSL CMS byte-range verification, and NavPDF native verification.
+
+## September 15, 2026 correction checkpoint
+
+The September 14 review corrections now include the native hardening work in Tasks 2.7 and the approved editor parity subset.
+
+Native OCR acceptance passed all 6 corpus samples through the Swift Apple Vision bridge on macOS.
+
+The bridge avoids the Rust autorelease-pool failure observed in the original Vision path and keeps recognition local to the device.
+
+Native rendering was rechecked from a single fresh packaged NavPDF process with the 500-page text fixture.
+
+The page canvas and thumbnails rendered visibly without the persistent PDF.js loading spinner.
+
+PDF.js is configured for the WKWebView path with DOM canvases, disabled offscreen and image decoder paths, disabled WASM, hardware accelerated canvas rendering, disabled detail canvases, and an explicit post-layout viewer update.
+
+Forms editing now enumerates existing text, checkbox, choice, radio and button fields, updates values and flags, deletes fields, and creates signature widgets.
+
+Crop controls now accept position and size and clamp the result to the visible page box.
+
+Inserted images, existing image objects, and Fill & Sign appearances now expose rotation or transform controls with persisted PDF output.
+
+Protection now supports a distinct permissions password with a restricted open-without-password copy and validates encrypted output before replacing a destination.
+
+Native staging and revision history budgets now use machine-relative limits with hard caps.
+
+Local verification passed 504 frontend tests across 80 files with coverage at 83.39% statements, 75.01% branches, 81.18% functions, and 86.20% lines.
+
+Rust verification passed 80 tests with one constrained-volume test ignored and Clippy passed with warnings denied.
+
+Phase 7 acceptance passed 55 of 55 checks, Phase 8 acceptance passed 12 of 12 checks, Phase 10 acceptance passed 55 of 55 checks, and the OCR corpus passed 6 of 6 samples.
+
+The final local package contains src-tauri/target/release/bundle/macos/NavPDF.app and src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg.
+
+The executable SHA-256 is 9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4.
+
+The DMG SHA-256 is 2904b2a5bcbbf680aff64c8284e5e7553afdc0c579379818eb68e8f9f27c0a82.
+
+hdiutil verify reports a valid DMG with CRC32 $B4992B9A.
+
+Preview and Acrobat reopen checks for this final source revision remain open.
+
+Full Tranche 6 domain refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
+
+The hosted run for commit 74974c9 confirmed that Cargo Deny now receives src-tauri/Cargo.toml, but it rejected unallowed transitive license terms and the macOS Rust job could not find the synthetic swift_Builtin_float link entry.
+
+The follow-up adds the explicit transitive license allowances and JPEG IJG clarification, marks the private native package unpublished, and removes the redundant Swift runtime link entry.
+
+The local cargo-deny 0.18.4 full license check passes.
+
+Hosted run `35009656343` passed the normal frontend, Rust, SonarCloud and commit checks.
+It failed Cargo Deny on `RUSTSEC-2024-0370`, `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098` and `RUSTSEC-2025-0100`, all transitive advisories with no safe upgrade reported by the database.
+It also failed native acceptance because `reader-100.pdf` is generated by `npm run fixtures` and was not generated in that job.
+The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
+Hosted run `35012242904` passed all listed CI and native acceptance checks for this follow-up.
+
+The hosted Phase 10 checks then exposed more OpenSSL version drift because the runner rejected `x509 -not_before` and used different successful CMS output text.
+The script now uses the compatible `req -nodes` and `x509 -days 0` forms and checks the CMS process exit status.
+OpenSSL checks CMS and byte-range integrity with `-noverify`, while independent `pdfsig` checks the synthetic trust chain.
+Local Phase 10 acceptance passes 55 of 55 checks.

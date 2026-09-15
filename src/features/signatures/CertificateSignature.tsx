@@ -11,6 +11,7 @@ import {
   verifySignatures,
 } from "../../services/engine";
 import type { CertificateSummary, Certification, SignatureInfo } from "../../types/engine";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 const CERTIFICATION_OPTIONS: [Certification, string][] = [
   ["none", "Do not certify"],
@@ -112,7 +113,12 @@ export function CertificateSignature({
     releaseCertificate();
   };
 
-  const textField = (suffix: string, label: string, value: string, change: (value: string) => void) => (
+  const textField = (
+    suffix: string,
+    label: string,
+    value: string,
+    change: (value: string) => void,
+  ) => (
     <div className="setting-group">
       <label className="setting-title" htmlFor={`${ids}-${suffix}`}>
         {label}
@@ -129,7 +135,7 @@ export function CertificateSignature({
   );
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Certificate Signature">
+    <FeatureDialog title="Certificate Signature" onClose={onClose} busy={working}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -155,25 +161,30 @@ export function CertificateSignature({
             </div>
           )}
           <p className="field-hint">
-            A certificate signature binds a saved copy to the certificate in your .p12 or .pfx
-            file, so readers can detect later changes. It has no visible appearance on the page.
-            NavPDF adds no timestamp or revocation data, does not check whether readers trust
-            your certificate, and sends nothing over the network.
+            A certificate signature binds a saved copy to the certificate in your .p12 or .pfx file,
+            so readers can detect later changes. It has no visible appearance on the page. NavPDF
+            adds no timestamp or revocation data, does not check whether readers trust your
+            certificate, and sends nothing over the network.
           </p>
 
           <section className="setting-group" aria-labelledby={`${ids}-existing`}>
             <h4 id={`${ids}-existing`} className="setting-title">
               Signatures in this file
             </h4>
-            {native && signatures === null && !problem && <p className="field-hint">Checking signatures…</p>}
-            {signatures?.length === 0 && <p className="field-hint">This file has no certificate signatures.</p>}
+            {native && signatures === null && !problem && (
+              <p className="field-hint">Checking signatures…</p>
+            )}
+            {signatures?.length === 0 && (
+              <p className="field-hint">This file has no certificate signatures.</p>
+            )}
             {alreadySigned && (
               <>
                 <ul className="signature-list">
                   {signatures!.map((signature) => (
                     <li key={signature.field} className={`signature-row ${signature.status}`}>
                       <span>
-                        <strong>{STATUS_LABELS[signature.status]}</strong> · {signature.signer ?? signature.field}
+                        <strong>{STATUS_LABELS[signature.status]}</strong> ·{" "}
+                        {signature.signer ?? signature.field}
                       </span>
                       <span className="field-hint">{signature.message}</span>
                       {signature.certification !== null && (
@@ -185,8 +196,8 @@ export function CertificateSignature({
                   ))}
                 </ul>
                 <p className="field-hint">
-                  Valid means the signed bytes match the signature and the certificate it
-                  carries. Certificate trust and revocation are not checked.
+                  Valid means the signed bytes match the signature and the certificate it carries.
+                  Certificate trust and revocation are not checked.
                 </p>
               </>
             )}
@@ -199,8 +210,9 @@ export function CertificateSignature({
                 <div>
                   <p>Signing as {certificate.subject}</p>
                   <p className="field-hint">
-                    Issued by {certificate.selfSigned ? "itself (self-signed)" : certificate.issuer}. Valid{" "}
-                    {certificate.notBefore} to {certificate.notAfter}. {certificate.keyType}.
+                    Issued by {certificate.selfSigned ? "itself (self-signed)" : certificate.issuer}
+                    . Valid {certificate.notBefore} to {certificate.notAfter}. {certificate.keyType}
+                    .
                   </p>
                 </div>
               </div>
@@ -265,7 +277,12 @@ export function CertificateSignature({
           </button>
           {certificate ? (
             <>
-              <button type="button" className="button-secondary" disabled={working} onClick={useAnother}>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={working}
+                onClick={useAnother}
+              >
                 Use Another Certificate
               </button>
               <button
@@ -289,6 +306,6 @@ export function CertificateSignature({
           )}
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

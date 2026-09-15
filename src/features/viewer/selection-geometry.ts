@@ -20,9 +20,7 @@ const intersection = (
   const top = Math.max(a.top, b.top);
   const right = Math.min(a.right, b.right);
   const bottom = Math.min(a.bottom, b.bottom);
-  return right - left > 1 && bottom - top > 1
-    ? { left, top, right, bottom }
-    : null;
+  return right - left > 1 && bottom - top > 1 ? { left, top, right, bottom } : null;
 };
 
 /**
@@ -35,13 +33,10 @@ export async function readTextSelectionGeometry(
   resolveViewport: (page: number) => Promise<SelectionViewport>,
 ): Promise<SelectedTextGeometry[]> {
   const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || selection.isCollapsed)
-    return [];
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return [];
   const range = selection.getRangeAt(0);
   const rects = Array.from(range.getClientRects());
-  const pages = Array.from(
-    root.querySelectorAll<HTMLElement>(".page[data-page-number]"),
-  );
+  const pages = Array.from(root.querySelectorAll<HTMLElement>(".page[data-page-number]"));
   const byPage = new Map<number, TextMarkupQuad[]>();
   for (const rect of rects.slice(0, 1000)) {
     for (const page of pages) {

@@ -13,9 +13,7 @@ describe("AnnotationSelectionLayer", () => {
   it("renders null when tool is not select", () => {
     const controller = { pdf: null, container: document.createElement("div") };
     useWorkspace.getState().set({ tool: "highlight" });
-    const { container } = render(
-      <AnnotationSelectionLayer controller={controller as never} />,
-    );
+    const { container } = render(<AnnotationSelectionLayer controller={controller as never} />);
     expect(container.firstChild).toBeNull();
   });
 

@@ -64,7 +64,9 @@ function controller(texts: string[] = ["Invoice SYNTHETIC-CANARY total", "No mat
       saveDocument: vi.fn(async () => new Uint8Array([37, 80, 68, 70])),
       getPage: vi.fn(async (page: number) => ({
         getTextContent: vi.fn(async () => ({
-          items: [{ str: texts[page - 1], transform: [10, 0, 0, 10, 100, 700], width: 150, height: 10 }],
+          items: [
+            { str: texts[page - 1], transform: [10, 0, 0, 10, 100, 700], width: 150, height: 10 },
+          ],
         })),
       })),
     },
@@ -93,9 +95,13 @@ describe("password protection", () => {
   it("validates passwords and restrictions before saving", () => {
     expect(validateProtection("", "", "", "", ALL)).toMatch(/Enter a password/);
     expect(validateProtection("a", "b", "", "", ALL)).toMatch(/do not match/);
-    expect(validateProtection("a", "a", "", "", { ...ALL, print: false })).toMatch(/permissions password/);
+    expect(validateProtection("a", "a", "", "", { ...ALL, print: false })).toMatch(
+      /permissions password/,
+    );
     expect(validateProtection("a", "a", "a", "a", { ...ALL, copy: false })).toMatch(/must differ/);
-    expect(validateProtection("a", "a", "b", "c", { ...ALL, copy: false })).toMatch(/permissions passwords do not match/);
+    expect(validateProtection("a", "a", "b", "c", { ...ALL, copy: false })).toMatch(
+      /permissions passwords do not match/,
+    );
     expect(validateProtection("x".repeat(128), "x".repeat(128), "", "", ALL)).toMatch(/127 bytes/);
     expect(validateProtection("a", "a", "", "", ALL)).toBeNull();
   });
@@ -113,7 +119,10 @@ describe("password protection", () => {
     type("Open password", "synthetic-open");
     type("Confirm open password", "different");
     fireEvent.click(screen.getByText("Save Protected Copy…"));
-    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "The open passwords do not match.");
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "The open passwords do not match.",
+    );
     type("Confirm open password", "synthetic-open");
     fireEvent.click(screen.getByLabelText("Print"));
     type("Permissions password", "synthetic-owner");
@@ -138,9 +147,19 @@ describe("password protection", () => {
   it("marks the document saved when the protected copy replaced its source", async () => {
     seed({ protectedSource: true });
     const view = controller();
-    engine.saveProtectedCopy.mockResolvedValueOnce({ name: "synthetic.pdf", size: 5, replacedSource: true });
+    engine.saveProtectedCopy.mockResolvedValueOnce({
+      name: "synthetic.pdf",
+      size: 5,
+      replacedSource: true,
+    });
     const onSaveUnprotected = vi.fn(async () => true);
-    render(<ProtectDialog controller={view as never} onClose={() => {}} onSaveUnprotected={onSaveUnprotected} />);
+    render(
+      <ProtectDialog
+        controller={view as never}
+        onClose={() => {}}
+        onSaveUnprotected={onSaveUnprotected}
+      />,
+    );
     expect(screen.getByText("Save Protected Document")).toBeTruthy();
     type("Open password", "synthetic-open");
     type("Confirm open password", "synthetic-open");
@@ -167,9 +186,13 @@ describe("password protection", () => {
     type("Document password", "synthetic-open");
     fireEvent.click(screen.getByText("Unlock for Editing"));
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(view.replaceWithBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "Unlocked for editing", {
-      resetHistory: true,
-    });
+    expect(view.replaceWithBytes).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      "Unlocked for editing",
+      {
+        resetHistory: true,
+      },
+    );
     expect(useWorkspace.getState().info).toMatchObject({ encrypted: false, protectedSource: true });
     expect(discardRecovery).toHaveBeenCalled();
   });
@@ -219,7 +242,10 @@ describe("measured compression", () => {
     expect(screen.getByText("Fonts: changed")).toBeTruthy();
     fireEvent.click(screen.getByText("Apply Compressed Version"));
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(view.replaceWithBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "Compressed (Smallest): saved 3.0 KB");
+    expect(view.replaceWithBytes).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      "Compressed (Smallest): saved 3.0 KB",
+    );
     expect(formatBytes(-2 * 1024 * 1024)).toBe("-2.00 MB");
   });
 
@@ -265,16 +291,25 @@ describe("redaction workflow", () => {
     rewrittenForms: 0,
     sanitized: ["Document information, XMP metadata and private application data"],
     warnings: ["An image was removed entirely."],
-    audit: { passed: true, regionsChecked: 2, residualRegionItems: 0, termsChecked: 1, residualTerms: 0, streamsScanned: 7 },
+    audit: {
+      passed: true,
+      regionsChecked: 2,
+      residualRegionItems: 0,
+      termsChecked: 1,
+      residualTerms: 0,
+      streamsScanned: 7,
+    },
   };
 
   it("marks search matches and coordinates, then applies an audited redaction", async () => {
     seed();
     const view = controller();
-    engine.redactDocument.mockRejectedValueOnce(new Error("Redaction was blocked")).mockResolvedValueOnce({
-      bytes: new Uint8Array([5]),
-      report: result,
-    });
+    engine.redactDocument
+      .mockRejectedValueOnce(new Error("Redaction was blocked"))
+      .mockResolvedValueOnce({
+        bytes: new Uint8Array([5]),
+        report: result,
+      });
     render(<RedactionTool controller={view as never} onClose={() => {}} />);
     type("Find and mark text", "synthetic-canary");
     fireEvent.click(screen.getByText("Mark Matches"));
@@ -292,9 +327,13 @@ describe("redaction workflow", () => {
     expect(request.terms).toEqual(["synthetic-canary"]);
     expect(request.regions).toHaveLength(2);
     expect(request.options.removeBookmarks).toBe(true);
-    expect(view.replaceWithBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "Redactions applied", {
-      resetHistory: true,
-    });
+    expect(view.replaceWithBytes).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      "Redactions applied",
+      {
+        resetHistory: true,
+      },
+    );
     expect(useWorkspace.getState().status).toMatch(/Save As/);
   });
 
@@ -322,25 +361,37 @@ describe("redaction workflow", () => {
   });
 
   it("computes padded term rectangles, overlay boxes and drawn regions", () => {
-    const [rect] = termRects([{ str: "Hello SECRET world", transform: [10, 0, 0, 10, 100, 700], width: 180, height: 10 }], "secret");
+    const [rect] = termRects(
+      [{ str: "Hello SECRET world", transform: [10, 0, 0, 10, 100, 700], width: 180, height: 10 }],
+      "secret",
+    );
     expect(rect[0]).toBeCloseTo(100 + 5.65 * 10);
     expect(rect[2]).toBeCloseTo(100 + 12.35 * 10);
     expect(rect[1]).toBeCloseTo(697);
     expect(rect[3]).toBeCloseTo(711);
-    const [rotated] = termRects([{ str: "AB", transform: [0, 10, -10, 0, 50, 50], width: 20, height: 10 }], "b");
+    const [rotated] = termRects(
+      [{ str: "AB", transform: [0, 10, -10, 0, 50, 50], width: 20, height: 10 }],
+      "b",
+    );
     expect(rotated[0]).toBeLessThan(50);
     expect(rotated[3]).toBeGreaterThan(60);
-    expect(termRects([{ str: "x", transform: [1, 0, 0, 1, 0, 0], width: 0, height: 1 }], "x")).toEqual([]);
+    expect(
+      termRects([{ str: "x", transform: [1, 0, 0, 1, 0, 0], width: 0, height: 1 }], "x"),
+    ).toEqual([]);
     expect(termRects([], " ")).toEqual([]);
 
     const view = controller();
     const page = view.viewer.getPageView().div;
-    const cleanup = placePageBoxes(view.viewer as never, [{ page: 1, rect: [10, 20, 30, 50], className: "redaction-mark" }]);
+    const cleanup = placePageBoxes(view.viewer as never, [
+      { page: 1, rect: [10, 20, 30, 50], className: "redaction-mark" },
+    ]);
     const box = page.querySelector(".redaction-mark") as HTMLElement;
     expect(box.style.width).toBe("20px");
     cleanup();
     expect(page.querySelector(".redaction-mark")).toBeNull();
-    expect(viewportToPdfRect(view.viewer as never, 1, { x: 10, y: 92 }, { x: 40, y: 12 })).toEqual([10, 700, 40, 780]);
+    expect(viewportToPdfRect(view.viewer as never, 1, { x: 10, y: 92 }, { x: 40, y: 12 })).toEqual([
+      10, 700, 40, 780,
+    ]);
     expect(viewportToPdfRect(undefined, 1, { x: 0, y: 0 }, { x: 1, y: 1 })).toBeNull();
   });
 });
@@ -350,9 +401,45 @@ describe("existing content editor", () => {
     page: 1,
     mediaBox: [0, 0, 612, 792],
     objects: [
-      { id: "abc:3", kind: "text", bbox: [72, 690, 200, 710], text: "Invoice 1001", font: "Helvetica", fontSize: 12, pixelWidth: null, pixelHeight: null, shared: false, replaceable: true, reason: null },
-      { id: "abc:9", kind: "image", bbox: [0, 0, 50, 50], text: null, font: null, fontSize: null, pixelWidth: 2, pixelHeight: 2, shared: true, replaceable: true, reason: null },
-      { id: "abc:11", kind: "text", bbox: [0, 0, 1, 1], text: "CID text", font: "CID", fontSize: 9, pixelWidth: null, pixelHeight: null, shared: false, replaceable: false, reason: "Text in composite (CID) fonts cannot be re-encoded safely." },
+      {
+        id: "abc:3",
+        kind: "text",
+        bbox: [72, 690, 200, 710],
+        text: "Invoice 1001",
+        font: "Helvetica",
+        fontSize: 12,
+        pixelWidth: null,
+        pixelHeight: null,
+        shared: false,
+        replaceable: true,
+        reason: null,
+      },
+      {
+        id: "abc:9",
+        kind: "image",
+        bbox: [0, 0, 50, 50],
+        text: null,
+        font: null,
+        fontSize: null,
+        pixelWidth: 2,
+        pixelHeight: 2,
+        shared: true,
+        replaceable: true,
+        reason: null,
+      },
+      {
+        id: "abc:11",
+        kind: "text",
+        bbox: [0, 0, 1, 1],
+        text: "CID text",
+        font: "CID",
+        fontSize: 9,
+        pixelWidth: null,
+        pixelHeight: null,
+        shared: false,
+        replaceable: false,
+        reason: "Text in composite (CID) fonts cannot be re-encoded safely.",
+      },
     ],
   };
 
@@ -361,9 +448,36 @@ describe("existing content editor", () => {
     const view = controller();
     engine.inspectPage.mockResolvedValue(objects);
     engine.editPage
-      .mockResolvedValueOnce({ bytes: null, report: { applied: false, message: "The replacement is 60.0 pt wide", widthBefore: 60, widthAfter: 60, missingCharacters: [] } })
-      .mockResolvedValueOnce({ bytes: new Uint8Array([1]), report: { applied: true, message: "Text replaced.", widthBefore: 60, widthAfter: 60, missingCharacters: [] } })
-      .mockResolvedValueOnce({ bytes: new Uint8Array([2]), report: { applied: true, message: "Image deleted.", widthBefore: null, widthAfter: null, missingCharacters: [] } });
+      .mockResolvedValueOnce({
+        bytes: null,
+        report: {
+          applied: false,
+          message: "The replacement is 60.0 pt wide",
+          widthBefore: 60,
+          widthAfter: 60,
+          missingCharacters: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        bytes: new Uint8Array([1]),
+        report: {
+          applied: true,
+          message: "Text replaced.",
+          widthBefore: 60,
+          widthAfter: 60,
+          missingCharacters: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        bytes: new Uint8Array([2]),
+        report: {
+          applied: true,
+          message: "Image deleted.",
+          widthBefore: null,
+          widthAfter: null,
+          missingCharacters: [],
+        },
+      });
     render(<ObjectEditor controller={view as never} onClose={() => {}} />);
     expect(await screen.findByText("Page 1: 3 objects")).toBeTruthy();
     fireEvent.click(await screen.findByText("Invoice 1001"));
@@ -371,15 +485,23 @@ describe("existing content editor", () => {
     fireEvent.click(screen.getByText("Preview Width"));
     expect(await screen.findByText(/60.0 pt wide/)).toBeTruthy();
     fireEvent.click(screen.getByText("Replace Text"));
-    await vi.waitFor(() => expect(view.replaceWithBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "Text replaced."));
-    expect(engine.editPage.mock.calls[1][2]).toEqual({ type: "replaceText", objectId: "abc:3", text: "Invoice 1002" });
+    await vi.waitFor(() =>
+      expect(view.replaceWithBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "Text replaced."),
+    );
+    expect(engine.editPage.mock.calls[1][2]).toEqual({
+      type: "replaceText",
+      objectId: "abc:3",
+      text: "Invoice 1002",
+    });
     fireEvent.click(await screen.findByText("Image 2×2 px (shared)"));
     expect(screen.getByText(/changes this page only/)).toBeTruthy();
     fireEvent.click(screen.getByText("Delete Image"));
     await vi.waitFor(() => expect(view.replaceWithBytes).toHaveBeenCalledTimes(2));
     fireEvent.click(await screen.findByText("CID text"));
     expect(screen.getByText(/composite \(CID\) fonts/)).toBeTruthy();
-    expect((screen.getByText("Replace Text").closest("button") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByText("Replace Text").closest("button") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 
   it("reports scan failures and rejects unsupported image files", async () => {
@@ -387,6 +509,38 @@ describe("existing content editor", () => {
     engine.inspectPage.mockRejectedValueOnce(new Error("scan failed"));
     render(<ObjectEditor controller={controller() as never} onClose={() => {}} />);
     await vi.waitFor(() => expect(useWorkspace.getState().error).toBe("scan failed"));
-    await expect(decodeImageFile(new File(["x"], "x.gif", { type: "image/gif" }))).rejects.toThrow(/PNG or JPEG/);
+    await expect(decodeImageFile(new File(["x"], "x.gif", { type: "image/gif" }))).rejects.toThrow(
+      /PNG or JPEG/,
+    );
+  });
+
+  it("applies rotation, scale, and translation to an existing image", async () => {
+    seed();
+    const view = controller();
+    engine.inspectPage.mockResolvedValue(objects);
+    engine.editPage.mockResolvedValueOnce({
+      bytes: new Uint8Array([3]),
+      report: {
+        applied: true,
+        message: "Image transform applied.",
+        widthBefore: null,
+        widthAfter: null,
+        missingCharacters: [],
+      },
+    });
+    render(<ObjectEditor controller={view as never} onClose={() => {}} />);
+    fireEvent.click(await screen.findByText("Image 2×2 px (shared)"));
+    fireEvent.change(screen.getByLabelText("Rotation (degrees)"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("Scale"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("Move X (pt)"), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText("Move Y (pt)"), { target: { value: "18" } });
+    fireEvent.click(screen.getByText("Apply Image Transform"));
+    await vi.waitFor(() => expect(view.replaceWithBytes).toHaveBeenCalled());
+    expect(engine.editPage).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      1,
+      expect.objectContaining({ type: "transformImage", objectId: "abc:9" }),
+      undefined,
+    );
   });
 });

@@ -19,6 +19,11 @@ interface Workspace {
   page: number;
   zoom: number;
   layout: Layout;
+  viewRotation: 0 | 90 | 180 | 270;
+  spread: "none" | "odd" | "even";
+  readMode: boolean;
+  nightMode: boolean;
+  pageLabels: string[] | null;
   tool: Tool;
   sidebar: SidebarTab;
   dirty: boolean;
@@ -38,6 +43,7 @@ interface Workspace {
   results: SearchResult[];
   bookmarks: Bookmark[];
   comments: Comment[];
+  redactionSelection: import("../types/document").SelectedTextGeometry[];
   selectedAnnotationId: string | null;
   renderedPages: number;
   firstRenderMs: number | null;
@@ -53,6 +59,8 @@ interface Workspace {
   activeSnapshot: boolean;
   hasDigitalSignature: boolean;
   formNotice: string | null;
+  revision: number;
+  editingAllowed: boolean;
   set: (patch: Partial<Omit<Workspace, "set" | "reset">>) => void;
   reset: () => void;
 }
@@ -62,12 +70,20 @@ const cleanDocument = {
   page: 1,
   hasDigitalSignature: false,
   formNotice: null,
+  revision: 0,
+  viewRotation: 0,
+  spread: "none",
+  readMode: false,
+  nightMode: false,
+  pageLabels: null,
+  editingAllowed: true,
   dirty: false,
   canUndo: false,
   canRedo: false,
   hasSelection: false,
   bookmarks: [],
   comments: [],
+  redactionSelection: [],
   selectedAnnotationId: null,
   results: [],
   searchCount: 0,
@@ -87,7 +103,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   busy: false,
   status: "Ready",
   error: "",
-  local: { preferences: defaultPreferences, recents: [], recovery: null },
+  local: { preferences: defaultPreferences, recents: [], recoveries: [] },
   settingsOpen: false,
   matchCase: false,
   wholeWord: false,
@@ -106,6 +122,7 @@ export const useWorkspace = create<Workspace>((set) => ({
       tool: "select",
       toolMode: null,
       activeModal: null,
+      busy: false,
       status: "Ready",
       error: "",
     }),

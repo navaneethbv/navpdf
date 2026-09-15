@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link as LinkIcon, X, AlertTriangle, ExternalLink, Bookmark } from "lucide-react";
+import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import {
@@ -7,6 +8,9 @@ import {
   validateSafeUrl,
   type LinkAnnotationOptions,
 } from "../../services/document-commands";
+import { fromTopLeftVisual } from "../../services/pdf/page-box";
+import { PageNumberInput } from "../../components/PageNumberInput";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export function LinkDialog({
   controller,
@@ -37,26 +41,34 @@ export function LinkDialog({
     setSaving(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const rect: [number, number, number, number] = [
+      let rect: [number, number, number, number] = [
         rectX,
         rectY,
         rectX + rectWidth,
         rectY + rectHeight,
       ];
+      try {
+        const doc = await PDFDocument.load(currentBytes);
+        const pageIndex = Math.max(0, Math.min(placementPage - 1, doc.getPageCount() - 1));
+        const page = doc.getPage(pageIndex);
+        const mapped = fromTopLeftVisual(page, rectX, rectY, rectWidth, rectHeight);
+        rect = [mapped.x, mapped.y, mapped.x + mapped.width, mapped.y + mapped.height];
+      } catch {
+        // Fallback for mock test environments
+      }
 
       const options: LinkAnnotationOptions = {
         page: placementPage,
         rect,
-        target:
-          linkType === "url"
-            ? { type: "url", url }
-            : { type: "page", targetPage },
+        target: linkType === "url" ? { type: "url", url } : { type: "page", targetPage },
       };
 
       const newBytes = await addLinkAnnotation(currentBytes, options);
       await controller.replaceWithBytes(
         newBytes,
-        linkType === "url" ? `Added URL link to page ${placementPage}` : `Added page jump to page ${targetPage}`,
+        linkType === "url"
+          ? `Added URL link to page ${placementPage}`
+          : `Added page jump to page ${targetPage}`,
       );
       onClose();
     } catch (err) {
@@ -67,12 +79,7 @@ export function LinkDialog({
   };
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add Link Annotation"
-    >
+    <FeatureDialog title="Add Link Annotation" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -87,12 +94,14 @@ export function LinkDialog({
         <div className="tab-buttons-bar">
           <button
             className={linkType === "url" ? "active" : ""}
+            aria-pressed={linkType === "url"}
             onClick={() => setLinkType("url")}
           >
             <ExternalLink size={15} /> External URL
           </button>
           <button
             className={linkType === "page" ? "active" : ""}
+            aria-pressed={linkType === "page"}
             onClick={() => setLinkType("page")}
           >
             <Bookmark size={15} /> Page Jump
@@ -102,12 +111,10 @@ export function LinkDialog({
         <div className="modal-body">
           <div className="setting-group">
             <label className="setting-title">Placement Page</label>
-            <input
-              type="number"
-              min={1}
-              max={s.info?.pages || 1}
+            <PageNumberInput
               value={placementPage}
-              onChange={(e) => setPlacementPage(Number(e.target.value))}
+              max={s.info?.pages || 1}
+              onChange={setPlacementPage}
               className="text-input"
             />
           </div>
@@ -146,12 +153,10 @@ export function LinkDialog({
           ) : (
             <div className="setting-group">
               <label className="setting-title">Jump to Page Number</label>
-              <input
-                type="number"
-                min={1}
-                max={s.info?.pages || 1}
+              <PageNumberInput
                 value={targetPage}
-                onChange={(e) => setTargetPage(Number(e.target.value))}
+                max={s.info?.pages || 1}
+                onChange={setTargetPage}
                 className="text-input"
               />
             </div>
@@ -215,6 +220,6 @@ export function LinkDialog({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

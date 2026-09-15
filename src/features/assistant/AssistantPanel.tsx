@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BookOpen, Info, Search, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 export interface Passage {
   page: number;
@@ -18,13 +19,20 @@ const termsOf = (text: string): string[] => text.toLowerCase().match(/[\p{L}\p{N
  * Extractive passage ranking over page text. A passage qualifies only when it contains at
  * least half of the distinct query terms, so unsupported questions return no citations.
  */
-export function rankPassages(pages: { page: number; text: string }[], query: string, limit = 5): Passage[] {
+export function rankPassages(
+  pages: { page: number; text: string }[],
+  query: string,
+  limit = 5,
+): Passage[] {
   const terms = [...new Set(termsOf(query))];
   if (!terms.length) return [];
   const required = Math.ceil(terms.length / 2);
   const passages: Passage[] = [];
   for (const { page, text } of pages) {
-    const sentences = text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
+    const sentences = text
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/(?<=[.!?])\s+/);
     let buffer = "";
     const flush = () => {
       if (!buffer) return;
@@ -34,7 +42,8 @@ export function rankPassages(pages: { page: number; text: string }[], query: str
         const occurrences = words.filter((word) => terms.includes(word)).length;
         passages.push({
           page,
-          excerpt: buffer.length > MAX_EXCERPT_CHARS ? `${buffer.slice(0, MAX_EXCERPT_CHARS)}…` : buffer,
+          excerpt:
+            buffer.length > MAX_EXCERPT_CHARS ? `${buffer.slice(0, MAX_EXCERPT_CHARS)}…` : buffer,
           score: matched.length * 10 + occurrences,
         });
       }
@@ -99,7 +108,7 @@ export function AssistantPanel({
   };
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Find and Cite Passages">
+    <FeatureDialog title="Find and Cite Passages" onClose={onClose} busy={!!progress}>
       <div className="modal-dialog assistant-dialog">
         <div className="modal-header">
           <div className="modal-title">
@@ -115,10 +124,9 @@ export function AssistantPanel({
           <div className="security-status-box">
             <Info size={18} />
             <p>
-              No local language model is installed, so NavPDF does not generate
-              summaries, answers, translations, slides or audio, and nothing is
-              downloaded or uploaded. This tool finds passages that contain your
-              words and cites their pages.
+              No local language model is installed, so NavPDF does not generate summaries, answers,
+              translations, slides or audio, and nothing is downloaded or uploaded. This tool finds
+              passages that contain your words and cites their pages.
             </p>
           </div>
           <form
@@ -138,7 +146,11 @@ export function AssistantPanel({
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Words to find, such as renewal notice period"
             />
-            <button type="submit" className="button-primary" disabled={!pdf || !termsOf(query).length || !!progress}>
+            <button
+              type="submit"
+              className="button-primary"
+              disabled={!pdf || !termsOf(query).length || !!progress}
+            >
               <Search size={15} /> Find Passages
             </button>
           </form>
@@ -158,8 +170,8 @@ export function AssistantPanel({
           )}
           {results && results.length === 0 && (
             <p className="field-hint" role="status">
-              No passage in this document contains enough of those words, so there
-              is nothing to cite. Try different words.
+              No passage in this document contains enough of those words, so there is nothing to
+              cite. Try different words.
             </p>
           )}
           {results && results.length > 0 && (
@@ -187,6 +199,6 @@ export function AssistantPanel({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

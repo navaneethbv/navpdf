@@ -90,4 +90,63 @@ describe("RevisionHistory", () => {
       });
     }).toThrow(/Stale base revision/);
   });
+
+  it("evicts the oldest retained revisions by byte budget", () => {
+    const history = new RevisionHistory({ maxEntries: 20, maxBytes: 7 });
+    history.seed({ bytes: new Uint8Array([0, 0, 0]), numPages: 1, description: "Initial" });
+    history.record({ bytes: new Uint8Array([1, 1, 1]), numPages: 1, description: "First" });
+    history.record({ bytes: new Uint8Array([2, 2, 2]), numPages: 1, description: "Second" });
+
+    expect(history.undo()?.bytes).toEqual(new Uint8Array([1, 1, 1]));
+    expect(history.undo()).toBeNull();
+  });
+
+  it("returns the retained current revision without copying its bytes", () => {
+    const history = new RevisionHistory();
+    history.seed({ bytes: new Uint8Array([1]), numPages: 1, description: "Initial" });
+    expect(history.getCurrent()).toBe(history.getCurrent());
+  });
+
+  it("handles empty cursors, redo, unsaved state, and reset", () => {
+    const history = new RevisionHistory({ maxEntries: 2, maxBytes: 10 });
+    expect(history.undo()).toBeNull();
+    expect(history.redo()).toBeNull();
+    const first = history.record(revision(1));
+    expect(first.revisionId).toBeDefined();
+    history.record(revision(2));
+    expect(history.undo()?.bytes).toEqual(new Uint8Array([1]));
+    expect(history.redo()?.bytes).toEqual(new Uint8Array([2]));
+    history.markUnsaved();
+    expect(history.isAtSavedRevision()).toBe(false);
+    history.restoreAfterFailedMove("redo");
+    expect(history.getCurrent()?.bytes).toEqual(new Uint8Array([1]));
+    history.clear();
+    expect(history.getCurrent()).toBeNull();
+    expect(history.canUndo()).toBe(false);
+    expect(history.canRedo()).toBe(false);
+  });
+
+  it("seeds when adopting the first revision and rejects stale native bases", () => {
+    const history = new RevisionHistory();
+    history.adopt({ bytes: new Uint8Array([1]), numPages: 1, description: "First" });
+    expect(() =>
+      history.adopt({
+        bytes: new Uint8Array([2]),
+        numPages: 1,
+        description: "Stale",
+        baseRevisionId: "different",
+      }),
+    ).toThrow(/Stale base revision/);
+  });
+
+  it("uses a machine-relative default byte budget when available", () => {
+    Object.defineProperty(navigator, "deviceMemory", {
+      configurable: true,
+      value: 8,
+    });
+    const history = new RevisionHistory();
+    history.seed({ bytes: new Uint8Array([1]), numPages: 1, description: "Initial" });
+    expect(history.getCurrent()?.bytes).toEqual(new Uint8Array([1]));
+    delete (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  });
 });

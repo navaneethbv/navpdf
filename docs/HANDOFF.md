@@ -1,5 +1,31 @@
 # NavPDF handoff
 
+## PR #4 follow-up to `3d2f611`
+
+Image transform coordinates, XFDF markup geometry, and empty choice-field updates are corrected with saved-output regressions.
+All required local automated checks pass, including 510 frontend tests and 80 Rust tests with the existing constrained-volume test ignored.
+See `docs/VERIFICATION.md` for the follow-up evidence and limits.
+Packaged UI and Preview/Acrobat acceptance remain open, and existing package hashes predate these fixes.
+The three untracked root planning documents remain untouched.
+
+## Current September 15 worktree
+
+The active worktree is `fix/september-14-review-corrections` at `d83f6d8271dd77c973df799f63dfecff14152128`.
+Only the three untracked root planning files remain outside the pushed tree.
+Tranches 0 through 3 are implemented in source and Tranche 4 is in progress.
+Tranche 5 is in progress, Tranche 6 is pending, and Tranches 7 and 8 are partial.
+
+Current checks are 504 frontend unit tests passed across 80 files with 83.39% statement, 75.01% branch, 81.18% function and 86.20% line coverage, TypeScript passed, ESLint passed, formatting checks passed, 80 Rust tests passed with one constrained-volume test ignored, and Clippy passed with warnings denied.
+The current worktree also adds metadata editing, preferences, menus and shortcuts, page operations, tokenized OS open-with and drag-drop, XFDF exchange, comment threads, stamps, context-menu redaction, corpus-driven OCR WER/CER reporting, explicit fixture guards, acceptance command aliases, independent-tool discovery and a macOS acceptance workflow.
+Hosted run `35012242904` passed every listed CI and native acceptance check, including Cargo Deny, Rust MSRV, both Rust test and Clippy jobs, Phase 7, Phase 8, Phase 10 and OCR.
+Native dialog, save/recovery, Preview and Acrobat checks for this source revision remain open.
+The current packaged app renders the visible page and thumbnails without the previous persistent spinner.
+The current package contains both the app and DMG, and `hdiutil verify` passed.
+The rebuilt executable SHA-256 is `9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4`.
+The DMG SHA-256 is `2904b2a5bcbbf680aff64ec8284e5e7553afdc0c579379818eb68e8f9f27c0a82`.
+The DMG verification CRC32 is `$B4992B9A`.
+The remainder of this file is historical evidence from earlier builds and does not override the current checkpoint above.
+
 Current corrective review: see [PR-2-REVIEW.md](PR-2-REVIEW.md).
 The completion statements and hashes below predate corrections to signature storage, native revisions and real OCR.
 Phases 3, 4 and 6 are reopened in the delivery tracker; Phase 9 remains partial.
@@ -67,3 +93,48 @@ Bundle identifier: `local.navpdf.reader`.
 - Text replacement is scoped to simple font replacements without paragraph reflow; CID composite fonts, Type 3 fonts, and characters missing from embedded subsets are safely refused.
 - Office exports are generated from extracted PDF text and table structures; direct reverse Office-to-PDF import is not delivered.
 - External cloud integrations, remote signing servers, and third-party AI models remain declined in adherence to privacy and offline safety standards.
+
+## Current September 15 handoff
+
+The active branch is fix/september-14-review-corrections.
+
+The current implementation includes the review hardening, native OCR bridge, image and signature transforms, forms editing, crop positioning, protection parity, viewer rendering hardening, and machine-relative native budgets.
+
+Native OCR acceptance is 6 of 6 samples.
+
+Native rendering was verified from one fresh packaged process with the 500-page fixture, and the page canvas and thumbnails were visible without the previous persistent spinner.
+
+The final local app executable is src-tauri/target/release/bundle/macos/NavPDF.app.
+
+The final local DMG is src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg.
+
+The executable SHA-256 is 9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4.
+
+The DMG SHA-256 is 2904b2a5bcbbf680aff64c8284e5e7553afdc0c579379818eb68e8f9f27c0a82.
+
+The DMG passed hdiutil verify with CRC32 $B4992B9A.
+
+Local tests and acceptance suites pass as recorded in docs/VERIFICATION.md.
+
+Preview and Acrobat reopen checks for the final source revision remain unverified.
+
+Full Tranche 6 structural refactors, most Tranche 7 Acrobat parity, clean-account and notarized distribution, and the remaining native revision recycling and performance gates remain open.
+
+The hosted run for commit 74974c9 confirmed the Cargo Deny manifest path correction, then exposed unallowed transitive license terms and a redundant Swift runtime link entry on macOS.
+
+The follow-up adds explicit license allowances and a versioned JPEG IJG clarification, marks the private native package unpublished, and removes the redundant Swift runtime link entry.
+
+The local cargo-deny 0.18.4 full license check passes.
+
+Hosted run `35009656343` passed the normal frontend, Rust, SonarCloud and commit checks.
+It failed Cargo Deny on six transitive unmaintained advisories with no safe upgrade reported by the advisory database.
+It also failed native acceptance because the job did not generate the ignored `reader-100.pdf` fixture before Phase 7.
+The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
+Hosted run `35012242904` passed all listed CI and native acceptance checks for this follow-up.
+
+The hosted Phase 10 checks then exposed more OpenSSL version drift because the runner rejected `x509 -not_before` and used different successful CMS output text.
+The script now uses the compatible `req -nodes` and `x509 -days 0` forms and checks the CMS process exit status.
+OpenSSL checks CMS and byte-range integrity with `-noverify`, while independent `pdfsig` checks the synthetic trust chain.
+Local Phase 10 acceptance passes 55 of 55 checks.
+
+The root planning files DELIVERY-PHASES.md, IMPLEMENTATION-PLAN-2026-09-14.md, and REVIEW-2026-09-14.md remain untracked source material and must not be included in the commit.

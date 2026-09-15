@@ -39,9 +39,7 @@ describe("native service browser fallback", () => {
     const head = await readRange(descriptor!.id, 0, 3);
     expect([...head]).toEqual([1, 2, 3]);
     await releaseDocument(descriptor!.id);
-    await expect(readRange(descriptor!.id, 0, 1)).rejects.toThrow(
-      /no longer available/,
-    );
+    await expect(readRange(descriptor!.id, 0, 1)).rejects.toThrow(/no longer available/);
   });
 
   it("returns null when no file is provided outside Tauri", async () => {
@@ -58,12 +56,7 @@ describe("native service browser fallback", () => {
     const file = new File([new Uint8Array([9, 9])], "doc.pdf");
     const descriptor = await openDocument(file);
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const result = await saveDocument(
-      descriptor!,
-      new Uint8Array([1, 2, 3]),
-      2,
-      false,
-    );
+    const result = await saveDocument(descriptor!, new Uint8Array([1, 2, 3]), 2, false);
     expect(result?.name).toBe("doc-edited.pdf");
     expect(result?.size).toBe(3);
     expect(click).toHaveBeenCalled();
@@ -76,7 +69,7 @@ describe("native service browser fallback", () => {
     expect(state.preferences.theme).toBe("dark");
     expect(state.preferences.networkAccess).toBe(false);
     expect(state.recents).toEqual([]);
-    expect(state.recovery).toBeNull();
+    expect(state.recoveries).toEqual([]);
   });
 
   it("returns defaults when nothing is stored", async () => {

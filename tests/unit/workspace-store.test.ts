@@ -13,7 +13,7 @@ beforeEach(() => {
     busy: false,
     status: "Ready",
     error: "",
-    local: { preferences: defaultPreferences, recents: [], recovery: null },
+    local: { preferences: defaultPreferences, recents: [], recoveries: [] },
     settingsOpen: false,
     toolMode: null,
     activeModal: null,

@@ -21,6 +21,9 @@ import {
   extractPages,
   insertBlankPage,
   insertImagePage,
+  duplicatePages,
+  insertDocumentPages,
+  replacePage,
   cropPages,
   splitDocument,
   describeStructureLoss,
@@ -29,7 +32,11 @@ import {
   computeReorderMapping,
 } from "../../services/document-commands";
 import { downloadBytes } from "../../utils/download";
+import { native } from "../../services/native";
+import { pruneDocument } from "../../services/engine";
 import type { ViewerController } from "../viewer/controller";
+import { parsePageRange } from "./page-range";
+import { ThumbCanvas } from "../viewer/Thumbnails";
 
 export function PageWorkspace({
   controller,
@@ -40,16 +47,22 @@ export function PageWorkspace({
 }) {
   const s = useWorkspace();
   const [selected, setSelected] = useState<number[]>([s.page - 1]);
-  const [focusedIndex, setFocusedIndex] = useState(Math.max(0, Math.min(s.page - 1, (s.info?.pages || 1) - 1)));
+  const [focusedIndex, setFocusedIndex] = useState(
+    Math.max(0, Math.min(s.page - 1, (s.info?.pages || 1) - 1)),
+  );
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [cropWidth, setCropWidth] = useState(500);
   const [cropHeight, setCropHeight] = useState(700);
+  const [cropX, setCropX] = useState(0);
+  const [cropY, setCropY] = useState(0);
   const [showCrop, setShowCrop] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
   const [splitRange, setSplitRange] = useState("1-2, 3-4");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const replacePdfInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [structureLoss, setStructureLoss] = useState("");
 
@@ -137,12 +150,25 @@ export function PageWorkspace({
     }
     const delSet = new Set(selected);
     const surviving = pagesList.filter((p) => !delSet.has(p));
-    const nextSelectedIndex = surviving.length > 0
-      ? Math.min(Math.max(0, selected[0]), surviving.length - 1)
-      : 0;
+    const nextSelectedIndex =
+      surviving.length > 0 ? Math.min(Math.max(0, selected[0]), surviving.length - 1) : 0;
 
     await mutate(
-      (bytes) => deletePages(bytes, selected),
+      async (bytes) => {
+        let res = await deletePages(bytes, selected);
+        if (native) {
+          try {
+            res = await pruneDocument(res);
+          } catch {
+            // ignore
+          }
+        } else {
+          s.set({
+            status: "Deleted objects remain in the file until saved from the desktop app.",
+          });
+        }
+        return res;
+      },
       `Deleted ${selected.length} page(s)`,
       { pageMapping: computeDeleteMapping(totalPages, selected) },
     );
@@ -191,14 +217,58 @@ export function PageWorkspace({
 
   const handleInsertBlank = async () => {
     const at = selected.length > 0 ? selected[0] + 1 : totalPages;
-    await mutate(
-      (bytes) => insertBlankPage(bytes, at),
-      "Blank page inserted",
-      { pageMapping: computeInsertMapping(totalPages, at, 1) },
-    );
+    await mutate((bytes) => insertBlankPage(bytes, at), "Blank page inserted", {
+      pageMapping: computeInsertMapping(totalPages, at, 1),
+    });
     setSelected([at]);
     setFocusedIndex(at);
     s.set({ page: at + 1 });
+  };
+
+  const handleDuplicate = async () => {
+    if (selected.length === 0) return;
+    await mutate(
+      (bytes) => duplicatePages(bytes, selected),
+      `Duplicated ${selected.length} page(s)`,
+      {
+        pageMapping: computeInsertMapping(
+          totalPages,
+          selected[selected.length - 1] + 1,
+          selected.length,
+        ),
+      },
+    );
+  };
+
+  const handleImportPdf = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    action: "insert" | "replace",
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !controller?.pdf) return;
+    try {
+      const other = new Uint8Array(await file.arrayBuffer());
+      const current = await controller.pdf.saveDocument();
+      const output =
+        action === "insert"
+          ? await insertDocumentPages(
+              current,
+              other,
+              selected.length ? selected[0] + 1 : totalPages,
+            )
+          : await replacePage(current, selected[0] ?? 0, other);
+      await controller.replaceWithBytes(
+        output,
+        action === "insert" ? "PDF pages inserted" : "Page replaced",
+        {
+          preMutationBytes: current,
+        },
+      );
+      s.set({ status: action === "insert" ? "PDF pages inserted" : "Page replaced" });
+    } catch (error) {
+      s.set({ error: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   const handleInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -208,11 +278,9 @@ export function PageWorkspace({
     const bytes = new Uint8Array(arrayBuffer);
     const type = file.type.includes("png") ? "png" : "jpg";
     const at = selected.length > 0 ? selected[0] + 1 : totalPages;
-    await mutate(
-      (docBytes) => insertImagePage(docBytes, at, bytes, type),
-      "Image page inserted",
-      { pageMapping: computeInsertMapping(totalPages, at, 1) },
-    );
+    await mutate((docBytes) => insertImagePage(docBytes, at, bytes, type), "Image page inserted", {
+      pageMapping: computeInsertMapping(totalPages, at, 1),
+    });
     setSelected([at]);
     setFocusedIndex(at);
     s.set({ page: at + 1 });
@@ -223,8 +291,8 @@ export function PageWorkspace({
     await mutate(
       (bytes) =>
         cropPages(bytes, selected, {
-          x: 0,
-          y: 0,
+          x: cropX,
+          y: cropY,
           width: cropWidth,
           height: cropHeight,
         }),
@@ -234,24 +302,21 @@ export function PageWorkspace({
   };
 
   const handleSplit = async () => {
-    if (!controller?.pdf) return;
+    if (!controller?.pdf || busy) return;
+    setBusy(true);
+    s.set({ busy: true, status: "Splitting document..." });
     try {
-      const ranges = splitRange.split(",").map((r) => {
-        const parts = r.trim().split("-").map((n) => parseInt(n, 10) - 1);
-        if (parts.length === 1) return [parts[0]];
-        const start = Math.max(0, parts[0]);
-        const end = Math.min(totalPages - 1, parts[1]);
-        return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      });
+      const ranges = splitRange.split(",").map((range) => parsePageRange(range, totalPages));
       const currentBytes = await controller.pdf.saveDocument();
       const files = await splitDocument(currentBytes, ranges);
-      files.forEach((fileBytes, i) =>
-        downloadBytes(fileBytes, `split-part-${i + 1}.pdf`),
-      );
+      files.forEach((fileBytes, i) => downloadBytes(fileBytes, `split-part-${i + 1}.pdf`));
       setShowSplit(false);
       s.set({ status: `Document split into ${files.length} parts` });
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+      s.set({ busy: false });
     }
   };
 
@@ -378,9 +443,7 @@ export function PageWorkspace({
           <button
             title="Move Page Right"
             onClick={() => handleMove(1)}
-            disabled={
-              selected.length !== 1 || selected[0] === totalPages - 1 || busy
-            }
+            disabled={selected.length !== 1 || selected[0] === totalPages - 1 || busy}
           >
             <ArrowRight size={17} />
           </button>
@@ -406,6 +469,30 @@ export function PageWorkspace({
             <span>Blank</span>
           </button>
           <button
+            title="Duplicate selected pages"
+            onClick={() => void handleDuplicate()}
+            disabled={selected.length === 0 || busy}
+          >
+            <Plus size={17} />
+            <span>Duplicate</span>
+          </button>
+          <button
+            title="Insert pages from a PDF"
+            onClick={() => pdfInputRef.current?.click()}
+            disabled={busy}
+          >
+            <Plus size={17} />
+            <span>Insert PDF</span>
+          </button>
+          <button
+            title="Replace the selected page"
+            onClick={() => replacePdfInputRef.current?.click()}
+            disabled={selected.length !== 1 || busy}
+          >
+            <ImageIcon size={17} />
+            <span>Replace</span>
+          </button>
+          <button
             title="Insert Image as Page"
             onClick={() => fileInputRef.current?.click()}
             disabled={busy}
@@ -420,7 +507,36 @@ export function PageWorkspace({
             style={{ display: "none" }}
             onChange={handleInsertImage}
           />
-          <button title="Crop Page" onClick={() => setShowCrop(!showCrop)}>
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(event) => void handleImportPdf(event, "insert")}
+          />
+          <input
+            ref={replacePdfInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(event) => void handleImportPdf(event, "replace")}
+          />
+          <button
+            title="Crop Page"
+            onClick={async () => {
+              if (!showCrop && controller?.pdf && selected.length > 0) {
+                try {
+                  const pdfPage = await controller.pdf.getPage(selected[0] + 1);
+                  const vp = pdfPage.getViewport({ scale: 1 });
+                  setCropWidth(Math.round(vp.width));
+                  setCropHeight(Math.round(vp.height));
+                } catch {
+                  // ignore
+                }
+              }
+              setShowCrop(!showCrop);
+            }}
+          >
             <Crop size={17} />
             <span>Crop</span>
           </button>
@@ -452,6 +568,14 @@ export function PageWorkspace({
               onChange={(e) => setCropHeight(Number(e.target.value))}
             />
           </label>
+          <label>
+            X (pt):
+            <input type="number" value={cropX} onChange={(e) => setCropX(Number(e.target.value))} />
+          </label>
+          <label>
+            Y (pt):
+            <input type="number" value={cropY} onChange={(e) => setCropY(Number(e.target.value))} />
+          </label>
           <button onClick={handleCrop}>Apply Crop</button>
           <button onClick={() => setShowCrop(false)}>Cancel</button>
         </div>
@@ -461,13 +585,11 @@ export function PageWorkspace({
         <div className="split-controls-bar">
           <label>
             Page ranges (e.g. 1-2, 3-5):
-            <input
-              type="text"
-              value={splitRange}
-              onChange={(e) => setSplitRange(e.target.value)}
-            />
+            <input type="text" value={splitRange} onChange={(e) => setSplitRange(e.target.value)} />
           </label>
-          <button onClick={handleSplit}>Execute Split</button>
+          <button onClick={handleSplit} disabled={busy}>
+            {busy ? "Splitting..." : "Execute Split"}
+          </button>
           <button onClick={() => setShowSplit(false)}>Cancel</button>
         </div>
       )}
@@ -514,9 +636,7 @@ export function PageWorkspace({
               }}
             >
               <div className="page-card-preview">
-                <div className="page-card-placeholder">
-                  <span>Page {pageNum + 1}</span>
-                </div>
+                <ThumbCanvas pdf={controller?.pdf} page={pageNum + 1} revision={s.revision} />
                 {isSelected && (
                   <div className="page-selected-badge">
                     <Check size={14} />

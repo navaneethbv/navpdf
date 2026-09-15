@@ -689,6 +689,37 @@ mod tests {
     }
 
     #[test]
+    fn color_key_masked_images_are_left_as_they_are() {
+        let mut doc = Document::load_mem(&image_document(600, false)).unwrap();
+        let image = doc
+            .objects
+            .iter()
+            .find(|(_, object)| {
+                object.as_stream().is_ok_and(|stream| {
+                    stream.dict.get(b"Subtype").and_then(Object::as_name).ok()
+                        == Some(b"Image".as_slice())
+                })
+            })
+            .map(|(id, _)| *id)
+            .unwrap();
+        doc.get_object_mut(image)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .dict
+            .set("Mask", vec![Object::Integer(0); 6]);
+        let source = crate::engine::save(&mut doc).unwrap();
+        let (_, report) = compress(
+            &source,
+            CompressionPreset::Balanced,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_eq!(report.images_recompressed, 0, "{report:?}");
+        assert_eq!(report.images_skipped, 1, "{report:?}");
+    }
+
+    #[test]
     fn lossless_merges_duplicates_and_keeps_unhelpful_results_out() {
         let (output, report) = compress(
             &image_document(64, true),

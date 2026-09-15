@@ -5,6 +5,7 @@ import { PDFDocument } from "pdf-lib";
 import { PageWorkspace } from "../../src/features/pages/PageWorkspace";
 import { createBlankDocument } from "../../src/services/document-commands";
 import { useWorkspace } from "../../src/stores/workspace";
+import { PageNumberInput } from "../../src/components/PageNumberInput";
 
 const TINY_PNG = new Uint8Array(
   Buffer.from(
@@ -50,27 +51,17 @@ describe("PageWorkspace selection and moves", () => {
   it("supports shift-range, ctrl-toggle, deselect, and keyboard reorder", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     const cards = document.querySelectorAll(".page-grid-item");
     fireEvent.click(cards[2]);
     fireEvent.click(cards[0], { shiftKey: true });
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("3 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("3 of 4 selected");
     fireEvent.click(screen.getByText("Deselect"));
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("0 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("0 of 4 selected");
     fireEvent.click(cards[1], { ctrlKey: true });
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("1 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("1 of 4 selected");
     fireEvent.click(cards[1], { ctrlKey: true });
-    expect(
-      document.querySelector(".selected-count")?.textContent,
-    ).toContain("0 of 4 selected");
+    expect(document.querySelector(".selected-count")?.textContent).toContain("0 of 4 selected");
     fireEvent.click(cards[1]);
     fireEvent.click(screen.getByTitle("Move Page Left"));
     await vi.waitFor(() => {
@@ -85,9 +76,7 @@ describe("PageWorkspace selection and moves", () => {
   it("inserts blank and image pages", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByTitle("Insert Blank Page"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalledTimes(1);
@@ -112,13 +101,9 @@ describe("PageWorkspace selection and moves", () => {
   it("applies crop boxes with explicit dimensions", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Crop"));
-    const inputs = document.querySelectorAll(
-      '.crop-controls-bar input[type="number"]',
-    );
+    const inputs = document.querySelectorAll('.crop-controls-bar input[type="number"]');
     fireEvent.change(inputs[0], { target: { value: "400" } });
     fireEvent.change(inputs[1], { target: { value: "500" } });
     fireEvent.click(screen.getByText("Apply Crop"));
@@ -136,9 +121,7 @@ describe("PageWorkspace selection and moves", () => {
   it("cancels crop and split panels and closes the workspace", () => {
     seedDocument();
     const onClose = vi.fn();
-    render(
-      <PageWorkspace controller={null} onClose={onClose} />,
-    );
+    render(<PageWorkspace controller={null} onClose={onClose} />);
     fireEvent.click(screen.getByText("Crop"));
     fireEvent.click(screen.getByText("Cancel"));
     fireEvent.click(screen.getByText("Split"));
@@ -150,26 +133,20 @@ describe("PageWorkspace selection and moves", () => {
   it("rotates counter-clockwise", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     fireEvent.click(screen.getByTitle("Rotate CCW (-90°)"));
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalled();
     });
     const bytes = controller.replaceWithBytes.mock.calls[0][0] as Uint8Array;
-    expect((await PDFDocument.load(bytes)).getPage(0).getRotation().angle).toBe(
-      270,
-    );
+    expect((await PDFDocument.load(bytes)).getPage(0).getRotation().angle).toBe(270);
   });
 
   it("supports keyboard navigation: arrows, space toggle, rotate, and delete", async () => {
     seedDocument();
     const controller = await mockController();
     const onClose = vi.fn();
-    render(
-      <PageWorkspace controller={controller as never} onClose={onClose} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={onClose} />);
     const modal = screen.getByRole("region", { name: "Page Workspace" });
 
     // ArrowRight moves focus and selects next page (Page 2, index 1)
@@ -196,9 +173,7 @@ describe("PageWorkspace selection and moves", () => {
   it("supports drag and drop reordering of pages", async () => {
     seedDocument();
     const controller = await mockController();
-    render(
-      <PageWorkspace controller={controller as never} onClose={() => {}} />,
-    );
+    render(<PageWorkspace controller={controller as never} onClose={() => {}} />);
     const cards = document.querySelectorAll(".page-grid-item");
     expect(cards).toHaveLength(4);
 
@@ -221,5 +196,69 @@ describe("PageWorkspace selection and moves", () => {
     await vi.waitFor(() => {
       expect(controller.replaceWithBytes).toHaveBeenCalled();
     });
+  });
+
+  it("reports incomplete split ranges and guards a running split", async () => {
+    seedDocument();
+    const controller = await mockController();
+    const firstRender = render(
+      <PageWorkspace controller={controller as never} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByText("Split"));
+    fireEvent.change(screen.getByDisplayValue("1-2, 3-4"), {
+      target: { value: "3-" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Execute Split" }));
+    await vi.waitFor(() => {
+      expect(useWorkspace.getState().error).toBe("Incomplete range");
+    });
+    expect(controller.replaceWithBytes).not.toHaveBeenCalled();
+    firstRender.unmount();
+
+    let release: (value: Uint8Array) => void = () => {};
+    const pendingController = {
+      pdf: {
+        saveDocument: vi.fn(
+          () =>
+            new Promise<Uint8Array>((resolve) => {
+              release = resolve;
+            }),
+        ),
+        numPages: 4,
+      },
+      replaceWithBytes: vi.fn(),
+    };
+    useWorkspace.getState().reset();
+    seedDocument();
+    render(<PageWorkspace controller={pendingController as never} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Split"));
+    fireEvent.click(screen.getByRole("button", { name: "Execute Split" }));
+    expect(screen.getByRole("button", { name: "Splitting..." }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(useWorkspace.getState().busy).toBe(true);
+    release(await createBlankDocument(4));
+  });
+
+  it("falls back to the current page when a page input is cleared", () => {
+    const onChange = vi.fn();
+    render(<PageNumberInput value={4} max={10} onChange={onChange} aria-label="Page number" />);
+    fireEvent.change(screen.getByLabelText("Page number"), { target: { value: "" } });
+    expect(onChange).toHaveBeenCalledWith(4);
+    expect(
+      onChange.mock.calls.some(([value]) => typeof value === "number" && Number.isNaN(value)),
+    ).toBe(false);
+    fireEvent.change(screen.getByLabelText("Page number"), { target: { value: "not-a-number" } });
+    expect(onChange).toHaveBeenLastCalledWith(4);
+    render(
+      <PageNumberInput
+        value={Number.NaN}
+        min={Number.NaN}
+        max={Number.POSITIVE_INFINITY}
+        onChange={onChange}
+        aria-label="Fallback page"
+      />,
+    );
+    expect((screen.getByLabelText("Fallback page") as HTMLInputElement).value).toBe("1");
   });
 });

@@ -69,9 +69,7 @@ describe("structure-loss warnings", () => {
     render(<CreatePdfDialog onLoad={() => {}} onClose={() => {}} />);
 
     fireEvent.click(screen.getByText(/Combine Multiple Files/i));
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File([bytes as unknown as BlobPart], "form.pdf", {
       type: "application/pdf",
     });

@@ -72,6 +72,15 @@ body {
     background-color 0.2s ease,
     color 0.2s ease;
 }
+.night-mode .pdfViewer canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
+.read-mode .titlebar,
+.read-mode .left-sidebar,
+.read-mode .properties,
+.read-mode .statusbar {
+  display: none;
+}
 button,
 input,
 select {
@@ -705,6 +714,20 @@ p {
 .error-banner > span {
   flex: 1;
 }
+.notice-banner {
+  background: var(--surface);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.signature-warnings {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12px;
+}
+.signature-warnings p {
+  margin: 0;
+}
 .busy-indicator {
   position: fixed;
   bottom: 45px;
@@ -925,10 +948,17 @@ p {
   width: 460px;
   max-width: calc(100vw - 40px);
   box-shadow: 0 20px 80px var(--shadow-color);
+  z-index: 500;
+}
+.app-dialog.priority-dialog {
+  z-index: 2000;
 }
 .app-dialog::backdrop {
   background: var(--dialog-backdrop);
   backdrop-filter: blur(3px);
+}
+.app-dialog.priority-dialog::backdrop {
+  z-index: 1999;
 }
 .app-dialog > header {
   display: flex;
@@ -1290,9 +1320,88 @@ p {
   padding: 20px;
   animation: fadeIn 0.15s ease-out;
 }
+
+.context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 190px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 20%);
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.context-menu button:hover,
+.context-menu button:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.external-link-value {
+  max-width: 42rem;
+  overflow-wrap: anywhere;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--surface-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.segmented-control {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.segmented-control > button,
+.sig-card {
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-color);
+}
+
+.segmented-control > button[aria-pressed="true"],
+.sig-card[aria-pressed="true"] {
+  background: var(--accent-green, #25604b);
+  color: #fff;
+}
+
+.sig-card {
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .modal-dialog {
   background: var(--surface);
@@ -2153,7 +2262,6 @@ p {
   background: var(--surface-2);
   overflow-wrap: anywhere;
 }
-
 
 /* Notice that an operation composes a new document and cannot carry
    catalog structures (bookmarks, form fields) over from the source. */

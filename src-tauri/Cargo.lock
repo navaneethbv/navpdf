@@ -2712,11 +2712,13 @@ name = "navpdf"
 version = "0.2.0"
 dependencies = [
  "aes-gcm",
+ "cc",
  "cms",
  "const-oid 0.9.6",
  "der",
  "getrandom 0.4.3",
  "jpeg-encoder",
+ "libc",
  "lopdf",
  "objc2",
  "objc2-app-kit",
@@ -2734,8 +2736,10 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tempfile",
+ "url",
  "uuid",
  "x509-cert",
+ "zeroize",
  "zune-jpeg",
 ]
 
@@ -6257,6 +6261,7 @@ version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
 dependencies = [
+ "serde",
  "zeroize_derive",
 ]
 

@@ -33,6 +33,7 @@ export function AnnotationToolbar({
   onClose: () => void;
 }) {
   const s = useWorkspace();
+  const isBlocked = !controller || s.busy || !!s.info?.encrypted || !s.editingAllowed;
 
   const handleSetTool = (tool: "highlight" | "draw" | "text" | "select") => {
     s.set({ tool, selectedAnnotationId: null, hasSelection: false });
@@ -58,24 +59,33 @@ export function AnnotationToolbar({
 
   return (
     <div className="annotation-floating-toolbar" role="toolbar" aria-label="Annotation tools">
+      {!s.editingAllowed && (
+        <span
+          className="toolbar-restricted-notice"
+          style={{ fontSize: "12px", color: "var(--text-secondary)", padding: "0 8px" }}
+        >
+          Editing is restricted for this document.
+        </span>
+      )}
       <div className="tool-group">
         <button
           className={s.tool === "highlight" ? "active" : ""}
           title="Highlight Text"
+          disabled={isBlocked}
           onClick={() => handleSetTool("highlight")}
         >
           <Highlighter size={16} />
         </button>
         <button
           title="Underline Text"
-          disabled={!controller || s.busy || !!s.info?.encrypted}
+          disabled={isBlocked}
           onClick={() => applyTextMarkup("Underline")}
         >
           <Underline size={16} />
         </button>
         <button
           title="Strike-through Text"
-          disabled={!controller || s.busy || !!s.info?.encrypted}
+          disabled={isBlocked}
           onClick={() => applyTextMarkup("StrikeOut")}
         >
           <Strikethrough size={16} />
@@ -83,6 +93,7 @@ export function AnnotationToolbar({
         <button
           className={s.tool === "draw" ? "active" : ""}
           title="Pencil / Freehand Ink"
+          disabled={isBlocked}
           onClick={() => handleSetTool("draw")}
         >
           <PenTool size={16} />
@@ -90,13 +101,14 @@ export function AnnotationToolbar({
         <button
           className={s.tool === "text" ? "active" : ""}
           title="Text Box"
+          disabled={isBlocked}
           onClick={() => handleSetTool("text")}
         >
           <Type size={16} />
         </button>
         <button
           title="Sticky Note / Comment"
-          disabled={!controller || s.busy || !!s.info?.encrypted}
+          disabled={isBlocked}
           onClick={() => s.set({ activeModal: "sticky-note" })}
         >
           <MessageSquarePlus size={16} />
@@ -108,7 +120,7 @@ export function AnnotationToolbar({
       <div className="tool-group">
         <button
           title="Rectangle Shape"
-          disabled={!controller || s.busy || !!s.info?.encrypted}
+          disabled={isBlocked}
           onClick={() => selectShape("Square")}
           aria-pressed={s.tool === "shape" && s.shapeKind === "Square"}
         >
@@ -116,7 +128,7 @@ export function AnnotationToolbar({
         </button>
         <button
           title="Circle / Ellipse"
-          disabled={!controller || s.busy || !!s.info?.encrypted}
+          disabled={isBlocked}
           onClick={() => selectShape("Circle")}
           aria-pressed={s.tool === "shape" && s.shapeKind === "Circle"}
         >
@@ -124,7 +136,7 @@ export function AnnotationToolbar({
         </button>
         <button
           title="Line"
-          disabled={!controller || s.busy || !!s.info?.encrypted}
+          disabled={isBlocked}
           onClick={() => selectShape("Line")}
           aria-pressed={s.tool === "shape" && s.shapeKind === "Line"}
         >
@@ -132,7 +144,7 @@ export function AnnotationToolbar({
         </button>
         <button
           title="Arrow"
-          disabled={!controller || s.busy || !!s.info?.encrypted}
+          disabled={isBlocked}
           onClick={() => selectShape("Arrow")}
           aria-pressed={s.tool === "shape" && s.shapeKind === "Arrow"}
         >
@@ -146,6 +158,7 @@ export function AnnotationToolbar({
         {colors.map((c) => (
           <button
             key={c.hex}
+            disabled={isBlocked}
             className={`color-dot ${
               s.highlightColor === c.hex || s.inkColor === c.hex ? "active" : ""
             }`}

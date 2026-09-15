@@ -46,13 +46,7 @@ interface ToolItem {
   disabled?: boolean;
 }
 
-export function ToolPanel({
-  mode,
-  onClose,
-}: {
-  mode: ToolMode;
-  onClose: () => void;
-}) {
+export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => void }) {
   const [search, setSearch] = useState("");
   const s = useWorkspace();
   const hasDoc = !!s.document;
@@ -129,6 +123,15 @@ export function ToolPanel({
       category: "edit",
       icon: FileText,
       action: () => s.set({ activeModal: "add-text", tool: "text" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "document-properties",
+      label: "Document Properties",
+      description: "Edit title, author, subject, keywords, and PDF metadata",
+      category: "edit",
+      icon: FileText,
+      action: () => s.set({ activeModal: "properties" }),
       disabled: !hasDoc,
     },
     {
@@ -284,7 +287,7 @@ export function ToolPanel({
       description: "Place signature, initials, text, checkmarks, and dots",
       category: "forms",
       icon: PenLine,
-      action: () => s.set({ activeModal: "fill-sign" }),
+      action: () => s.set({ activeModal: "fill-sign", tool: "signature" }),
       disabled: !hasDoc,
     },
     {
@@ -302,7 +305,7 @@ export function ToolPanel({
       description: "Manage drawn, typed, or uploaded signatures locally",
       category: "forms",
       icon: Stamp,
-      action: () => s.set({ activeModal: "fill-sign" }),
+      action: () => s.set({ activeModal: "fill-sign", tool: "signature" }),
     },
     // Protect & Redact
     {
@@ -342,7 +345,7 @@ export function ToolPanel({
       action: () => s.set({ activeModal: "create-pdf" }),
     },
     {
-      id: "ai-summary",
+      id: "find-passages",
       label: "Find and Cite Passages",
       description: "Find passages containing your words and jump to cited pages",
       category: "ai",
@@ -368,22 +371,19 @@ export function ToolPanel({
     if (mode === "create" && !["create-blank", "combine-files"].includes(t.id)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
-    return (
-      t.label.toLowerCase().includes(q) ||
-      t.description.toLowerCase().includes(q)
-    );
+    return t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
   });
 
   const title =
     mode === "all"
       ? "All Tools"
       : mode === "edit"
-      ? "Edit PDF"
-      : mode === "convert"
-      ? "Convert & Export"
-      : mode === "esign"
-      ? "Fill & Sign"
-      : "Create PDF";
+        ? "Edit PDF"
+        : mode === "convert"
+          ? "Convert & Export"
+          : mode === "esign"
+            ? "Fill & Sign"
+            : "Create PDF";
 
   return (
     <div className="tool-drawer" role="region" aria-label={title}>
@@ -392,11 +392,7 @@ export function ToolPanel({
           <h3>{title}</h3>
           <span className="tool-count">{filtered.length} tools</span>
         </div>
-        <button
-          className="icon-button"
-          onClick={onClose}
-          aria-label="Close tools panel"
-        >
+        <button className="icon-button" onClick={onClose} aria-label="Close tools panel">
           <X size={18} />
         </button>
       </div>

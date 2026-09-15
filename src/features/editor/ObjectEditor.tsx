@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { AlertTriangle, Image as ImageIcon, RefreshCw, Replace, Trash2, Type, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Image as ImageIcon,
+  RefreshCw,
+  Replace,
+  RotateCw,
+  Trash2,
+  Type,
+  X,
+} from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { native } from "../../services/native";
 import { editPage, ENGINE_UNAVAILABLE, inspectPage } from "../../services/engine";
 import type { EditReport, EditRequest, PageObjects } from "../../types/engine";
 import { placePageBoxes, type ViewerLike } from "../redact/redaction-marks";
+import { FeatureDialog } from "../../components/FeatureDialog";
 
 /** Largest replacement image edge; larger images are scaled down before embedding. */
 const MAX_IMAGE_EDGE = 4096;
@@ -41,6 +51,10 @@ export function ObjectEditor({
   const [scan, setScan] = useState<PageObjects | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [imageRotation, setImageRotation] = useState(0);
+  const [imageScale, setImageScale] = useState(1);
+  const [imageOffsetX, setImageOffsetX] = useState(0);
+  const [imageOffsetY, setImageOffsetY] = useState(0);
   const [report, setReport] = useState<EditReport | null>(null);
   const [working, setWorking] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -48,6 +62,7 @@ export function ObjectEditor({
   const viewer = controller?.viewer as unknown as ViewerLike | undefined;
   const pdf = controller?.pdf;
   const page = s.page;
+  const revision = s.revision;
 
   const scanPage = useCallback(async () => {
     if (!pdf || !native) return;
@@ -62,7 +77,7 @@ export function ObjectEditor({
       setWorking(false);
     }
     // The store setter is stable; the scan depends on the active revision and page.
-  }, [pdf, page]);
+  }, [pdf, page, revision]);
 
   useEffect(() => {
     void scanPage();
@@ -72,7 +87,9 @@ export function ObjectEditor({
     () =>
       placePageBoxes(
         viewer,
-        selected && scan ? [{ page: scan.page, rect: selected.bbox, className: "object-edit-box" }] : [],
+        selected && scan
+          ? [{ page: scan.page, rect: selected.bbox, className: "object-edit-box" }]
+          : [],
       ),
     [viewer, selected, scan, s.zoom, s.renderedPages],
   );
@@ -87,8 +104,6 @@ export function ObjectEditor({
       setReport(result.report);
       if (result.bytes) {
         await controller.replaceWithBytes(result.bytes, result.report.message);
-        const rescanned = await inspectPage(await controller.pdf.saveDocument(), scan.page);
-        setScan(rescanned);
         setSelectedId(null);
       }
     } catch (error) {
@@ -108,8 +123,32 @@ export function ObjectEditor({
     }
   };
 
+  const transformImage = () => {
+    if (!selected || selected.kind !== "image") return;
+    const [x0, y0, x1, y1] = selected.bbox;
+    const centerX = (x0 + x1) / 2;
+    const centerY = (y0 + y1) / 2;
+    const radians = (imageRotation * Math.PI) / 180;
+    const a = imageScale * Math.cos(radians);
+    const b = imageScale * Math.sin(radians);
+    const c = -imageScale * Math.sin(radians);
+    const d = imageScale * Math.cos(radians);
+    void run({
+      type: "transformImage",
+      objectId: selected.id,
+      cm: [
+        a,
+        b,
+        c,
+        d,
+        centerX - a * centerX - c * centerY + imageOffsetX,
+        centerY - b * centerX - d * centerY + imageOffsetY,
+      ],
+    });
+  };
+
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Edit Existing Content">
+    <FeatureDialog title="Edit Existing Content" onClose={onClose} busy={working}>
       <div className="modal-dialog wide">
         <div className="modal-header">
           <div className="modal-title">
@@ -128,18 +167,23 @@ export function ObjectEditor({
             </div>
           )}
           <p className="field-hint">
-            Replace text in its existing font without reflowing the paragraph,
-            delete text or images, or replace an image on this page only. Text
-            in composite or Type 3 fonts, and characters missing from an
-            embedded font subset, are refused instead of substituted.
+            Replace text in its existing font without reflowing the paragraph, delete text or
+            images, or replace an image on this page only. Text in composite or Type 3 fonts, and
+            characters missing from an embedded font subset, are refused instead of substituted.
           </p>
           <div className="object-editor-layout">
             <div className="object-list" role="listbox" aria-label={`Objects on page ${page}`}>
               <div className="inline-field">
                 <span className="setting-title">
-                  Page {page}: {scan?.objects.length ?? 0} {scan?.objects.length === 1 ? "object" : "objects"}
+                  Page {page}: {scan?.objects.length ?? 0}{" "}
+                  {scan?.objects.length === 1 ? "object" : "objects"}
                 </span>
-                <button className="icon-button" onClick={() => void scanPage()} aria-label="Scan page again" disabled={working}>
+                <button
+                  className="icon-button"
+                  onClick={() => void scanPage()}
+                  aria-label="Scan page again"
+                  disabled={working}
+                >
                   <RefreshCw size={15} />
                 </button>
               </div>
@@ -186,7 +230,14 @@ export function ObjectEditor({
                     <button
                       className="button-secondary"
                       disabled={!selected.replaceable || working || !text}
-                      onClick={() => void run({ type: "replaceText", objectId: selected.id, text, preview: true })}
+                      onClick={() =>
+                        void run({
+                          type: "replaceText",
+                          objectId: selected.id,
+                          text,
+                          preview: true,
+                        })
+                      }
                     >
                       Preview Width
                     </button>
@@ -226,6 +277,70 @@ export function ObjectEditor({
                   >
                     <ImageIcon size={15} /> Replace Image…
                   </button>
+                  <div className="settings-row">
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-rotation`}>
+                        Rotation (degrees)
+                      </label>
+                      <input
+                        id={`${ids}-rotation`}
+                        className="text-input"
+                        type="number"
+                        min={-180}
+                        max={180}
+                        value={imageRotation}
+                        disabled={working}
+                        onChange={(event) => setImageRotation(Number(event.target.value))}
+                      />
+                    </div>
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-scale`}>
+                        Scale
+                      </label>
+                      <input
+                        id={`${ids}-scale`}
+                        className="text-input"
+                        type="number"
+                        min={0.1}
+                        max={4}
+                        step={0.05}
+                        value={imageScale}
+                        disabled={working}
+                        onChange={(event) => setImageScale(Number(event.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <div className="settings-row">
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-offset-x`}>
+                        Move X (pt)
+                      </label>
+                      <input
+                        id={`${ids}-offset-x`}
+                        className="text-input"
+                        type="number"
+                        value={imageOffsetX}
+                        disabled={working}
+                        onChange={(event) => setImageOffsetX(Number(event.target.value))}
+                      />
+                    </div>
+                    <div className="setting-group">
+                      <label className="setting-title" htmlFor={`${ids}-offset-y`}>
+                        Move Y (pt)
+                      </label>
+                      <input
+                        id={`${ids}-offset-y`}
+                        className="text-input"
+                        type="number"
+                        value={imageOffsetY}
+                        disabled={working}
+                        onChange={(event) => setImageOffsetY(Number(event.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <button className="button-secondary" disabled={working} onClick={transformImage}>
+                    <RotateCw size={15} /> Apply Image Transform
+                  </button>
                 </>
               )}
               {selected && (
@@ -238,7 +353,14 @@ export function ObjectEditor({
                 </button>
               )}
               {report && (
-                <p className={report.applied || report.missingCharacters.length === 0 ? "field-hint" : "error-text"} role="status">
+                <p
+                  className={
+                    report.applied || report.missingCharacters.length === 0
+                      ? "field-hint"
+                      : "error-text"
+                  }
+                  role="status"
+                >
                   {report.message}
                 </p>
               )}
@@ -251,6 +373,6 @@ export function ObjectEditor({
           </button>
         </div>
       </div>
-    </div>
+    </FeatureDialog>
   );
 }

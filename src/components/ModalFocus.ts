@@ -1,6 +1,6 @@
 const MODAL = '[role="dialog"][aria-modal="true"]';
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]';
+  "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]";
 
 function topModal(root: Document) {
   const modals = root.querySelectorAll<HTMLElement>(MODAL);

@@ -13,11 +13,7 @@ interface SelectionBox {
 
 const shapeTypes = new Set(["Square", "Circle", "Line"]);
 
-export function AnnotationSelectionLayer({
-  controller,
-}: {
-  controller: ViewerController;
-}) {
+export function AnnotationSelectionLayer({ controller }: { controller: ViewerController }) {
   const tool = useWorkspace((s) => s.tool);
   const comments = useWorkspace((s) => s.comments);
   const selectedId = useWorkspace((s) => s.selectedAnnotationId);
@@ -47,14 +43,8 @@ export function AnnotationSelectionLayer({
           scale: 1,
           rotation: pdfPage.rotate,
         });
-        const [vx1, vy1] = viewport.convertToViewportPoint(
-          comment.rect[0],
-          comment.rect[1],
-        );
-        const [vx2, vy2] = viewport.convertToViewportPoint(
-          comment.rect[2],
-          comment.rect[3],
-        );
+        const [vx1, vy1] = viewport.convertToViewportPoint(comment.rect[0], comment.rect[1]);
+        const [vx2, vy2] = viewport.convertToViewportPoint(comment.rect[2], comment.rect[3]);
         const pageRect = pageElement.getBoundingClientRect();
         const scaleX = pageRect.width / viewport.width;
         const scaleY = pageRect.height / viewport.height;
@@ -99,9 +89,7 @@ export function AnnotationSelectionLayer({
         <button
           key={box.comment.id}
           type="button"
-          className={`annotation-selection-box ${
-            selectedId === box.comment.id ? "selected" : ""
-          }`}
+          className={`annotation-selection-box ${selectedId === box.comment.id ? "selected" : ""}`}
           style={{
             left: box.left,
             top: box.top,

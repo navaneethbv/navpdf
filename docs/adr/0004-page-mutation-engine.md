@@ -3,6 +3,8 @@
 Date: 2026-09-13
 Status: Accepted for Phase 4.
 
+The PDFium deferral in this record is superseded by ADR 0006 for the native lopdf engine used by protection, compression, existing-object edits and redaction.
+
 ## Context
 
 Phase 4 requires page operations including reorder, rotation, deletion, cropping, blank/image page insertion, extraction, splitting and merging.

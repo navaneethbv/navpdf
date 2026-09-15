@@ -1,15 +1,7 @@
 export type Layout = "continuous" | "single" | "spread";
 export type ToolMode = "all" | "edit" | "convert" | "esign" | "create";
 export type Tool =
-  | "select"
-  | "hand"
-  | "highlight"
-  | "ink"
-  | "draw"
-  | "text"
-  | "shape"
-  | "signature"
-  | "snapshot";
+  "select" | "hand" | "highlight" | "ink" | "draw" | "text" | "shape" | "signature" | "snapshot";
 export type ShapeKind = "Square" | "Circle" | "Line" | "Arrow";
 export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "tools";
 export interface DocumentDescriptor {
@@ -31,6 +23,12 @@ export interface Preferences {
   autosave: boolean;
   recentFiles: boolean;
   networkAccess: boolean;
+  saveBehavior: "ask" | "save-as";
+  confirmOnDelete: boolean;
+  annotationColor: string;
+  annotationStrokeWidth: number;
+  ocrLanguage: string;
+  ocrScope: "current" | "all";
 }
 export interface RecentDocument {
   id: string;
@@ -41,7 +39,14 @@ export interface RecentDocument {
 export interface LocalState {
   preferences: Preferences;
   recents: RecentDocument[];
-  recovery: { name: string; savedAt: number } | null;
+  recoveries: RecoveryEntry[];
+}
+/** An autosaved copy of a document that was not saved before NavPDF closed. */
+export interface RecoveryEntry {
+  id: string;
+  name: string;
+  pages: number;
+  savedAt: number;
 }
 export interface SearchResult {
   page: number;
@@ -61,9 +66,21 @@ export interface Comment {
   text: string;
   rect?: [number, number, number, number];
   line?: [number, number, number, number];
+  lineEndings?: [string, string];
+  quads?: number[][];
   color?: [number, number, number];
   opacity?: number;
   width?: number;
+  vertices?: number[][];
+  callout?: number[];
+  stampName?: string;
+  replyTo?: string;
+  reviewState?: "Accepted" | "Rejected" | "Cancelled" | "Completed";
+}
+export interface SelectedTextGeometry {
+  page: number;
+  quads: { x1: number; y1: number; x2: number; y2: number }[];
+  text: string;
 }
 export interface DocumentInfo {
   pages: number;
@@ -82,4 +99,10 @@ export const defaultPreferences: Preferences = {
   autosave: true,
   recentFiles: true,
   networkAccess: false,
+  saveBehavior: "ask",
+  confirmOnDelete: true,
+  annotationColor: "#f5cf58",
+  annotationStrokeWidth: 2,
+  ocrLanguage: "en-US",
+  ocrScope: "current",
 };

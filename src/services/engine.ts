@@ -170,3 +170,11 @@ export async function verifySignatures(documentId: string): Promise<SignatureInf
   requireEngine();
   return invoke<SignatureInfo[]>("engine_verify_signatures", { documentId });
 }
+
+/** Prunes unreferenced objects, renumbers objects, and compresses streams. */
+export async function pruneDocument(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  const outputId = await invoke<string>("engine_prune", { inputId });
+  return take(outputId);
+}
