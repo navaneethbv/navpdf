@@ -71,7 +71,7 @@ export async function saveDocument(
     descriptor.name.replace(/\.pdf$/i, "-edited.pdf"),
     "document-edited.pdf",
   );
-  downloadBytes(bytes, name);
+  await downloadBytes(bytes, name);
   return { name, size: bytes.length };
 }
 export async function localState(): Promise<LocalState> {

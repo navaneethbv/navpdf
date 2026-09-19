@@ -9,6 +9,7 @@ import {
 } from "../../services/document-commands";
 import { parsePageRange } from "./page-range";
 import type { MergeInputItem } from "../../types/operations";
+import { imageFileToPdf, isImageFile } from "./image-import";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
 export interface CombineEntry {
@@ -20,12 +21,14 @@ export interface CombineEntry {
 export function CreatePdfDialog({
   onLoad,
   onClose,
+  initialTab = "blank",
 }: {
+  initialTab?: "blank" | "combine";
   onLoad: (file: File) => void;
   onClose: () => void;
 }) {
   const s = useWorkspace();
-  const [tab, setTab] = useState<"blank" | "combine">("blank");
+  const [tab, setTab] = useState<"blank" | "combine">(initialTab);
   const [pageCount, setPageCount] = useState(1);
   const [pageSize, setPageSize] = useState<"a4" | "letter">("a4");
   const [creating, setCreating] = useState(false);
@@ -44,7 +47,9 @@ export function CreatePdfDialog({
     void (async () => {
       try {
         const buffers = await Promise.all(
-          items.map(async (item) => new Uint8Array(await item.file.arrayBuffer())),
+          items
+            .filter((item) => !isImageFile(item.file))
+            .map(async (item) => new Uint8Array(await item.file.arrayBuffer())),
         );
         const warning = await describeStructureLoss(buffers);
         if (!cancelled) setStructureLoss(warning);
@@ -86,8 +91,10 @@ export function CreatePdfDialog({
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const buffer = new Uint8Array(await item.file.arrayBuffer());
-        const rawRange = item.range.trim();
+        const buffer = isImageFile(item.file)
+          ? await imageFileToPdf(item.file)
+          : new Uint8Array(await item.file.arrayBuffer());
+        const rawRange = isImageFile(item.file) ? "" : item.range.trim();
         if (rawRange) {
           const doc = await PDFDocument.load(buffer);
           const totalPages = doc.getPageCount();
@@ -117,11 +124,12 @@ export function CreatePdfDialog({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newItems: CombineEntry[] = Array.from(e.target.files).map((f) => ({
-        id: `${f.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: crypto.randomUUID(),
         file: f,
         range: "",
       }));
       setItems((prev) => [...prev, ...newItems]);
+      e.target.value = "";
     }
   };
 
@@ -174,7 +182,7 @@ export function CreatePdfDialog({
             aria-pressed={tab === "combine"}
             onClick={() => setTab("combine")}
           >
-            <Combine size={15} /> Combine Multiple Files
+            <Combine size={15} /> Import / Combine Files
           </button>
         </div>
 
@@ -208,15 +216,19 @@ export function CreatePdfDialog({
             </div>
           ) : (
             <div key="combine-section" className="combine-files-section">
+              <p>
+                Import PDFs, PNG or JPEG images in the order shown. Each image becomes one page.
+                Office documents must first be saved as PDF in their original app.
+              </p>
               <button className="button-secondary" onClick={() => fileInputRef.current?.click()}>
-                Select Files to Combine...
+                Select PDFs or Images...
               </button>
               <input
                 key="combine-file-input"
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="application/pdf"
+                accept="application/pdf,.pdf,image/png,.png,image/jpeg,.jpg,.jpeg"
                 style={{ display: "none" }}
                 onChange={handleFileChange}
               />
@@ -231,7 +243,12 @@ export function CreatePdfDialog({
                         </span>
                         <input
                           type="text"
-                          placeholder="All pages, or e.g. 1-3, 5"
+                          disabled={isImageFile(item.file)}
+                          placeholder={
+                            isImageFile(item.file)
+                              ? "One image per page"
+                              : "All pages, or e.g. 1-3, 5"
+                          }
                           value={item.range ?? ""}
                           onChange={(e) => updateRange(i, e.target.value)}
                           className="combine-range-input"

@@ -118,6 +118,8 @@ function seedDocument() {
       },
       page: 1,
       sidebar: "bookmarks",
+      settingsOpen: false,
+      propertiesVisible: false,
     });
   });
 }
@@ -140,8 +142,8 @@ describe("App shell", () => {
   it("renders the home workspace with toolbar and status", () => {
     render(<App />);
     expect(screen.getByText("Open PDF")).toBeTruthy();
-    expect(screen.getByText("NavPDF", { selector: "button.brand" })).toBeTruthy();
-    expect(screen.getByText("Network access off")).toBeTruthy();
+    expect(screen.getByLabelText("NavPDF home")).toBeTruthy();
+    expect(screen.getByText("On your device")).toBeTruthy();
   });
 
   it("shows and dismisses the error banner", () => {
@@ -165,6 +167,7 @@ describe("App shell", () => {
 
   it("opens the tool panel and every modal surface", () => {
     render(<App />);
+    seedDocument();
     const modals: [string, string][] = [
       ["toolMode:all", "All Tools"],
       ["page-workspace", "Organize Pages"],
@@ -183,7 +186,7 @@ describe("App shell", () => {
       ["compress", "Compress PDF"],
       ["protect", "Password Protect PDF"],
       ["design", "Generate Cover Page"],
-      ["assistant", "Find and Cite Passages"],
+      ["export-options", "Export a PDF"],
     ];
     for (const [modal, heading] of modals) {
       act(() => {
@@ -221,6 +224,8 @@ describe("App shell", () => {
     seedDocument();
     render(<App />);
     expect(screen.getByText("This PDF has no bookmarks.")).toBeTruthy();
+    expect(screen.queryByText("Doc")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Show document properties"));
     expect(screen.getByText("Doc")).toBeTruthy();
   });
 

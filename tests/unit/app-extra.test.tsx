@@ -241,7 +241,10 @@ describe("App keyboard and menus", () => {
       "tools:annotations",
       "tools:redact",
     ]) {
-      act(() => menu({ payload: action }));
+      act(() => {
+        useWorkspace.getState().set({ activeModal: null });
+        menu({ payload: action });
+      });
       expect(useWorkspace.getState().activeModal).toBe(
         action === "organize"
           ? "page-workspace"
@@ -255,6 +258,7 @@ describe("App keyboard and menus", () => {
       );
     }
     act(() => {
+      useWorkspace.getState().set({ activeModal: null });
       menu({ payload: "find" });
       menu({ payload: "fit-page" });
       menu({ payload: "fit-width" });
@@ -264,6 +268,75 @@ describe("App keyboard and menus", () => {
     });
     expect(useWorkspace.getState().sidebar).toBe("search");
     expect(useWorkspace.getState().settingsOpen).toBe(true);
+  });
+
+  it("routes file conversion and view menus while keeping an open dialog intact", () => {
+    seedDocument();
+    render(<App />);
+    const menu = menuHandler();
+    for (const action of [
+      "create-pdf",
+      "import-pdf",
+      "combine-pdf",
+      "open-recent",
+      "office-export",
+      "office-pptx",
+      "office-xlsx",
+      "office-rtf",
+      "convert",
+      "compress",
+      "protect",
+      "properties",
+      "ocr",
+      "forms",
+      "fill-sign",
+      "edit-objects",
+    ]) {
+      act(() => {
+        useWorkspace.getState().set({ activeModal: null, settingsOpen: false });
+        menu({ payload: action });
+      });
+      expect(useWorkspace.getState().activeModal).toBe(action);
+      act(() => menu({ payload: "import-pdf" }));
+      expect(useWorkspace.getState().activeModal).toBe(action);
+    }
+    act(() => useWorkspace.getState().set({ activeModal: null }));
+    for (const action of [
+      "layout-single",
+      "layout-spread",
+      "layout-continuous",
+      "first-page",
+      "last-page",
+      "next-page",
+      "previous-page",
+      "rotate-view",
+      "actual-size",
+    ]) {
+      act(() => menu({ payload: action }));
+    }
+    for (const [action, sidebar] of [
+      ["panel-pages", "pages"],
+      ["panel-bookmarks", "bookmarks"],
+      ["panel-comments", "comments"],
+    ]) {
+      act(() => menu({ payload: action }));
+      expect(useWorkspace.getState()).toMatchObject({
+        sidebar,
+        navigationVisible: true,
+        propertiesVisible: false,
+      });
+    }
+    act(() => {
+      menu({ payload: "read-mode" });
+      menu({ payload: "night-mode" });
+      menu({ payload: "all-tools" });
+      menu({ payload: "quick-tools" });
+    });
+    expect(useWorkspace.getState()).toMatchObject({
+      readMode: true,
+      nightMode: true,
+      toolMode: "all",
+    });
   });
 
   it("closes every modal through its close button", () => {
@@ -280,7 +353,7 @@ describe("App keyboard and menus", () => {
       "compress",
       "protect",
       "design",
-      "assistant",
+      "export-options",
     ]) {
       act(() => {
         useWorkspace.getState().set({ activeModal: modal });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
+import { X, Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 export function Properties({ controller }: { controller: ViewerController }) {
@@ -28,6 +28,13 @@ export function Properties({ controller }: { controller: ViewerController }) {
   }, [selected?.id, selected?.width, selected?.opacity, selected?.text, s.inkWidth, s.inkOpacity]);
   return (
     <aside className="properties">
+      <button
+        className="icon-button panel-close"
+        aria-label="Close properties panel"
+        onClick={() => s.set({ propertiesVisible: false, selectedAnnotationId: null })}
+      >
+        <X size={18} />
+      </button>
       <h2>
         {selected
           ? "Annotation properties"

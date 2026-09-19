@@ -298,7 +298,7 @@ describe("CreatePdfDialog", () => {
     const second = await createBlankDocument(2);
     const onLoad = vi.fn();
     render(<CreatePdfDialog onLoad={onLoad} onClose={() => {}} />);
-    fireEvent.click(screen.getByText("Combine Multiple Files"));
+    fireEvent.click(screen.getByText("Import / Combine Files"));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, {
       target: {

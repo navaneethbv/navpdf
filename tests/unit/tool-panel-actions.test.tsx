@@ -32,7 +32,7 @@ describe("ToolPanel actions and modes", () => {
     ];
     for (const { mode, title } of modes) {
       const { unmount } = render(<ToolPanel mode={mode} onClose={() => {}} />);
-      expect(screen.getByText(title)).toBeTruthy();
+      expect(screen.getByRole("heading", { name: title })).toBeTruthy();
       unmount();
     }
   });
@@ -48,6 +48,7 @@ describe("ToolPanel actions and modes", () => {
   it("activates every tool action", () => {
     const onClose = vi.fn();
     render(<ToolPanel mode="all" onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "View more" }));
     const cards = document.querySelectorAll(".tool-card");
     expect(cards.length).toBeGreaterThan(20);
     cards.forEach((card) => {
@@ -68,6 +69,7 @@ describe("ToolPanel actions and modes", () => {
 
   it("selects the snapshot tool and highlight tool", () => {
     render(<ToolPanel mode="all" onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "View more" }));
     fireEvent.click(screen.getByText("Take Snapshot"));
     expect(useWorkspace.getState()).toMatchObject({
       activeSnapshot: true,

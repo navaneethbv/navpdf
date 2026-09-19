@@ -122,6 +122,9 @@ export function useDocumentSession(controller: ViewerController | null) {
         useWorkspace.getState().reset();
         useWorkspace.getState().set({
           document: descriptor,
+          toolMode: "all",
+          navigationVisible: false,
+          propertiesVisible: false,
           bookmarks,
           comments,
           formNotice,

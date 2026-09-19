@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { Statusbar, Toolbar } from "../../src/app/Toolbar";
+import { NavigationRail, QuickToolRail, Toolbar } from "../../src/app/Toolbar";
 import { useWorkspace } from "../../src/stores/workspace";
 
 beforeEach(() => {
@@ -40,12 +40,16 @@ function renderToolbar(controller?: Record<string, ReturnType<typeof vi.fn>>) {
     ...controller,
   };
   render(
-    <Toolbar
-      controller={mock as never}
-      open={callbacks.open}
-      save={callbacks.save}
-      home={callbacks.home}
-    />,
+    <>
+      <QuickToolRail controller={mock as never} />
+      <NavigationRail controller={mock as never} />
+      <Toolbar
+        controller={mock as never}
+        open={callbacks.open}
+        save={callbacks.save}
+        home={callbacks.home}
+      />
+    </>,
   );
   return { callbacks, mock };
 }
@@ -56,7 +60,8 @@ describe("Toolbar remaining handlers", () => {
     for (const tab of ["Convert", "E-Sign", "Create"]) {
       fireEvent.click(screen.getByText(tab));
     }
-    expect(useWorkspace.getState().toolMode).toBe("create");
+    expect(useWorkspace.getState().toolMode).toBe("esign");
+    expect(useWorkspace.getState().activeModal).toBe("create-pdf");
     fireEvent.click(screen.getByLabelText("Settings"));
     expect(useWorkspace.getState().settingsOpen).toBe(true);
   });
@@ -102,7 +107,7 @@ describe("Toolbar remaining handlers", () => {
 describe("Statusbar page input", () => {
   it("navigates on Enter and on blur", () => {
     const mock = { goTo: vi.fn() };
-    render(<Statusbar controller={mock as never} />);
+    render(<NavigationRail controller={mock as never} />);
     const input = screen.getByLabelText("Page number") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "4" } });
     fireEvent.keyDown(input, { key: "Enter" });

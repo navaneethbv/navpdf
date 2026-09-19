@@ -40,7 +40,7 @@ interface ToolItem {
   id: string;
   label: string;
   description: string;
-  category: "edit" | "pages" | "review" | "convert" | "forms" | "protect" | "ai";
+  category: "edit" | "pages" | "review" | "convert" | "forms" | "protect";
   icon: typeof FileText;
   action: () => void;
   disabled?: boolean;
@@ -48,6 +48,7 @@ interface ToolItem {
 
 export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => void }) {
   const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const s = useWorkspace();
   const hasDoc = !!s.document;
 
@@ -100,11 +101,11 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     },
     {
       id: "combine-files",
-      label: "Combine / Merge Files",
+      label: "Combine Files",
       description: "Merge multiple PDF documents or images into one",
       category: "pages",
       icon: Combine,
-      action: () => s.set({ activeModal: "create-pdf" }),
+      action: () => s.set({ activeModal: "combine-pdf" }),
     },
     {
       id: "print-doc",
@@ -145,7 +146,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     },
     {
       id: "edit-existing",
-      label: "Edit Existing Content",
+      label: "Edit a PDF",
       description: "Replace or delete existing text runs and images on a page",
       category: "edit",
       icon: Replace,
@@ -241,7 +242,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       description: "Editable text slides or page-picture slides",
       category: "convert",
       icon: Presentation,
-      action: () => s.set({ activeModal: "office-export" }),
+      action: () => s.set({ activeModal: "office-pptx" }),
       disabled: !hasDoc,
     },
     {
@@ -250,12 +251,12 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       description: "Page text aligned into typed cells; formulas are never created",
       category: "convert",
       icon: FileSpreadsheet,
-      action: () => s.set({ activeModal: "office-export" }),
+      action: () => s.set({ activeModal: "office-xlsx" }),
       disabled: !hasDoc,
     },
     {
       id: "ocr-text",
-      label: "Extract Page Text",
+      label: "Scan & OCR",
       description: "Recognize scanned pages locally or extract embedded page text",
       category: "convert",
       icon: Scan,
@@ -283,7 +284,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     // Forms & Sign
     {
       id: "fill-and-sign",
-      label: "Fill & Sign Yourself",
+      label: "Fill & Sign",
       description: "Place signature, initials, text, checkmarks, and dots",
       category: "forms",
       icon: PenLine,
@@ -292,7 +293,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     },
     {
       id: "form-fields",
-      label: "Prepare Form Fields",
+      label: "Prepare a Form",
       description: "Add interactive text fields, checkboxes, and buttons",
       category: "forms",
       icon: CheckSquare,
@@ -310,7 +311,7 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     // Protect & Redact
     {
       id: "protect-pdf",
-      label: "Password Protect",
+      label: "Protect a PDF",
       description: "Save an AES-256 protected copy or unlock a protected PDF",
       category: "protect",
       icon: Shield,
@@ -345,15 +346,6 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       action: () => s.set({ activeModal: "create-pdf" }),
     },
     {
-      id: "find-passages",
-      label: "Find and Cite Passages",
-      description: "Find passages containing your words and jump to cited pages",
-      category: "ai",
-      icon: Sparkles,
-      action: () => s.set({ activeModal: "assistant" }),
-      disabled: !hasDoc,
-    },
-    {
       id: "design-cover",
       label: "Design Cover Page",
       description: "Generate stylish modern cover pages and title templates",
@@ -364,7 +356,50 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     },
   ];
 
-  const filtered = tools.filter((t) => {
+  tools.push({
+    id: "export-pdf",
+    label: "Export a PDF",
+    description: "Word, PowerPoint, Excel, images and text",
+    category: "convert",
+    icon: Download,
+    action: () => s.set({ activeModal: "export-options" }),
+    disabled: !hasDoc,
+  });
+  tools.push({
+    id: "import-pdf",
+    label: "Import / Convert to PDF",
+    description: "Create a PDF from PDFs, PNG or JPEG images",
+    category: "pages",
+    icon: FilePlus,
+    action: () => s.set({ activeModal: "import-pdf" }),
+  });
+  const preferred = [
+    "edit-existing",
+    "export-pdf",
+    "fill-and-sign",
+    "create-blank",
+    "combine-files",
+    "organize-pages",
+    "ocr-text",
+    "protect-pdf",
+    "redact-pdf",
+    "compress-pdf",
+    "form-fields",
+    "drawing-markup",
+    "import-pdf",
+    "certificate-sign",
+  ];
+  const ordered =
+    mode === "all"
+      ? [...tools].sort((a, b) => {
+          const rank = (id: string) => {
+            const index = preferred.indexOf(id);
+            return index < 0 ? preferred.length : index;
+          };
+          return rank(a.id) - rank(b.id);
+        })
+      : tools;
+  const filtered = ordered.filter((t) => {
     if (mode === "edit" && !["edit", "pages"].includes(t.category)) return false;
     if (mode === "convert" && t.category !== "convert") return false;
     if (mode === "esign" && t.category !== "forms") return false;
@@ -411,11 +446,12 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
       )}
 
       <div className="tool-grid">
-        {filtered.map((tool) => (
+        {(mode === "all" && !search && !expanded ? filtered.slice(0, 12) : filtered).map((tool) => (
           <button
             key={tool.id}
-            className={`tool-card ${tool.disabled ? "disabled" : ""}`}
-            disabled={tool.disabled}
+            className={`tool-card category-${tool.category} ${tool.disabled ? "disabled" : ""}`}
+            title={tool.description}
+            disabled={s.busy || tool.disabled}
             onClick={() => {
               tool.action();
               if (mode !== "all") onClose();
@@ -426,11 +462,19 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
             </div>
             <div className="tool-card-text">
               <span className="tool-card-label">{tool.label}</span>
-              <span className="tool-card-desc">{tool.description}</span>
             </div>
           </button>
         ))}
       </div>
+      {mode === "all" && !search && (
+        <button
+          className="tool-view-more"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? "View less" : "View more"}
+        </button>
+      )}
     </div>
   );
 }

@@ -26,6 +26,8 @@ interface Workspace {
   pageLabels: string[] | null;
   tool: Tool;
   sidebar: SidebarTab;
+  navigationVisible: boolean;
+  propertiesVisible: boolean;
   dirty: boolean;
   busy: boolean;
   status: string;
@@ -100,6 +102,8 @@ export const useWorkspace = create<Workspace>((set) => ({
   layout: "continuous",
   tool: "select",
   sidebar: "pages",
+  navigationVisible: false,
+  propertiesVisible: false,
   busy: false,
   status: "Ready",
   error: "",
@@ -115,7 +119,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   toolMode: null,
   activeModal: null,
   quickRailVisible: true,
-  set,
+  set: (patch) => set({ ...(patch.sidebar ? { navigationVisible: true } : {}), ...patch }),
   reset: () =>
     set({
       ...cleanDocument,

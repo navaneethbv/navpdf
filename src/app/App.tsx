@@ -13,7 +13,7 @@ import { Dialog } from "../components/Dialog";
 import { RootErrorBoundary } from "../components/RootErrorBoundary";
 import { ToolErrorBoundary } from "../components/ToolErrorBoundary";
 import { native } from "../services/native";
-import { Toolbar, Statusbar } from "./Toolbar";
+import { Toolbar, Statusbar, QuickToolRail, NavigationRail } from "./Toolbar";
 import { useDocumentSession } from "./useDocumentSession";
 import { ToolPanel } from "../features/tools/ToolPanel";
 import { PageWorkspace } from "../features/pages/PageWorkspace";
@@ -37,7 +37,7 @@ import { CompressDialog } from "../features/compress/CompressDialog";
 import { ProtectDialog } from "../features/protect/ProtectDialog";
 import { CertificateSignature } from "../features/signatures/CertificateSignature";
 import { DesignTools } from "../features/design/DesignTools";
-import { AssistantPanel } from "../features/assistant/AssistantPanel";
+import { ExportOptions } from "../features/convert/ExportOptions";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
 export default function App() {
@@ -165,7 +165,88 @@ export default function App() {
     void listen<string>("menu-action", ({ payload }) => {
       const state = useWorkspace.getState();
       if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
+      if (
+        state.busy ||
+        state.settingsOpen ||
+        session.password ||
+        session.confirm ||
+        state.activeModal
+      )
+        return;
+      const creationActions = ["create-pdf", "import-pdf", "combine-pdf", "open-recent"];
+      const documentActions = [
+        "edit-objects",
+        "page-workspace",
+        "office-export",
+        "office-pptx",
+        "office-xlsx",
+        "office-rtf",
+        "convert",
+        "compress",
+        "protect",
+        "properties",
+        "ocr",
+        "forms",
+        "fill-sign",
+      ];
+      if (
+        creationActions.includes(payload) ||
+        (state.document && documentActions.includes(payload))
+      ) {
+        state.set({ activeModal: payload });
+        return;
+      }
+      if (state.document) {
+        const layout = new Map<string, "single" | "continuous" | "spread">([
+          ["layout-single", "single"],
+          ["layout-continuous", "continuous"],
+          ["layout-spread", "spread"],
+        ]).get(payload);
+        if (layout) {
+          controller?.setLayout(layout);
+          return;
+        }
+        const panel = new Map<string, "pages" | "bookmarks" | "comments">([
+          ["panel-pages", "pages"],
+          ["panel-bookmarks", "bookmarks"],
+          ["panel-comments", "comments"],
+        ]).get(payload);
+        if (panel) {
+          state.set({ sidebar: panel, propertiesVisible: false });
+          return;
+        }
+      }
       switch (payload) {
+        case "first-page":
+          controller?.goToFirst();
+          break;
+        case "last-page":
+          controller?.goToLast();
+          break;
+        case "next-page":
+          if (state.document) controller?.goTo(Math.min(state.page + 1, state.info?.pages ?? 1));
+          break;
+        case "previous-page":
+          if (state.document) controller?.goTo(Math.max(state.page - 1, 1));
+          break;
+        case "rotate-view":
+          if (state.document) controller?.rotateView(90);
+          break;
+        case "actual-size":
+          controller?.zoom(1);
+          break;
+        case "read-mode":
+          if (state.document) state.set({ readMode: !state.readMode });
+          break;
+        case "night-mode":
+          if (state.document) state.set({ nightMode: !state.nightMode });
+          break;
+        case "all-tools":
+          state.set({ toolMode: state.toolMode ? null : "all" });
+          break;
+        case "quick-tools":
+          state.set({ quickRailVisible: !state.quickRailVisible });
+          break;
         case "tour":
         case "tips":
           if (
@@ -290,9 +371,18 @@ export default function App() {
         resetKey={s.document?.id ?? "home"}
       >
         <div className={`workspace ${s.document ? "has-document" : ""}`} inert={s.busy}>
-          {s.document && controller && <Sidebar controller={controller} />}
-          <ViewerHost controller={controller} onReady={ready} />
-          {s.document && controller && <Properties controller={controller} />}
+          {s.document && s.toolMode && (
+            <ToolPanel mode={s.toolMode} onClose={() => s.set({ toolMode: null })} />
+          )}
+          <div className="document-stage">
+            {s.document && <QuickToolRail controller={controller} />}
+            <ViewerHost controller={controller} onReady={ready} />
+          </div>
+          {s.document && controller && s.navigationVisible && <Sidebar controller={controller} />}
+          {s.document && controller && (s.propertiesVisible || s.selectedAnnotationId) && (
+            <Properties controller={controller} />
+          )}
+          {s.document && <NavigationRail controller={controller} />}
         </div>
       </RootErrorBoundary>
       {!s.document && (
@@ -304,7 +394,7 @@ export default function App() {
           onError={session.report}
         />
       )}
-      <Statusbar controller={controller} />
+      <Statusbar />
       {s.busy && (
         <div className="busy-indicator" aria-hidden="true">
           <LoaderCircle size={16} className="spinner" />
@@ -326,6 +416,28 @@ export default function App() {
         ready={session.preferencesReady && !!controller && !session.password && !session.confirm}
       />
       {s.settingsOpen && <Settings />}
+      {s.activeModal === "open-recent" && (
+        <Dialog title="Open Recent Files" onClose={() => s.set({ activeModal: null })}>
+          <div className="export-options">
+            {s.local.recents.length ? (
+              s.local.recents.map((item) => (
+                <button
+                  className="button"
+                  key={item.id}
+                  onClick={() => {
+                    s.set({ activeModal: null });
+                    session.recent(item.id, item.page);
+                  }}
+                >
+                  {item.name}
+                </button>
+              ))
+            ) : (
+              <p>No recent PDFs yet.</p>
+            )}
+          </div>
+        </Dialog>
+      )}
       {session.password && (
         <Dialog title="Unlock PDF" onClose={session.cancelPassword} priority>
           <form
@@ -395,7 +507,9 @@ export default function App() {
           })
         }
       >
-        {s.toolMode && <ToolPanel mode={s.toolMode} onClose={() => s.set({ toolMode: null })} />}
+        {!s.document && s.toolMode && (
+          <ToolPanel mode={s.toolMode} onClose={() => s.set({ toolMode: null })} />
+        )}
         {s.activeSnapshot && <SnapshotTool onClose={() => s.set({ activeSnapshot: false })} />}
         {(s.activeModal === "annotations" ||
           (s.document &&
@@ -425,8 +539,9 @@ export default function App() {
         {s.activeModal === "print" && (
           <PrintDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {s.activeModal === "create-pdf" && (
+        {["create-pdf", "import-pdf", "combine-pdf"].includes(s.activeModal ?? "") && (
           <CreatePdfDialog
+            initialTab={s.activeModal === "create-pdf" ? "blank" : "combine"}
             onLoad={(file) => session.open(file)}
             onClose={() => s.set({ activeModal: null })}
           />
@@ -472,8 +587,22 @@ export default function App() {
         {s.activeModal === "convert" && (
           <ExportDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {s.activeModal === "office-export" && (
-          <OfficeExport controller={controller} onClose={() => s.set({ activeModal: null })} />
+        {["office-export", "office-pptx", "office-xlsx", "office-rtf"].includes(
+          s.activeModal ?? "",
+        ) && (
+          <OfficeExport
+            controller={controller}
+            initialFormat={
+              s.activeModal === "office-pptx"
+                ? "pptx-text"
+                : s.activeModal === "office-xlsx"
+                  ? "xlsx"
+                  : s.activeModal === "office-rtf"
+                    ? "rtf"
+                    : "docx"
+            }
+            onClose={() => s.set({ activeModal: null })}
+          />
         )}
         {s.activeModal === "redact" && (
           <RedactionTool controller={controller} onClose={() => s.set({ activeModal: null })} />
@@ -500,9 +629,7 @@ export default function App() {
         {s.activeModal === "design" && (
           <DesignTools controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {s.activeModal === "assistant" && (
-          <AssistantPanel controller={controller} onClose={() => s.set({ activeModal: null })} />
-        )}
+        {s.activeModal === "export-options" && <ExportOptions />}
         {s.activeModal === "properties" && (
           <PropertiesDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}

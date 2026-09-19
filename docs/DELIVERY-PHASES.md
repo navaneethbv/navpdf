@@ -7,6 +7,20 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 19 single-document workspace and export delivery
+
+The [workspace implementation plan](IMPLEMENTATION-PLAN-2026-09-19-WORKSPACE.md) follows the supplied reference screenshots with one PDF open at a time.
+The document tab, mode bar, colored left tool list, floating markup tools, optional right panels and navigation rail replace the previous toolbar arrangement.
+File, Edit, View, Window and Help expose implemented commands without account or assistant controls.
+PDF, PNG and JPEG import use ordered composition; Office, image, text and compression exports are directly discoverable.
+Native testing reproduced an export freeze in WebKit's automatic download destination handling.
+Generated files now use a native Save dialog and the existing atomic writer, with cancellation and errors propagated to the initiating tool.
+Image-page rendering stalled under macOS WebKit background suspension; disabling window throttling fixes the reproduced case on the tested system.
+Fit modes now recalculate when panels change the document area, while numeric zoom stays fixed.
+Word and PowerPoint opened the native exports, and Preview reopened imported and compressed PDF copies.
+The new layout does not establish complete feature parity: the advanced capabilities and platform/distribution gates listed in the plan remain open.
+See the verification ledger for exact evidence and the remaining compact-window inspection limitation.
+
 ## September 19 native opening and getting started
 
 The [implementation plan](IMPLEMENTATION-PLAN-2026-09-19.md) addresses native file delivery and the requested tour and startup tips.
@@ -19,7 +33,7 @@ Cold-start testing also exposed file delivery before runtime setup; early queue 
 Clean Finder launch and requests deferred behind tour or Tips passed in the rebuilt app.
 These changes do not close the existing conversion, interoperability or distribution gates.
 Current validation evidence is recorded in `docs/VERIFICATION.md`.
-The requested import, export discoverability and compression review follows this delivery.
+The following workspace delivery addresses import, export discoverability and compression.
 
 ## September 18 settings reliability and color themes
 

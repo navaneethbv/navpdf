@@ -95,7 +95,7 @@ describe("Sidebar", () => {
     const exportBtn = screen.getByRole("button", { name: /Export/ });
     fireEvent.click(exportBtn);
     expect(withExchange.exportComments).toHaveBeenCalled();
-    expect(useWorkspace.getState().status).toBe("Comments exported");
+    await vi.waitFor(() => expect(useWorkspace.getState().status).toBe("Comments exported"));
 
     const importBtn = screen.getByRole("button", { name: /Import/ });
     const file = new File(['{"schema":"navpdf-comments"}'], "comments.json", {

@@ -83,25 +83,21 @@ export function AttachmentsDialog({
     }
   };
 
-  const handleDownloadAttachment = (item: AttachmentItem) => {
-    if (item.data) {
-      downloadBlob(new Blob([item.data as unknown as BlobPart]), item.name);
-      return;
+  const handleDownloadAttachment = async (item: AttachmentItem) => {
+    setSaving(true);
+    try {
+      const data =
+        item.data ??
+        (controller?.pdf
+          ? await extractEmbeddedAttachment(await controller.pdf.saveDocument(), item.name)
+          : undefined);
+      if (!data) throw new Error(`Could not extract attachment "${item.name}".`);
+      await downloadBlob(new Blob([data as unknown as BlobPart]), item.name);
+    } catch (err) {
+      s.set({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSaving(false);
     }
-    if (!controller?.pdf) return;
-    controller.pdf
-      .saveDocument()
-      .then(async (currentBytes) => {
-        const data = await extractEmbeddedAttachment(currentBytes, item.name);
-        if (data) {
-          downloadBlob(new Blob([data as unknown as BlobPart]), item.name);
-        } else {
-          s.set({ error: `Could not extract attachment "${item.name}".` });
-        }
-      })
-      .catch((err) => {
-        s.set({ error: err instanceof Error ? err.message : String(err) });
-      });
   };
 
   const handleDeleteAttachment = async (item: EmbeddedAttachmentSummary) => {

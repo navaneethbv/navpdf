@@ -53,9 +53,16 @@ export function ViewerHost({
       }
       if (!controller.pdf) return;
       // The first document is attached while this frame is hidden. Fit only
-      // once it has real dimensions, then preserve the user's zoom on resize.
+      // once it has real dimensions. Keep fit modes responsive to docked panels
+      // while preserving an explicitly chosen numeric zoom.
       if (needsFit || controller.viewer.currentScale <= 0) {
         controller.zoom(useWorkspace.getState().local.preferences.defaultZoom);
+      } else if (
+        ["auto", "page-fit", "page-width", "page-height"].includes(
+          controller.viewer.currentScaleValue,
+        )
+      ) {
+        controller.zoom(controller.viewer.currentScaleValue);
       }
       needsFit = false;
       controller.viewer.update();
