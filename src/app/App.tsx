@@ -7,6 +7,7 @@ import { ViewerHost } from "../features/viewer/ViewerHost";
 import { Sidebar } from "../features/viewer/Sidebar";
 import { Properties } from "../features/annotations/Properties";
 import { Home } from "../features/home/Home";
+import { GettingStarted } from "../features/help/GettingStarted";
 import { Settings } from "../features/settings/Settings";
 import { Dialog } from "../components/Dialog";
 import { RootErrorBoundary } from "../components/RootErrorBoundary";
@@ -68,7 +69,13 @@ export default function App() {
   useEffect(() => {
     function key(event: KeyboardEvent) {
       const state = useWorkspace.getState();
-      if (state.settingsOpen || session.password || session.confirm) return;
+      if (
+        state.settingsOpen ||
+        session.password ||
+        session.confirm ||
+        ["help", "tour", "tips"].includes(state.activeModal ?? "")
+      )
+        return;
       if (state.busy) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -157,7 +164,20 @@ export default function App() {
     let disposed = false;
     void listen<string>("menu-action", ({ payload }) => {
       const state = useWorkspace.getState();
+      if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
       switch (payload) {
+        case "tour":
+        case "tips":
+          if (
+            state.busy ||
+            state.settingsOpen ||
+            state.activeModal ||
+            session.password ||
+            session.confirm
+          )
+            return;
+          state.set({ activeModal: payload });
+          break;
         case "open":
           open();
           break;
@@ -301,6 +321,9 @@ export default function App() {
           e.target.value = "";
           if (file) session.open(file);
         }}
+      />
+      <GettingStarted
+        ready={session.preferencesReady && !!controller && !session.password && !session.confirm}
       />
       {s.settingsOpen && <Settings />}
       {session.password && (

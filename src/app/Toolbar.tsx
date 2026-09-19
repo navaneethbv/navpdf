@@ -29,6 +29,7 @@ import {
   Lock,
   RotateCw,
   Moon,
+  CircleHelp,
 } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
@@ -112,6 +113,15 @@ export function Toolbar({
           onClick={() => s.set({ quickRailVisible: !s.quickRailVisible })}
         >
           {s.quickRailVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+        <button
+          className="icon-button"
+          aria-label="Help and tips"
+          title="Help and tips"
+          disabled={s.busy}
+          onClick={() => s.set({ activeModal: "help" })}
+        >
+          <CircleHelp size={17} />
         </button>
         <button
           className="icon-button"

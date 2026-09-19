@@ -2765,3 +2765,55 @@ p {
   min-width: 0;
   font-family: monospace;
 }
+
+.guide-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+.guide-content {
+  padding: 8px 0 20px;
+  min-height: 255px;
+}
+.guide-icon {
+  display: inline-flex;
+  padding: 16px;
+  border-radius: 16px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.guide-progress {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 18px;
+}
+.guide-content h3 {
+  font-size: 23px;
+  line-height: 1.25;
+  margin: 8px 0 12px;
+}
+.guide-content p {
+  line-height: 1.6;
+}
+.guide-detail {
+  border-left: 3px solid var(--accent);
+  padding-left: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+.guide-actions span {
+  flex: 1;
+}
+.guide-help button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px;
+  margin-top: 12px;
+  text-align: left;
+}

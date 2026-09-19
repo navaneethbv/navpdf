@@ -41,6 +41,20 @@
     "shortDescription": "A private local PDF workspace",
     "macOS": {
       "minimumSystemVersion": "13.0"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "pdf"
+        ],
+        "contentTypes": [
+          "com.adobe.pdf"
+        ],
+        "name": "PDF Document",
+        "role": "Editor",
+        "rank": "Alternate",
+        "mimeType": "application/pdf"
+      }
+    ]
   }
 }

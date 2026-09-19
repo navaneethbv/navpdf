@@ -49,6 +49,8 @@ vi.mock("pdfjs-dist/legacy/web/pdf_viewer.mjs", () => ({
   SpreadMode: { ODD: 1, NONE: 0 },
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []), isTauri: () => true }));
+
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => () => {}),
 }));
@@ -56,7 +58,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../../src/services/native", () => ({
   native: true,
   localState: vi.fn(async () => ({
-    preferences: { ...defaultPreferences },
+    preferences: { ...defaultPreferences, tourCompleted: true, showStartupTips: false },
     recents: [],
     recoveries: [],
   })),

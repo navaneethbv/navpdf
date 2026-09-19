@@ -7,6 +7,18 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 19 native opening and getting started
+
+The [implementation plan](IMPLEMENTATION-PLAN-2026-09-19.md) addresses native file delivery and the requested tour and startup tips.
+PDF association metadata registers NavPDF as an alternate editor.
+Ordered native open requests survive renderer startup and wait for busy operations or dialogs; cancellation releases their opaque tokens.
+Multiple-file batches receive an explicit single-document message.
+A first-launch tour and seven tips are accessible from Help, with persisted tour completion and a startup-tip opt-out that Settings can reverse.
+Native testing found that Enter initially closed the tour; explicit post-open focus now targets Next or Dismiss.
+These changes do not close the existing conversion, interoperability or distribution gates.
+Current validation evidence is recorded in `docs/VERIFICATION.md`.
+The requested import, export discoverability and compression review follows this delivery.
+
 ## September 18 settings reliability and color themes
 
 The [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md) covers reproduced settings defects and the requested color palettes within Light and Dark modes.

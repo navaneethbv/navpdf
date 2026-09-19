@@ -1,5 +1,19 @@
 # Verification ledger
 
+## September 19 native opening, tour and tips
+
+The implementation adds an ordered native PDF-open queue, an alternate PDF association, first-launch guidance and startup-tip preferences.
+Local checks pass lint, TypeScript, formatting, production build, 581 frontend tests across 84 files, 87 Rust tests, Clippy with warnings denied, Rustfmt, instruction parity and diff whitespace checks.
+One existing constrained-volume Rust test remains ignored.
+Coverage is 83.89% statements, 75.97% branches, 81.62% functions and 86.72% lines.
+Native tests verified the first-launch tour, Help reopening, keyboard Enter and Back navigation, readable dialog layout, and tip opt-out persistence after relaunch.
+The initial native tour focused Close instead of Next; setting the autofocus attribute before showModal corrects that behavior without depending on a background animation frame.
+The pre-change Finder Open With menu omitted NavPDF; the rebuilt bundle now declares PDF content types with Editor role and Alternate rank.
+Finder cold-start and deferred-open acceptance is pending because concurrent user input interrupted the UI test.
+No first-render or broader PDF interoperability gate is claimed by these checks.
+The user authorized preserving their active edits before relaunch; the copy is output/reader-5-preserved-20260919.pdf, and independent Poppler text extraction confirmed the added text.
+Hosted checks and final artifact identifiers will be recorded before merge.
+
 ## September 15 PR #4 follow-up review fixes
 
 The follow-up to `3d2f611` corrects image transforms by converting the requested page-space matrix into the current image coordinate system.

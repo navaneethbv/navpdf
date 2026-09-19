@@ -6,6 +6,7 @@ import { useWorkspace } from "../stores/workspace";
 import * as desktop from "../services/native";
 import { loadPdf } from "../services/pdf";
 import type { DocumentDescriptor } from "../types/document";
+import { useNativeOpenRequests } from "./useNativeOpenRequests";
 import type { ViewerController } from "../features/viewer/controller";
 export function useDocumentSession(controller: ViewerController | null) {
   const [password, setPassword] = useState<{
@@ -13,6 +14,9 @@ export function useDocumentSession(controller: ViewerController | null) {
     reason: number;
     submit: (password: string) => void;
   } | null>(null);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const confirmationPending = useRef(false);
+  const confirmationCancelled = useRef<(() => void) | null>(null);
   const [confirm, setConfirm] = useState<(() => void) | null>(null);
   const task = useRef<PDFDocumentLoadingTask | null>(null),
     loading = useRef<PDFDocumentLoadingTask | null>(null),
@@ -30,15 +34,16 @@ export function useDocumentSession(controller: ViewerController | null) {
   useEffect(() => {
     void desktop
       .localState()
-      .then((local) =>
+      .then((local) => {
         useWorkspace.getState().set({
           local,
           layout: local.preferences.layout,
           highlightColor: local.preferences.annotationColor,
           inkColor: local.preferences.annotationColor,
           inkWidth: local.preferences.annotationStrokeWidth,
-        }),
-      )
+        });
+        setPreferencesReady(true);
+      })
       .catch(report);
   }, [report]);
   const refreshLocal = useCallback(async () => {
@@ -243,9 +248,11 @@ export function useDocumentSession(controller: ViewerController | null) {
     [controller, report, refreshLocal],
   );
   const guard = useCallback((action: () => void) => {
-    if (useWorkspace.getState().busy || lock.current) return;
-    if (useWorkspace.getState().dirty) setConfirm(() => action);
-    else action();
+    if (useWorkspace.getState().busy || lock.current || confirmationPending.current) return;
+    if (useWorkspace.getState().dirty) {
+      confirmationPending.current = true;
+      setConfirm(() => action);
+    } else action();
   }, []);
   const open = useCallback(
     (file?: File) =>
@@ -270,27 +277,44 @@ export function useDocumentSession(controller: ViewerController | null) {
       }),
     [guard, load, report],
   );
+  const canOpenToken = useCallback(() => {
+    const state = useWorkspace.getState();
+    return (
+      !state.busy &&
+      !state.settingsOpen &&
+      !state.activeModal &&
+      !lock.current &&
+      !pendingOpen.current &&
+      !confirmationPending.current
+    );
+  }, []);
   const openToken = useCallback(
-    (token: string) =>
-      guard(() => {
-        if (pendingOpen.current) {
-          useWorkspace.getState().set({
-            error: "Open is already in progress.",
-            status: "Open is already in progress.",
-          });
-          return;
-        }
-        pendingOpen.current = true;
-        void desktop
-          .openDocumentFromToken(token)
-          .then((descriptor) => load(descriptor))
-          .catch(report)
-          .finally(() => {
-            pendingOpen.current = false;
-          });
+    (token: string): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const finish = () => {
+          confirmationCancelled.current = null;
+          void invoke("dismiss_open_request", { token }).then(() => resolve(), reject);
+        };
+        const action = () => {
+          pendingOpen.current = true;
+          void desktop
+            .openDocumentFromToken(token)
+            .then((descriptor) => load(descriptor))
+            .catch(report)
+            .finally(() => {
+              pendingOpen.current = false;
+              finish();
+            });
+        };
+        if (useWorkspace.getState().dirty) {
+          confirmationPending.current = true;
+          confirmationCancelled.current = finish;
+          setConfirm(() => action);
+        } else action();
       }),
-    [guard, load, report],
+    [load, report],
   );
+  useNativeOpenRequests(!!controller && preferencesReady, canOpenToken, openToken, report);
   const recent = useCallback(
     (id: string, page: number) =>
       guard(() => {
@@ -339,22 +363,6 @@ export function useDocumentSession(controller: ViewerController | null) {
       }),
     [controller, guard, load, report],
   );
-  useEffect(() => {
-    if (!desktop.native) return;
-    let unlisten: (() => void) | undefined;
-    let disposed = false;
-    void listen<{ token?: string; error?: string }>("open-token", ({ payload }) => {
-      if (payload.error) report(payload.error);
-      else if (payload.token) openToken(payload.token);
-    }).then((fn) => {
-      if (disposed) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [openToken, report]);
   useEffect(() => {
     if (!desktop.native) return;
     const interval = setInterval(() => {
@@ -416,16 +424,25 @@ export function useDocumentSession(controller: ViewerController | null) {
     setPassword(null);
     void loading.current?.destroy();
   }, []);
-  const cancelConfirm = useCallback(() => setConfirm(null), []);
+  const cancelConfirm = useCallback(() => {
+    setConfirm(null);
+    confirmationPending.current = false;
+    confirmationCancelled.current?.();
+    confirmationCancelled.current = null;
+  }, []);
   const discardAndContinue = useCallback(() => {
     const action = confirm;
     setConfirm(null);
+    confirmationPending.current = false;
     action?.();
   }, [confirm]);
   const saveAndContinue = useCallback(async () => {
     const action = confirm;
     setConfirm(null);
+    // Keep incoming requests waiting while the save decision completes.
     if (await save()) action?.();
+    else confirmationCancelled.current?.();
+    confirmationPending.current = false;
   }, [confirm, save]);
 
   return useMemo(
@@ -438,6 +455,7 @@ export function useDocumentSession(controller: ViewerController | null) {
       load,
       report,
       refreshLocal,
+      preferencesReady,
       password,
       cancelPassword,
       confirm,
@@ -454,6 +472,7 @@ export function useDocumentSession(controller: ViewerController | null) {
       load,
       report,
       refreshLocal,
+      preferencesReady,
       password,
       cancelPassword,
       confirm,
