@@ -470,7 +470,9 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
         <button
           className="tool-view-more"
           aria-expanded={expanded}
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => {
+            setExpanded(!expanded);
+          }}
         >
           {expanded ? "View less" : "View more"}
         </button>

@@ -27,6 +27,19 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
     selectedId = useWorkspace((s) => s.selectedAnnotationId),
     set = useWorkspace((s) => s.set);
   const importInput = useRef<HTMLInputElement>(null);
+  const exportComments = async () => {
+    try {
+      const source = controller.exportComments();
+      const name = useWorkspace.getState().document?.name || "document.pdf";
+      const saved = await downloadBlob(
+        new Blob([source], { type: "application/json" }),
+        safeFileName(`${name.replace(/\.pdf$/i, "")}-comments.json`),
+      );
+      if (saved) set({ status: "Comments exported" });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error) });
+    }
+  };
   useEffect(() => {
     if (tab === "comments")
       void controller
@@ -81,18 +94,8 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
               type="button"
               className="button"
               disabled={comments.length === 0}
-              onClick={async () => {
-                try {
-                  const source = controller.exportComments();
-                  const name = useWorkspace.getState().document?.name || "document.pdf";
-                  const saved = await downloadBlob(
-                    new Blob([source], { type: "application/json" }),
-                    safeFileName(`${name.replace(/\.pdf$/i, "")}-comments.json`),
-                  );
-                  if (saved) set({ status: "Comments exported" });
-                } catch (error) {
-                  set({ error: error instanceof Error ? error.message : String(error) });
-                }
+              onClick={() => {
+                void exportComments();
               }}
             >
               <Download size={14} /> Export

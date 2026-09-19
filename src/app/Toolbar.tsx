@@ -362,7 +362,9 @@ export function NavigationRail({ controller }: ControllerProps) {
           aria-label="Page number"
           value={page}
           disabled={disabled}
-          onChange={(event) => setPage(event.target.value)}
+          onChange={(event) => {
+            setPage(event.target.value);
+          }}
           onBlur={commit}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
