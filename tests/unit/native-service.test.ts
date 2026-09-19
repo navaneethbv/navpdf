@@ -64,9 +64,16 @@ describe("native service browser fallback", () => {
   });
 
   it("persists preferences to localStorage with network access off", async () => {
-    await savePreferences({ ...defaultPreferences, theme: "dark" });
+    await savePreferences({
+      ...defaultPreferences,
+      theme: "dark",
+      lightPalette: "amber",
+      darkPalette: "ocean",
+    });
     const state = await localState();
     expect(state.preferences.theme).toBe("dark");
+    expect(state.preferences.lightPalette).toBe("amber");
+    expect(state.preferences.darkPalette).toBe("ocean");
     expect(state.preferences.networkAccess).toBe(false);
     expect(state.recents).toEqual([]);
     expect(state.recoveries).toEqual([]);
@@ -75,6 +82,14 @@ describe("native service browser fallback", () => {
   it("returns defaults when nothing is stored", async () => {
     const state = await localState();
     expect(state.preferences).toEqual(defaultPreferences);
+  });
+
+  it("preserves legacy preferences and defaults the new palette choices", async () => {
+    localStorage.setItem("navpdf-preferences", JSON.stringify({ theme: "dark" }));
+    const state = await localState();
+    expect(state.preferences.theme).toBe("dark");
+    expect(state.preferences.lightPalette).toBe("default");
+    expect(state.preferences.darkPalette).toBe("default");
   });
 
   it("no-ops native-only calls without throwing", async () => {

@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { listen } from "@tauri-apps/api/event";
+import { defaultPreferences } from "../../src/types/document";
 
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   AnnotationEditorType: { NONE: 0, HIGHLIGHT: 1, FREETEXT: 2, INK: 3 },
@@ -55,15 +56,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../../src/services/native", () => ({
   native: true,
   localState: vi.fn(async () => ({
-    preferences: {
-      theme: "system",
-      defaultZoom: "page-fit",
-      layout: "continuous",
-      rememberPage: true,
-      autosave: true,
-      recentFiles: true,
-      networkAccess: false,
-    },
+    preferences: { ...defaultPreferences },
     recents: [],
     recoveries: [],
   })),
@@ -138,6 +131,7 @@ beforeEach(() => {
   act(() => {
     useWorkspace.getState().set({
       busy: false,
+      settingsOpen: false,
       status: "Ready",
       error: "",
       sidebar: "pages",
@@ -149,6 +143,19 @@ beforeEach(() => {
 describe("App keyboard and menus", () => {
   it("applies the system theme preference", () => {
     render(<App />);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("keeps the Settings preview in control when system appearance changes", async () => {
+    const media = Object.assign(new EventTarget(), { matches: true });
+    vi.stubGlobal("matchMedia", () => media);
+    render(<App />);
+    await act(async () => {});
+    act(() => useWorkspace.getState().set({ settingsOpen: true }));
+    fireEvent.change(screen.getByLabelText(/Theme/), { target: { value: "light" } });
+    act(() => media.dispatchEvent(new Event("change")));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    fireEvent.click(screen.getByText("Cancel"));
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 

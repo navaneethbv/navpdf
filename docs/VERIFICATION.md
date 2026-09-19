@@ -532,3 +532,48 @@ The hosted Phase 10 checks then exposed more OpenSSL version drift because the r
 The script now uses the compatible `req -nodes` and `x509 -days 0` forms and checks the CMS process exit status.
 OpenSSL checks CMS and byte-range integrity with `-noverify`, while independent `pdfsig` checks the synthetic trust chain.
 Local Phase 10 acceptance passes 55 of 55 checks.
+
+### September 19, 2026 settings and theme verification
+
+Application source: `c93b9a119cbd3e5836243c213a7d9d6b0ef7ab63`, following the [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md).
+This change supplies 15 palettes per mode, independent saved defaults, custom background/accent overrides, and settings persistence and preview corrections.
+
+Local validation:
+
+- The full frontend suite passed 571 tests across 82 files, with 83.76% statement, 75.68% branch, 81.54% function and 86.57% line coverage.
+- After the final CSS transition correction, all 61 focused theme, contrast and settings tests passed again.
+- Lint, typecheck, formatting, production build, instruction-file parity and diff checks passed.
+- Rust tests passed 84 tests with the existing constrained-volume test ignored; Clippy passed with warnings denied.
+  The native source did not change after those checks.
+- Contrast checks cover all 30 preset combinations, including accent text, and extreme custom colors including white, black, yellow, orange and midtone gray.
+- Real temporary-directory write failures verify that failed settings and history writes preserve live state and existing saved data.
+  Frontend deferred-save tests cover duplicate submission, dismissal guards, retry, cancellation and system appearance events.
+
+Native acceptance used the rebuilt `src-tauri/target/release/bundle/macos/NavPDF.app` with a single running NavPDF process.
+The expected result was a centered, scrollable Settings dialog, immediate coherent color previews, readable labels, persisted independent colors after restart, and restoration of committed preferences on dismissal.
+Actual checks confirmed those results, including native palette menus with all 15 entries, Acrobat-inspired gray previews, white backgrounds with yellow controls, and dark blue backgrounds with orange controls.
+Native color pickers opened, and keyboard hex inputs successfully set exact custom values.
+Saving, quitting, relaunching and reopening Settings retained light `#ffffff`/`#ffff00` and dark `#102030`/`#ff8800` overrides.
+Reset controls cleared the test overrides, and the final saved state was restored to System with Default light and Ocean dark palettes.
+Escape and Cancel restored committed previews, and the app was left on its home screen.
+The native repaint regression was verified through button backgrounds and inherited home-screen text, with color transitions excluded while movement animations remain.
+
+The synthetic `tests/pdf-fixtures/reader-5.pdf` rendered its original white page, green document header and text in the themed workspace, with no document edits or saves.
+Fixture SHA-256: `07f9553aad1ec04bd6ab6a733e56d2c05117b01b52aa20fb2e7d26e5acd06098`.
+The initial PDF preview remained loading until returning from Settings, after which the page and thumbnails rendered; this check does not establish initial-render latency or broader viewer acceptance.
+PDF serialization and independent-reader interoperability were outside this appearance-only native check.
+OS appearance events were simulated in frontend tests; the macOS system setting itself was not changed.
+Native write-failure UI and pending-write latency were not injected into personal settings.
+
+`npm run package -- --verbose` produced both the app and DMG, and `hdiutil verify` reported a valid DMG checksum.
+The initial sandboxed packaging attempt could not access the disk-image service; packaging succeeded with the required native service access.
+Executable SHA-256: `6ae5f2d6fc74166e36d611055cb464e50e63784c488345f004c69d3193d02b60`.
+DMG SHA-256: `d78724998a68770ba596828a0e857d9e04fc8ebf12435589a959d63cb092b1cb`.
+The installer is `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
+
+Hosted validation and merge status are recorded on [PR 20](https://github.com/navaneethbv/navpdf/pull/20).
+The required Rust check name now aggregates successful Linux and macOS jobs without changing branch protection.
+SonarCloud's workflow skips analysis because `SONAR_TOKEN` is absent, so its green workflow result is not a passing analysis.
+The separate hosted review scan reports an unsupported service model; this is distinct from CodeQL and Codacy analysis.
+GitHub also reports an existing moderate advisory against transitive `glib` 0.18.5; this change does not alter that dependency or advisory policy.
+Signing, notarization, clean-account launch, physical printing, non-macOS native UI and broader PDF interoperability gates remain open.
