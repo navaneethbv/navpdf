@@ -39,7 +39,8 @@ Existing untracked files are outside this change.
 6. Run focused regressions, lint, typecheck, coverage, build, Rust tests, Clippy, formatting, instruction parity and diff checks.
    Inspect native dialog rendering, keyboard dismissal, save and reopen using the rebuilt package.
    Native baseline inspection also reproduced upper-left dialog positioning after the stylesheet reset; restore automatic margins and bounded scrolling.
-   Native preview testing found button backgrounds retaining the previous theme while text changed; verify custom button appearance across both transition directions.
+   Native preview testing found button backgrounds and inherited text retaining earlier colors.
+   Exclude theme colors from CSS transitions, avoid intermediate style reads, and verify both transition directions in the package.
 7. Record evidence and limits in the delivery tracker and verification ledger, publish a focused PR, inspect exact-head hosted checks and merge when required checks pass.
    GitHub protection requires the obsolete `Rust (test + clippy)` name; add an aggregate job under that name which requires successful Linux and macOS checks, preserving branch protection.
 

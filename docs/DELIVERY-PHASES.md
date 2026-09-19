@@ -13,7 +13,8 @@ The [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md) covers reproduced s
 Native preference saves and recent-history clearing now publish memory changes only after the atomic settings write succeeds.
 Settings saves are serialized, pending writes prevent dismissal, failed saves retain the draft, and successful saves avoid a second fallible state read.
 Theme previews own system appearance updates while Settings is open and restore committed preferences on dismissal.
-Preview changes no longer briefly restore the saved theme, which caused mismatched button colors in native WebKit rendering.
+Preview changes no longer briefly restore the saved theme.
+Theme colors change without CSS transitions or intermediate style reads, correcting stale button backgrounds and inherited text in native WebKit rendering.
 Each mode offers 15 palettes: Default (Forest), Acrobat Gray, Amber, Coral, Ocean, Violet, Midnight, Graphite, Rose, Crimson, Mint, Teal, Lime, Sepia and Slate.
 The Acrobat-inspired option uses neutral gray backgrounds and blue controls.
 Light and Dark remember separate palettes, existing preferences default to the original colors, and PDF page colors remain unchanged.

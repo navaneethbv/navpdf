@@ -517,9 +517,6 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--surface);
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
 }
 .night-mode .pdfViewer canvas {
   filter: invert(1) hue-rotate(180deg);
@@ -1617,7 +1614,7 @@ p {
   font-weight: 500;
   color: var(--muted);
   border-radius: 4px;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
 }
 .mode-tab:hover {
   color: var(--ink);
@@ -1703,7 +1700,6 @@ p {
   color: var(--ink);
   font-size: 13px;
   outline: none;
-  transition: border-color 0.15s ease;
 }
 .tool-search-box input:focus {
   border-color: var(--accent);
@@ -1724,7 +1720,7 @@ p {
   gap: 14px;
   text-align: left;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
 }
 .tool-card:hover:not(:disabled) {
   border-color: var(--accent);
@@ -1943,7 +1939,7 @@ p {
   font-size: 12px;
   font-weight: 500;
   color: var(--ink);
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
 }
 .tab-button:hover {
   border-color: var(--accent);
@@ -1973,7 +1969,6 @@ p {
   color: var(--ink);
   font-size: 13px;
   outline: none;
-  transition: border-color 0.15s ease;
 }
 .text-input:focus {
   border-color: var(--accent);
@@ -2011,7 +2006,7 @@ p {
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
 }
 .button-secondary:hover:not(:disabled) {
   background: var(--surface-2);
@@ -2139,7 +2134,7 @@ p {
   color: var(--ink);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: transform 0.12s ease;
 }
 .page-workspace-toolbar button:hover:not(:disabled) {
   background: var(--surface-2);
@@ -2223,7 +2218,7 @@ p {
   user-select: none;
   border-radius: 8px;
   padding: 8px;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
   outline: none;
 }
 .page-grid-item:hover .page-card-preview {
@@ -2254,7 +2249,7 @@ p {
   justify-content: center;
   box-shadow: 0 2px 6px var(--shadow-color);
   overflow: hidden;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
 }
 .page-card-placeholder {
   font-size: 13px;
@@ -2290,7 +2285,7 @@ p {
   border: 2px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
   user-select: none;
 }
 .page-card:hover {
@@ -2368,7 +2363,7 @@ p {
   background: transparent;
   border: none;
   color: var(--ink);
-  transition: all 0.12s ease;
+  transition: transform 0.12s ease;
 }
 .annotation-floating-toolbar button:hover {
   background: var(--surface-2);
@@ -2656,7 +2651,7 @@ p {
   font-weight: 500;
   text-align: center;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: transform 0.15s ease;
 }
 .stamp-button:hover {
   border-color: var(--accent);
