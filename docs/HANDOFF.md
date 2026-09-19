@@ -2,7 +2,7 @@
 
 ## September 19 workspace delivery
 
-Source `9a7fca2` implements the approved single-PDF reference layout, PNG/JPEG import, discoverable conversion/compression and native export saving.
+Source `6b7fd37` implements the approved single-PDF reference layout, PNG/JPEG import, discoverable conversion/compression and native export saving.
 The tour, tips and native-open delivery merged in PR 21; themes and custom overrides were delivered earlier.
 The verification ledger records local checks, exact artifacts, native menu/navigation/rendering checks, Word/PowerPoint interoperability and compressed/imported PDF reopen evidence.
 Compact native resizing remains unverified because the automation could not resize the window reliably.

@@ -2,19 +2,21 @@
 
 ## September 19 single-document workspace
 
-Application source: `9a7fca29a694f82f1da9eb7cb87581f3e2a9c729`.
+Application source: `6b7fd37`, including the callback cleanup after `9a7fca2`.
 Local checks pass lint, TypeScript, formatting, production build, 587 frontend tests across 85 files, 89 Rust tests, Clippy with warnings denied, Rustfmt, instruction parity and diff whitespace checks.
 The existing constrained-volume Rust test remains ignored.
-Coverage is 83.89% statements, 76.08% branches, 81.22% functions and 86.73% lines.
-Both the application and DMG built; hdiutil verified CRC32 `$D40BFF20`.
-Final executable SHA-256: `5101e83822cafc9eed861e7e6d5cd337325458caca383717031eeaf69b99dbb9`.
-Final DMG SHA-256: `182f697cfa9a104728a6cfe9b86ee6b38700e2a95d7a31ce7749a6969c049c3a`.
+Coverage is 83.89% statements, 76.08% branches, 81.23% functions and 86.73% lines.
+Both the application and DMG built; hdiutil verified CRC32 `$D7B69CB6`.
+Final executable SHA-256: `cf52f95151810a1ed7d2457c98414aba9c5b4f1b645ed8ec9349cca2e5ec2cb3`.
+Final DMG SHA-256: `7335fec58d53a4cbb12df1b23f63e1e0e9d08a6290eb3d427f150bb5a281c4b1`.
 
 Native inspection covered the document and mode bars, left tool list, markup rail, right page controls, opening/closing the pages panel, page-entry keyboard navigation, visible focus, light appearance, gray dark appearance and restored System/Default-light/Ocean-dark preferences.
 The default 1440 by 960 window was inspected; compact-window acceptance remains open because native edge drags did not resize the window and alternate edge coordinates returned windowNotFoundAtPosition.
 No compact-layout success is inferred from CSS breakpoints or unit tests.
 Opening the right panel initially clipped a fitted image page; the final bundle refits it correctly while retaining explicit numeric zoom behavior in the regression test.
-The final bundle reopens the saved image PDF with both page and thumbnail rendered.
+The page-fit bundle reopens the saved image PDF with both page and thumbnail rendered.
+The final callback-only cleanup bundle passed a fresh launch, startup-tip dismissal, expanded tool list and keyboard page-entry check.
+Export cancellation retained the Office dialog and the original reader page.
 
 Native Import selected a synthetic PNG, combined it into a PDF, saved a copy, closed and reopened it.
 Preview displayed the saved yellow page, and Poppler independently reported one 240 by 120 point page.
@@ -41,7 +43,7 @@ These fixture measurements are not a general compression-ratio claim.
 The user's preserved edited PDF remains unchanged at `output/reader-5-preserved-20260919.pdf`.
 The three pre-existing untracked root planning documents remain untouched.
 Signing, notarization, clean-account installation, physical printing, non-macOS UI and the separately tracked advanced capabilities remain open.
-Hosted checks and merge status are recorded in the workspace PR; Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
+Hosted checks and merge status are recorded in [PR 22](https://github.com/navaneethbv/navpdf/pull/22); Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
 
 ## September 19 native opening, tour and tips
 
