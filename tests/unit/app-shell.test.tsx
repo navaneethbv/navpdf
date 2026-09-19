@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { listen } from "@tauri-apps/api/event";
+import { defaultPreferences } from "../../src/types/document";
 
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   AnnotationEditorType: { NONE: 0, HIGHLIGHT: 1, FREETEXT: 2, INK: 3 },
@@ -55,15 +56,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../../src/services/native", () => ({
   native: true,
   localState: vi.fn(async () => ({
-    preferences: {
-      theme: "system",
-      defaultZoom: "page-fit",
-      layout: "continuous",
-      rememberPage: true,
-      autosave: true,
-      recentFiles: true,
-      networkAccess: false,
-    },
+    preferences: { ...defaultPreferences },
     recents: [],
     recoveries: [],
   })),

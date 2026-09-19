@@ -18,10 +18,15 @@ function readableText(background: string) {
 }
 
 function mix(a: string, b: string, fraction: number) {
-  const other = channels(b);
-  return `#${channels(a)
-    .map((channel, index) =>
-      Math.round(channel * (1 - fraction) + other[index] * fraction)
+  const [ar, ag, ab] = channels(a);
+  const [br, bg, bb] = channels(b);
+  return `#${[
+    [ar, br],
+    [ag, bg],
+    [ab, bb],
+  ]
+    .map(([left, right]) =>
+      Math.round(left * (1 - fraction) + right * fraction)
         .toString(16)
         .padStart(2, "0"),
     )

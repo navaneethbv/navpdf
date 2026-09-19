@@ -2764,3 +2764,11 @@ p {
   height: 32px;
   padding: 2px;
 }
+.custom-color-row .check-label {
+  flex: 1;
+}
+.dialog-body .custom-color-hex {
+  width: 84px;
+  min-width: 0;
+  font-family: monospace;
+}

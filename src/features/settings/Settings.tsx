@@ -15,16 +15,19 @@ export function Settings() {
   const { theme, lightPalette, darkPalette, lightOverrides, darkOverrides } = preferences;
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () =>
+    const apply = () => {
       applyTheme(theme, media.matches, {
         lightPalette,
         darkPalette,
         lightOverrides,
         darkOverrides,
       });
+    };
     apply();
     media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
+    return () => {
+      media.removeEventListener("change", apply);
+    };
   }, [theme, lightPalette, darkPalette, lightOverrides, darkOverrides]);
   useEffect(
     () => () => {
@@ -36,7 +39,9 @@ export function Settings() {
     },
     [],
   );
-  const patch = (value: Partial<Preferences>) => update({ ...preferences, ...value });
+  const patch = (value: Partial<Preferences>) => {
+    update({ ...preferences, ...value });
+  };
   const close = () => {
     if (!savePending.current) set({ settingsOpen: false });
   };
@@ -79,7 +84,9 @@ export function Settings() {
             <select
               id="settings-theme"
               value={preferences.theme}
-              onChange={(e) => patch({ theme: e.target.value as Preferences["theme"] })}
+              onChange={(e) => {
+                patch({ theme: e.target.value as Preferences["theme"] });
+              }}
             >
               <option value="system">System</option>
               <option value="light">Light</option>
@@ -94,10 +101,10 @@ export function Settings() {
             <label>
               Light palette
               <select
-                value={preferences.lightPalette ?? "default"}
-                onChange={(e) =>
-                  patch({ lightPalette: e.target.value as Preferences["lightPalette"] })
-                }
+                value={preferences.lightPalette}
+                onChange={(e) => {
+                  patch({ lightPalette: e.target.value as Preferences["lightPalette"] });
+                }}
               >
                 {colorPalettes.map((palette) => (
                   <option key={palette.value} value={palette.value}>
@@ -109,10 +116,10 @@ export function Settings() {
             <label>
               Dark palette
               <select
-                value={preferences.darkPalette ?? "default"}
-                onChange={(e) =>
-                  patch({ darkPalette: e.target.value as Preferences["darkPalette"] })
-                }
+                value={preferences.darkPalette}
+                onChange={(e) => {
+                  patch({ darkPalette: e.target.value as Preferences["darkPalette"] });
+                }}
               >
                 {colorPalettes.map((palette) => (
                   <option key={palette.value} value={palette.value}>
@@ -133,13 +140,17 @@ export function Settings() {
             </p>
             <CustomColors
               mode="Light"
-              value={lightOverrides ?? { background: null, accent: null }}
-              onChange={(value) => patch({ lightOverrides: value })}
+              value={lightOverrides}
+              onChange={(value) => {
+                patch({ lightOverrides: value });
+              }}
             />
             <CustomColors
               mode="Dark"
-              value={darkOverrides ?? { background: null, accent: null }}
-              onChange={(value) => patch({ darkOverrides: value })}
+              value={darkOverrides}
+              onChange={(value) => {
+                patch({ darkOverrides: value });
+              }}
             />
           </details>
           <h3>PDF viewing</h3>
@@ -148,7 +159,9 @@ export function Settings() {
               Default zoom
               <select
                 value={preferences.defaultZoom}
-                onChange={(e) => patch({ defaultZoom: e.target.value })}
+                onChange={(e) => {
+                  patch({ defaultZoom: e.target.value });
+                }}
               >
                 <option value="page-fit">Fit page</option>
                 <option value="page-width">Fit width</option>
@@ -161,7 +174,9 @@ export function Settings() {
               Page layout
               <select
                 value={preferences.layout}
-                onChange={(e) => patch({ layout: e.target.value as Preferences["layout"] })}
+                onChange={(e) => {
+                  patch({ layout: e.target.value as Preferences["layout"] });
+                }}
               >
                 <option value="continuous">Continuous</option>
                 <option value="single">Single page</option>
@@ -173,7 +188,9 @@ export function Settings() {
             <input
               type="checkbox"
               checked={preferences.rememberPage}
-              onChange={(e) => patch({ rememberPage: e.target.checked })}
+              onChange={(e) => {
+                patch({ rememberPage: e.target.checked });
+              }}
             />{" "}
             Remember last page
           </label>
@@ -182,9 +199,9 @@ export function Settings() {
             Default save behavior
             <select
               value={preferences.saveBehavior}
-              onChange={(e) =>
-                patch({ saveBehavior: e.target.value as Preferences["saveBehavior"] })
-              }
+              onChange={(e) => {
+                patch({ saveBehavior: e.target.value as Preferences["saveBehavior"] });
+              }}
             >
               <option value="ask">Ask before replacing a file</option>
               <option value="save-as">Always save a copy</option>
@@ -194,7 +211,9 @@ export function Settings() {
             <input
               type="checkbox"
               checked={preferences.confirmOnDelete}
-              onChange={(e) => patch({ confirmOnDelete: e.target.checked })}
+              onChange={(e) => {
+                patch({ confirmOnDelete: e.target.checked });
+              }}
             />{" "}
             Confirm before deleting pages or annotations
           </label>
@@ -202,7 +221,9 @@ export function Settings() {
             <input
               type="checkbox"
               checked={preferences.autosave}
-              onChange={(e) => patch({ autosave: e.target.checked })}
+              onChange={(e) => {
+                patch({ autosave: e.target.checked });
+              }}
             />{" "}
             Autosave recovery for unencrypted PDFs
           </label>
@@ -210,7 +231,9 @@ export function Settings() {
             <input
               type="checkbox"
               checked={preferences.recentFiles}
-              onChange={(e) => patch({ recentFiles: e.target.checked })}
+              onChange={(e) => {
+                patch({ recentFiles: e.target.checked });
+              }}
             />{" "}
             Keep recent document history
           </label>
@@ -225,7 +248,9 @@ export function Settings() {
               <input
                 type="color"
                 value={preferences.annotationColor}
-                onChange={(e) => patch({ annotationColor: e.target.value })}
+                onChange={(e) => {
+                  patch({ annotationColor: e.target.value });
+                }}
               />
             </label>
             <label>
@@ -236,11 +261,11 @@ export function Settings() {
                 max={20}
                 step={1}
                 value={preferences.annotationStrokeWidth}
-                onChange={(e) =>
+                onChange={(e) => {
                   patch({
                     annotationStrokeWidth: Math.max(1, Math.min(20, Number(e.target.value))),
-                  })
-                }
+                  });
+                }}
               />
             </label>
           </div>
@@ -250,7 +275,9 @@ export function Settings() {
               Default language
               <input
                 value={preferences.ocrLanguage}
-                onChange={(e) => patch({ ocrLanguage: e.target.value })}
+                onChange={(e) => {
+                  patch({ ocrLanguage: e.target.value });
+                }}
                 maxLength={16}
               />
             </label>
@@ -258,7 +285,9 @@ export function Settings() {
               Default page scope
               <select
                 value={preferences.ocrScope}
-                onChange={(e) => patch({ ocrScope: e.target.value as Preferences["ocrScope"] })}
+                onChange={(e) => {
+                  patch({ ocrScope: e.target.value as Preferences["ocrScope"] });
+                }}
               >
                 <option value="current">Current page</option>
                 <option value="all">All pages</option>

@@ -166,7 +166,7 @@ it("previews, cancels, saves and resets custom colors independently", async () =
   act(() => useWorkspace.getState().set({ settingsOpen: true }));
   fireEvent.click(screen.getByText("Custom background and accent colors"));
   fireEvent.click(screen.getByLabelText("Custom light accent"));
-  fireEvent.change(screen.getByLabelText("Light accent color"), { target: { value: "#ff8800" } });
+  fireEvent.change(screen.getByLabelText("Light accent hex"), { target: { value: "#ff8800" } });
   fireEvent.click(screen.getByLabelText("Custom dark background"));
   fireEvent.change(screen.getByLabelText("Dark background color"), {
     target: { value: "#102030" },
@@ -186,4 +186,17 @@ it("previews, cancels, saves and resets custom colors independently", async () =
   );
   fireEvent.click(screen.getByLabelText("Custom dark background"));
   expect((screen.getByLabelText("Dark background color") as HTMLInputElement).disabled).toBe(true);
+});
+
+it("allows incomplete hex edits while preventing invalid form submission", () => {
+  render(<SettingsHost />);
+  fireEvent.click(screen.getByText("Custom background and accent colors"));
+  fireEvent.click(screen.getByLabelText("Custom light accent"));
+  const hex = screen.getByLabelText("Light accent hex") as HTMLInputElement;
+  fireEvent.change(hex, { target: { value: "" } });
+  expect(hex.disabled).toBe(false);
+  expect(hex.checkValidity()).toBe(false);
+  fireEvent.change(hex, { target: { value: "#ff8800" } });
+  expect(hex.checkValidity()).toBe(true);
+  expect((screen.getByLabelText("Light accent color") as HTMLInputElement).value).toBe("#ff8800");
 });

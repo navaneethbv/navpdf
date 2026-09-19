@@ -1,4 +1,5 @@
 import type { ThemeOverrides } from "../../types/document";
+import { isThemeColor } from "../../services/theme-colors";
 
 export function CustomColors({
   mode,
@@ -16,31 +17,66 @@ export function CustomColors({
   return (
     <fieldset className="custom-colors">
       <legend>{mode} overrides</legend>
-      {(["background", "accent"] as const).map((key) => (
+      {[
+        {
+          key: "background",
+          color: value.background,
+          fallback: defaults.background,
+          change: (color: string | null) => {
+            onChange({ ...value, background: color });
+          },
+        },
+        {
+          key: "accent",
+          color: value.accent,
+          fallback: defaults.accent,
+          change: (color: string | null) => {
+            onChange({ ...value, accent: color });
+          },
+        },
+      ].map(({ key, color, fallback, change }) => (
         <div className="custom-color-row" key={key}>
           <label className="check-label">
             <input
               type="checkbox"
-              checked={Boolean(value[key])}
-              onChange={(event) =>
-                onChange({ ...value, [key]: event.target.checked ? defaults[key] : null })
-              }
+              checked={color !== null}
+              onChange={(event) => {
+                change(event.target.checked ? fallback : null);
+              }}
             />
             Custom {mode.toLowerCase()} {key}
           </label>
           <input
             type="color"
             aria-label={`${mode} ${key} color`}
-            disabled={!value[key]}
-            value={value[key] ?? defaults[key]}
-            onChange={(event) => onChange({ ...value, [key]: event.target.value })}
+            disabled={color === null}
+            value={isThemeColor(color) ? color : fallback}
+            onChange={(event) => {
+              change(event.target.value);
+            }}
+          />
+          <input
+            type="text"
+            className="custom-color-hex"
+            aria-label={`${mode} ${key} hex`}
+            placeholder="#rrggbb"
+            pattern="#[0-9a-fA-F]{6}"
+            maxLength={7}
+            required
+            disabled={color === null}
+            value={color ?? ""}
+            onChange={(event) => {
+              change(event.target.value);
+            }}
           />
         </div>
       ))}
       <button
         type="button"
-        disabled={!value.background && !value.accent}
-        onClick={() => onChange({ background: null, accent: null })}
+        disabled={value.background === null && value.accent === null}
+        onClick={() => {
+          onChange({ background: null, accent: null });
+        }}
       >
         Reset {mode.toLowerCase()} colors
       </button>
