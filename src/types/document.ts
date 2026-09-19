@@ -15,8 +15,11 @@ export interface SaveResult {
   name: string;
   size: number;
 }
+export type ColorPalette = "default" | "amber" | "coral" | "ocean" | "violet";
 export interface Preferences {
   theme: "system" | "light" | "dark";
+  lightPalette: ColorPalette;
+  darkPalette: ColorPalette;
   defaultZoom: string;
   layout: Layout;
   rememberPage: boolean;
@@ -93,6 +96,8 @@ export interface DocumentInfo {
 }
 export const defaultPreferences: Preferences = {
   theme: "system",
+  lightPalette: "default",
+  darkPalette: "default",
   defaultZoom: "page-fit",
   layout: "continuous",
   rememberPage: true,

@@ -28,6 +28,8 @@ use url::Url;
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
     pub theme: String,
+    pub light_palette: String,
+    pub dark_palette: String,
     pub default_zoom: String,
     pub layout: String,
     pub remember_page: bool,
@@ -45,6 +47,8 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             theme: "system".into(),
+            light_palette: "default".into(),
+            dark_palette: "default".into(),
             default_zoom: "page-fit".into(),
             layout: "continuous".into(),
             remember_page: true,
@@ -790,6 +794,12 @@ pub fn save_preferences(state: State<AppState>, preferences: Preferences) -> Res
 }
 
 fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result<(), String> {
+    const PALETTES: [&str; 5] = ["default", "amber", "coral", "ocean", "violet"];
+    if !PALETTES.contains(&preferences.light_palette.as_str())
+        || !PALETTES.contains(&preferences.dark_palette.as_str())
+    {
+        return Err("Invalid color palette.".into());
+    }
     if !["system", "light", "dark"].contains(&preferences.theme.as_str())
         || !["continuous", "single", "spread"].contains(&preferences.layout.as_str())
     {
@@ -1201,6 +1211,8 @@ mod tests {
         seed_recent(&state);
         let mut preferences = Preferences {
             theme: "dark".into(),
+            light_palette: "amber".into(),
+            dark_palette: "ocean".into(),
             network_access: true,
             ..Preferences::default()
         };
@@ -1208,6 +1220,8 @@ mod tests {
         let saved: LocalData =
             serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
         assert_eq!(saved.preferences.theme, "dark");
+        assert_eq!(saved.preferences.light_palette, "amber");
+        assert_eq!(saved.preferences.dark_palette, "ocean");
         assert!(!saved.preferences.network_access);
         assert_eq!(saved.recents.len(), 1);
         assert_eq!(
@@ -1226,6 +1240,33 @@ mod tests {
             serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
         assert!(saved.recents.is_empty());
         assert_eq!(saved.preferences.theme, "dark");
+    }
+
+    #[test]
+    fn legacy_preferences_default_palettes_and_invalid_palettes_preserve_storage() {
+        let legacy: LocalData =
+            serde_json::from_str(r#"{"preferences":{"theme":"light"},"recents":[]}"#).unwrap();
+        assert_eq!(legacy.preferences.theme, "light");
+        assert_eq!(legacy.preferences.light_palette, "default");
+        assert_eq!(legacy.preferences.dark_palette, "default");
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        persist_preferences(&state, legacy.preferences.clone()).unwrap();
+        let original = fs::read(root.path().join("settings.json")).unwrap();
+        for light in [true, false] {
+            let mut invalid = legacy.preferences.clone();
+            if light {
+                invalid.light_palette = "unknown".into();
+            } else {
+                invalid.dark_palette = "unknown".into();
+            }
+            assert!(persist_preferences(&state, invalid).is_err());
+            assert_eq!(
+                fs::read(root.path().join("settings.json")).unwrap(),
+                original
+            );
+            assert_eq!(state.local.lock().unwrap().preferences.theme, "light");
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-# Settings reliability implementation plan
+# Settings reliability and color themes implementation plan
 
 Baseline: `7074cc5` on `origin/main`.
 Requested order: review, plan, implementation, validation, PR and merge.
@@ -10,8 +10,10 @@ A failed write can therefore leave the running application using settings that w
 The dialog also permits repeated submissions and dismissal while saving.
 App and Settings independently apply the theme, and only App subscribes to system appearance changes, so an open preview can be replaced by the persisted theme.
 
-These concrete defects take priority over the conditional request for additional palettes.
-The existing System, Light and Dark choices remain the supported themes for this change.
+Fix the settings defects and add the requested color schemes within both Light and Dark modes.
+Preserve the current green scheme as Default and offer Amber, Coral, Ocean and Violet, each with coordinated backgrounds, text, borders and accents.
+Remember separate light and dark palette choices, including when System mode switches appearance.
+Theme changes affect application chrome only, leaving PDF paper and document colors intact.
 Broader missing capabilities and distribution gates remain in `docs/DELIVERY-PHASES.md`.
 Existing untracked files are outside this change.
 
@@ -24,10 +26,16 @@ Existing untracked files are outside this change.
    Apply the same transaction boundary to explicit recent-history clearing.
 3. Guard settings submission synchronously, disable editing and dismissal while the write is pending, retain the draft on errors, and publish the committed preferences without a second fallible state read.
 4. Give Settings ownership of theme preview while open, subscribe its draft to system appearance changes, and restore the saved preference when it closes.
-5. Run focused regressions, lint, typecheck, coverage, build, Rust tests, Clippy, formatting, instruction parity and diff checks.
+   Restore only on unmount, avoiding intermediate saved-theme flashes and the reproduced native button repaint defect.
+5. Add defaulted lightPalette and darkPalette preferences to frontend and native storage without changing existing settings behavior.
+   Validate palette identifiers natively and fall back to Default for unknown display values.
+   Add labeled Light palette and Dark palette selectors with immediate preview, and define light and dark token sets for each scheme.
+   Verify palette persistence, legacy settings compatibility, independent mode choices, cancellation, system-mode transitions and text/button contrast for all ten combinations.
+6. Run focused regressions, lint, typecheck, coverage, build, Rust tests, Clippy, formatting, instruction parity and diff checks.
    Inspect native dialog rendering, keyboard dismissal, save and reopen using the rebuilt package.
    Native baseline inspection also reproduced upper-left dialog positioning after the stylesheet reset; restore automatic margins and bounded scrolling.
-6. Record evidence and limits in the delivery tracker and verification ledger, publish a focused PR, inspect exact-head hosted checks and merge when required checks pass.
+   Native preview testing found button backgrounds retaining the previous theme while text changed; verify custom button appearance across both transition directions.
+7. Record evidence and limits in the delivery tracker and verification ledger, publish a focused PR, inspect exact-head hosted checks and merge when required checks pass.
    GitHub protection requires the obsolete `Rust (test + clippy)` name; add an aggregate job under that name which requires successful Linux and macOS checks, preserving branch protection.
 
 ## Acceptance criteria
@@ -37,5 +45,7 @@ Existing untracked files are outside this change.
 - Repeated submit attempts produce one write; Escape, close and Cancel cannot dismiss an in-flight save.
 - A save error leaves an editable draft and allows retry.
 - A system appearance change respects the current preview; Cancel restores the saved theme using the current system appearance.
+- Each mode retains its own palette across save and restart, and existing settings load Default palettes.
+- All palettes keep normal UI text and button labels at least 4.5:1 against their backgrounds, and leave PDF page colors unchanged.
 - Saving preferences updates workspace defaults while retaining current recovery and recent-document state, except an explicitly disabled recent history.
 - The final report distinguishes local checks, native UI evidence, hosted checks, merge status and outstanding release gates.

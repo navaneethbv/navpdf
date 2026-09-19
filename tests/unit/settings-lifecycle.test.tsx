@@ -26,6 +26,31 @@ function SettingsHost() {
   return useWorkspace((s) => s.settingsOpen) ? <Settings /> : null;
 }
 
+it("switches previews without briefly restoring the saved theme", () => {
+  useWorkspace.getState().set({
+    local: {
+      ...useWorkspace.getState().local,
+      preferences: { ...defaultPreferences, theme: "dark" },
+    },
+  });
+  render(<SettingsHost />);
+  fireEvent.change(screen.getByLabelText(/Theme/), { target: { value: "light" } });
+  const observer = new MutationObserver(() => {});
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+    attributeOldValue: true,
+  });
+  try {
+    fireEvent.change(screen.getByLabelText(/Theme/), { target: { value: "system" } });
+    const previousThemes = observer.takeRecords().map((record) => record.oldValue);
+    expect(previousThemes).not.toContain("dark");
+    expect(document.documentElement.dataset.theme).toBe("light");
+  } finally {
+    observer.disconnect();
+  }
+});
+
 it("tracks system appearance during a preview and restores the saved mode on Cancel", () => {
   render(<SettingsHost />);
   fireEvent.change(screen.getByLabelText(/Theme/), { target: { value: "dark" } });
@@ -103,4 +128,26 @@ it("clears visible recent history only after the privacy preference commits", as
   await vi.waitFor(() => expect(useWorkspace.getState().settingsOpen).toBe(false));
   expect(useWorkspace.getState().local.recents).toEqual([]);
   expect(useWorkspace.getState().local.preferences.recentFiles).toBe(false);
+});
+
+it("previews, cancels and persists independent Light and Dark palettes", async () => {
+  vi.mocked(savePreferences).mockResolvedValue(undefined);
+  render(<SettingsHost />);
+  fireEvent.change(screen.getByLabelText("Light palette"), { target: { value: "amber" } });
+  expect(document.documentElement.dataset.palette).toBe("amber");
+  fireEvent.change(screen.getByLabelText("Dark palette"), { target: { value: "ocean" } });
+  expect(document.documentElement.dataset.palette).toBe("amber");
+  fireEvent.change(screen.getByLabelText(/Theme/), { target: { value: "dark" } });
+  expect(document.documentElement.dataset.palette).toBe("ocean");
+  fireEvent.click(screen.getByText("Cancel"));
+  expect(document.documentElement.dataset.palette).toBe("default");
+  act(() => useWorkspace.getState().set({ settingsOpen: true }));
+  expect((screen.getByLabelText("Light palette") as HTMLSelectElement).value).toBe("default");
+  fireEvent.change(screen.getByLabelText("Light palette"), { target: { value: "coral" } });
+  fireEvent.change(screen.getByLabelText("Dark palette"), { target: { value: "violet" } });
+  fireEvent.click(screen.getByText("Save settings"));
+  await vi.waitFor(() => expect(useWorkspace.getState().settingsOpen).toBe(false));
+  act(() => useWorkspace.getState().set({ settingsOpen: true }));
+  expect((screen.getByLabelText("Light palette") as HTMLSelectElement).value).toBe("coral");
+  expect((screen.getByLabelText("Dark palette") as HTMLSelectElement).value).toBe("violet");
 });

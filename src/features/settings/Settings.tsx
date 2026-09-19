@@ -3,7 +3,7 @@ import { Dialog } from "../../components/Dialog";
 import { useWorkspace } from "../../stores/workspace";
 import { savePreferences } from "../../services/native";
 import type { Preferences } from "../../types/document";
-import { applyTheme } from "../../services/theme";
+import { applyTheme, colorPalettes } from "../../services/theme";
 export function Settings() {
   const initial = useWorkspace((s) => s.local.preferences),
     set = useWorkspace((s) => s.set);
@@ -11,16 +11,24 @@ export function Settings() {
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const savePending = useRef(false);
+  const { theme, lightPalette, darkPalette } = preferences;
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => applyTheme(preferences.theme, media.matches);
+    const apply = () => applyTheme(theme, media.matches, { lightPalette, darkPalette });
     apply();
     media.addEventListener("change", apply);
-    return () => {
-      media.removeEventListener("change", apply);
-      applyTheme(useWorkspace.getState().local.preferences.theme, media.matches);
-    };
-  }, [preferences.theme]);
+    return () => media.removeEventListener("change", apply);
+  }, [theme, lightPalette, darkPalette]);
+  useEffect(
+    () => () => {
+      applyTheme(
+        useWorkspace.getState().local.preferences.theme,
+        window.matchMedia("(prefers-color-scheme: dark)").matches,
+        useWorkspace.getState().local.preferences,
+      );
+    },
+    [],
+  );
   const patch = (value: Partial<Preferences>) => update({ ...preferences, ...value });
   const close = () => {
     if (!savePending.current) set({ settingsOpen: false });
@@ -75,6 +83,42 @@ export function Settings() {
               of the system setting.
             </span>
           </label>
+          <div className="form-columns">
+            <label>
+              Light palette
+              <select
+                value={preferences.lightPalette ?? "default"}
+                onChange={(e) =>
+                  patch({ lightPalette: e.target.value as Preferences["lightPalette"] })
+                }
+              >
+                {colorPalettes.map((palette) => (
+                  <option key={palette.value} value={palette.value}>
+                    {palette.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Dark palette
+              <select
+                value={preferences.darkPalette ?? "default"}
+                onChange={(e) =>
+                  patch({ darkPalette: e.target.value as Preferences["darkPalette"] })
+                }
+              >
+                {colorPalettes.map((palette) => (
+                  <option key={palette.value} value={palette.value}>
+                    {palette.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="muted">
+            Each mode remembers its own colors. Switch Theme to preview either palette. PDF pages
+            keep their original colors.
+          </p>
           <h3>PDF viewing</h3>
           <div className="form-columns">
             <label>

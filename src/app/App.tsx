@@ -53,11 +53,11 @@ export default function App() {
   useEffect(() => {
     if (s.settingsOpen) return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => applyTheme(s.local.preferences.theme, media.matches);
+    const apply = () => applyTheme(s.local.preferences.theme, media.matches, s.local.preferences);
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [s.local.preferences.theme, s.settingsOpen]);
+  }, [s.local.preferences, s.settingsOpen]);
   useEffect(() => {
     if (controller?.pdf) controller.setLayout(s.layout);
   }, [controller, s.layout]);

@@ -7,12 +7,15 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
-## September 18 settings reliability review
+## September 18 settings reliability and color themes
 
-The [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md) prioritizes reproduced settings defects over the conditional request for extra theme palettes.
+The [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md) covers reproduced settings defects and the requested color palettes within Light and Dark modes.
 Native preference saves and recent-history clearing now publish memory changes only after the atomic settings write succeeds.
 Settings saves are serialized, pending writes prevent dismissal, failed saves retain the draft, and successful saves avoid a second fallible state read.
 Theme previews own system appearance updates while Settings is open and restore committed preferences on dismissal.
+Preview changes no longer briefly restore the saved theme, which caused mismatched button colors in native WebKit rendering.
+Default preserves the existing green scheme; Amber, Coral, Ocean and Violet supply coordinated backgrounds and accents for each mode.
+Light and Dark remember separate palettes, existing preferences default to the original colors, and PDF page colors remain unchanged.
 Native inspection also found upper-left dialog positioning; shared dialogs now have automatic margins and bounded scrolling.
 CI adds the existing branch-protection check name as an aggregate requiring both Linux and macOS Rust jobs.
 This maintenance scope does not close the existing PDF interoperability or distribution gates below.
