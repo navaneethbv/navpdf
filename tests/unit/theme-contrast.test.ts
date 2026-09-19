@@ -67,7 +67,7 @@ it("keeps custom surfaces and button labels readable for extreme and midtone col
   ];
   for (const background of colors) {
     for (const accent of colors) {
-      const custom = customThemeTokens({ background, accent }, "#ffffff", "#1768c4");
+      const custom = customThemeTokens({ background, accent });
       for (const [fg, bg] of [
         ["ink", "surface"],
         ["ink", "surface-2"],
@@ -90,13 +90,7 @@ it("keeps custom surfaces and button labels readable for extreme and midtone col
   }
 });
 it("ignores malformed custom colors and supports each override independently", () => {
-  expect(
-    customThemeTokens({ background: "red", accent: "url(bad)" }, "#ffffff", "#1768c4"),
-  ).toEqual({});
-  expect(
-    customThemeTokens({ background: null, accent: "#abcdef" }, "#ffffff", "#1768c4"),
-  ).not.toHaveProperty("surface");
-  expect(
-    customThemeTokens({ background: "#AbCdEf", accent: null }, "#ffffff", "#1768c4"),
-  ).not.toHaveProperty("accent");
+  expect(customThemeTokens({ background: "red", accent: "url(bad)" })).toEqual({});
+  expect(customThemeTokens({ background: null, accent: "#abcdef" })).not.toHaveProperty("surface");
+  expect(customThemeTokens({ background: "#AbCdEf", accent: null })).not.toHaveProperty("accent");
 });

@@ -33,13 +33,8 @@ function mix(a: string, b: string, fraction: number) {
     .join("")}`;
 }
 
-export function customThemeTokens(
-  overrides: ThemeOverrides,
-  baseBackground: string,
-  baseAccent: string,
-) {
-  const background = isThemeColor(overrides.background) ? overrides.background : baseBackground;
-  const accent = isThemeColor(overrides.accent) ? overrides.accent : baseAccent;
+export function customThemeTokens(overrides: ThemeOverrides) {
+  const background = isThemeColor(overrides.background) ? overrides.background : "var(--surface)";
   const tokens: Record<string, string> = {};
   if (isThemeColor(overrides.background)) {
     const ink = readableText(background);
@@ -56,6 +51,7 @@ export function customThemeTokens(
     });
   }
   if (isThemeColor(overrides.accent)) {
+    const accent = overrides.accent;
     const onAccent = readableText(accent);
     Object.assign(tokens, {
       accent,

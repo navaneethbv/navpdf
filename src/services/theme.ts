@@ -57,13 +57,7 @@ export function applyTheme(
   for (const token of overrideTokens) root.style.removeProperty(`--${token}`);
   const overrides = resolved === "dark" ? palettes?.darkOverrides : palettes?.lightOverrides;
   if (overrides) {
-    const computed = getComputedStyle(root);
-    const tokens = customThemeTokens(
-      overrides,
-      computed.getPropertyValue("--surface").trim() ||
-        (resolved === "dark" ? "#151c18" : "#fbfaf7"),
-      computed.getPropertyValue("--accent").trim() || (resolved === "dark" ? "#9dd6b6" : "#2c7257"),
-    );
+    const tokens = customThemeTokens(overrides);
     for (const [token, value] of Object.entries(tokens))
       root.style.setProperty(`--${token}`, value);
   }
