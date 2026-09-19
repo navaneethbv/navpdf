@@ -2104,7 +2104,7 @@ export function sanitizeAttachmentFilename(filename: string): string {
   if (!filename) return "attachment.bin";
   let clean = Array.from(filename)
     .filter((ch) => {
-      const code = ch.codePointAt(0)!;
+      const code = ch.codePointAt(0) ?? 0;
       // Bidirectional overrides and isolates can disguise an extension ("txt.exe").
       const bidi = (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
       return code >= 32 && code !== 127 && !bidi;

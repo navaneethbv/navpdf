@@ -171,9 +171,7 @@ export function ViewerHost({
               void navigator.clipboard?.writeText(window.getSelection()?.toString() ?? "");
             if (id === "highlight" || id === "underline" || id === "strike")
               void controller
-                .addTextMarkup(
-                  markupType(id),
-                )
+                .addTextMarkup(markupType(id))
                 .catch((error: unknown) => useWorkspace.getState().set({ error: String(error) }));
             if (id === "note") useWorkspace.getState().set({ activeModal: "sticky-note" });
             if (id === "redact")

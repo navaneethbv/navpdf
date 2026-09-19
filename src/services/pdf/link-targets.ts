@@ -57,7 +57,11 @@ function resolveNamedDestination(doc: PDFDocument, name: string): PDFArray | nul
   return tree ? searchNameTree(tree, name) : null;
 }
 
-function resolveTargetPage(doc: PDFDocument, value: unknown, pages: Map<string, number>): number | null {
+function resolveTargetPage(
+  doc: PDFDocument,
+  value: unknown,
+  pages: Map<string, number>,
+): number | null {
   let destination = value;
   if (value instanceof PDFName) destination = resolveNamedDestination(doc, value.decodeText());
   else if (value instanceof PDFString || value instanceof PDFHexString) {
@@ -77,7 +81,12 @@ function internalDestination(annotation: PDFDict) {
   return kind?.asString() === "/GoTo" ? action?.lookup(PDFName.of("D")) : undefined;
 }
 
-function stripLinks(doc: PDFDocument, annotations: PDFArray, kept: Set<number>, pages: Map<string, number>) {
+function stripLinks(
+  doc: PDFDocument,
+  annotations: PDFArray,
+  kept: Set<number>,
+  pages: Map<string, number>,
+) {
   let removed = 0;
   for (let i = annotations.size() - 1; i >= 0; i--) {
     const annotation = annotations.lookup(i);

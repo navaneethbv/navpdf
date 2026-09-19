@@ -11,45 +11,50 @@ interface BoundedDecoder {
   getCode?: (...args: unknown[]) => number;
 }
 
-function boundedDecoder(stream: PDFRawStream, maxBytes: number, checkTime: () => void): BoundedDecoder {
-    const decoder = decodePDFRawStream(stream) as unknown as BoundedDecoder;
-    if (
-      !(decoder.buffer instanceof Uint8Array) ||
-      typeof decoder.ensureBuffer !== "function" ||
-      typeof decoder.decode !== "function"
-    ) {
-      throw new TypeError("The PDF stream decoder cannot enforce a size limit.");
-    }
-    // LZW and ASCII filters reserve ahead of their actual output. This fixed
-    // allowance preserves exact-boundary files without unbounded buffer growth.
-    const allocationLimit = maxBytes + 4096;
-    decoder.ensureBuffer = (length) => {
+function boundedDecoder(
+  stream: PDFRawStream,
+  maxBytes: number,
+  checkTime: () => void,
+): BoundedDecoder {
+  const decoder = decodePDFRawStream(stream) as unknown as BoundedDecoder;
+  if (
+    !(decoder.buffer instanceof Uint8Array) ||
+    typeof decoder.ensureBuffer !== "function" ||
+    typeof decoder.decode !== "function"
+  ) {
+    throw new TypeError("The PDF stream decoder cannot enforce a size limit.");
+  }
+  // LZW and ASCII filters reserve ahead of their actual output. This fixed
+  // allowance preserves exact-boundary files without unbounded buffer growth.
+  const allocationLimit = maxBytes + 4096;
+  decoder.ensureBuffer = (length) => {
+    checkTime();
+    if (!Number.isSafeInteger(length) || length < 0 || length > allocationLimit)
+      throw new Error("PDF stream exceeds the allowed decoded size.");
+    if (length <= decoder.buffer.length) return decoder.buffer;
+    const buffer = new Uint8Array(
+      Math.min(allocationLimit, Math.max(length, decoder.buffer.length * 2, 512)),
+    );
+    buffer.set(decoder.buffer);
+    decoder.buffer = buffer;
+    return buffer;
+  };
+  const readBlock = decoder.readBlock.bind(decoder);
+  decoder.readBlock = () => {
+    checkTime();
+    readBlock();
+    if (decoder.bufferLength > maxBytes)
+      throw new Error("PDF stream exceeds the allowed decoded size.");
+  };
+  // A malformed Flate block can loop without producing output or requesting a
+  // larger buffer. Its code reader must share the work deadline as well.
+  if (decoder.getCode) {
+    const getCode = decoder.getCode.bind(decoder);
+    decoder.getCode = (...args) => {
       checkTime();
-      if (!Number.isSafeInteger(length) || length < 0 || length > allocationLimit)
-        throw new Error("PDF stream exceeds the allowed decoded size.");
-      if (length <= decoder.buffer.length) return decoder.buffer;
-      const buffer = new Uint8Array(
-        Math.min(allocationLimit, Math.max(length, decoder.buffer.length * 2, 512)),
-      );
-      buffer.set(decoder.buffer);
-      decoder.buffer = buffer;
-      return buffer;
+      return getCode(...args);
     };
-    const readBlock = decoder.readBlock.bind(decoder);
-    decoder.readBlock = () => {
-      checkTime();
-      readBlock();
-      if (decoder.bufferLength > maxBytes) throw new Error("PDF stream exceeds the allowed decoded size.");
-    };
-    // A malformed Flate block can loop without producing output or requesting a
-    // larger buffer. Its code reader must share the work deadline as well.
-    if (decoder.getCode) {
-      const getCode = decoder.getCode.bind(decoder);
-      decoder.getCode = (...args) => {
-        checkTime();
-        return getCode(...args);
-      };
-    }
+  }
   return decoder;
 }
 

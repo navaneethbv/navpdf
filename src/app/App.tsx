@@ -253,11 +253,21 @@ export default function App() {
         return;
       }
       if (state.document) {
-        if (payload === "layout-single" || payload === "layout-continuous" || payload === "layout-spread") {
-          controller?.setLayout(payload.slice("layout-".length) as "single" | "continuous" | "spread");
+        if (
+          payload === "layout-single" ||
+          payload === "layout-continuous" ||
+          payload === "layout-spread"
+        ) {
+          controller?.setLayout(
+            payload.slice("layout-".length) as "single" | "continuous" | "spread",
+          );
           return;
         }
-        if (payload === "panel-pages" || payload === "panel-bookmarks" || payload === "panel-comments") {
+        if (
+          payload === "panel-pages" ||
+          payload === "panel-bookmarks" ||
+          payload === "panel-comments"
+        ) {
           state.set({
             sidebar: payload.slice("panel-".length) as "pages" | "bookmarks" | "comments",
             propertiesVisible: false,
@@ -518,7 +528,9 @@ export default function App() {
               <button type="button" className="button" onClick={session.cancelPassword}>
                 Cancel
               </button>
-              <button type="submit" className="button primary">Unlock PDF</button>
+              <button type="submit" className="button primary">
+                Unlock PDF
+              </button>
             </div>
           </form>
         </Dialog>

@@ -183,7 +183,9 @@ export function ExportDialog({
                 type="button"
                 className={format === "txt" ? "active" : ""}
                 aria-pressed={format === "txt"}
-                onClick={() => { setFormat("txt"); }}
+                onClick={() => {
+                  setFormat("txt");
+                }}
                 disabled={exporting}
               >
                 <FileText size={15} /> Plain Text (.txt)
@@ -192,7 +194,9 @@ export function ExportDialog({
                 type="button"
                 className={format === "png" ? "active" : ""}
                 aria-pressed={format === "png"}
-                onClick={() => { setFormat("png"); }}
+                onClick={() => {
+                  setFormat("png");
+                }}
                 disabled={exporting}
               >
                 <ImageIcon size={15} /> PNG Image
@@ -201,7 +205,9 @@ export function ExportDialog({
                 type="button"
                 className={format === "jpg" ? "active" : ""}
                 aria-pressed={format === "jpg"}
-                onClick={() => { setFormat("jpg"); }}
+                onClick={() => {
+                  setFormat("jpg");
+                }}
                 disabled={exporting}
               >
                 <ImageIcon size={15} /> JPEG Image
@@ -216,7 +222,9 @@ export function ExportDialog({
                 type="button"
                 className={scope === "all" ? "active" : ""}
                 aria-pressed={scope === "all"}
-                onClick={() => { setScope("all"); }}
+                onClick={() => {
+                  setScope("all");
+                }}
                 disabled={exporting}
               >
                 All Pages ({totalPages})
@@ -225,7 +233,9 @@ export function ExportDialog({
                 type="button"
                 className={scope === "current" ? "active" : ""}
                 aria-pressed={scope === "current"}
-                onClick={() => { setScope("current"); }}
+                onClick={() => {
+                  setScope("current");
+                }}
                 disabled={exporting}
               >
                 Current Page ({s.page})
@@ -234,7 +244,9 @@ export function ExportDialog({
                 type="button"
                 className={scope === "range" ? "active" : ""}
                 aria-pressed={scope === "range"}
-                onClick={() => { setScope("range"); }}
+                onClick={() => {
+                  setScope("range");
+                }}
                 disabled={exporting}
               >
                 Custom Range
@@ -245,7 +257,9 @@ export function ExportDialog({
                 type="text"
                 placeholder="e.g. 1-3, 5"
                 value={customRange}
-                onChange={(e) => { setCustomRange(e.target.value); }}
+                onChange={(e) => {
+                  setCustomRange(e.target.value);
+                }}
                 style={{ marginTop: "8px" }}
                 disabled={exporting}
               />
@@ -263,7 +277,9 @@ export function ExportDialog({
                   <button
                     type="button"
                     className={dpi === 72 ? "active" : ""}
-                    onClick={() => { setDpi(72); }}
+                    onClick={() => {
+                      setDpi(72);
+                    }}
                     disabled={exporting}
                   >
                     72 DPI (Draft)
@@ -271,7 +287,9 @@ export function ExportDialog({
                   <button
                     type="button"
                     className={dpi === 150 ? "active" : ""}
-                    onClick={() => { setDpi(150); }}
+                    onClick={() => {
+                      setDpi(150);
+                    }}
                     disabled={exporting}
                   >
                     150 DPI (Standard)
@@ -279,7 +297,9 @@ export function ExportDialog({
                   <button
                     type="button"
                     className={dpi === 300 ? "active" : ""}
-                    onClick={() => { setDpi(300); }}
+                    onClick={() => {
+                      setDpi(300);
+                    }}
                     disabled={exporting}
                   >
                     300 DPI (High Print)
@@ -299,7 +319,9 @@ export function ExportDialog({
                     max="1.0"
                     step="0.05"
                     value={quality}
-                    onChange={(e) => { setQuality(Number.parseFloat(e.target.value)); }}
+                    onChange={(e) => {
+                      setQuality(Number.parseFloat(e.target.value));
+                    }}
                     disabled={exporting}
                   />
                 </div>
@@ -395,9 +417,7 @@ async function exportSinglePageImage(options: RenderPageOptions): Promise<boolea
   const viewport = page.getViewport({ scale });
   const pixelArea = Math.ceil(viewport.width) * Math.ceil(viewport.height);
   if (pixelArea > MAX_EXPORT_PIXELS || viewport.width > 8192 || viewport.height > 8192) {
-    throw new Error(
-      `Export resolution too high: page ${pageNum} would exceed maximum dimensions.`,
-    );
+    throw new Error(`Export resolution too high: page ${pageNum} would exceed maximum dimensions.`);
   }
 
   const canvas = document.createElement("canvas");
@@ -418,7 +438,7 @@ async function exportSinglePageImage(options: RenderPageOptions): Promise<boolea
     const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
     if (!dataUrl) throw new Error("The image could not be exported.");
     const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
-    const imageBytes = Uint8Array.from(atob(encoded), (char) => (char.codePointAt(0) ?? 0));
+    const imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
     return await downloadBlob(
       new Blob([imageBytes], { type: mime }),
       `${baseName}-page-${pageNum}.${format}`,

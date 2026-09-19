@@ -160,7 +160,7 @@ export function OcrPanel({
           const dataUrl = canvas.toDataURL("image/png");
           const encoded = dataUrl.split(",")[1];
           if (!encoded) throw new Error("Unable to encode the OCR page.");
-          imageBytes = Uint8Array.from(atob(encoded), (char) => (char.codePointAt(0) ?? 0));
+          imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
         } finally {
           canvas.width = 0;
           canvas.height = 0;

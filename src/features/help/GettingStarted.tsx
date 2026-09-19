@@ -142,9 +142,7 @@ function GuideDialog({ mode }: Readonly<{ mode: "help" | "tour" | "tips" }>) {
             <span className="guide-icon" aria-hidden="true">
               <Icon size={30} />
             </span>
-            <p className="guide-progress">
-              {card.progress}
-            </p>
+            <p className="guide-progress">{card.progress}</p>
             <h3>{card.title}</h3>
             <p>{card.text}</p>
             {card.detail && <p className="guide-detail">{card.detail}</p>}

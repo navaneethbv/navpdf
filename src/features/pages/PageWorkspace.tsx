@@ -597,10 +597,23 @@ export function PageWorkspace({
             Page ranges (e.g. 1-2, 3-5):{" "}
             <input type="text" value={splitRange} onChange={(e) => setSplitRange(e.target.value)} />
           </label>
-          <button type="button" onClick={handleSplit} disabled={busy}>
+          <button
+            type="button"
+            onClick={() => {
+              void handleSplit();
+            }}
+            disabled={busy}
+          >
             {busy ? "Splitting..." : "Execute Split"}
           </button>
-          <button type="button" onClick={() => setShowSplit(false)}>Cancel</button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowSplit(false);
+            }}
+          >
+            Cancel
+          </button>
         </div>
       )}
 

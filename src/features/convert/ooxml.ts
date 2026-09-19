@@ -134,9 +134,9 @@ export function escapeXml(text: string) {
   return Array.from(text)
     .filter(isXmlCharacter)
     .join("")
-    .replaceAll('&', "&amp;")
-    .replaceAll('<', "&lt;")
-    .replaceAll('>', "&gt;")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
 
