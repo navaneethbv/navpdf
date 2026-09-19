@@ -15,7 +15,22 @@ export interface SaveResult {
   name: string;
   size: number;
 }
-export type ColorPalette = "default" | "amber" | "coral" | "ocean" | "violet";
+export type ColorPalette =
+  | "default"
+  | "amber"
+  | "coral"
+  | "ocean"
+  | "violet"
+  | "acrobat"
+  | "midnight"
+  | "graphite"
+  | "rose"
+  | "crimson"
+  | "mint"
+  | "teal"
+  | "lime"
+  | "sepia"
+  | "slate";
 export interface Preferences {
   theme: "system" | "light" | "dark";
   lightPalette: ColorPalette;

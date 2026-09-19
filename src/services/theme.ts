@@ -7,6 +7,16 @@ export const colorPalettes: { value: ColorPalette; label: string }[] = [
   { value: "coral", label: "Coral · Warm orange" },
   { value: "ocean", label: "Ocean · Coastal blue" },
   { value: "violet", label: "Violet · Soft purple" },
+  { value: "acrobat", label: "Acrobat · Neutral gray" },
+  { value: "midnight", label: "Midnight · Indigo" },
+  { value: "graphite", label: "Graphite · Monochrome" },
+  { value: "rose", label: "Rose · Soft pink" },
+  { value: "crimson", label: "Crimson · Ruby red" },
+  { value: "mint", label: "Mint · Fresh green" },
+  { value: "teal", label: "Teal · Lagoon" },
+  { value: "lime", label: "Lime · Citrus green" },
+  { value: "sepia", label: "Sepia · Warm paper" },
+  { value: "slate", label: "Slate · Blue gray" },
 ];
 
 export function resolveTheme(theme: ThemePreference, systemDark: boolean) {

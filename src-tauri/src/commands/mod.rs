@@ -794,7 +794,10 @@ pub fn save_preferences(state: State<AppState>, preferences: Preferences) -> Res
 }
 
 fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result<(), String> {
-    const PALETTES: [&str; 5] = ["default", "amber", "coral", "ocean", "violet"];
+    const PALETTES: [&str; 15] = [
+        "default", "amber", "coral", "ocean", "violet", "acrobat", "midnight", "graphite", "rose",
+        "crimson", "mint", "teal", "lime", "sepia", "slate",
+    ];
     if !PALETTES.contains(&preferences.light_palette.as_str())
         || !PALETTES.contains(&preferences.dark_palette.as_str())
     {

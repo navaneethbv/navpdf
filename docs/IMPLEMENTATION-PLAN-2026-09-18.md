@@ -11,7 +11,9 @@ The dialog also permits repeated submissions and dismissal while saving.
 App and Settings independently apply the theme, and only App subscribes to system appearance changes, so an open preview can be replaced by the persisted theme.
 
 Fix the settings defects and add the requested color schemes within both Light and Dark modes.
-Preserve the current green scheme as Default and offer Amber, Coral, Ocean and Violet, each with coordinated backgrounds, text, borders and accents.
+Offer exactly 15 palettes in each mode: Default (Forest), Acrobat Gray, Amber, Coral, Ocean, Violet, Midnight, Graphite, Rose, Crimson, Mint, Teal, Lime, Sepia and Slate.
+Each has coordinated backgrounds, text, borders and accents.
+Acrobat Gray follows the neutral light-gray and dark-gray appearance described in [Adobe's display theme documentation](https://helpx.adobe.com/acrobat/desktop/get-started/preferences-and-settings/change-display.html), with blue controls; it is an inspired palette rather than a claim of exact proprietary color values.
 Remember separate light and dark palette choices, including when System mode switches appearance.
 Theme changes affect application chrome only, leaving PDF paper and document colors intact.
 Broader missing capabilities and distribution gates remain in `docs/DELIVERY-PHASES.md`.
@@ -30,7 +32,7 @@ Existing untracked files are outside this change.
 5. Add defaulted lightPalette and darkPalette preferences to frontend and native storage without changing existing settings behavior.
    Validate palette identifiers natively and fall back to Default for unknown display values.
    Add labeled Light palette and Dark palette selectors with immediate preview, and define light and dark token sets for each scheme.
-   Verify palette persistence, legacy settings compatibility, independent mode choices, cancellation, system-mode transitions and text/button contrast for all ten combinations.
+   Verify palette persistence, legacy settings compatibility, independent mode choices, cancellation, system-mode transitions and text/button contrast for all 30 combinations.
 6. Run focused regressions, lint, typecheck, coverage, build, Rust tests, Clippy, formatting, instruction parity and diff checks.
    Inspect native dialog rendering, keyboard dismissal, save and reopen using the rebuilt package.
    Native baseline inspection also reproduced upper-left dialog positioning after the stylesheet reset; restore automatic margins and bounded scrolling.

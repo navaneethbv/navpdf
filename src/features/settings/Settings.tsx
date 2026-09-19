@@ -116,8 +116,8 @@ export function Settings() {
             </label>
           </div>
           <p className="muted">
-            Each mode remembers its own colors. Switch Theme to preview either palette. PDF pages
-            keep their original colors.
+            Save settings to make these palettes your defaults. Each mode remembers its own colors.
+            Switch Theme to preview either palette. PDF pages keep their original colors.
           </p>
           <h3>PDF viewing</h3>
           <div className="form-columns">

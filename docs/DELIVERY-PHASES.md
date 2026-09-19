@@ -14,7 +14,8 @@ Native preference saves and recent-history clearing now publish memory changes o
 Settings saves are serialized, pending writes prevent dismissal, failed saves retain the draft, and successful saves avoid a second fallible state read.
 Theme previews own system appearance updates while Settings is open and restore committed preferences on dismissal.
 Preview changes no longer briefly restore the saved theme, which caused mismatched button colors in native WebKit rendering.
-Default preserves the existing green scheme; Amber, Coral, Ocean and Violet supply coordinated backgrounds and accents for each mode.
+Each mode offers 15 palettes: Default (Forest), Acrobat Gray, Amber, Coral, Ocean, Violet, Midnight, Graphite, Rose, Crimson, Mint, Teal, Lime, Sepia and Slate.
+The Acrobat-inspired option uses neutral gray backgrounds and blue controls.
 Light and Dark remember separate palettes, existing preferences default to the original colors, and PDF page colors remain unchanged.
 Native inspection also found upper-left dialog positioning; shared dialogs now have automatic margins and bounded scrolling.
 CI adds the existing branch-protection check name as an aggregate requiring both Linux and macOS Rust jobs.

@@ -50,3 +50,8 @@ describe("theme preferences", () => {
     expect(document.documentElement.dataset.palette).toBe("default");
   });
 });
+
+it("offers 15 distinct palettes for either mode", () => {
+  expect(colorPalettes).toHaveLength(15);
+  expect(new Set(colorPalettes.map(({ value }) => value)).size).toBe(15);
+});
