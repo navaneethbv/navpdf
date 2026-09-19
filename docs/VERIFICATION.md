@@ -1,5 +1,50 @@
 # Verification ledger
 
+## September 19 single-document workspace
+
+Application source: `6b7fd37`, including the callback cleanup after `9a7fca2`.
+Local checks pass lint, TypeScript, formatting, production build, 587 frontend tests across 85 files, 89 Rust tests, Clippy with warnings denied, Rustfmt, instruction parity and diff whitespace checks.
+The existing constrained-volume Rust test remains ignored.
+Coverage is 83.89% statements, 76.08% branches, 81.23% functions and 86.73% lines.
+Both the application and DMG built; hdiutil verified CRC32 `$D7B69CB6`.
+Final executable SHA-256: `cf52f95151810a1ed7d2457c98414aba9c5b4f1b645ed8ec9349cca2e5ec2cb3`.
+Final DMG SHA-256: `7335fec58d53a4cbb12df1b23f63e1e0e9d08a6290eb3d427f150bb5a281c4b1`.
+
+Native inspection covered the document and mode bars, left tool list, markup rail, right page controls, opening/closing the pages panel, page-entry keyboard navigation, visible focus, light appearance, gray dark appearance and restored System/Default-light/Ocean-dark preferences.
+The default 1440 by 960 window was inspected; compact-window acceptance remains open because native edge drags did not resize the window and alternate edge coordinates returned windowNotFoundAtPosition.
+No compact-layout success is inferred from CSS breakpoints or unit tests.
+Opening the right panel initially clipped a fitted image page; the final bundle refits it correctly while retaining explicit numeric zoom behavior in the regression test.
+The page-fit bundle reopens the saved image PDF with both page and thumbnail rendered.
+The final callback-only cleanup bundle passed a fresh launch, startup-tip dismissal, expanded tool list and keyboard page-entry check.
+Export cancellation retained the Office dialog and the original reader page.
+
+Native Import selected a synthetic PNG, combined it into a PDF, saved a copy, closed and reopened it.
+Preview displayed the saved yellow page, and Poppler independently reported one 240 by 120 point page.
+Artifact: `output/workspace-native-import.pdf`, SHA-256 `ad195175fa4931b24c9748fa080b646320e689a933609ebfc5b4590bd3bda435`.
+Integration coverage also composes PNG and JPEG pages and verifies dimensions and image operators through PDF.js after reload.
+Malformed headers, excessive dimensions and oversized files are rejected before decoding.
+
+The native Office export reproduction hung the main thread inside WebKit's download sandbox-extension issuance.
+The process sample is `output/navpdf-export-sample.txt`; the clean synthetic reader session was force-quit through Activity Monitor.
+The replacement native Save dialog successfully saved DOCX, PPTX and a 1274 by 1649 PNG without the freeze.
+These export and compression workflows ran in executable `68542a2be310ed6dc80e65bfa67b4a0b0e5b0a82e059ddaef5a078fdbfd5c82a`, before the final page-fit-only correction.
+Microsoft Word opened the DOCX and displayed its text, and Microsoft PowerPoint opened five slides without a repair prompt.
+Independent ZIP integrity and XML parsing verified all five page markers in both Office outputs.
+DOCX: `output/workspace-native-export.docx`, SHA-256 `1de65cd6bea53e3abd17f245d0b9fbff4210804fad2402dfdc5e6d34fa4554fb`.
+PPTX: `output/workspace-native-export.pptx`, SHA-256 `f911159c32a39d3442bc68a2b827f5aa6d88c6a711b4f368d17b2f69391bf76d`.
+The editable formats preserve reconstructed text, not original PDF drawings or exact Office formatting.
+
+Balanced compression on the synthetic image-heavy fixture measured 7,489,070 bytes before and 46,665 bytes after, with three pages, three image placements and zero text differences.
+The saved copy reopened in NavPDF and Preview, showing the expected text and image.
+Artifact: `output/native-p7p8/workspace-compressed-20260919.pdf`, SHA-256 `7877297776c811cfa1053b574fb56846e297307af3368920cc5f242b8507440b`.
+The 5,314-byte reader fixture would grow to 7,578 bytes, so the tool correctly retained the original.
+These fixture measurements are not a general compression-ratio claim.
+
+The user's preserved edited PDF remains unchanged at `output/reader-5-preserved-20260919.pdf`.
+The three pre-existing untracked root planning documents remain untouched.
+Signing, notarization, clean-account installation, physical printing, non-macOS UI and the separately tracked advanced capabilities remain open.
+Hosted checks and merge status are recorded in [PR 22](https://github.com/navaneethbv/navpdf/pull/22); Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
+
 ## September 19 native opening, tour and tips
 
 The implementation adds an ordered native PDF-open queue, an alternate PDF association, first-launch guidance and startup-tip preferences.
@@ -21,7 +66,7 @@ The rebuilt executable SHA-256 is `4d2cc1c80b0ecaf24236721349a27a42d70b3aa7bbf97
 The DMG SHA-256 is `c1f921403258e67ace0046fb8bdb8e213a14417b6c0c3f8e489b3e9d90e81414`; hdiutil verified CRC32 `$934E5A4C`.
 [PR 21](https://github.com/navaneethbv/navpdf/pull/21) records hosted checks and merge status.
 Codacy, CodeQL, frontend, Rust and native acceptance passed on the application commit.
-NPM Audit encountered registry HTTP 503 maintenance and is being retried; Sonar analysis remains skipped without SONAR_TOKEN.
+NPM Audit passed after registry maintenance cleared, and PR 21 merged as `13109e3`; Sonar analysis remains skipped without SONAR_TOKEN.
 Signing, notarization, clean-account installation, physical printing and non-macOS UI acceptance remain separate gates.
 
 ## September 15 PR #4 follow-up review fixes

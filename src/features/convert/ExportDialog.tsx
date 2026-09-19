@@ -86,7 +86,13 @@ export function ExportDialog({
       if (cancelled.current) return;
 
       const fullText = textChunks.join("\n");
-      downloadBlob(new Blob([fullText], { type: "text/plain;charset=utf-8" }), `${baseName}.txt`);
+      if (
+        !(await downloadBlob(
+          new Blob([fullText], { type: "text/plain;charset=utf-8" }),
+          `${baseName}.txt`,
+        ))
+      )
+        return;
       s.set({
         status:
           targetIndices.length === totalPages
@@ -150,10 +156,15 @@ export function ExportDialog({
         try {
           const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
           if (!dataUrl) throw new Error("The image could not be exported.");
-          const a = document.createElement("a");
-          a.href = dataUrl;
-          a.download = `${baseName}-page-${pageNum}.${format}`;
-          a.click();
+          const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
+          const imageBytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+          if (
+            !(await downloadBlob(
+              new Blob([imageBytes], { type: mime }),
+              `${baseName}-page-${pageNum}.${format}`,
+            ))
+          )
+            return;
         } catch (error) {
           if (error instanceof Error && error.message === "The image could not be exported.") {
             throw error;

@@ -31,6 +31,18 @@ describe("ToolPanel", () => {
     expect(screen.queryByText("Organize Pages")).toBeNull();
   });
 
+  it("expands the reference tool list and opens the requested Office format", () => {
+    useWorkspace.getState().set({ document: { id: "d", name: "d.pdf", size: 10 } });
+    render(<ToolPanel mode="all" onClose={() => {}} />);
+    expect(screen.queryByText("PowerPoint (.pptx)")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View more" }));
+    fireEvent.click(screen.getByRole("button", { name: "PowerPoint (.pptx)" }));
+    expect(useWorkspace.getState().activeModal).toBe("office-pptx");
+    fireEvent.click(screen.getByRole("button", { name: "View less" }));
+    expect(screen.queryByText("PowerPoint (.pptx)")).toBeNull();
+    expect(screen.queryByText(/assistant|Find and Cite/i)).toBeNull();
+  });
+
   it("disables document tools when no document is open", () => {
     render(<ToolPanel mode="all" onClose={() => {}} />);
     expect(
@@ -57,7 +69,7 @@ describe("ToolPanel", () => {
       document: { id: "d", name: "d.pdf", size: 10 },
     });
     render(<ToolPanel mode="esign" onClose={onClose} />);
-    fireEvent.click(screen.getByText("Fill & Sign Yourself"));
+    fireEvent.click(screen.getByRole("button", { name: "Fill & Sign" }));
     expect(useWorkspace.getState().activeModal).toBe("fill-sign");
     expect(onClose).toHaveBeenCalled();
   });

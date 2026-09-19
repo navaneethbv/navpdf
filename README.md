@@ -14,7 +14,9 @@ See [the implementation review](docs/PR-1-REVIEW.md) for historical limitations 
 
 Available features:
 
-- Native Open, Save, and Save As dialogs, plus queued Finder Open With and single-file drag-and-drop.
+- A single-document tab, left tool panel, floating markup tools, right navigation rail, and organized native menus.
+- Native Open, Save, Save As, and export dialogs, plus queued Finder Open With and single-file drag-and-drop.
+- Import and combine PDFs, PNGs, and JPEGs, with ordered pages and bounded image validation.
 - A first-launch tour, seven startup tips, a saved tip opt-out, and Help access to both.
 - Continuous, single-page, and two-page viewing.
 - Fit page, fit width, 25% to 500% zoom, trackpad zoom, and a hand tool.
@@ -26,7 +28,7 @@ Available features:
 - Underline, strike-through, sticky notes, ink, free text, shapes, arrows, comments, page operations, forms, Fill & Sign, content placement, decorations, links, and attachments.
 - Offline OCR, searchable text layers, plain-text/image exports, DOCX/XLSX/PPTX/RTF exports, existing-object editing, AES-256 protection, measured compression, permanent redaction, and local certificate signatures.
 - Password prompts for reading encrypted PDFs.
-- Light, dark, and system themes, viewing preferences, and optional local recent history.
+- Light, dark, and system appearance with 15 palettes per mode, custom background and accent overrides, and optional local recent history.
 - Validated atomic saves, external-change detection, private recovery copies, and unsaved-change prompts.
 
 Encrypted documents remain read-only until the user explicitly unlocks them for editing.
@@ -37,6 +39,11 @@ Image-only scans display normally and can use local Apple Vision OCR on macOS to
 Browser preview and other platforms report OCR unavailable.
 Searchable export supports standard-font characters; other recognized text can be extracted without modifying the PDF.
 See [the PR 2 corrective review](docs/PR-2-REVIEW.md) for reopened acceptance gates and remaining capability gaps.
+
+Office exports reconstruct editable text from the PDF text layer; PowerPoint can alternatively preserve each page as a picture.
+Office-to-PDF import requires saving a PDF from the original Office application.
+PNG and JPEG imports are limited to 25 MB, 32 megapixels and 16,384 pixels per edge.
+Native exports ask for a destination and retain the active document on cancellation or write failure.
 
 ## Getting started
 

@@ -206,7 +206,7 @@ export function PageWorkspace({
     try {
       const currentBytes = await controller.pdf.saveDocument();
       const extractedBytes = await extractPages(currentBytes, selected);
-      downloadBytes(extractedBytes, "extracted-pages.pdf");
+      if (!(await downloadBytes(extractedBytes, "extracted-pages.pdf"))) return;
       s.set({ status: "Pages extracted" });
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -309,7 +309,9 @@ export function PageWorkspace({
       const ranges = splitRange.split(",").map((range) => parsePageRange(range, totalPages));
       const currentBytes = await controller.pdf.saveDocument();
       const files = await splitDocument(currentBytes, ranges);
-      files.forEach((fileBytes, i) => downloadBytes(fileBytes, `split-part-${i + 1}.pdf`));
+      for (const [i, fileBytes] of files.entries()) {
+        if (!(await downloadBytes(fileBytes, `split-part-${i + 1}.pdf`))) return;
+      }
       setShowSplit(false);
       s.set({ status: `Document split into ${files.length} parts` });
     } catch (err) {

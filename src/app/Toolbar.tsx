@@ -16,104 +16,70 @@ import {
   Plus,
   Scan,
   MoveHorizontal,
-  ChevronLeft,
-  ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Search,
   Home,
   Settings,
-  ShieldCheck,
   Download,
   Eye,
   EyeOff,
-  Layers,
-  Lock,
   RotateCw,
   Moon,
   CircleHelp,
+  X,
+  Files,
+  Bookmark,
+  MessageSquare,
+  Info,
+  Ellipsis,
 } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
 import type { Layout, ToolMode } from "../types/document";
 
+type ControllerProps = { controller: ViewerController | null };
 export function Toolbar({
-  controller,
   open,
   save,
   home,
-}: {
-  controller: ViewerController | null;
+}: ControllerProps & {
   open: () => void;
   save: (as: boolean) => void;
   home: () => void;
 }) {
-  const s = useWorkspace(),
-    disabled = !s.document || s.busy;
-
-  const toggleMode = (m: ToolMode) => {
-    s.set({ toolMode: s.toolMode === m ? null : m });
-  };
-
+  const s = useWorkspace();
+  const disabled = !s.document || s.busy;
+  const toggleMode = (mode: ToolMode) => s.set({ toolMode: s.toolMode === mode ? null : mode });
   return (
     <>
-      <header className="titlebar">
-        <button className="brand" onClick={home} aria-label="NavPDF home">
-          <span>N</span>NavPDF
+      <header className="document-bar">
+        <button className="icon-button" onClick={home} aria-label="NavPDF home" title="Home">
+          <Home size={21} />
         </button>
-        <span className="titlebar-divider" />
-        <nav className="mode-nav-tabs" aria-label="Tool modes">
-          <button
-            className={`mode-tab ${s.toolMode === "all" ? "active" : ""}`}
-            aria-pressed={s.toolMode === "all"}
-            onClick={() => toggleMode("all")}
-          >
-            All tools
-          </button>
-          <button
-            className={`mode-tab ${s.toolMode === "edit" ? "active" : ""}`}
-            aria-pressed={s.toolMode === "edit"}
-            onClick={() => toggleMode("edit")}
-          >
-            Edit
-          </button>
-          <button
-            className={`mode-tab ${s.toolMode === "convert" ? "active" : ""}`}
-            aria-pressed={s.toolMode === "convert"}
-            onClick={() => toggleMode("convert")}
-          >
-            Convert
-          </button>
-          <button
-            className={`mode-tab ${s.toolMode === "esign" ? "active" : ""}`}
-            aria-pressed={s.toolMode === "esign"}
-            onClick={() => toggleMode("esign")}
-          >
-            E-Sign
-          </button>
-          <button
-            className={`mode-tab ${s.toolMode === "create" ? "active" : ""}`}
-            aria-pressed={s.toolMode === "create"}
-            onClick={() => toggleMode("create")}
-          >
-            Create
-          </button>
-        </nav>
-        <span className="titlebar-divider" />
-        <div className="document-title">
-          {s.document?.name || "Local workspace"}
+        <div className={`document-tab ${s.document ? "is-open" : ""}`}>
+          <Files size={17} />
+          <span>{s.document?.name || "NavPDF"}</span>
           {s.dirty && <span className="dirty-indicator" title="Unsaved changes" />}
+          {s.document && (
+            <button
+              className="icon-button"
+              onClick={home}
+              disabled={s.busy}
+              aria-label="Close document"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
-        <div className="titlebar-space" />
-        <span className="privacy-label">
-          <ShieldCheck size={15} /> On your device
-        </span>
         <button
-          className="icon-button"
-          aria-label="Toggle Quick Tool Rail"
-          title={s.quickRailVisible ? "Hide quick rail" : "Show quick rail"}
-          onClick={() => s.set({ quickRailVisible: !s.quickRailVisible })}
+          className="create-button"
+          disabled={s.busy}
+          onClick={() => s.set({ activeModal: "create-pdf" })}
         >
-          {s.quickRailVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+          <Plus size={18} /> Create
         </button>
+        <div className="toolbar-space" />
         <button
           className="icon-button"
           aria-label="Help and tips"
@@ -121,340 +87,418 @@ export function Toolbar({
           disabled={s.busy}
           onClick={() => s.set({ activeModal: "help" })}
         >
-          <CircleHelp size={17} />
+          <CircleHelp size={20} />
         </button>
         <button
           className="icon-button"
           aria-label="Settings"
+          title="Settings"
+          disabled={s.busy}
           onClick={() => s.set({ settingsOpen: true })}
         >
-          <Settings size={17} />
+          <Settings size={19} />
         </button>
       </header>
-
-      {s.quickRailVisible && (
-        <div className="main-toolbar" role="toolbar" aria-label="PDF tools">
-          <div className="toolbar-group">
-            <button title="Open (⌘O)" aria-label="Open PDF" onClick={open} disabled={s.busy}>
-              <FolderOpen size={18} />
-              <span>Open</span>
-            </button>
+      <div className="workspace-commandbar">
+        <nav className="workspace-modes" aria-label="Tool modes">
+          {(
+            [
+              ["all", "All tools"],
+              ["edit", "Edit"],
+              ["convert", "Convert"],
+              ["esign", "E-Sign"],
+            ] as const
+          ).map(([mode, label]) => (
             <button
-              title="Save (⌘S)"
-              aria-label="Save PDF"
-              onClick={() => save(false)}
-              disabled={disabled || s.info?.encrypted}
+              key={mode}
+              aria-pressed={s.toolMode === mode}
+              className={s.toolMode === mode ? "active" : ""}
+              disabled={s.busy}
+              onClick={() => toggleMode(mode)}
             >
-              <Save size={18} />
-              <span>Save</span>
+              {label}
             </button>
-            <button
-              title="Save As (⌘⇧S)"
-              aria-label="Save PDF As"
-              onClick={() => save(true)}
-              disabled={disabled || s.info?.encrypted}
-            >
-              <Download size={18} />
-            </button>
-          </div>
-          <div className="toolbar-group">
-            <button
-              aria-label="Undo"
-              disabled={disabled || !s.canUndo}
-              onClick={() => controller?.undo()}
-            >
-              <Undo2 size={17} />
-            </button>
-            <button
-              aria-label="Redo"
-              disabled={disabled || !s.canRedo}
-              onClick={() => controller?.redo()}
-            >
-              <Redo2 size={17} />
-            </button>
-          </div>
-          <div className="toolbar-group">
-            <button
-              aria-label="Select text"
-              aria-pressed={s.tool === "select"}
-              className={s.tool === "select" ? "active" : ""}
-              disabled={disabled}
-              onClick={() => controller?.setTool("select")}
-            >
-              <MousePointer2 size={18} />
-              <span>Select</span>
-            </button>
-            <button
-              aria-label="Hand tool"
-              aria-pressed={s.tool === "hand"}
-              className={s.tool === "hand" ? "active" : ""}
-              disabled={disabled}
-              onClick={() => controller?.setTool("hand")}
-            >
-              <Hand size={18} />
-            </button>
-            <button
-              aria-label="Highlight text"
-              aria-pressed={s.tool === "highlight"}
-              className={s.tool === "highlight" ? "active" : ""}
-              disabled={disabled || s.info?.encrypted}
-              onClick={() => controller?.setTool("highlight")}
-            >
-              <Highlighter size={18} />
-              <span>Highlight</span>
-            </button>
-            <button
-              aria-label="Ink & Draw"
-              aria-pressed={s.tool === "draw"}
-              className={s.tool === "draw" ? "active" : ""}
-              disabled={disabled}
-              onClick={() => s.set({ tool: "draw", activeModal: "annotations" })}
-            >
-              <PenTool size={18} />
-            </button>
-            <button
-              aria-label="Add Text"
-              aria-pressed={s.tool === "text"}
-              className={s.tool === "text" ? "active" : ""}
-              disabled={disabled}
-              onClick={() => s.set({ tool: "text", activeModal: "add-text" })}
-            >
-              <Type size={18} />
-            </button>
-            <button
-              aria-label="Fill & Sign"
-              aria-pressed={s.tool === "signature"}
-              className={s.tool === "signature" ? "active" : ""}
-              disabled={disabled}
-              onClick={() => {
-                s.set({ activeModal: "fill-sign", tool: "signature" });
-                controller?.setTool("signature");
-              }}
-            >
-              <PenLine size={18} />
-            </button>
-            <button
-              aria-label="Snapshot region"
-              aria-pressed={s.activeSnapshot}
-              className={s.activeSnapshot ? "active" : ""}
-              disabled={disabled}
-              onClick={() => {
-                s.set({ activeSnapshot: true, tool: "snapshot" });
-                controller?.setTool("snapshot");
-              }}
-            >
-              <Camera size={18} />
-            </button>
-            <button
-              aria-label="Organize Pages"
-              disabled={disabled}
-              onClick={() => s.set({ activeModal: "page-workspace" })}
-            >
-              <Layers size={18} />
-            </button>
-            <button
-              aria-label="Print Document"
-              disabled={disabled}
-              onClick={() => s.set({ activeModal: "print" })}
-            >
-              <Printer size={18} />
-            </button>
-          </div>
-          <div className="toolbar-group zoom-controls">
-            <button
-              aria-label="Zoom out"
-              disabled={disabled || s.zoom <= 25}
-              onClick={() => controller?.zoom(s.zoom / 100 / 1.15)}
-            >
-              <Minus size={16} />
-            </button>
-            <select
-              aria-label="Zoom percentage"
-              value={s.zoom}
-              disabled={disabled}
-              onChange={(e) => controller?.zoom(Number(e.target.value) / 100)}
-            >
-              {[...new Set([25, 50, 75, 100, 125, 150, 200, 300, 400, 500, s.zoom])]
-                .sort((a, b) => a - b)
-                .map((n) => (
-                  <option value={n} key={n}>
-                    {n}%
-                  </option>
-                ))}
-            </select>
-            <button
-              aria-label="Zoom in"
-              disabled={disabled || s.zoom >= 500}
-              onClick={() => controller?.zoom((s.zoom / 100) * 1.15)}
-            >
-              <Plus size={16} />
-            </button>
-            <button
-              aria-label="Fit width"
-              title="Fit width"
-              disabled={disabled}
-              onClick={() => controller?.zoom("page-width")}
-            >
-              <MoveHorizontal size={18} />
-            </button>
-            <button
-              aria-label="Fit page"
-              title="Fit page (⌘0)"
-              disabled={disabled}
-              onClick={() => controller?.zoom("page-fit")}
-            >
-              <Scan size={18} />
-            </button>
-          </div>
-          <div className="toolbar-space" />
-          <div className="toolbar-group">
-            <select
-              aria-label="Page layout"
-              disabled={disabled}
-              value={s.layout}
-              onChange={(e) => controller?.setLayout(e.target.value as Layout)}
-            >
-              <option value="continuous">Continuous</option>
-              <option value="single">Single page</option>
-              <option value="spread">Two pages</option>
-            </select>
-            <button
-              aria-label="Rotate view clockwise"
-              title="Rotate view clockwise"
-              disabled={disabled}
-              onClick={() => controller?.rotateView(90)}
-            >
-              <RotateCw size={17} />
-            </button>
-            <button
-              aria-label={s.nightMode ? "Disable night mode" : "Enable night mode"}
-              title="Night mode"
-              disabled={disabled}
-              onClick={() => s.set({ nightMode: !s.nightMode })}
-            >
-              <Moon size={17} />
-            </button>
-            <button
-              aria-label={s.readMode ? "Exit read mode" : "Enter read mode"}
-              title="Read mode"
-              disabled={disabled}
-              onClick={() => s.set({ readMode: !s.readMode })}
-            >
-              <Eye size={17} />
-            </button>
-            <button
-              aria-label="Find in PDF"
-              title="Find (⌘F)"
-              disabled={disabled}
-              onClick={() => s.set({ sidebar: "search" })}
-            >
-              <Search size={18} />
-            </button>
-            <button aria-label="Close document" disabled={disabled} onClick={home}>
-              <Home size={17} />
-            </button>
-          </div>
+          ))}
+        </nav>
+        <div className="toolbar-space" />
+        <button
+          className="workspace-find"
+          aria-label="Find in PDF"
+          disabled={disabled}
+          onClick={() => s.set({ sidebar: "search" })}
+        >
+          <span>Find text in this PDF</span>
+          <Search size={20} />
+        </button>
+        <div className="command-actions" role="toolbar" aria-label="File actions">
+          <button
+            className="icon-button"
+            title="Open (⌘O)"
+            aria-label="Open PDF"
+            disabled={s.busy}
+            onClick={open}
+          >
+            <FolderOpen size={21} />
+          </button>
+          <button
+            className="icon-button"
+            title="Save (⌘S)"
+            aria-label="Save PDF"
+            disabled={disabled || s.info?.encrypted}
+            onClick={() => save(false)}
+          >
+            <Save size={21} />
+          </button>
+          <button
+            className="icon-button"
+            title="Save As (⌘⇧S)"
+            aria-label="Save PDF As"
+            disabled={disabled || s.info?.encrypted}
+            onClick={() => save(true)}
+          >
+            <Download size={21} />
+          </button>
+          <button
+            className="icon-button"
+            title="Print"
+            aria-label="Print Document"
+            disabled={disabled}
+            onClick={() => s.set({ activeModal: "print" })}
+          >
+            <Printer size={21} />
+          </button>
+          <button
+            className="export-button"
+            disabled={disabled}
+            onClick={() => s.set({ activeModal: "export-options" })}
+          >
+            Export PDF
+          </button>
         </div>
-      )}
+        <button
+          className="icon-button read-mode-exit"
+          aria-label="Exit read mode"
+          onClick={() => s.set({ readMode: false })}
+        >
+          <Eye size={20} />
+        </button>
+      </div>
     </>
   );
 }
-export function Statusbar({ controller }: { controller: ViewerController | null }) {
+
+export function QuickToolRail({ controller }: ControllerProps) {
   const s = useWorkspace();
-  const pageInputRef = useRef<HTMLInputElement>(null);
-  const [pageInputValue, setPageInputValue] = useState(String(s.page));
+  const disabled = !s.document || s.busy;
+  const readOnly = disabled || !s.editingAllowed || !!s.info?.encrypted;
+  if (!s.quickRailVisible) return null;
+  return (
+    <div className="quick-tool-rail" role="toolbar" aria-label="PDF tools">
+      <span className="rail-grip" aria-hidden="true" />
+      <button
+        title="Select text"
+        aria-label="Select text"
+        aria-pressed={s.tool === "select"}
+        disabled={disabled}
+        onClick={() => controller?.setTool("select")}
+      >
+        <MousePointer2 size={24} />
+      </button>
+      <button
+        title="Add a comment"
+        aria-label="Add a comment"
+        disabled={readOnly}
+        onClick={() => s.set({ activeModal: "sticky-note" })}
+      >
+        <MessageSquare size={23} />
+      </button>
+      <button
+        title="Highlight text"
+        aria-label="Highlight text"
+        aria-pressed={s.tool === "highlight"}
+        disabled={readOnly}
+        onClick={() => controller?.setTool("highlight")}
+      >
+        <Highlighter size={24} />
+      </button>
+      <button
+        title="Ink & Draw"
+        aria-label="Ink & Draw"
+        aria-pressed={s.tool === "draw"}
+        disabled={readOnly}
+        onClick={() => s.set({ tool: "draw", activeModal: "annotations" })}
+      >
+        <PenTool size={24} />
+      </button>
+      <button
+        title="Add Text"
+        aria-label="Add Text"
+        aria-pressed={s.tool === "text"}
+        disabled={readOnly}
+        onClick={() => s.set({ tool: "text", activeModal: "add-text" })}
+      >
+        <Type size={24} />
+      </button>
+      <button
+        title="Fill & Sign"
+        aria-label="Fill & Sign"
+        aria-pressed={s.tool === "signature"}
+        disabled={readOnly}
+        onClick={() => {
+          s.set({ activeModal: "fill-sign", tool: "signature" });
+          controller?.setTool("signature");
+        }}
+      >
+        <PenLine size={24} />
+      </button>
+      <button
+        title="Snapshot region"
+        aria-label="Snapshot region"
+        aria-pressed={s.activeSnapshot}
+        disabled={disabled}
+        onClick={() => {
+          s.set({ activeSnapshot: true, tool: "snapshot" });
+          controller?.setTool("snapshot");
+        }}
+      >
+        <Camera size={24} />
+      </button>
+      <details className="rail-more">
+        <summary aria-label="More quick tools" title="More quick tools">
+          <Ellipsis size={24} />
+        </summary>
+        <div className="rail-popover">
+          <button
+            aria-label="Hand tool"
+            aria-pressed={s.tool === "hand"}
+            disabled={disabled}
+            onClick={() => controller?.setTool("hand")}
+          >
+            <Hand size={18} /> Hand tool
+          </button>
+          <button
+            aria-label="Undo"
+            disabled={disabled || !s.canUndo}
+            onClick={() => controller?.undo()}
+          >
+            <Undo2 size={18} /> Undo
+          </button>
+          <button
+            aria-label="Redo"
+            disabled={disabled || !s.canRedo}
+            onClick={() => controller?.redo()}
+          >
+            <Redo2 size={18} /> Redo
+          </button>
+          <button aria-label="Hide quick tools" onClick={() => s.set({ quickRailVisible: false })}>
+            <EyeOff size={18} /> Hide quick tools
+          </button>
+        </div>
+      </details>
+    </div>
+  );
+}
 
+export function NavigationRail({ controller }: ControllerProps) {
+  const s = useWorkspace();
+  const disabled = !s.document || s.busy;
+  const pageInput = useRef<HTMLInputElement>(null);
+  const [page, setPage] = useState(String(s.page));
   useEffect(() => {
-    if (document.activeElement !== pageInputRef.current)
-      setPageInputValue(s.pageLabels?.[s.page - 1] ?? String(s.page));
+    if (document.activeElement !== pageInput.current)
+      setPage(s.pageLabels?.[s.page - 1] ?? String(s.page));
   }, [s.page, s.pageLabels]);
-
-  const commitPageInput = () => {
-    if (!pageInputValue.trim()) {
-      setPageInputValue(String(s.page));
+  const commit = () => {
+    if (!page.trim()) {
+      setPage(String(s.page));
       return;
     }
-    if (controller?.goToPage) {
-      controller.goToPage(pageInputValue);
-    } else {
-      const page = Number(pageInputValue);
-      if (Number.isFinite(page)) controller?.goTo(page);
-    }
+    if (controller?.goToPage) controller.goToPage(page);
+    else if (Number.isFinite(Number(page))) controller?.goTo(Number(page));
   };
+  return (
+    <aside className="navigation-rail" aria-label="Page and view controls">
+      <div className="rail-panels">
+        {(
+          [
+            { id: "comments", label: "Comments", icon: MessageSquare },
+            { id: "bookmarks", label: "Bookmarks", icon: Bookmark },
+            { id: "pages", label: "Pages", icon: Files },
+            { id: "search", label: "Search", icon: Search },
+          ] as const
+        ).map((item) => (
+          <button
+            key={item.id}
+            title={item.label}
+            aria-label={`Show ${item.label.toLowerCase()}`}
+            aria-pressed={s.navigationVisible && s.sidebar === item.id}
+            disabled={disabled}
+            onClick={() =>
+              s.set({
+                sidebar: item.id,
+                navigationVisible: !(s.navigationVisible && s.sidebar === item.id),
+                propertiesVisible: false,
+              })
+            }
+          >
+            <item.icon size={23} />
+          </button>
+        ))}
+        <button
+          title="Document properties"
+          aria-label="Show document properties"
+          disabled={disabled}
+          aria-pressed={s.propertiesVisible}
+          onClick={() =>
+            s.set({ propertiesVisible: !s.propertiesVisible, navigationVisible: false })
+          }
+        >
+          <Info size={23} />
+        </button>
+      </div>
+      <div className="rail-navigation">
+        <input
+          ref={pageInput}
+          aria-label="Page number"
+          value={page}
+          disabled={disabled}
+          onChange={(event) => {
+            setPage(event.target.value);
+          }}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              commit();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        <span title="Total pages">{s.info?.pages ?? 0}</span>
+        <button
+          title="Previous page"
+          aria-label="Previous page"
+          disabled={disabled || s.page <= 1}
+          onClick={() => controller?.goTo(s.page - 1)}
+        >
+          <ChevronUp size={23} />
+        </button>
+        <button
+          title="Next page"
+          aria-label="Next page"
+          disabled={disabled || s.page >= (s.info?.pages ?? 0)}
+          onClick={() => controller?.goTo(s.page + 1)}
+        >
+          <ChevronDown size={23} />
+        </button>
+        <hr />
+        <button
+          title="Rotate view clockwise"
+          aria-label="Rotate view clockwise"
+          disabled={disabled}
+          onClick={() => controller?.rotateView(90)}
+        >
+          <RotateCw size={23} />
+        </button>
+        <button
+          title="Fit page (⌘0)"
+          aria-label="Fit page"
+          disabled={disabled}
+          onClick={() => controller?.zoom("page-fit")}
+        >
+          <Scan size={23} />
+        </button>
+        <button
+          title="Zoom in"
+          aria-label="Zoom in"
+          disabled={disabled || s.zoom >= 500}
+          onClick={() => controller?.zoom((s.zoom / 100) * 1.15)}
+        >
+          <Plus size={23} />
+        </button>
+        <button
+          title="Zoom out"
+          aria-label="Zoom out"
+          disabled={disabled || s.zoom <= 25}
+          onClick={() => controller?.zoom(s.zoom / 100 / 1.15)}
+        >
+          <Minus size={23} />
+        </button>
+        <details className="rail-more">
+          <summary aria-label="More view options" title="More view options">
+            <Ellipsis size={22} />
+          </summary>
+          <div className="rail-popover view-options">
+            <label>
+              Zoom
+              <select
+                aria-label="Zoom percentage"
+                value={s.zoom}
+                onChange={(e) => controller?.zoom(Number(e.target.value) / 100)}
+              >
+                {[...new Set([25, 50, 75, 100, 125, 150, 200, 300, 400, 500, s.zoom])]
+                  .sort((a, b) => a - b)
+                  .map((n) => (
+                    <option key={n} value={n}>
+                      {n}%
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Page display
+              <select
+                aria-label="Page layout"
+                value={s.layout}
+                onChange={(e) => controller?.setLayout(e.target.value as Layout)}
+              >
+                <option value="continuous">Continuous</option>
+                <option value="single">Single page</option>
+                <option value="spread">Two pages</option>
+              </select>
+            </label>
+            <button aria-label="Fit width" onClick={() => controller?.zoom("page-width")}>
+              <MoveHorizontal size={18} /> Fit width
+            </button>
+            <button
+              aria-label={s.nightMode ? "Disable night mode" : "Enable night mode"}
+              onClick={() => s.set({ nightMode: !s.nightMode })}
+            >
+              <Moon size={18} /> Night mode
+            </button>
+            <button
+              aria-label={s.readMode ? "Exit read mode" : "Enter read mode"}
+              onClick={() => s.set({ readMode: !s.readMode })}
+            >
+              <Eye size={18} /> Read mode
+            </button>
+            <button
+              aria-label="Toggle Quick Tool Rail"
+              onClick={() => s.set({ quickRailVisible: !s.quickRailVisible })}
+            >
+              <PenTool size={18} /> {s.quickRailVisible ? "Hide" : "Show"} quick tools
+            </button>
+          </div>
+        </details>
+      </div>
+    </aside>
+  );
+}
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
+export function Statusbar() {
+  const s = useWorkspace();
   return (
     <footer className="statusbar">
       <span className={`status-light ${s.busy ? "working" : ""}`} />
       <span role="status">{s.status}</span>
       <div className="statusbar-space" />
       {s.document && (
-        <>
-          {s.info?.encrypted && (
-            <span
-              className="statusbar-item"
-              title="Document is encrypted"
-              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
-            >
-              <Lock size={13} /> Protected
-            </span>
-          )}
-          {s.hasDigitalSignature && (
-            <span
-              className="statusbar-item"
-              title="Document contains a digital signature"
-              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
-            >
-              <ShieldCheck size={13} /> Signed
-            </span>
-          )}
-          {s.document.size > 0 && (
-            <span className="statusbar-item" title={`File size: ${s.document.size} bytes`}>
-              {formatSize(s.document.size)}
-            </span>
-          )}
-          <span className="status-separator" />
-          <button
-            aria-label="Previous page"
-            disabled={s.page === 1 || s.busy}
-            onClick={() => controller?.goTo(s.page - 1)}
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <label>
-            Page
-            <input
-              ref={pageInputRef}
-              aria-label="Page number"
-              type="text"
-              value={pageInputValue}
-              onChange={(e) => setPageInputValue(e.target.value)}
-              onBlur={commitPageInput}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  commitPageInput();
-                  e.currentTarget.blur();
-                }
-              }}
-            />
-            <span>of {s.info?.pages}</span>
-          </label>
-          <button
-            aria-label="Next page"
-            disabled={s.page === s.info?.pages || s.busy}
-            onClick={() => controller?.goTo(s.page + 1)}
-          >
-            <ChevronRight size={15} />
-          </button>
-          <span className="status-separator" />
-        </>
+        <span>
+          {s.info?.encrypted ? "Protected · " : ""}
+          {s.hasDigitalSignature ? "Signed · " : ""}
+          {(s.document.size / 1024).toFixed(1)} KB
+        </span>
       )}
-      <span>Network access off</span>
+      <span>On your device</span>
     </footer>
   );
 }

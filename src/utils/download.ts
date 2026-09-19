@@ -1,3 +1,5 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+
 /**
  * Hand a generated file to the user as a download.
  *
@@ -14,7 +16,17 @@ export function safeFileName(name: string, fallback = "download"): string {
   return base || fallback;
 }
 
-export function downloadBlob(blob: Blob, fileName: string): void {
+export async function downloadBlob(blob: Blob, fileName: string): Promise<boolean> {
+  if (isTauri()) {
+    if (blob.size > 1024 ** 3) throw new Error("The export exceeds the 1 GB limit.");
+    const name = JSON.stringify(safeFileName(fileName)).replace(
+      /[^\x20-\x7e]/g,
+      (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
+    return invoke<boolean>("export_file", new Uint8Array(await blob.arrayBuffer()), {
+      headers: { "x-export-name": name },
+    });
+  }
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -22,9 +34,14 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   anchor.rel = "noopener";
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
+  return true;
 }
 
 /** Convenience wrapper for the byte payloads the PDF pipeline produces. */
-export function downloadBytes(bytes: Uint8Array, fileName: string, type = "application/pdf"): void {
-  downloadBlob(new Blob([bytes as unknown as BlobPart], { type }), fileName);
+export function downloadBytes(
+  bytes: Uint8Array,
+  fileName: string,
+  type = "application/pdf",
+): Promise<boolean> {
+  return downloadBlob(new Blob([bytes as unknown as BlobPart], { type }), fileName);
 }

@@ -163,8 +163,15 @@ it("fits the first visible document and preserves later user zoom", () => {
   resized();
   expect(zoom).toHaveBeenCalledWith(useWorkspace.getState().local.preferences.defaultZoom);
   zoom.mockClear();
+  controller.viewer.currentScaleValue = "1.5";
   controller.viewer.currentScale = 1.5;
   resized();
   expect(zoom).not.toHaveBeenCalled();
   expect(controller.viewer.update).toHaveBeenCalledTimes(2);
+  controller.viewer.currentScaleValue = "page-width";
+  resized();
+  expect(zoom).toHaveBeenLastCalledWith("page-width");
+  controller.viewer.currentScaleValue = "page-fit";
+  resized();
+  expect(zoom).toHaveBeenLastCalledWith("page-fit");
 });

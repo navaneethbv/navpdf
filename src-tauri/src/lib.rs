@@ -51,8 +51,32 @@ pub fn run() {
             let close = MenuItemBuilder::with_id("home", "Close document")
                 .accelerator("CmdOrCtrl+W")
                 .build(app)?;
+            let create = SubmenuBuilder::new(app, "Create")
+                .text("create-pdf", "Blank PDF...")
+                .text("import-pdf", "PDF from Images or Files...")
+                .build()?;
+            let export = SubmenuBuilder::new(app, "Export a PDF")
+                .text("office-export", "Microsoft Word...")
+                .text("office-pptx", "Microsoft PowerPoint...")
+                .text("office-xlsx", "Microsoft Excel...")
+                .text("office-rtf", "Rich Text...")
+                .text("convert", "Images or Plain Text...")
+                .build()?;
             let file = SubmenuBuilder::new(app, "File")
-                .items(&[&open, &save, &save_as, &print])
+                .item(&open)
+                .text("open-recent", "Open Recent Files...")
+                .item(&create)
+                .text("import-pdf", "Import...")
+                .text("combine-pdf", "Combine Files...")
+                .separator()
+                .items(&[&save, &save_as])
+                .item(&export)
+                .text("compress", "Compress a PDF...")
+                .text("protect", "Protect Using Password...")
+                .separator()
+                .item(&print)
+                .text("find", "Find")
+                .text("properties", "Document Properties...")
                 .separator()
                 .item(&close)
                 .build()?;
@@ -70,30 +94,65 @@ pub fn run() {
                 .copy()
                 .paste()
                 .select_all()
+                .separator()
+                .text("edit-objects", "Edit PDF...")
+                .text("tools:add-text", "Add Text...")
+                .text("tools:add-image", "Add Image...")
+                .separator()
+                .text("organize", "Organize Pages...")
+                .text("page-workspace", "Delete or Rotate Pages...")
+                .separator()
+                .text("tools:redact", "Redact a PDF...")
+                .text("ocr", "Scan and OCR...")
+                .text("forms", "Prepare Form...")
+                .text("fill-sign", "Fill and Sign...")
                 .build()?;
             let find = MenuItemBuilder::with_id("find", "Search Document")
                 .accelerator("CmdOrCtrl+F")
                 .build(app)?;
-            let view = SubmenuBuilder::new(app, "View")
+            let navigation = SubmenuBuilder::new(app, "Page Navigation")
+                .text("first-page", "First Page")
+                .text("previous-page", "Previous Page")
+                .text("next-page", "Next Page")
+                .text("last-page", "Last Page")
+                .build()?;
+            let display = SubmenuBuilder::new(app, "Page Display")
+                .text("layout-single", "Single Page")
+                .text("layout-continuous", "Continuous")
+                .text("layout-spread", "Two Pages")
+                .build()?;
+            let zoom = SubmenuBuilder::new(app, "Zoom")
                 .text("zoom-in", "Zoom In")
                 .text("zoom-out", "Zoom Out")
+                .text("actual-size", "Actual Size")
                 .text("fit-page", "Fit Page")
                 .text("fit-width", "Fit Width")
+                .build()?;
+            let panels = SubmenuBuilder::new(app, "Show/Hide")
+                .text("all-tools", "All Tools")
+                .text("quick-tools", "Quick Tools")
+                .text("panel-pages", "Page Thumbnails")
+                .text("panel-bookmarks", "Bookmarks")
+                .text("panel-comments", "Comments")
+                .build()?;
+            let view = SubmenuBuilder::new(app, "View")
+                .text("rotate-view", "Rotate View Clockwise")
+                .item(&navigation)
+                .item(&display)
+                .item(&zoom)
                 .separator()
+                .text("read-mode", "Read Mode")
+                .fullscreen()
+                .separator()
+                .item(&panels)
+                .text("settings", "Display Theme...")
+                .text("night-mode", "Night Mode")
                 .item(&find)
                 .build()?;
-            let annotate = SubmenuBuilder::new(app, "Annotate")
-                .text("highlight", "Highlight")
-                .text("select", "Select Text")
-                .build()?;
-            let organize = SubmenuBuilder::new(app, "Organize")
-                .text("organize", "Organize Pages...")
-                .build()?;
-            let tools = SubmenuBuilder::new(app, "Tools")
-                .text("tools:add-text", "Edit PDF")
-                .text("tools:add-image", "Add Image")
-                .text("tools:annotations", "Comment")
-                .text("tools:redact", "Redact")
+            let window_menu = SubmenuBuilder::new(app, "Window")
+                .minimize()
+                .maximize()
+                .fullscreen()
                 .build()?;
             // The predefined macOS Quit item calls NSApplication.terminate directly,
             // bypassing the runtime's cancellable exit event.
@@ -115,9 +174,7 @@ pub fn run() {
                 .build()?;
             app.set_menu(
                 MenuBuilder::new(app)
-                    .items(&[
-                        &settings, &file, &edit, &view, &annotate, &organize, &tools, &help,
-                    ])
+                    .items(&[&settings, &file, &edit, &view, &window_menu, &help])
                     .build()?,
             )?;
             let window =
@@ -171,6 +228,7 @@ pub fn run() {
             read_range,
             close_document,
             save_document,
+            commands::export::export_file,
             commit_working_revision,
             get_revision,
             local_state,

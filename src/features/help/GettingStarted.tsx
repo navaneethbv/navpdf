@@ -15,7 +15,7 @@ const steps = [
   {
     icon: Search,
     title: "Find your way around",
-    text: "Use the sidebar for page thumbnails, bookmarks, search and comments. Choose a page number or adjust the zoom in the toolbar.",
+    text: "Use the right rail for page thumbnails, bookmarks, search and comments. Page numbers and zoom controls are at the bottom of that rail.",
     detail:
       "Find text with Command+F on macOS or Control+F on Windows and Linux. Image-only scans need OCR before text search.",
   },
@@ -52,7 +52,7 @@ const tips = [
   },
   {
     title: "Find your place faster",
-    text: "The sidebar groups page thumbnails, bookmarks, search results and comments. Click a thumbnail to jump directly to that page.",
+    text: "The right rail opens page thumbnails, bookmarks, search results and comments. Click a thumbnail to jump directly to that page.",
   },
   {
     title: "Give your eyes a change",

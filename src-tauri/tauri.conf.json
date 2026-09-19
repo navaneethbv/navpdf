@@ -19,7 +19,8 @@
         "minWidth": 900,
         "minHeight": 620,
         "dragDropEnabled": true,
-        "create": false
+        "create": false,
+        "backgroundThrottling": "disabled"
       }
     ],
     "security": {

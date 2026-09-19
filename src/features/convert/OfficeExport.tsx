@@ -115,12 +115,14 @@ async function pagePicture(
 export function OfficeExport({
   controller,
   onClose,
+  initialFormat = "docx",
 }: {
   controller: ViewerController | null;
   onClose: () => void;
+  initialFormat?: Format;
 }) {
   const s = useWorkspace();
-  const [format, setFormat] = useState<Format>("docx");
+  const [format, setFormat] = useState<Format>(initialFormat);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState("");
   const [preview, setPreview] = useState<string[][] | null>(null);
@@ -222,7 +224,13 @@ export function OfficeExport({
                 : buildRtf(pages);
       }
       if (cancelled.current) return;
-      downloadBlob(new Blob([bytes], { type: selected.mime }), `${baseName}.${selected.extension}`);
+      if (
+        !(await downloadBlob(
+          new Blob([bytes], { type: selected.mime }),
+          `${baseName}.${selected.extension}`,
+        ))
+      )
+        return;
       s.set({ status: `Exported ${selected.label}` });
       onClose();
     });

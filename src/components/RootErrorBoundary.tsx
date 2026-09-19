@@ -51,7 +51,7 @@ export class RootErrorBoundary extends Component<Props, State> {
       } else {
         const sourceName = this.props.document?.name ?? "document.pdf";
         const baseName = sourceName.replace(/\.pdf$/i, "") || "document";
-        downloadBytes(bytes, safeFileName(`${baseName}-recovered.pdf`));
+        if (!(await downloadBytes(bytes, safeFileName(`${baseName}-recovered.pdf`)))) return;
       }
       this.setState({ saved: true });
     } catch {
