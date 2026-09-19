@@ -138,6 +138,7 @@ beforeEach(() => {
   act(() => {
     useWorkspace.getState().set({
       busy: false,
+      settingsOpen: false,
       status: "Ready",
       error: "",
       sidebar: "pages",
@@ -149,6 +150,19 @@ beforeEach(() => {
 describe("App keyboard and menus", () => {
   it("applies the system theme preference", () => {
     render(<App />);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("keeps the Settings preview in control when system appearance changes", async () => {
+    const media = Object.assign(new EventTarget(), { matches: true });
+    vi.stubGlobal("matchMedia", () => media);
+    render(<App />);
+    await act(async () => {});
+    act(() => useWorkspace.getState().set({ settingsOpen: true }));
+    fireEvent.change(screen.getByLabelText(/Theme/), { target: { value: "light" } });
+    act(() => media.dispatchEvent(new Event("change")));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    fireEvent.click(screen.getByText("Cancel"));
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 

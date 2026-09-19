@@ -51,12 +51,13 @@ export default function App() {
     else input.current?.click();
   }, [session]);
   useEffect(() => {
+    if (s.settingsOpen) return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => applyTheme(s.local.preferences.theme, media.matches);
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [s.local.preferences.theme]);
+  }, [s.local.preferences.theme, s.settingsOpen]);
   useEffect(() => {
     if (controller?.pdf) controller.setLayout(s.layout);
   }, [controller, s.layout]);

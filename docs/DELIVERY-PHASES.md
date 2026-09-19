@@ -7,6 +7,17 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 18 settings reliability review
+
+The [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md) prioritizes reproduced settings defects over the conditional request for extra theme palettes.
+Native preference saves and recent-history clearing now publish memory changes only after the atomic settings write succeeds.
+Settings saves are serialized, pending writes prevent dismissal, failed saves retain the draft, and successful saves avoid a second fallible state read.
+Theme previews own system appearance updates while Settings is open and restore committed preferences on dismissal.
+Native inspection also found upper-left dialog positioning; shared dialogs now have automatic margins and bounded scrolling.
+CI adds the existing branch-protection check name as an aggregate requiring both Linux and macOS Rust jobs.
+This maintenance scope does not close the existing PDF interoperability or distribution gates below.
+Verification evidence is recorded in `docs/VERIFICATION.md`.
+
 ## September 15 current implementation checkpoint
 
 PR #4 follow-up review corrections fix page-space image transforms, preserve XFDF text-markup quadrilaterals, and allow clearing dropdown and radio selections while updating field flags.

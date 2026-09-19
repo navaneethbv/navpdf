@@ -785,10 +785,11 @@ pub fn local_state(state: State<AppState>) -> Result<serde_json::Value, String> 
     }))
 }
 #[tauri::command]
-pub fn save_preferences(
-    state: State<AppState>,
-    mut preferences: Preferences,
-) -> Result<(), String> {
+pub fn save_preferences(state: State<AppState>, preferences: Preferences) -> Result<(), String> {
+    persist_preferences(&state, preferences)
+}
+
+fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result<(), String> {
     if !["system", "light", "dark"].contains(&preferences.theme.as_str())
         || !["continuous", "single", "spread"].contains(&preferences.layout.as_str())
     {
@@ -806,18 +807,26 @@ pub fn save_preferences(
     }
     preferences.network_access = false;
     let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
-    local.preferences = preferences;
-    if !local.preferences.recent_files {
-        local.recents.clear();
+    let mut candidate = local.clone();
+    candidate.preferences = preferences;
+    if !candidate.preferences.recent_files {
+        candidate.recents.clear();
     }
-    filesystem::private_json(&state.root.join("settings.json"), &*local)?;
+    filesystem::private_json(&state.root.join("settings.json"), &candidate)?;
+    *local = candidate;
     Ok(())
 }
 #[tauri::command]
 pub fn clear_recents(state: State<AppState>) -> Result<(), String> {
+    persist_cleared_recents(&state)
+}
+
+fn persist_cleared_recents(state: &AppState) -> Result<(), String> {
     let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
-    local.recents.clear();
-    filesystem::private_json(&state.root.join("settings.json"), &*local)?;
+    let mut candidate = local.clone();
+    candidate.recents.clear();
+    filesystem::private_json(&state.root.join("settings.json"), &candidate)?;
+    *local = candidate;
     Ok(())
 }
 #[tauri::command]
@@ -1147,6 +1156,76 @@ mod tests {
             saving: Mutex::new(false),
             engine: engine::EngineState::default(),
         }
+    }
+
+    fn seed_recent(state: &AppState) {
+        state.local.lock().unwrap().recents.push(Recent {
+            id: "synthetic".into(),
+            name: "synthetic.pdf".into(),
+            path: state.root.join("synthetic.pdf"),
+            opened_at: 1,
+            page: 1,
+        });
+    }
+
+    #[test]
+    fn failed_settings_writes_preserve_live_preferences_and_recents() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        seed_recent(&state);
+        // A directory at the destination causes a real atomic replacement failure.
+        fs::create_dir(root.path().join("settings.json")).unwrap();
+        let before = serde_json::to_value(&*state.local.lock().unwrap()).unwrap();
+        let preferences = Preferences {
+            theme: "dark".into(),
+            recent_files: false,
+            ..Preferences::default()
+        };
+        assert!(persist_preferences(&state, preferences).is_err());
+        assert_eq!(
+            serde_json::to_value(&*state.local.lock().unwrap()).unwrap(),
+            before
+        );
+        assert!(persist_cleared_recents(&state).is_err());
+        assert_eq!(
+            serde_json::to_value(&*state.local.lock().unwrap()).unwrap(),
+            before
+        );
+        assert!(root.path().join("settings.json").is_dir());
+    }
+
+    #[test]
+    fn settings_commit_round_trips_and_preserves_recents_unless_disabled() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        seed_recent(&state);
+        let mut preferences = Preferences {
+            theme: "dark".into(),
+            network_access: true,
+            ..Preferences::default()
+        };
+        persist_preferences(&state, preferences.clone()).unwrap();
+        let saved: LocalData =
+            serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
+        assert_eq!(saved.preferences.theme, "dark");
+        assert!(!saved.preferences.network_access);
+        assert_eq!(saved.recents.len(), 1);
+        assert_eq!(
+            serde_json::to_value(saved).unwrap(),
+            serde_json::to_value(&*state.local.lock().unwrap()).unwrap()
+        );
+        preferences.recent_files = false;
+        persist_preferences(&state, preferences).unwrap();
+        let saved: LocalData =
+            serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
+        assert!(saved.recents.is_empty());
+        assert!(state.local.lock().unwrap().recents.is_empty());
+        seed_recent(&state);
+        persist_cleared_recents(&state).unwrap();
+        let saved: LocalData =
+            serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
+        assert!(saved.recents.is_empty());
+        assert_eq!(saved.preferences.theme, "dark");
     }
 
     #[test]

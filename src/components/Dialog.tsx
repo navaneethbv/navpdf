@@ -6,12 +6,14 @@ export function Dialog({
   children,
   onClose,
   priority,
+  busy = false,
   className = "",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   priority?: boolean;
+  busy?: boolean;
   className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
@@ -33,13 +35,13 @@ export function Dialog({
       aria-labelledby={id}
       onCancel={(e) => {
         e.preventDefault();
-        onClose();
+        if (!busy) onClose();
       }}
       className={`app-dialog ${priority ? "priority-dialog" : ""} ${className}`.trim()}
     >
       <header>
         <h2 id={id}>{title}</h2>
-        <button className="icon-button" onClick={onClose} aria-label="Close dialog">
+        <button className="icon-button" onClick={onClose} aria-label="Close dialog" disabled={busy}>
           <X size={18} />
         </button>
       </header>
