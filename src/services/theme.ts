@@ -11,6 +11,7 @@ const overrideTokens = [
   "line",
   "accent",
   "accent-strong",
+  "accent-ink",
   "on-accent",
   "brand",
   "on-brand",

@@ -40,6 +40,9 @@ describe.each(["light", "dark"])("%s palette contrast", (mode) => {
       ["on-accent", "accent-strong"],
       ["on-brand", "brand"],
       ["ink", "accent-soft"],
+      ["accent-strong", "surface"],
+      ["accent-strong", "surface-2"],
+      ["accent-strong", "accent-soft"],
     ]) {
       const a = luminance(resolved[foreground]);
       const b = luminance(resolved[background]);
@@ -84,6 +87,7 @@ it("keeps custom surfaces and button labels readable for extreme and midtone col
           `${background}/${accent}: ${fg}/${bg}`,
         ).toBeGreaterThanOrEqual(4.5);
       }
+      expect(custom["accent-ink"]).toBe("var(--ink)");
       expect(custom).not.toHaveProperty("page");
       expect(custom).not.toHaveProperty("page-ink");
     }

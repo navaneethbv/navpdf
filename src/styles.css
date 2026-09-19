@@ -16,6 +16,7 @@
   --muted: #59685f;
   --line: #d4ddd7;
   --accent: #2c7257;
+  --accent-ink: var(--accent-strong);
   --accent-strong: #205b45;
   --accent-soft: #e0eee7;
   --input: #fffefa;
@@ -545,11 +546,8 @@ button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 3px;
-}
-button {
-  transition: background 0.12s;
 }
 svg {
   flex-shrink: 0;
@@ -678,7 +676,7 @@ p {
 .main-toolbar button.active {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 25%, transparent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .main-toolbar select {
   height: 30px;
@@ -726,7 +724,7 @@ p {
 }
 .sidebar-tabs button.active {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .sidebar-heading {
   font-size: 12px;
@@ -767,7 +765,7 @@ p {
   background: var(--accent-soft);
 }
 .thumbnail.selected > span {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 650;
 }
 .thumb-paper canvas {
@@ -859,7 +857,7 @@ p {
   height: 45px;
   border-radius: 6px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   margin-top: 7px;
 }
 .property-button-grid {
@@ -914,7 +912,7 @@ p {
   line-height: 1.7;
 }
 .reader-hint > svg {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .reader-hint p {
   font-size: 11px;
@@ -1034,7 +1032,7 @@ p {
   display: grid;
   place-items: center;
   border-radius: 9px;
-  color: var(--accent);
+  color: var(--accent-ink);
   margin-bottom: 27px;
   box-shadow: 0 3px 7px var(--shadow-color);
 }
@@ -1277,7 +1275,7 @@ p {
 .search-results strong,
 .comment-row strong {
   font-size: 10px;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 .search-results span,
@@ -1626,7 +1624,7 @@ p {
   background: var(--surface);
 }
 .mode-tab.active {
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--surface);
   font-weight: 600;
   box-shadow: 0 1px 3px var(--shadow-color);
@@ -1743,7 +1741,7 @@ p {
   height: 40px;
   border-radius: 8px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1910,7 +1908,7 @@ p {
   color: var(--ink);
 }
 .modal-title svg {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .modal-body {
   padding: 20px;
@@ -1954,7 +1952,7 @@ p {
 .tab-button.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 .setting-group {
@@ -2237,7 +2235,7 @@ p {
   box-shadow: 0 0 0 2px var(--accent);
 }
 .page-grid-item.focused {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 2px;
 }
 .page-grid-item.drag-over {
@@ -2377,7 +2375,7 @@ p {
 }
 .annotation-floating-toolbar button.active {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .divider-vert {
   width: 1px;
@@ -2401,7 +2399,7 @@ p {
   transform: scale(1.2);
 }
 .color-swatch-dot.active {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 2px;
 }
 
@@ -2431,7 +2429,7 @@ p {
   width: 100%;
   height: 100%;
   overflow: visible;
-  color: var(--accent);
+  color: var(--accent-ink);
   pointer-events: none;
 }
 .annotation-selection-layer {
@@ -2566,7 +2564,7 @@ p {
   align-items: center;
 }
 .check-list li.passed svg {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .check-list li.failed {
   color: var(--danger-ink);
@@ -2683,7 +2681,7 @@ p {
 }
 .citation-badge {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
   padding: 2px 6px;
   border-radius: 4px;

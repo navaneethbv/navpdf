@@ -65,6 +65,7 @@ export function customThemeTokens(overrides: ThemeOverrides) {
   if (Object.keys(tokens).length) {
     // Retain the surface foreground contrast for selected controls.
     tokens["accent-soft"] = background;
+    tokens["accent-ink"] = "var(--ink)";
   }
   return tokens;
 }
