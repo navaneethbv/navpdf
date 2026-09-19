@@ -24,6 +24,7 @@ Native inspection also found upper-left dialog positioning; shared dialogs now h
 CI adds the existing branch-protection check name as an aggregate requiring both Linux and macOS Rust jobs.
 This maintenance scope does not close the existing PDF interoperability or distribution gates below.
 Verification evidence is recorded in `docs/VERIFICATION.md`.
+A native reader-5.pdf preview initially remained loading until returning from Settings, then rendered; recheck initial-render scheduling separately before claiming broader viewer acceptance.
 
 ## September 15 current implementation checkpoint
 
