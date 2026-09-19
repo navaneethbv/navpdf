@@ -227,8 +227,8 @@ async function redactionAcceptance(corpus) {
 
 async function protectionAcceptance(corpus) {
   const scenario = "protection";
-  const userPassword = randomBytes(24).toString("hex");
-  const ownerPassword = randomBytes(24).toString("hex");
+  const userPassword = `pass-${randomBytes(12).toString("hex")}`;
+  const ownerPassword = `owner-${randomBytes(12).toString("hex")}`;
   const output = path.join(root, "protected-output.pdf");
   const permissions = {
     print: true,

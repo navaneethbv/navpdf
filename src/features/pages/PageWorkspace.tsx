@@ -597,10 +597,10 @@ export function PageWorkspace({
             Page ranges (e.g. 1-2, 3-5):{" "}
             <input type="text" value={splitRange} onChange={(e) => setSplitRange(e.target.value)} />
           </label>
-          <button onClick={handleSplit} disabled={busy}>
+          <button type="button" onClick={handleSplit} disabled={busy}>
             {busy ? "Splitting..." : "Execute Split"}
           </button>
-          <button onClick={() => setShowSplit(false)}>Cancel</button>
+          <button type="button" onClick={() => setShowSplit(false)}>Cancel</button>
         </div>
       )}
 
@@ -634,7 +634,7 @@ export function PageWorkspace({
                 setDragOverIndex(null);
                 const fromStr = e.dataTransfer.getData("text/plain");
                 const from = fromStr ? Number.parseInt(fromStr, 10) : draggedIndex;
-                if (from !== null && from !== undefined && !Number.isNaN(from)) {
+                if (typeof from === "number" && !Number.isNaN(from)) {
                   void handleDropReorder(from, pageNum);
                 }
                 setDraggedIndex(null);
@@ -643,6 +643,13 @@ export function PageWorkspace({
               onClick={(e) => {
                 setFocusedIndex(pageNum);
                 toggleSelect(pageNum, e);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setFocusedIndex(pageNum);
+                  toggleSelect(pageNum, e as unknown as React.MouseEvent);
+                }
               }}
             >
               <div className="page-card-preview">

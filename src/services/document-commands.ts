@@ -1300,7 +1300,7 @@ export function validateStandardFontCoverage(text: string): {
 } {
   const unsupported: string[] = [];
   for (const ch of text) {
-    const code = ch.codePointAt(0)!;
+    const code = ch.codePointAt(0) ?? 0;
     if (code === 9 || code === 10 || code === 13) continue;
     const isWinAnsi =
       (code >= 32 && code <= 126) ||
@@ -1612,11 +1612,11 @@ export async function applyDocumentDecorations(
 
   const formatTokens = (template: string, pageNum: number) =>
     template
-      .replaceAll(/\{page\}/g, () => String(pageNum))
-      .replaceAll(/\{total\}/g, () => String(total))
-      .replaceAll(/\{date\}/g, () => today)
-      .replaceAll(/\{title\}/g, () => docTitle)
-      .replaceAll(/\{author\}/g, () => docAuthor);
+      .replaceAll("{page}", () => String(pageNum))
+      .replaceAll("{total}", () => String(total))
+      .replaceAll("{date}", () => today)
+      .replaceAll("{title}", () => docTitle)
+      .replaceAll("{author}", () => docAuthor);
 
   for (const pageIndex of targetIndices) {
     const page = doc.getPage(pageIndex);

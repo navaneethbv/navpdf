@@ -8,16 +8,16 @@ const workspace = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 /** Acceptance scripts operate only on disposable output and synthetic fixtures. */
 export function artifactPath(value, allowedDirectories = ["output"]) {
   const resolved = path.resolve(workspace, value);
-  const root = allowedDirectories
+  const isAllowed = allowedDirectories
     .map((name) => path.join(workspace, name))
-    .find((candidate) => {
+    .some((candidate) => {
       const relative = path.relative(candidate, resolved);
       return (
         relative === "" ||
         (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
       );
     });
-  if (!root)
+  if (!isAllowed)
     throw new Error("Acceptance paths must stay inside the repository artifact directories.");
   for (let current = resolved; current !== workspace; current = path.dirname(current)) {
     try {

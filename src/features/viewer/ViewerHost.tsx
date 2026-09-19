@@ -172,9 +172,7 @@ export function ViewerHost({
             if (id === "highlight" || id === "underline" || id === "strike")
               void controller
                 .addTextMarkup(
-                  (
-                    { highlight: "Highlight", underline: "Underline", strike: "StrikeOut" } as const
-                  )[id],
+                  markupType(id),
                 )
                 .catch((error: unknown) => useWorkspace.getState().set({ error: String(error) }));
             if (id === "note") useWorkspace.getState().set({ activeModal: "sticky-note" });
@@ -220,4 +218,10 @@ export function ViewerHost({
       )}
     </div>
   );
+}
+
+function markupType(id: string): "Highlight" | "Underline" | "StrikeOut" {
+  if (id === "underline") return "Underline";
+  if (id === "strike") return "StrikeOut";
+  return "Highlight";
 }

@@ -409,13 +409,7 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
     return t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
   });
 
-  const titles: Record<string, string> = {
-    all: "All Tools",
-    edit: "Edit PDF",
-    convert: "Convert & Export",
-    esign: "Fill & Sign",
-  };
-  const title = titles[mode] ?? "Create PDF";
+  const title = getToolPanelTitle(mode);
 
   return (
     <section className="tool-drawer" aria-label={title}>
@@ -476,4 +470,19 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       )}
     </section>
   );
+}
+
+function getToolPanelTitle(mode: ToolMode): string {
+  switch (mode) {
+    case "all":
+      return "All Tools";
+    case "edit":
+      return "Edit PDF";
+    case "convert":
+      return "Convert & Export";
+    case "esign":
+      return "Fill & Sign";
+    default:
+      return "Create PDF";
+  }
 }

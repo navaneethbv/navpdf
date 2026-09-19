@@ -332,17 +332,15 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
       >
         <X size={18} />
       </button>
-      <h2>
-        {selected
-          ? "Annotation properties"
-          : ((
-              { highlight: "Highlight properties", shape: "Shape properties" } as Record<
-                string,
-                string
-              >
-            )[s.tool] ?? "Document")}
-      </h2>
+      <h2>{getSidebarTitle(Boolean(selected), s.tool)}</h2>
       {renderProperties()}
     </aside>
   );
+}
+
+function getSidebarTitle(selected: boolean, tool: string): string {
+  if (selected) return "Annotation properties";
+  if (tool === "highlight") return "Highlight properties";
+  if (tool === "shape") return "Shape properties";
+  return "Document";
 }

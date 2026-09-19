@@ -13,16 +13,16 @@ import {
 const MAX_XFDF_BYTES = 10 * 1024 * 1024;
 const xmlEscape = (value: string) =>
   value
-    .replaceAll(/&/g, "&amp;")
-    .replaceAll(/</g, "&lt;")
-    .replaceAll(/>/g, "&gt;")
-    .replaceAll(/"/g, "&quot;");
+    .replaceAll('&', "&amp;")
+    .replaceAll('<', "&lt;")
+    .replaceAll('>', "&gt;")
+    .replaceAll('"', "&quot;");
 const xmlUnescape = (value: string) =>
   value
-    .replaceAll(/&quot;/g, '"')
-    .replaceAll(/&gt;/g, ">")
-    .replaceAll(/&lt;/g, "<")
-    .replaceAll(/&amp;/g, "&");
+    .replaceAll('&quot;', '"')
+    .replaceAll('&gt;', ">")
+    .replaceAll('&lt;', "<")
+    .replaceAll('&amp;', "&");
 const attrs = (source: string) => {
   const values = new Map<string, string>();
   for (const match of source.matchAll(/(?:^|\s)([A-Za-z][\w:-]*)\s*=\s*"([^"]*)"/g))

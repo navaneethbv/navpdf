@@ -12,7 +12,7 @@ interface AnnotationData {
   lineEndings?: string[];
   name?: string;
   inReplyTo?: string;
-  state?: Comment["reviewState"];
+  state?: NonNullable<Comment["reviewState"]>;
   quadPoints?: number[];
   color?: ArrayLike<number>;
   opacity?: number;
@@ -38,8 +38,9 @@ function rectangle(values?: number[]): [number, number, number, number] | undefi
 function quadBounds(values: number[] = []): number[][] | undefined {
   const bounds: number[][] = [];
   for (let k = 0; k + 7 < values.length; k += 8) {
-    const xs = [values[k], values[k + 2], values[k + 4], values[k + 6]];
-    const ys = [values[k + 1], values[k + 3], values[k + 5], values[k + 7]];
+    const [x1, y1, x2, y2, x3, y3, x4, y4] = values.slice(k, k + 8);
+    const xs = [x1, x2, x3, x4];
+    const ys = [y1, y2, y3, y4];
     bounds.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
   }
   return bounds.length ? bounds : undefined;
@@ -51,10 +52,11 @@ function numberArray(dict: PDFDict, key: string): number[] | undefined {
 }
 
 function storedGeometry(annotations: PDFArray | undefined, id: string) {
-  for (let i = 0; i < (annotations?.size() ?? 0); i++) {
-    const dict = annotations!.lookup(i, PDFDict);
+  if (!annotations) return {};
+  for (let i = 0; i < annotations.size(); i++) {
+    const dict = annotations.lookup(i, PDFDict);
     const name = dict.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText();
-    if (name !== id && annotationIdentifier(annotations!.get(i)) !== id && id !== `annot_${i}`)
+    if (name !== id && annotationIdentifier(annotations.get(i)) !== id && id !== `annot_${i}`)
       continue;
     const rawEndings = dict.lookupMaybe(PDFName.of("LE"), PDFArray);
     const endings: [string, string] | undefined =
@@ -94,7 +96,7 @@ export function readComment(raw: unknown, page: number, annotations?: PDFArray):
   const fallbackEndings: [string, string] | undefined =
     data.lineEndings?.length === 2 ? [data.lineEndings[0], data.lineEndings[1]] : undefined;
   const lineEndings = stored.endings ?? fallbackEndings;
-  const arrow = lineEndings?.some((value) => value?.toLowerCase().includes("arrow"));
+  const arrow = lineEndings?.some((value) => value.toLowerCase().includes("arrow"));
   const type = arrow ? "Arrow" : data.subtype;
   const comment: Comment = {
     id,

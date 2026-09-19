@@ -507,18 +507,12 @@ export function FormManager({
 
           <div className="setting-group">
             <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
-              {({ button: "Button Label", radio: "Option Value" } as Record<string, string>)[
-                fieldType
-              ] ?? "Default Value"}
+              {getFieldDefaultLabel(fieldType)}
             </label>
             <input
               id={`${fieldIds}-field-4`}
               type="text"
-              placeholder={
-                ({ button: "e.g. Submit", radio: "e.g. Yes" } as Record<string, string>)[
-                  fieldType
-                ] ?? "Optional default value"
-              }
+              placeholder={getFieldDefaultPlaceholder(fieldType)}
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
               className="text-input"
@@ -618,4 +612,16 @@ export function FormManager({
       </div>
     </FeatureDialog>
   );
+}
+
+function getFieldDefaultLabel(fieldType: string): string {
+  if (fieldType === "button") return "Button Label";
+  if (fieldType === "radio") return "Option Value";
+  return "Default Value";
+}
+
+function getFieldDefaultPlaceholder(fieldType: string): string {
+  if (fieldType === "button") return "e.g. Submit";
+  if (fieldType === "radio") return "e.g. Yes";
+  return "Optional default value";
 }

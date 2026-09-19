@@ -379,7 +379,7 @@ export class ViewerController {
     this.replacing = true;
     useWorkspace.getState().set({ busy: true });
     try {
-      return await this.commitReplacement(bytes, status, options);
+      await this.commitReplacement(bytes, status, options);
     } finally {
       this.replacing = false;
       useWorkspace.getState().set({ busy: wasBusy });
@@ -652,15 +652,7 @@ export class ViewerController {
     if (!this.pdf) return;
     try {
       this.viewer.annotationEditorMode = {
-        mode:
-          (
-            {
-              highlight: AnnotationEditorType.HIGHLIGHT,
-              ink: AnnotationEditorType.INK,
-              draw: AnnotationEditorType.INK,
-              text: AnnotationEditorType.FREETEXT,
-            } as Record<string, number>
-          )[tool] ?? AnnotationEditorType.NONE,
+        mode: annotationEditorTypeForTool(tool),
       };
     } catch {
       // Suppress throw if PDF.js refuses annotation mode due to permissions
@@ -1194,5 +1186,19 @@ export class ViewerController {
         ? {}
         : { selectedAnnotationId: null, hasSelection: false }),
     });
+  }
+}
+
+function annotationEditorTypeForTool(tool: Tool): number {
+  switch (tool) {
+    case "highlight":
+      return AnnotationEditorType.HIGHLIGHT;
+    case "ink":
+    case "draw":
+      return AnnotationEditorType.INK;
+    case "text":
+      return AnnotationEditorType.FREETEXT;
+    default:
+      return AnnotationEditorType.NONE;
   }
 }

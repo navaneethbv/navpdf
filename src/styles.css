@@ -1665,8 +1665,6 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
   border: 0;
   padding: 0;
   margin-bottom: 18px;

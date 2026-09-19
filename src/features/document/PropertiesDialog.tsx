@@ -142,7 +142,7 @@ export function PropertiesDialog({
             <button type="button" className="button" onClick={onClose} disabled={saving}>
               Cancel
             </button>
-            <button className="button primary" disabled={saving}>
+            <button type="submit" className="button primary" disabled={saving}>
               Save properties
             </button>
           </div>

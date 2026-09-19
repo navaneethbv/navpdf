@@ -51,7 +51,7 @@ export function installModalFocus(root: Document = document) {
       return;
     }
     const first = items[0];
-    const last = items.at(-1)!;
+    const last = items.at(-1) ?? first;
     if (!modal.contains(active)) {
       event.preventDefault();
       (event.shiftKey ? last : first).focus();

@@ -96,37 +96,25 @@ function GuideDialog({ mode }: Readonly<{ mode: "help" | "tour" | "tips" }>) {
   const pending = useRef(false);
   const close = async () => {
     if (pending.current) return;
-    const state = useWorkspace.getState();
-    const patch: Partial<Preferences> = {};
-    if (mode === "tour" && !state.local.preferences.tourCompleted) patch.tourCompleted = true;
-    if (mode === "tips" && hideTips) patch.showStartupTips = false;
-    if (Object.keys(patch).length) {
-      pending.current = true;
-      setSaving(true);
-      setError("");
-      try {
-        const preferences = { ...state.local.preferences, ...patch };
-        await savePreferences(preferences);
-        const current = useWorkspace.getState();
-        current.set({ local: { ...current.local, preferences } });
-      } catch {
-        setError("Your preference could not be saved. Try again to dismiss this dialog.");
-        pending.current = false;
-        setSaving(false);
-        return;
-      }
+    pending.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await persistGuidePreferences(mode, hideTips);
+    } catch {
+      setError("Your preference could not be saved. Try again to dismiss this dialog.");
+      pending.current = false;
+      setSaving(false);
+      return;
     }
     useWorkspace.getState().set({ activeModal: null });
   };
-  const current = steps.at(step) ?? steps[0];
-  const currentTip = tips.at(tip) ?? tips[0];
+  const card = getGuideCard(mode, step, tip);
   const nextLabel = step === steps.length - 1 ? "Get started" : "Next";
-  const Icon = mode === "tour" ? current.icon : Lightbulb;
+  const Icon = card.icon;
   return (
     <Dialog
-      title={
-        { tour: "Welcome to NavPDF", tips: "A tip for your workspace", help: "Help and tips" }[mode]
-      }
+      title={getGuideTitle(mode)}
       onClose={() => void close()}
       busy={saving}
       className="guide-dialog"
@@ -155,13 +143,11 @@ function GuideDialog({ mode }: Readonly<{ mode: "help" | "tour" | "tips" }>) {
               <Icon size={30} />
             </span>
             <p className="guide-progress">
-              {mode === "tour"
-                ? `Step ${step + 1} of ${steps.length}`
-                : `Tip ${tip + 1} of ${tips.length}`}
+              {card.progress}
             </p>
-            <h3>{mode === "tour" ? current.title : currentTip.title}</h3>
-            <p>{mode === "tour" ? current.text : currentTip.text}</p>
-            {mode === "tour" && <p className="guide-detail">{current.detail}</p>}
+            <h3>{card.title}</h3>
+            <p>{card.text}</p>
+            {card.detail && <p className="guide-detail">{card.detail}</p>}
           </div>
           {mode === "tips" && (
             <label className="check-label">
@@ -236,4 +222,52 @@ function GuideDialog({ mode }: Readonly<{ mode: "help" | "tour" | "tips" }>) {
       )}
     </Dialog>
   );
+}
+
+function getGuideTitle(mode: "help" | "tour" | "tips"): string {
+  switch (mode) {
+    case "tour":
+      return "Welcome to NavPDF";
+    case "tips":
+      return "A tip for your workspace";
+    case "help":
+    default:
+      return "Help and tips";
+  }
+}
+
+function getGuideCard(mode: "help" | "tour" | "tips", step: number, tip: number) {
+  if (mode === "tour") {
+    const current = steps.at(step) ?? steps[0];
+    return {
+      icon: current.icon,
+      title: current.title,
+      text: current.text,
+      detail: current.detail,
+      progress: `Step ${step + 1} of ${steps.length}`,
+    };
+  }
+  const currentTip = tips.at(tip) ?? tips[0];
+  return {
+    icon: Lightbulb,
+    title: currentTip.title,
+    text: currentTip.text,
+    detail: undefined,
+    progress: `Tip ${tip + 1} of ${tips.length}`,
+  };
+}
+
+async function persistGuidePreferences(
+  mode: "help" | "tour" | "tips",
+  hideTips: boolean,
+): Promise<boolean> {
+  const state = useWorkspace.getState();
+  const patch: Partial<Preferences> = {};
+  if (mode === "tour" && !state.local.preferences.tourCompleted) patch.tourCompleted = true;
+  if (mode === "tips" && hideTips) patch.showStartupTips = false;
+  if (Object.keys(patch).length === 0) return true;
+  const preferences = { ...state.local.preferences, ...patch };
+  await savePreferences(preferences);
+  useWorkspace.getState().set({ local: { ...state.local, preferences } });
+  return true;
 }

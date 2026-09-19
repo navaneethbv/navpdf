@@ -41,12 +41,16 @@ import { ExportOptions } from "../features/convert/ExportOptions";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
 function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "docx" {
-  const formats = {
-    "office-pptx": "pptx-text",
-    "office-xlsx": "xlsx",
-    "office-rtf": "rtf",
-  } as const;
-  return formats[modal as keyof typeof formats] ?? "docx";
+  switch (modal) {
+    case "office-pptx":
+      return "pptx-text";
+    case "office-xlsx":
+      return "xlsx";
+    case "office-rtf":
+      return "rtf";
+    default:
+      return "docx";
+  }
 }
 
 function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
@@ -67,25 +71,33 @@ function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerContr
 }
 
 function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController | null): boolean {
-  const directions: Record<string, [number, number]> = {
-    ArrowLeft: [-1, 0],
-    ArrowRight: [1, 0],
-    ArrowDown: [0, -1],
-    ArrowUp: [0, 1],
-  };
-  const direction = directions[event.key];
-  if (direction) {
-    event.preventDefault();
-    const distance = event.shiftKey ? 10 : 1;
-    void controller?.moveSelectedAnnotation(direction[0] * distance, direction[1] * distance);
-    return true;
+  let dx = 0;
+  let dy = 0;
+  switch (event.key) {
+    case "ArrowLeft":
+      dx = -1;
+      break;
+    case "ArrowRight":
+      dx = 1;
+      break;
+    case "ArrowDown":
+      dy = -1;
+      break;
+    case "ArrowUp":
+      dy = 1;
+      break;
+    case "Delete":
+    case "Backspace":
+      event.preventDefault();
+      void controller?.deleteSelectedAnnotation();
+      return true;
+    default:
+      return false;
   }
-  if (["Delete", "Backspace"].includes(event.key)) {
-    event.preventDefault();
-    void controller?.deleteSelectedAnnotation();
-    return true;
-  }
-  return false;
+  event.preventDefault();
+  const distance = event.shiftKey ? 10 : 1;
+  void controller?.moveSelectedAnnotation(dx * distance, dy * distance);
+  return true;
 }
 
 export default function App() {
@@ -139,32 +151,51 @@ export default function App() {
         (event.target instanceof HTMLElement && event.target.isContentEditable);
       if (editable) return;
       if (event.ctrlKey || event.metaKey) {
-        const actions: Record<string, () => void> = {
-          o: open,
-          s: () => {
+        switch (event.key.toLowerCase()) {
+          case "o":
+            event.preventDefault();
+            open();
+            break;
+          case "s":
+            event.preventDefault();
             void session.save(event.shiftKey);
-          },
-          f: () => {
+            break;
+          case "f":
+            event.preventDefault();
             if (state.document) state.set({ sidebar: "search" });
-          },
-          p: () => {
+            break;
+          case "p":
+            event.preventDefault();
             if (state.document) state.set({ activeModal: "print" });
-          },
-          w: session.home,
-          z: () => {
+            break;
+          case "w":
+            event.preventDefault();
+            session.home();
+            break;
+          case "z":
+            event.preventDefault();
             if (event.shiftKey) controller?.redo();
             else controller?.undo();
-          },
-          ",": () => state.set({ settingsOpen: true }),
-          "0": () => controller?.zoom("page-fit"),
-          "+": () => controller?.zoom((state.zoom / 100) * 1.15),
-          "=": () => controller?.zoom((state.zoom / 100) * 1.15),
-          "-": () => controller?.zoom(state.zoom / 100 / 1.15),
-        };
-        const command = actions[event.key.toLowerCase()];
-        if (command) {
-          event.preventDefault();
-          command();
+            break;
+          case ",":
+            event.preventDefault();
+            state.set({ settingsOpen: true });
+            break;
+          case "0":
+            event.preventDefault();
+            controller?.zoom("page-fit");
+            break;
+          case "+":
+          case "=":
+            event.preventDefault();
+            controller?.zoom((state.zoom / 100) * 1.15);
+            break;
+          case "-":
+            event.preventDefault();
+            controller?.zoom(state.zoom / 100 / 1.15);
+            break;
+          default:
+            break;
         }
       }
       if (state.selectedAnnotationId && handleAnnotationKey(event, controller)) return;
@@ -222,57 +253,51 @@ export default function App() {
         return;
       }
       if (state.document) {
-        const layout = new Map<string, "single" | "continuous" | "spread">([
-          ["layout-single", "single"],
-          ["layout-continuous", "continuous"],
-          ["layout-spread", "spread"],
-        ]).get(payload);
-        if (layout) {
-          controller?.setLayout(layout);
+        if (payload === "layout-single" || payload === "layout-continuous" || payload === "layout-spread") {
+          controller?.setLayout(payload.slice("layout-".length) as "single" | "continuous" | "spread");
           return;
         }
-        const panel = new Map<string, "pages" | "bookmarks" | "comments">([
-          ["panel-pages", "pages"],
-          ["panel-bookmarks", "bookmarks"],
-          ["panel-comments", "comments"],
-        ]).get(payload);
-        if (panel) {
-          state.set({ sidebar: panel, propertiesVisible: false });
+        if (payload === "panel-pages" || payload === "panel-bookmarks" || payload === "panel-comments") {
+          state.set({
+            sidebar: payload.slice("panel-".length) as "pages" | "bookmarks" | "comments",
+            propertiesVisible: false,
+          });
           return;
         }
       }
-      const actions: Record<string, () => void> = {
-        "first-page": () => {
+      switch (payload) {
+        case "first-page":
           controller?.goToFirst();
-        },
-        "last-page": () => {
+          break;
+        case "last-page":
           controller?.goToLast();
-        },
-        "next-page": () => {
+          break;
+        case "next-page":
           if (state.document) controller?.goTo(Math.min(state.page + 1, state.info?.pages ?? 1));
-        },
-        "previous-page": () => {
+          break;
+        case "previous-page":
           if (state.document) controller?.goTo(Math.max(state.page - 1, 1));
-        },
-        "rotate-view": () => {
+          break;
+        case "rotate-view":
           if (state.document) controller?.rotateView(90);
-        },
-        "actual-size": () => {
+          break;
+        case "actual-size":
           controller?.zoom(1);
-        },
-        "read-mode": () => {
+          break;
+        case "read-mode":
           if (state.document) state.set({ readMode: !state.readMode });
-        },
-        "night-mode": () => {
+          break;
+        case "night-mode":
           if (state.document) state.set({ nightMode: !state.nightMode });
-        },
-        "all-tools": () => {
+          break;
+        case "all-tools":
           state.set({ toolMode: state.toolMode ? null : "all" });
-        },
-        "quick-tools": () => {
+          break;
+        case "quick-tools":
           state.set({ quickRailVisible: !state.quickRailVisible });
-        },
-        tour: () => {
+          break;
+        case "tour":
+        case "tips":
           if (
             state.busy ||
             state.settingsOpen ||
@@ -280,82 +305,72 @@ export default function App() {
             session.password ||
             session.confirm
           )
-            return;
+            break;
           state.set({ activeModal: payload });
-        },
-        tips: () => {
-          if (
-            state.busy ||
-            state.settingsOpen ||
-            state.activeModal ||
-            session.password ||
-            session.confirm
-          )
-            return;
-          state.set({ activeModal: payload });
-        },
-        open: () => {
+          break;
+        case "open":
           open();
-        },
-        save: () => {
+          break;
+        case "save":
           void session.save();
-        },
-        "save-as": () => {
+          break;
+        case "save-as":
           void session.save(true);
-        },
-        print: () => {
+          break;
+        case "print":
           if (state.document) state.set({ activeModal: "print" });
-        },
-        home: () => {
+          break;
+        case "home":
           session.home();
-        },
-        organize: () => {
+          break;
+        case "organize":
           if (state.document) state.set({ activeModal: "page-workspace" });
-        },
-        undo: () => {
+          break;
+        case "undo":
           controller?.undo();
-        },
-        redo: () => {
+          break;
+        case "redo":
           controller?.redo();
-        },
-        find: () => {
+          break;
+        case "find":
           state.set({ sidebar: "search" });
-        },
-        settings: () => {
+          break;
+        case "settings":
           state.set({ settingsOpen: true });
-        },
-        highlight: () => {
+          break;
+        case "highlight":
           if (!state.info?.encrypted) controller?.setTool("highlight");
-        },
-        select: () => {
+          break;
+        case "select":
           controller?.setTool("select");
-        },
-        "tools:add-text": () => {
+          break;
+        case "tools:add-text":
           if (state.document) state.set({ activeModal: "add-text" });
-        },
-        "tools:add-image": () => {
+          break;
+        case "tools:add-image":
           if (state.document) state.set({ activeModal: "add-image" });
-        },
-        "tools:annotations": () => {
+          break;
+        case "tools:annotations":
           if (state.document) state.set({ activeModal: "annotations" });
-        },
-        "tools:redact": () => {
+          break;
+        case "tools:redact":
           if (state.document) state.set({ activeModal: "redact" });
-        },
-        "fit-page": () => {
+          break;
+        case "fit-page":
           controller?.zoom("page-fit");
-        },
-        "fit-width": () => {
+          break;
+        case "fit-width":
           controller?.zoom("page-width");
-        },
-        "zoom-in": () => {
+          break;
+        case "zoom-in":
           controller?.zoom((state.zoom / 100) * 1.15);
-        },
-        "zoom-out": () => {
+          break;
+        case "zoom-out":
           controller?.zoom(state.zoom / 100 / 1.15);
-        },
-      };
-      actions[payload]?.();
+          break;
+        default:
+          break;
+      }
     }).then((fn) => {
       if (disposed) fn();
       else cleanup = fn;
@@ -503,7 +518,7 @@ export default function App() {
               <button type="button" className="button" onClick={session.cancelPassword}>
                 Cancel
               </button>
-              <button className="button primary">Unlock PDF</button>
+              <button type="submit" className="button primary">Unlock PDF</button>
             </div>
           </form>
         </Dialog>
@@ -515,13 +530,14 @@ export default function App() {
             changes.
           </p>
           <div className="dialog-actions">
-            <button className="button" onClick={session.cancelConfirm}>
+            <button type="button" className="button" onClick={session.cancelConfirm}>
               Keep editing
             </button>
-            <button className="button" onClick={session.discardAndContinue}>
+            <button type="button" className="button" onClick={session.discardAndContinue}>
               Discard
             </button>
             <button
+              type="button"
               className="button primary"
               disabled={s.busy}
               onClick={() => void session.saveAndContinue()}

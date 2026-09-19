@@ -12,7 +12,7 @@ export async function openDocument(file?: File): Promise<DocumentDescriptor | nu
   if (native) {
     const name = JSON.stringify(file.name).replaceAll(
       /[^\x20-\x7e]/g,
-      (char) => String.raw`\u${char.codePointAt(0)!.toString(16).padStart(4, "0")}`,
+      (char) => String.raw`\u${(char.codePointAt(0) ?? 0).toString(16).padStart(4, "0")}`,
     );
     return invoke<DocumentDescriptor>("import_document", new Uint8Array(await file.arrayBuffer()), {
       headers: { "x-document-name": name },
