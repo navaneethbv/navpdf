@@ -1,5 +1,16 @@
 # NavPDF handoff
 
+## September 19 workspace delivery
+
+Source `9a7fca2` implements the approved single-PDF reference layout, PNG/JPEG import, discoverable conversion/compression and native export saving.
+The tour, tips and native-open delivery merged in PR 21; themes and custom overrides were delivered earlier.
+The verification ledger records local checks, exact artifacts, native menu/navigation/rendering checks, Word/PowerPoint interoperability and compressed/imported PDF reopen evidence.
+Compact native resizing remains unverified because the automation could not resize the window reliably.
+The advanced capability and distribution gates remain separate from this layout delivery.
+Preserved user edits are in `output/reader-5-preserved-20260919.pdf`.
+The three untracked root planning documents are pre-existing and must not be reset, cleaned, stashed or swept into this PR.
+Older checkpoints below are historical and do not override this entry.
+
 ## PR #4 follow-up to `3d2f611`
 
 Image transform coordinates, XFDF markup geometry, and empty choice-field updates are corrected with saved-output regressions.
