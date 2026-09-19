@@ -293,7 +293,9 @@ export function useDocumentSession(controller: ViewerController | null) {
       new Promise((resolve, reject) => {
         const finish = () => {
           confirmationCancelled.current = null;
-          void invoke("dismiss_open_request", { token }).then(() => resolve(), reject);
+          void invoke("dismiss_open_request", { token }).then(() => {
+            resolve();
+          }, reject);
         };
         const action = () => {
           pendingOpen.current = true;

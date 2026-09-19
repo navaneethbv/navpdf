@@ -54,11 +54,11 @@ it("retains requests while busy and serializes overlapping notifications", async
   let ready = false;
   let finish!: () => void;
   const open = vi.fn(async (token: string) => {
-    if (token === "before-listener")
+    if (Object.is(token, "before-listener"))
       await new Promise<void>((resolve) => {
         finish = resolve;
       });
-    requests = requests.filter((request) => request.token !== token);
+    requests = requests.filter((request) => !Object.is(request.token, token));
   });
   const { unmount } = renderHook(() => useNativeOpenRequests(true, () => ready, open, report));
   await flush();

@@ -1,7 +1,11 @@
 use serde::Serialize;
-use std::{collections::VecDeque, path::PathBuf};
+use std::{collections::VecDeque, path::PathBuf, sync::Mutex};
 
 const MAX_PENDING: usize = 32;
+
+/// Installed on Builder before setup: macOS can deliver Opened before Ready.
+#[derive(Default)]
+pub struct PendingOpenRequests(pub Mutex<OpenQueue>);
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

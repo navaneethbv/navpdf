@@ -17,6 +17,8 @@ export function useNativeOpenRequests(
     let disposed = false;
     let running = false;
     let requested = false;
+    const isDisposed = (): boolean => disposed;
+    const needsRefresh = (): boolean => requested;
     let unlisten: (() => void) | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const drain = async () => {
@@ -26,13 +28,13 @@ export function useNativeOpenRequests(
       retry = undefined;
       running = true;
       try {
-        while (!disposed) {
+        while (!isDisposed()) {
           requested = false;
           const requests = await invoke<OpenRequest[]>("pending_open_requests");
-          if (disposed) return;
+          if (isDisposed()) return;
           const request = requests[0];
           if (!request) {
-            if (requested) continue;
+            if (needsRefresh()) continue;
             return;
           }
           if (!canOpen()) {
@@ -48,7 +50,7 @@ export function useNativeOpenRequests(
           }
         }
       } catch (error) {
-        if (!disposed) report(error);
+        if (!isDisposed()) report(error);
       } finally {
         running = false;
       }
@@ -59,7 +61,7 @@ export function useNativeOpenRequests(
       void drain();
     })
       .then((stop) => {
-        if (disposed) stop();
+        if (isDisposed()) stop();
         else {
           unlisten = stop;
           void drain();

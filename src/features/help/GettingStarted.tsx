@@ -89,7 +89,7 @@ export function GettingStarted({ ready }: { ready: boolean }) {
 
 function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
   const [step, setStep] = useState(0);
-  const [tip, setTip] = useState(() => Math.floor(Math.random() * tips.length));
+  const [tip, setTip] = useState(() => Math.floor(Date.now() / 86_400_000) % tips.length);
   const [hideTips, setHideTips] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -118,7 +118,8 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
     }
     useWorkspace.getState().set({ activeModal: null });
   };
-  const current = steps[step];
+  const current = steps.at(step) ?? steps[0];
+  const currentTip = tips.at(tip) ?? tips[0];
   const Icon = mode === "tour" ? current.icon : Lightbulb;
   return (
     <Dialog
@@ -162,8 +163,8 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                 ? `Step ${step + 1} of ${steps.length}`
                 : `Tip ${tip + 1} of ${tips.length}`}
             </p>
-            <h3>{mode === "tour" ? current.title : tips[tip].title}</h3>
-            <p>{mode === "tour" ? current.text : tips[tip].text}</p>
+            <h3>{mode === "tour" ? current.title : currentTip.title}</h3>
+            <p>{mode === "tour" ? current.text : currentTip.text}</p>
             {mode === "tour" && <p className="guide-detail">{current.detail}</p>}
           </div>
           {mode === "tips" && (
@@ -172,7 +173,9 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                 type="checkbox"
                 checked={hideTips}
                 disabled={saving}
-                onChange={(event) => setHideTips(event.target.checked)}
+                onChange={(event) => {
+                  setHideTips(event.target.checked);
+                }}
               />{" "}
               Don’t show tips again
             </label>
@@ -192,7 +195,9 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                 <button
                   className="button"
                   disabled={saving || step === 0}
-                  onClick={() => setStep(step - 1)}
+                  onClick={() => {
+                    setStep(step - 1);
+                  }}
                 >
                   Back
                 </button>
@@ -201,7 +206,10 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                   data-autofocus
                   className="button primary"
                   disabled={saving}
-                  onClick={() => (step === steps.length - 1 ? void close() : setStep(step + 1))}
+                  onClick={() => {
+                    if (step === steps.length - 1) void close();
+                    else setStep(step + 1);
+                  }}
                 >
                   {saving ? "Saving…" : step === steps.length - 1 ? "Get started" : "Next"}
                 </button>
@@ -211,7 +219,9 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                 <button
                   className="button"
                   disabled={saving}
-                  onClick={() => setTip((tip + 1) % tips.length)}
+                  onClick={() => {
+                    setTip((tip + 1) % tips.length);
+                  }}
                 >
                   Next tip
                 </button>

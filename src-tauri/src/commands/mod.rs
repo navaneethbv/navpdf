@@ -153,7 +153,6 @@ pub struct RedactionAudit {
 }
 pub struct AppState {
     pub documents: Mutex<HashMap<String, Arc<Opened>>>,
-    pub pending_open_tokens: Mutex<open_queue::OpenQueue>,
     pub local: Mutex<LocalData>,
     pub root: PathBuf,
     pub dirty: Mutex<bool>,
@@ -351,8 +350,8 @@ fn is_pdf_path(path: &std::path::Path) -> bool {
 /// Source paths stay native; notifications only wake the renderer's queue reader.
 pub fn register_open_paths(app: &AppHandle, paths: Vec<PathBuf>) {
     let result = app
-        .state::<AppState>()
-        .pending_open_tokens
+        .state::<open_queue::PendingOpenRequests>()
+        .0
         .lock()
         .map_err(|_| "Open queue unavailable.".to_string())
         .and_then(|mut queue| queue.push(paths));
@@ -371,19 +370,22 @@ pub fn register_open_paths(app: &AppHandle, paths: Vec<PathBuf>) {
 
 #[tauri::command]
 pub fn pending_open_requests(
-    state: State<AppState>,
+    state: State<open_queue::PendingOpenRequests>,
 ) -> Result<Vec<open_queue::OpenRequest>, String> {
     Ok(state
-        .pending_open_tokens
+        .0
         .lock()
         .map_err(|_| "Open queue unavailable.")?
         .pending())
 }
 
 #[tauri::command]
-pub fn dismiss_open_request(state: State<AppState>, token: String) -> Result<(), String> {
+pub fn dismiss_open_request(
+    state: State<open_queue::PendingOpenRequests>,
+    token: String,
+) -> Result<(), String> {
     state
-        .pending_open_tokens
+        .0
         .lock()
         .map_err(|_| "Open queue unavailable.")?
         .dismiss(&token);
@@ -393,8 +395,8 @@ pub fn dismiss_open_request(state: State<AppState>, token: String) -> Result<(),
 #[tauri::command]
 pub async fn open_document_from_token(app: AppHandle, token: String) -> Result<Descriptor, String> {
     let path = app
-        .state::<AppState>()
-        .pending_open_tokens
+        .state::<open_queue::PendingOpenRequests>()
+        .0
         .lock()
         .map_err(|_| "Open queue unavailable.")?
         .take(&token)?;
@@ -1060,7 +1062,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::default(),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -1084,7 +1085,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::default(),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -1164,7 +1164,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::default(),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -1195,7 +1194,6 @@ mod tests {
     fn test_state(root: &std::path::Path) -> AppState {
         AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::default(),
             local: Mutex::new(LocalData::default()),
             root: root.to_path_buf(),
             dirty: Mutex::new(false),

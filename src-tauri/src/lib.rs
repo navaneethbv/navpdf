@@ -15,6 +15,7 @@ use tauri::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let result = tauri::Builder::default()
+        .manage(commands::open_queue::PendingOpenRequests::default())
         .setup(|app| {
             let root = app.path().app_data_dir()?;
             fs::create_dir_all(&root)?;
@@ -29,7 +30,6 @@ pub fn run() {
                 .unwrap_or_default();
             app.manage(AppState {
                 documents: Mutex::new(HashMap::new()),
-                pending_open_tokens: Mutex::default(),
                 local: Mutex::new(local),
                 root,
                 dirty: Mutex::new(false),

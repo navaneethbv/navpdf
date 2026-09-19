@@ -246,7 +246,9 @@ export function Settings() {
             <input
               type="checkbox"
               checked={preferences.showStartupTips}
-              onChange={(e) => patch({ showStartupTips: e.target.checked })}
+              onChange={(e) => {
+                patch({ showStartupTips: e.target.checked });
+              }}
             />
             Show tips when NavPDF starts
           </label>
