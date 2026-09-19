@@ -4,6 +4,7 @@ import { useWorkspace } from "../../stores/workspace";
 import { savePreferences } from "../../services/native";
 import type { Preferences } from "../../types/document";
 import { applyTheme, colorPalettes } from "../../services/theme";
+import { CustomColors } from "./CustomColors";
 export function Settings() {
   const initial = useWorkspace((s) => s.local.preferences),
     set = useWorkspace((s) => s.set);
@@ -11,14 +12,20 @@ export function Settings() {
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const savePending = useRef(false);
-  const { theme, lightPalette, darkPalette } = preferences;
+  const { theme, lightPalette, darkPalette, lightOverrides, darkOverrides } = preferences;
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => applyTheme(theme, media.matches, { lightPalette, darkPalette });
+    const apply = () =>
+      applyTheme(theme, media.matches, {
+        lightPalette,
+        darkPalette,
+        lightOverrides,
+        darkOverrides,
+      });
     apply();
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
-  }, [theme, lightPalette, darkPalette]);
+  }, [theme, lightPalette, darkPalette, lightOverrides, darkOverrides]);
   useEffect(
     () => () => {
       applyTheme(
@@ -119,6 +126,22 @@ export function Settings() {
             Save settings to make these palettes your defaults. Each mode remembers its own colors.
             Switch Theme to preview either palette. PDF pages keep their original colors.
           </p>
+          <details className="custom-color-settings">
+            <summary>Custom background and accent colors</summary>
+            <p className="muted">
+              Overrides apply on top of the selected palette. Text colors adjust for readability.
+            </p>
+            <CustomColors
+              mode="Light"
+              value={lightOverrides ?? { background: null, accent: null }}
+              onChange={(value) => patch({ lightOverrides: value })}
+            />
+            <CustomColors
+              mode="Dark"
+              value={darkOverrides ?? { background: null, accent: null }}
+              onChange={(value) => patch({ darkOverrides: value })}
+            />
+          </details>
           <h3>PDF viewing</h3>
           <div className="form-columns">
             <label>

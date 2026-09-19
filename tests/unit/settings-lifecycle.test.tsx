@@ -151,3 +151,39 @@ it("previews, cancels and persists independent Light and Dark palettes", async (
   expect((screen.getByLabelText("Light palette") as HTMLSelectElement).value).toBe("coral");
   expect((screen.getByLabelText("Dark palette") as HTMLSelectElement).value).toBe("violet");
 });
+
+it("previews, cancels, saves and resets custom colors independently", async () => {
+  vi.mocked(savePreferences).mockResolvedValue(undefined);
+  render(<SettingsHost />);
+  fireEvent.click(screen.getByText("Custom background and accent colors"));
+  fireEvent.click(screen.getByLabelText("Custom light background"));
+  fireEvent.change(screen.getByLabelText("Light background color"), {
+    target: { value: "#ffeeaa" },
+  });
+  expect(document.documentElement.style.getPropertyValue("--surface")).toBe("#ffeeaa");
+  fireEvent.click(screen.getByText("Cancel"));
+  expect(document.documentElement.style.getPropertyValue("--surface")).toBe("");
+  act(() => useWorkspace.getState().set({ settingsOpen: true }));
+  fireEvent.click(screen.getByText("Custom background and accent colors"));
+  fireEvent.click(screen.getByLabelText("Custom light accent"));
+  fireEvent.change(screen.getByLabelText("Light accent color"), { target: { value: "#ff8800" } });
+  fireEvent.click(screen.getByLabelText("Custom dark background"));
+  fireEvent.change(screen.getByLabelText("Dark background color"), {
+    target: { value: "#102030" },
+  });
+  fireEvent.click(screen.getByText("Save settings"));
+  await vi.waitFor(() => expect(useWorkspace.getState().settingsOpen).toBe(false));
+  act(() => useWorkspace.getState().set({ settingsOpen: true }));
+  fireEvent.click(screen.getByText("Custom background and accent colors"));
+  expect((screen.getByLabelText("Light accent color") as HTMLInputElement).value).toBe("#ff8800");
+  expect((screen.getByLabelText("Dark background color") as HTMLInputElement).value).toBe(
+    "#102030",
+  );
+  fireEvent.click(screen.getByText("Reset light colors"));
+  expect((screen.getByLabelText("Light accent color") as HTMLInputElement).disabled).toBe(true);
+  expect((screen.getByLabelText("Dark background color") as HTMLInputElement).value).toBe(
+    "#102030",
+  );
+  fireEvent.click(screen.getByLabelText("Custom dark background"));
+  expect((screen.getByLabelText("Dark background color") as HTMLInputElement).disabled).toBe(true);
+});

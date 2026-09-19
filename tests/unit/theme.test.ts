@@ -55,3 +55,21 @@ it("offers 15 distinct palettes for either mode", () => {
   expect(colorPalettes).toHaveLength(15);
   expect(new Set(colorPalettes.map(({ value }) => value)).size).toBe(15);
 });
+
+it("switches independent custom colors with System and removes overrides on reset", () => {
+  const settings = {
+    lightPalette: "amber",
+    darkPalette: "ocean",
+    lightOverrides: { background: "#ffffff", accent: "#ffff00" },
+    darkOverrides: { background: "#101020", accent: "#ff8800" },
+  } as const;
+  applyTheme("system", false, settings);
+  expect(document.documentElement.style.getPropertyValue("--surface")).toBe("#ffffff");
+  expect(document.documentElement.style.getPropertyValue("--on-accent")).toBe("#000000");
+  applyTheme("system", true, settings);
+  expect(document.documentElement.style.getPropertyValue("--surface")).toBe("#101020");
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#ff8800");
+  applyTheme("light", false);
+  expect(document.documentElement.style.getPropertyValue("--surface")).toBe("");
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe("");
+});

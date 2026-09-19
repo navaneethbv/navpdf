@@ -17,6 +17,8 @@ Preview changes no longer briefly restore the saved theme, which caused mismatch
 Each mode offers 15 palettes: Default (Forest), Acrobat Gray, Amber, Coral, Ocean, Violet, Midnight, Graphite, Rose, Crimson, Mint, Teal, Lime, Sepia and Slate.
 The Acrobat-inspired option uses neutral gray backgrounds and blue controls.
 Light and Dark remember separate palettes, existing preferences default to the original colors, and PDF page colors remain unchanged.
+Optional background and accent overrides persist independently for each mode, preview immediately, adapt text contrast, and reset to the selected palette.
+Native storage validates custom colors before committing settings.
 Native inspection also found upper-left dialog positioning; shared dialogs now have automatic margins and bounded scrolling.
 CI adds the existing branch-protection check name as an aggregate requiring both Linux and macOS Rust jobs.
 This maintenance scope does not close the existing PDF interoperability or distribution gates below.

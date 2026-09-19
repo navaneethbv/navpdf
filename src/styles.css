@@ -2736,3 +2736,31 @@ p {
   font-size: 11px;
   line-height: 1.45;
 }
+.custom-color-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.custom-colors {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 14px 0 0;
+  min-width: 0;
+}
+.custom-colors legend {
+  padding: 0 5px;
+  font-weight: 600;
+}
+.custom-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.custom-color-row input[type="color"] {
+  width: 48px;
+  min-width: 48px;
+  height: 32px;
+  padding: 2px;
+}

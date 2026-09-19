@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { customThemeTokens } from "../../src/services/theme-colors";
 import { colorPalettes } from "../../src/services/theme";
 
 const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
@@ -50,4 +51,52 @@ describe.each(["light", "dark"])("%s palette contrast", (mode) => {
     expect(resolved.page).toBe(base.page);
     expect(resolved["page-ink"]).toBe(base["page-ink"]);
   });
+});
+
+it("keeps custom surfaces and button labels readable for extreme and midtone colors", () => {
+  const colors = [
+    "#000000",
+    "#ffffff",
+    "#ffff00",
+    "#ff8800",
+    "#ff0000",
+    "#00ff00",
+    "#0000ff",
+    "#757575",
+    "#777777",
+  ];
+  for (const background of colors) {
+    for (const accent of colors) {
+      const custom = customThemeTokens({ background, accent }, "#ffffff", "#1768c4");
+      for (const [fg, bg] of [
+        ["ink", "surface"],
+        ["ink", "surface-2"],
+        ["muted", "input"],
+        ["ink", "accent-soft"],
+        ["on-accent", "accent"],
+        ["on-accent", "accent-strong"],
+        ["on-brand", "brand"],
+      ]) {
+        const a = luminance(custom[fg]);
+        const b = luminance(custom[bg]);
+        expect(
+          (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+          `${background}/${accent}: ${fg}/${bg}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(custom).not.toHaveProperty("page");
+      expect(custom).not.toHaveProperty("page-ink");
+    }
+  }
+});
+it("ignores malformed custom colors and supports each override independently", () => {
+  expect(
+    customThemeTokens({ background: "red", accent: "url(bad)" }, "#ffffff", "#1768c4"),
+  ).toEqual({});
+  expect(
+    customThemeTokens({ background: null, accent: "#abcdef" }, "#ffffff", "#1768c4"),
+  ).not.toHaveProperty("surface");
+  expect(
+    customThemeTokens({ background: "#AbCdEf", accent: null }, "#ffffff", "#1768c4"),
+  ).not.toHaveProperty("accent");
 });

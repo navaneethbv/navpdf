@@ -31,10 +31,16 @@ export type ColorPalette =
   | "lime"
   | "sepia"
   | "slate";
+export interface ThemeOverrides {
+  background: string | null;
+  accent: string | null;
+}
 export interface Preferences {
   theme: "system" | "light" | "dark";
   lightPalette: ColorPalette;
   darkPalette: ColorPalette;
+  lightOverrides: ThemeOverrides;
+  darkOverrides: ThemeOverrides;
   defaultZoom: string;
   layout: Layout;
   rememberPage: boolean;
@@ -113,6 +119,8 @@ export const defaultPreferences: Preferences = {
   theme: "system",
   lightPalette: "default",
   darkPalette: "default",
+  lightOverrides: { background: null, accent: null },
+  darkOverrides: { background: null, accent: null },
   defaultZoom: "page-fit",
   layout: "continuous",
   rememberPage: true,

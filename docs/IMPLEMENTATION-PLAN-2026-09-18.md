@@ -15,6 +15,9 @@ Offer exactly 15 palettes in each mode: Default (Forest), Acrobat Gray, Amber, C
 Each has coordinated backgrounds, text, borders and accents.
 Acrobat Gray follows the neutral light-gray and dark-gray appearance described in [Adobe's display theme documentation](https://helpx.adobe.com/acrobat/desktop/get-started/preferences-and-settings/change-display.html), with blue controls; it is an inspired palette rather than a claim of exact proprietary color values.
 Remember separate light and dark palette choices, including when System mode switches appearance.
+Allow independent custom background and accent overrides for Light and Dark, layered over any of the 15 palettes.
+Overrides persist as defaults, preview immediately, and can be reset to the selected palette without changing other preferences.
+Derive readable text and button labels from custom colors and validate six-digit hexadecimal values at the native boundary.
 Theme changes affect application chrome only, leaving PDF paper and document colors intact.
 Broader missing capabilities and distribution gates remain in `docs/DELIVERY-PHASES.md`.
 Existing untracked files are outside this change.

@@ -23,6 +23,13 @@ use tauri::{
 use tempfile::NamedTempFile;
 use url::Url;
 
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ThemeOverrides {
+    pub background: Option<String>,
+    pub accent: Option<String>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +37,8 @@ pub struct Preferences {
     pub theme: String,
     pub light_palette: String,
     pub dark_palette: String,
+    pub light_overrides: ThemeOverrides,
+    pub dark_overrides: ThemeOverrides,
     pub default_zoom: String,
     pub layout: String,
     pub remember_page: bool,
@@ -49,6 +58,8 @@ impl Default for Preferences {
             theme: "system".into(),
             light_palette: "default".into(),
             dark_palette: "default".into(),
+            light_overrides: ThemeOverrides::default(),
+            dark_overrides: ThemeOverrides::default(),
             default_zoom: "page-fit".into(),
             layout: "continuous".into(),
             remember_page: true,
@@ -818,6 +829,19 @@ fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result
     {
         return Err("Invalid preference value.".into());
     }
+    for overrides in [&preferences.light_overrides, &preferences.dark_overrides] {
+        for color in [&overrides.background, &overrides.accent]
+            .into_iter()
+            .flatten()
+        {
+            if color.len() != 7
+                || !color.starts_with('#')
+                || !color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
+            {
+                return Err("Custom colors must use six-digit hexadecimal values.".into());
+            }
+        }
+    }
     preferences.network_access = false;
     let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
     let mut candidate = local.clone();
@@ -1252,6 +1276,8 @@ mod tests {
         assert_eq!(legacy.preferences.theme, "light");
         assert_eq!(legacy.preferences.light_palette, "default");
         assert_eq!(legacy.preferences.dark_palette, "default");
+        assert!(legacy.preferences.light_overrides.background.is_none());
+        assert!(legacy.preferences.dark_overrides.accent.is_none());
         let root = tempfile::tempdir().unwrap();
         let state = test_state(root.path());
         persist_preferences(&state, legacy.preferences.clone()).unwrap();
@@ -1270,6 +1296,80 @@ mod tests {
             );
             assert_eq!(state.local.lock().unwrap().preferences.theme, "light");
         }
+    }
+
+    #[test]
+    fn custom_theme_colors_roundtrip_and_invalid_colors_preserve_saved_state() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let preferences = Preferences {
+            light_palette: "acrobat".into(),
+            dark_palette: "midnight".into(),
+            light_overrides: ThemeOverrides {
+                background: Some("#FFFFff".into()),
+                accent: Some("#ff8800".into()),
+            },
+            dark_overrides: ThemeOverrides {
+                background: Some("#102030".into()),
+                accent: None,
+            },
+            ..Preferences::default()
+        };
+        persist_preferences(&state, preferences.clone()).unwrap();
+        let original = fs::read(root.path().join("settings.json")).unwrap();
+        let saved: LocalData = serde_json::from_slice(&original).unwrap();
+        assert_eq!(
+            saved.preferences.light_overrides.background.as_deref(),
+            Some("#FFFFff")
+        );
+        assert_eq!(
+            saved.preferences.light_overrides.accent.as_deref(),
+            Some("#ff8800")
+        );
+        assert_eq!(
+            saved.preferences.dark_overrides.background.as_deref(),
+            Some("#102030")
+        );
+        assert!(saved.preferences.dark_overrides.accent.is_none());
+        for color in ["red", "#fff", "#1234567", "#gggggg", "url(bad)", "#12é45"] {
+            for field in 0..4 {
+                let mut invalid = preferences.clone();
+                let target = match field {
+                    0 => &mut invalid.light_overrides.background,
+                    1 => &mut invalid.light_overrides.accent,
+                    2 => &mut invalid.dark_overrides.background,
+                    _ => &mut invalid.dark_overrides.accent,
+                };
+                *target = Some(color.into());
+                assert!(persist_preferences(&state, invalid).is_err());
+                assert_eq!(
+                    fs::read(root.path().join("settings.json")).unwrap(),
+                    original
+                );
+                assert_eq!(
+                    state
+                        .local
+                        .lock()
+                        .unwrap()
+                        .preferences
+                        .light_overrides
+                        .accent
+                        .as_deref(),
+                    Some("#ff8800")
+                );
+            }
+        }
+        let mut reset = preferences;
+        reset.light_overrides = ThemeOverrides::default();
+        persist_preferences(&state, reset).unwrap();
+        let saved: LocalData =
+            serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
+        assert!(saved.preferences.light_overrides.background.is_none());
+        assert!(saved.preferences.light_overrides.accent.is_none());
+        assert_eq!(
+            saved.preferences.dark_overrides.background.as_deref(),
+            Some("#102030")
+        );
     }
 
     #[test]

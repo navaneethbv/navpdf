@@ -1,4 +1,22 @@
 import type { ColorPalette, Preferences } from "../types/document";
+import { customThemeTokens } from "./theme-colors";
+
+const overrideTokens = [
+  "surface",
+  "surface-2",
+  "canvas",
+  "input",
+  "ink",
+  "muted",
+  "line",
+  "accent",
+  "accent-strong",
+  "on-accent",
+  "brand",
+  "on-brand",
+  "selection-fill",
+  "accent-soft",
+];
 
 export type ThemePreference = Preferences["theme"];
 export const colorPalettes: { value: ColorPalette; label: string }[] = [
@@ -26,7 +44,8 @@ export function resolveTheme(theme: ThemePreference, systemDark: boolean) {
 export function applyTheme(
   theme: ThemePreference,
   systemDark: boolean,
-  palettes?: Pick<Preferences, "lightPalette" | "darkPalette">,
+  palettes?: Pick<Preferences, "lightPalette" | "darkPalette"> &
+    Partial<Pick<Preferences, "lightOverrides" | "darkOverrides">>,
 ) {
   const resolved = resolveTheme(theme, systemDark);
   const palette = resolved === "dark" ? palettes?.darkPalette : palettes?.lightPalette;
@@ -34,4 +53,18 @@ export function applyTheme(
   document.documentElement.dataset.palette =
     colorPalettes.find((entry) => entry.value === palette)?.value ?? "default";
   document.documentElement.style.colorScheme = resolved;
+  const root = document.documentElement;
+  for (const token of overrideTokens) root.style.removeProperty(`--${token}`);
+  const overrides = resolved === "dark" ? palettes?.darkOverrides : palettes?.lightOverrides;
+  if (overrides) {
+    const computed = getComputedStyle(root);
+    const tokens = customThemeTokens(
+      overrides,
+      computed.getPropertyValue("--surface").trim() ||
+        (resolved === "dark" ? "#151c18" : "#fbfaf7"),
+      computed.getPropertyValue("--accent").trim() || (resolved === "dark" ? "#9dd6b6" : "#2c7257"),
+    );
+    for (const [token, value] of Object.entries(tokens))
+      root.style.setProperty(`--${token}`, value);
+  }
 }
