@@ -8,14 +8,14 @@ export function Dialog({
   priority,
   busy = false,
   className = "",
-}: {
+}: Readonly<{
   title: string;
   children: ReactNode;
   onClose: () => void;
   priority?: boolean;
   busy?: boolean;
   className?: string;
-}) {
+}>) {
   const ref = useRef<HTMLDialogElement>(null),
     id = useId();
   useEffect(() => {

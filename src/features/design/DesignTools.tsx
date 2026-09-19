@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Sparkles, Layout, X } from "lucide-react";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
@@ -9,10 +9,12 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 export function DesignTools({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [template, setTemplate] = useState<"modern" | "minimal" | "corporate">("modern");
   const [title, setTitle] = useState(s.document?.name.replace(/\.pdf$/i, "") || "Document Title");
@@ -142,7 +144,9 @@ export function DesignTools({
       }
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(newBytes, "Cover page generated and inserted");
+      await controller.replaceWithBytes(newBytes, "Cover page generated and inserted", {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -165,8 +169,8 @@ export function DesignTools({
         </div>
 
         <div className="modal-body">
-          <div className="setting-group">
-            <label className="setting-title">Template Style</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Template Style</legend>
             <div className="tab-buttons-bar">
               <button
                 className={template === "modern" ? "active" : ""}
@@ -190,11 +194,14 @@ export function DesignTools({
                 Minimal
               </button>
             </div>
-          </div>
+          </fieldset>
 
           <div className="setting-group">
-            <label className="setting-title">Title</label>
+            <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+              Title
+            </label>
             <input
+              id={`${fieldIds}-field-1`}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -203,8 +210,11 @@ export function DesignTools({
           </div>
 
           <div className="setting-group">
-            <label className="setting-title">Subtitle</label>
+            <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+              Subtitle
+            </label>
             <input
+              id={`${fieldIds}-field-2`}
               type="text"
               value={subtitle}
               onChange={(e) => setSubtitle(e.target.value)}
@@ -213,8 +223,11 @@ export function DesignTools({
           </div>
 
           <div className="setting-group">
-            <label className="setting-title">Author / Organization</label>
+            <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
+              Author / Organization
+            </label>
             <input
+              id={`${fieldIds}-field-3`}
               type="text"
               value={author}
               onChange={(e) => setAuthor(e.target.value)}

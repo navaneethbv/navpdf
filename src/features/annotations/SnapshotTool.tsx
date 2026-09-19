@@ -3,7 +3,7 @@ import { Copy, Download, X, Check } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import { safeFileName } from "../../utils/download";
 
-export function SnapshotTool({ onClose }: { onClose: () => void }) {
+export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
   const s = useWorkspace();
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [current, setCurrent] = useState<{ x: number; y: number } | null>(null);

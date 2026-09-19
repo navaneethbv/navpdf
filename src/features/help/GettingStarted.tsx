@@ -72,7 +72,7 @@ const tips = [
   },
 ];
 
-export function GettingStarted({ ready }: { ready: boolean }) {
+export function GettingStarted({ ready }: Readonly<{ ready: boolean }>) {
   const state = useWorkspace();
   const startupHandled = useRef(false);
   useEffect(() => {
@@ -87,7 +87,7 @@ export function GettingStarted({ ready }: { ready: boolean }) {
   return <GuideDialog key={mode} mode={mode} />;
 }
 
-function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
+function GuideDialog({ mode }: Readonly<{ mode: "help" | "tour" | "tips" }>) {
   const [step, setStep] = useState(0);
   const [tip, setTip] = useState(() => Math.floor(Date.now() / 86_400_000) % tips.length);
   const [hideTips, setHideTips] = useState(false);
@@ -120,15 +120,12 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
   };
   const current = steps.at(step) ?? steps[0];
   const currentTip = tips.at(tip) ?? tips[0];
+  const nextLabel = step === steps.length - 1 ? "Get started" : "Next";
   const Icon = mode === "tour" ? current.icon : Lightbulb;
   return (
     <Dialog
       title={
-        mode === "tour"
-          ? "Welcome to NavPDF"
-          : mode === "tips"
-            ? "A tip for your workspace"
-            : "Help and tips"
+        { tour: "Welcome to NavPDF", tips: "A tip for your workspace", help: "Help and tips" }[mode]
       }
       onClose={() => void close()}
       busy={saving}
@@ -139,7 +136,6 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
           <p>Get familiar with your workspace, or discover a useful shortcut.</p>
           <button
             className="button"
-            autoFocus
             data-autofocus
             onClick={() => useWorkspace.getState().set({ activeModal: "tour" })}
           >
@@ -202,7 +198,6 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                   Back
                 </button>
                 <button
-                  autoFocus
                   data-autofocus
                   className="button primary"
                   disabled={saving}
@@ -211,7 +206,7 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                     else setStep(step + 1);
                   }}
                 >
-                  {saving ? "Saving…" : step === steps.length - 1 ? "Get started" : "Next"}
+                  {saving ? "Saving…" : nextLabel}
                 </button>
               </>
             ) : (
@@ -227,7 +222,6 @@ function GuideDialog({ mode }: { mode: "help" | "tour" | "tips" }) {
                 </button>
                 <span />
                 <button
-                  autoFocus
                   data-autofocus
                   className="button primary"
                   disabled={saving}

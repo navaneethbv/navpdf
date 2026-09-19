@@ -189,9 +189,7 @@ describe("password protection", () => {
     expect(view.replaceWithBytes).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       "Unlocked for editing",
-      {
-        resetHistory: true,
-      },
+      { expectedSource: view.pdf, resetHistory: true },
     );
     expect(useWorkspace.getState().info).toMatchObject({ encrypted: false, protectedSource: true });
     expect(discardRecovery).toHaveBeenCalled();
@@ -245,6 +243,7 @@ describe("measured compression", () => {
     expect(view.replaceWithBytes).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       "Compressed (Smallest): saved 3.0 KB",
+      { expectedSource: view.pdf },
     );
     expect(formatBytes(-2 * 1024 * 1024)).toBe("-2.00 MB");
   });
@@ -330,9 +329,7 @@ describe("redaction workflow", () => {
     expect(view.replaceWithBytes).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       "Redactions applied",
-      {
-        resetHistory: true,
-      },
+      { expectedSource: view.pdf, resetHistory: true },
     );
     expect(useWorkspace.getState().status).toMatch(/Save As/);
   });
@@ -486,7 +483,9 @@ describe("existing content editor", () => {
     expect(await screen.findByText(/60.0 pt wide/)).toBeTruthy();
     fireEvent.click(screen.getByText("Replace Text"));
     await vi.waitFor(() =>
-      expect(view.replaceWithBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "Text replaced."),
+      expect(view.replaceWithBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "Text replaced.", {
+        expectedSource: view.pdf,
+      }),
     );
     expect(engine.editPage.mock.calls[1][2]).toEqual({
       type: "replaceText",

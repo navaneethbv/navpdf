@@ -42,10 +42,11 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 export function ObjectEditor({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const ids = useId();
   const [scan, setScan] = useState<PageObjects | null>(null);
@@ -103,7 +104,9 @@ export function ObjectEditor({
       const result = await editPage(await controller.pdf.saveDocument(), scan.page, request, rgba);
       setReport(result.report);
       if (result.bytes) {
-        await controller.replaceWithBytes(result.bytes, result.report.message);
+        await controller.replaceWithBytes(result.bytes, result.report.message, {
+          expectedSource: sourcePdf,
+        });
         setSelectedId(null);
       }
     } catch (error) {
@@ -353,16 +356,15 @@ export function ObjectEditor({
                 </button>
               )}
               {report && (
-                <p
+                <output
                   className={
                     report.applied || report.missingCharacters.length === 0
                       ? "field-hint"
                       : "error-text"
                   }
-                  role="status"
                 >
                   {report.message}
-                </p>
+                </output>
               )}
             </div>
           </div>

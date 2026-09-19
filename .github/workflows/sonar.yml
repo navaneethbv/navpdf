@@ -12,44 +12,40 @@ permissions:
 
 jobs:
   sonar:
-    name: SonarCloud
+    # The project currently uses SonarCloud automatic analysis. Enable this job
+    # only after disabling automatic analysis and configuring SONAR_TOKEN.
+    if: vars.SONAR_CI_ANALYSIS == 'true'
+    name: SonarCloud CI analysis
     runs-on: ubuntu-latest
     steps:
       - name: Check for SONAR_TOKEN
-        id: guard
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           if [ -z "$SONAR_TOKEN" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::SONAR_TOKEN is not set. Skipping analysis."
-            echo "::notice::Add the secret and set sonar.organization/sonar.projectKey in sonar-project.properties to enable it."
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "::error::SONAR_TOKEN is required for CI analysis."
+            exit 1
           fi
 
-      - uses: actions/checkout@v7
-        if: steps.guard.outputs.configured == 'true'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Sonar needs full history to assign blame and compute new-code periods.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v7
-        if: steps.guard.outputs.configured == 'true'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
-        if: steps.guard.outputs.configured == 'true'
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Generate coverage for analysis
-        if: steps.guard.outputs.configured == 'true'
         run: npm run test:coverage
 
       - name: SonarCloud scan
-        if: steps.guard.outputs.configured == 'true'
-        uses: SonarSource/sonarqube-scan-action@v8
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: -Dsonar.qualitygate.wait=true

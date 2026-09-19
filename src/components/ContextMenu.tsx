@@ -12,13 +12,13 @@ export function ContextMenu({
   actions,
   onAction,
   onClose,
-}: {
+}: Readonly<{
   x: number;
   y: number;
   actions: ContextMenuAction[];
   onAction: (id: string) => void;
   onClose: () => void;
-}) {
+}>) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const first = ref.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");

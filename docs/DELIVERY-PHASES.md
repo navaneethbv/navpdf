@@ -7,6 +7,13 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 19 security and quality review in progress
+
+The [security review](SECURITY-REVIEW-2026-09-19.md) tracks annotation serialization, bounded stream decoding, redaction resource removal and document lifecycle corrections.
+The initial SonarCloud analysis reported 462 unresolved issues.
+The security regressions and baseline frontend suite pass locally, but the remaining quality backlog, hosted checks and rebuilt native acceptance still gate this delivery.
+No delivery phase or feature-parity gate is closed by this review alone.
+
 ## September 19 single-document workspace and export delivery
 
 The [workspace implementation plan](IMPLEMENTATION-PLAN-2026-09-19-WORKSPACE.md) follows the supplied reference screenshots with one PDF open at a time.

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useId, useState, useRef, useEffect } from "react";
 import {
   PenLine,
   Check,
@@ -34,10 +34,12 @@ import { PageNumberInput } from "../../components/PageNumberInput";
 export function FillAndSign({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [tab, setTab] = useState<"library" | "draw" | "type" | "import" | "marks">("library");
   const [signatures, setSignatures] = useState<SavedSignature[]>(() => {
@@ -242,7 +244,9 @@ export function FillAndSign({
       });
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(newBytes, "Signature appearance placed on page");
+      await controller.replaceWithBytes(newBytes, "Signature appearance placed on page", {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -310,7 +314,9 @@ export function FillAndSign({
       }
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(newBytes, `Mark (${symbol}) placed on document`);
+      await controller.replaceWithBytes(newBytes, `Mark (${symbol}) placed on document`, {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -570,7 +576,7 @@ export function FillAndSign({
                   name="sigType"
                   checked={sigType === "signature"}
                   onChange={() => setSigType("signature")}
-                />
+                />{" "}
                 Signature
               </label>
               <label
@@ -581,7 +587,7 @@ export function FillAndSign({
                   name="sigType"
                   checked={sigType === "initials"}
                   onChange={() => setSigType("initials")}
-                />
+                />{" "}
                 Initials
               </label>
               <label
@@ -597,7 +603,7 @@ export function FillAndSign({
                   type="checkbox"
                   checked={sessionOnly}
                   onChange={(e) => setSessionOnly(e.target.checked)}
-                />
+                />{" "}
                 Session only (do not persist)
               </label>
             </div>
@@ -718,8 +724,11 @@ export function FillAndSign({
               }}
             >
               <div>
-                <label className="setting-title">Page</label>
+                <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+                  Page
+                </label>
                 <PageNumberInput
+                  id={`${fieldIds}-field-1`}
                   value={targetPage}
                   max={s.info?.pages || 1}
                   onChange={setTargetPage}
@@ -727,8 +736,11 @@ export function FillAndSign({
                 />
               </div>
               <div>
-                <label className="setting-title">X (pt)</label>
+                <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                  X (pt)
+                </label>
                 <input
+                  id={`${fieldIds}-field-2`}
                   type="number"
                   value={posX}
                   onChange={(e) => setPosX(Number(e.target.value))}
@@ -736,8 +748,11 @@ export function FillAndSign({
                 />
               </div>
               <div>
-                <label className="setting-title">Y From Top (pt)</label>
+                <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
+                  Y From Top (pt)
+                </label>
                 <input
+                  id={`${fieldIds}-field-3`}
                   type="number"
                   value={posY}
                   onChange={(e) => setPosY(Number(e.target.value))}
@@ -746,8 +761,11 @@ export function FillAndSign({
               </div>
               {tab === "library" && (
                 <div>
-                  <label className="setting-title">Width (pt)</label>
+                  <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
+                    Width (pt)
+                  </label>
                   <input
+                    id={`${fieldIds}-field-4`}
                     type="number"
                     min={40}
                     max={400}

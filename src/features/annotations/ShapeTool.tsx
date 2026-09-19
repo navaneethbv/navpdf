@@ -63,7 +63,7 @@ function previewStyle(draft: Draft, overlay: HTMLElement) {
   };
 }
 
-export function ShapeTool({ controller }: { controller: ViewerController }) {
+export function ShapeTool({ controller }: Readonly<{ controller: ViewerController }>) {
   const overlay = useRef<HTMLDivElement>(null);
   const active = useRef<{
     pointerId: number;

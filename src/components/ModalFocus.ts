@@ -1,10 +1,10 @@
-const MODAL = '[role="dialog"][aria-modal="true"]';
+const MODAL = '[role="dialog"][aria-modal="true"], dialog[open][aria-modal="true"]';
 const FOCUSABLE =
   "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]";
 
 function topModal(root: Document) {
   const modals = root.querySelectorAll<HTMLElement>(MODAL);
-  return modals.length ? modals[modals.length - 1] : null;
+  return modals.length ? modals.item(modals.length - 1) : null;
 }
 
 function focusableIn(modal: HTMLElement) {
@@ -51,7 +51,7 @@ export function installModalFocus(root: Document = document) {
       return;
     }
     const first = items[0];
-    const last = items[items.length - 1];
+    const last = items.at(-1)!;
     if (!modal.contains(active)) {
       event.preventDefault();
       (event.shiftKey ? last : first).focus();

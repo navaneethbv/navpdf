@@ -215,6 +215,45 @@ describe("ViewerController lifecycle", () => {
     await vi.waitFor(() => expect(useWorkspace.getState().comments).toEqual([]));
   });
 
+  it("rejects output computed from a document that has since been replaced", async () => {
+    const original = makePdf(2);
+    const current = makePdf(3);
+    await controller.attach(original as never);
+    await controller.attach(current as never);
+    await expect(
+      controller.replaceWithBytes(new Uint8Array([2]), "Old edit", {
+        expectedSource: original as never,
+      }),
+    ).rejects.toThrow(/document changed/);
+    expect(controller.pdf).toBe(current);
+    expect(commitWorkingRevision).not.toHaveBeenCalled();
+    expect(loadPdfFromBytes).not.toHaveBeenCalled();
+  });
+
+  it("does not restore an obsolete document if the candidate finishes after another attachment", async () => {
+    const original = makePdf(2);
+    await controller.attach(original as never);
+    let finish!: (value: unknown) => void;
+    const destroy = vi.fn(async () => {});
+    loadPdfFromBytes.mockReturnValue({
+      promise: new Promise((resolve) => {
+        finish = resolve;
+      }),
+      destroy,
+    });
+    const replacing = controller.replaceWithBytes(new Uint8Array([2]), "Edit", {
+      expectedSource: original as never,
+    });
+    await vi.waitFor(() => expect(loadPdfFromBytes).toHaveBeenCalled());
+    const current = makePdf(4);
+    await controller.attach(current as never);
+    finish(makePdf(3));
+    await expect(replacing).rejects.toThrow(/document changed/);
+    expect(controller.pdf).toBe(current);
+    expect(commitWorkingRevision).not.toHaveBeenCalled();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it("restores the active document when native revision publication fails", async () => {
     const original = makePdf(2);
     await controller.attach(original as never);

@@ -1,3 +1,4 @@
+import { artifactPath } from "./local-paths.mjs";
 // Synthetic Phase 7 acceptance corpus. Every canary is unique so an independent consumer can
 // prove its absence. Output goes to ignored directories; nothing here is a checked-in fixture.
 import {
@@ -271,7 +272,8 @@ async function losslessDocument() {
   return pdf.save({ useObjectStreams: false });
 }
 
-export async function createCorpus(directory) {
+export async function createCorpus(target) {
+  const directory = artifactPath(target);
   await mkdir(directory, { recursive: true });
   const redaction = await redactionDocument();
   const files = {

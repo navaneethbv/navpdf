@@ -179,7 +179,7 @@ describe("Searchable PDF Layer and Integrity (P6.3)", () => {
         .filter((str) => str === "Recognized");
 
       // Exactly 1 occurrence of "Recognized", not duplicated
-      expect(items.length).toBe(1);
+      expect(items).toHaveLength(1);
     } finally {
       await reopened.loadingTask.destroy();
     }

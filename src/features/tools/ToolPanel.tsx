@@ -46,7 +46,7 @@ interface ToolItem {
   disabled?: boolean;
 }
 
-export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => void }) {
+export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose: () => void }>) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(false);
   const s = useWorkspace();
@@ -409,19 +409,16 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     return t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
   });
 
-  const title =
-    mode === "all"
-      ? "All Tools"
-      : mode === "edit"
-        ? "Edit PDF"
-        : mode === "convert"
-          ? "Convert & Export"
-          : mode === "esign"
-            ? "Fill & Sign"
-            : "Create PDF";
+  const titles: Record<string, string> = {
+    all: "All Tools",
+    edit: "Edit PDF",
+    convert: "Convert & Export",
+    esign: "Fill & Sign",
+  };
+  const title = titles[mode] ?? "Create PDF";
 
   return (
-    <div className="tool-drawer" role="region" aria-label={title}>
+    <section className="tool-drawer" aria-label={title}>
       <div className="tool-drawer-header">
         <div className="tool-drawer-title">
           <h3>{title}</h3>
@@ -477,6 +474,6 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
           {expanded ? "View less" : "View more"}
         </button>
       )}
-    </div>
+    </section>
   );
 }

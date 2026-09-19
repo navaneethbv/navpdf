@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useId, useState, useRef, useEffect } from "react";
 import { FilePlus, Combine, Check, X, ArrowUp, ArrowDown } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
@@ -22,11 +22,12 @@ export function CreatePdfDialog({
   onLoad,
   onClose,
   initialTab = "blank",
-}: {
+}: Readonly<{
   initialTab?: "blank" | "combine";
   onLoad: (file: File) => void;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
   const s = useWorkspace();
   const [tab, setTab] = useState<"blank" | "combine">(initialTab);
   const [pageCount, setPageCount] = useState(1);
@@ -156,6 +157,7 @@ export function CreatePdfDialog({
     });
   };
 
+  const createLabel = tab === "blank" ? "Create PDF" : "Combine & Open";
   return (
     <FeatureDialog title="Create PDF" onClose={onClose} busy={creating}>
       <div className="modal-dialog">
@@ -190,8 +192,11 @@ export function CreatePdfDialog({
           {tab === "blank" ? (
             <div key="blank-section">
               <div className="setting-group">
-                <label className="setting-title">Page Count</label>
+                <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+                  Page Count
+                </label>
                 <input
+                  id={`${fieldIds}-field-1`}
                   key="blank-page-count"
                   type="number"
                   min={1}
@@ -203,8 +208,11 @@ export function CreatePdfDialog({
               </div>
 
               <div className="setting-group">
-                <label className="setting-title">Page Size</label>
+                <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                  Page Size
+                </label>
                 <select
+                  id={`${fieldIds}-field-2`}
                   value={pageSize}
                   onChange={(e) => setPageSize(e.target.value as "a4" | "letter")}
                   className="select-input"
@@ -288,11 +296,7 @@ export function CreatePdfDialog({
                 </div>
               )}
 
-              {structureLoss && (
-                <p className="structure-warning" role="status">
-                  {structureLoss}
-                </p>
-              )}
+              {structureLoss && <output className="structure-warning">{structureLoss}</output>}
             </div>
           )}
         </div>
@@ -311,8 +315,7 @@ export function CreatePdfDialog({
             }
             className="button-primary"
           >
-            <Check size={16} />{" "}
-            {creating ? "Creating..." : tab === "blank" ? "Create PDF" : "Combine & Open"}
+            <Check size={16} /> {creating ? "Creating..." : createLabel}
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useId, useState, useRef, useMemo } from "react";
 import { Type, Image as ImageIcon, X, AlertTriangle } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
@@ -17,11 +17,13 @@ export function ContentEditor({
   controller,
   type,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   type: "text" | "image";
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [text, setText] = useState("");
   const [fontSize, setFontSize] = useState(14);
@@ -49,9 +51,9 @@ export function ContentEditor({
     setSaving(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const r = parseInt(fontColor.slice(1, 3), 16) / 255;
-      const g = parseInt(fontColor.slice(3, 5), 16) / 255;
-      const b = parseInt(fontColor.slice(5, 7), 16) / 255;
+      const r = Number.parseInt(fontColor.slice(1, 3), 16) / 255;
+      const g = Number.parseInt(fontColor.slice(3, 5), 16) / 255;
+      const b = Number.parseInt(fontColor.slice(5, 7), 16) / 255;
       let textX = posX;
       let textY = posY;
       try {
@@ -77,7 +79,9 @@ export function ContentEditor({
         maxWidth: maxWidth > 0 ? maxWidth : undefined,
       });
 
-      await controller.replaceWithBytes(newBytes, "Text added to document");
+      await controller.replaceWithBytes(newBytes, "Text added to document", {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -105,7 +109,9 @@ export function ContentEditor({
         rotationDegrees: imageRotation,
       });
 
-      await controller.replaceWithBytes(newBytes, "Image inserted into document");
+      await controller.replaceWithBytes(newBytes, "Image inserted into document", {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -133,8 +139,11 @@ export function ContentEditor({
 
         <div className="modal-body">
           <div className="setting-group">
-            <label className="setting-title">Target Page</label>
+            <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+              Target Page
+            </label>
             <PageNumberInput
+              id={`${fieldIds}-field-1`}
               value={targetPage}
               max={s.info?.pages || 1}
               onChange={setTargetPage}
@@ -145,8 +154,11 @@ export function ContentEditor({
           {type === "text" ? (
             <>
               <div className="setting-group">
-                <label className="setting-title">Text Content</label>
+                <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                  Text Content
+                </label>
                 <textarea
+                  id={`${fieldIds}-field-2`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   placeholder="Enter text to place on page..."
@@ -181,8 +193,11 @@ export function ContentEditor({
 
               <div className="settings-row">
                 <div className="setting-group">
-                  <label className="setting-title">Font Family</label>
+                  <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
+                    Font Family
+                  </label>
                   <select
+                    id={`${fieldIds}-field-3`}
                     value={fontFamily}
                     onChange={(e) => setFontFamily(e.target.value as StandardFontFamily)}
                     className="select-input"
@@ -195,8 +210,11 @@ export function ContentEditor({
                 </div>
 
                 <div className="setting-group">
-                  <label className="setting-title">Alignment</label>
+                  <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
+                    Alignment
+                  </label>
                   <select
+                    id={`${fieldIds}-field-4`}
                     value={alignment}
                     onChange={(e) => setAlignment(e.target.value as "left" | "center" | "right")}
                     className="select-input"
@@ -210,8 +228,11 @@ export function ContentEditor({
 
               <div className="settings-row">
                 <div className="setting-group">
-                  <label className="setting-title">Font Size (pt)</label>
+                  <label htmlFor={`${fieldIds}-field-5`} className="setting-title">
+                    Font Size (pt)
+                  </label>
                   <input
+                    id={`${fieldIds}-field-5`}
                     type="number"
                     min={8}
                     max={72}
@@ -221,8 +242,11 @@ export function ContentEditor({
                   />
                 </div>
                 <div className="setting-group">
-                  <label className="setting-title">Color</label>
+                  <label htmlFor={`${fieldIds}-field-6`} className="setting-title">
+                    Color
+                  </label>
                   <input
+                    id={`${fieldIds}-field-6`}
                     type="color"
                     value={fontColor}
                     onChange={(e) => setFontColor(e.target.value)}
@@ -232,8 +256,11 @@ export function ContentEditor({
               </div>
 
               <div className="setting-group">
-                <label className="setting-title">Max Wrap Width (pt)</label>
+                <label htmlFor={`${fieldIds}-field-7`} className="setting-title">
+                  Max Wrap Width (pt)
+                </label>
                 <input
+                  id={`${fieldIds}-field-7`}
                   type="number"
                   min={50}
                   max={800}
@@ -245,8 +272,11 @@ export function ContentEditor({
 
               <div className="settings-row">
                 <div className="setting-group">
-                  <label className="setting-title">X Position (pt)</label>
+                  <label htmlFor={`${fieldIds}-field-8`} className="setting-title">
+                    X Position (pt)
+                  </label>
                   <input
+                    id={`${fieldIds}-field-8`}
                     type="number"
                     value={posX}
                     onChange={(e) => setPosX(Number(e.target.value))}
@@ -254,8 +284,11 @@ export function ContentEditor({
                   />
                 </div>
                 <div className="setting-group">
-                  <label className="setting-title">Y Position from top (pt)</label>
+                  <label htmlFor={`${fieldIds}-field-9`} className="setting-title">
+                    Y Position from top (pt)
+                  </label>
                   <input
+                    id={`${fieldIds}-field-9`}
                     type="number"
                     value={posY}
                     onChange={(e) => setPosY(Number(e.target.value))}
@@ -266,21 +299,24 @@ export function ContentEditor({
             </>
           ) : (
             <>
-              <div className="setting-group">
-                <label className="setting-title">Image Scaling & Aspect Ratio</label>
+              <fieldset className="setting-group">
+                <legend className="setting-title">Image Scaling & Aspect Ratio</legend>
                 <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <input
                     type="checkbox"
                     checked={preserveAspectRatio}
                     onChange={(e) => setPreserveAspectRatio(e.target.checked)}
-                  />
+                  />{" "}
                   Preserve Aspect Ratio
                 </label>
-              </div>
+              </fieldset>
 
               <div className="setting-group">
-                <label className="setting-title">Opacity ({Math.round(imageOpacity * 100)}%)</label>
+                <label htmlFor={`${fieldIds}-field-10`} className="setting-title">
+                  Opacity ({Math.round(imageOpacity * 100)}%)
+                </label>
                 <input
+                  id={`${fieldIds}-field-10`}
                   type="range"
                   min="0.1"
                   max="1.0"
@@ -306,8 +342,8 @@ export function ContentEditor({
                 />
               </div>
 
-              <div className="setting-group">
-                <label className="setting-title">Select Image File</label>
+              <fieldset className="setting-group">
+                <legend className="setting-title">Select Image File</legend>
                 <button
                   className="button-secondary"
                   onClick={() => fileInputRef.current?.click()}
@@ -322,7 +358,7 @@ export function ContentEditor({
                   style={{ display: "none" }}
                   onChange={handleApplyImage}
                 />
-              </div>
+              </fieldset>
             </>
           )}
         </div>

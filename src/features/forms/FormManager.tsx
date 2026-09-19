@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useId, useEffect, useState } from "react";
 import {
   Type,
   CheckSquare,
@@ -42,10 +42,12 @@ type ExistingField = {
 export function FormManager({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [fieldType, setFieldType] = useState<
     "text" | "checkbox" | "radio" | "dropdown" | "button" | "signature"
@@ -175,7 +177,9 @@ export function FormManager({
         required: existingRequired,
         readOnly: existingReadOnly,
       });
-      await controller.replaceWithBytes(bytes, `Form field "${selectedExisting.name}" updated`);
+      await controller.replaceWithBytes(bytes, `Form field "${selectedExisting.name}" updated`, {
+        expectedSource: sourcePdf,
+      });
       await loadExistingFields();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -192,7 +196,9 @@ export function FormManager({
         await controller.pdf.saveDocument(),
         selectedExisting.name,
       );
-      await controller.replaceWithBytes(bytes, `Form field "${selectedExisting.name}" deleted`);
+      await controller.replaceWithBytes(bytes, `Form field "${selectedExisting.name}" deleted`, {
+        expectedSource: sourcePdf,
+      });
       await loadExistingFields();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -260,7 +266,9 @@ export function FormManager({
       };
 
       const newBytes = await addFormField(currentBytes, definition);
-      await controller.replaceWithBytes(newBytes, `Form field "${fieldName}" created`);
+      await controller.replaceWithBytes(newBytes, `Form field "${fieldName}" created`, {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -269,6 +277,53 @@ export function FormManager({
     }
   };
 
+  const renderExistingValue = () => {
+    if (!selectedExisting) return null;
+    if (selectedExisting.kind === "checkbox")
+      return (
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            marginTop: "8px",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={existingChecked}
+            onChange={(event) => setExistingChecked(event.target.checked)}
+          />{" "}
+          Checked
+        </label>
+      );
+    if (selectedExisting.kind === "choice")
+      return (
+        <select
+          className="select-input"
+          value={existingValue}
+          onChange={(event) => setExistingValue(event.target.value)}
+          disabled={saving || existingReadOnly}
+          aria-label="Existing field value"
+        >
+          <option value="">No selection</option>
+          {selectedExisting.options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    return (
+      <input
+        className="text-input"
+        value={existingValue}
+        onChange={(event) => setExistingValue(event.target.value)}
+        disabled={saving || existingReadOnly}
+        aria-label="Existing field value"
+      />
+    );
+  };
   return (
     <FeatureDialog title="Prepare Form Fields" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
@@ -305,53 +360,14 @@ export function FormManager({
                 selectedExisting.kind !== "button" &&
                 selectedExisting.kind !== "other" && (
                   <>
-                    {selectedExisting.kind === "checkbox" ? (
-                      <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          marginTop: "8px",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={existingChecked}
-                          onChange={(event) => setExistingChecked(event.target.checked)}
-                        />
-                        Checked
-                      </label>
-                    ) : selectedExisting.kind === "choice" ? (
-                      <select
-                        className="select-input"
-                        value={existingValue}
-                        onChange={(event) => setExistingValue(event.target.value)}
-                        disabled={saving || existingReadOnly}
-                        aria-label="Existing field value"
-                      >
-                        <option value="">No selection</option>
-                        {selectedExisting.options.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        className="text-input"
-                        value={existingValue}
-                        onChange={(event) => setExistingValue(event.target.value)}
-                        disabled={saving || existingReadOnly}
-                        aria-label="Existing field value"
-                      />
-                    )}
+                    {renderExistingValue()}
                     <div style={{ display: "flex", gap: "16px", marginTop: "8px" }}>
                       <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <input
                           type="checkbox"
                           checked={existingRequired}
                           onChange={(event) => setExistingRequired(event.target.checked)}
-                        />
+                        />{" "}
                         Required
                       </label>
                       <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -359,7 +375,7 @@ export function FormManager({
                           type="checkbox"
                           checked={existingReadOnly}
                           onChange={(event) => setExistingReadOnly(event.target.checked)}
-                        />
+                        />{" "}
                         Read-Only
                       </label>
                     </div>
@@ -386,8 +402,8 @@ export function FormManager({
             </div>
           )}
 
-          <div className="setting-group">
-            <label className="setting-title">Field Type</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Field Type</legend>
             <div className="tab-buttons-bar">
               <button
                 type="button"
@@ -438,11 +454,14 @@ export function FormManager({
                 <PenTool size={15} /> Signature
               </button>
             </div>
-          </div>
+          </fieldset>
 
           <div className="setting-group">
-            <label className="setting-title">Field Name</label>
+            <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+              Field Name
+            </label>
             <input
+              id={`${fieldIds}-field-1`}
               type="text"
               placeholder="e.g. FirstName, SignatureDate, Agreed"
               value={fieldName}
@@ -453,8 +472,11 @@ export function FormManager({
 
           {fieldType === "radio" && (
             <div className="setting-group">
-              <label className="setting-title">Radio Group Name</label>
+              <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                Radio Group Name
+              </label>
               <input
+                id={`${fieldIds}-field-2`}
                 type="text"
                 placeholder="e.g. PaymentMethod, DeliveryChoice"
                 value={groupName}
@@ -469,8 +491,11 @@ export function FormManager({
 
           {fieldType === "dropdown" && (
             <div className="setting-group">
-              <label className="setting-title">Dropdown Options</label>
+              <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
+                Dropdown Options
+              </label>
               <input
+                id={`${fieldIds}-field-3`}
                 type="text"
                 placeholder="Comma separated: Red, Green, Blue"
                 value={optionsText}
@@ -481,21 +506,18 @@ export function FormManager({
           )}
 
           <div className="setting-group">
-            <label className="setting-title">
-              {fieldType === "button"
-                ? "Button Label"
-                : fieldType === "radio"
-                  ? "Option Value"
-                  : "Default Value"}
+            <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
+              {({ button: "Button Label", radio: "Option Value" } as Record<string, string>)[
+                fieldType
+              ] ?? "Default Value"}
             </label>
             <input
+              id={`${fieldIds}-field-4`}
               type="text"
               placeholder={
-                fieldType === "button"
-                  ? "e.g. Submit"
-                  : fieldType === "radio"
-                    ? "e.g. Yes"
-                    : "Optional default value"
+                ({ button: "e.g. Submit", radio: "e.g. Yes" } as Record<string, string>)[
+                  fieldType
+                ] ?? "Optional default value"
               }
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
@@ -504,8 +526,11 @@ export function FormManager({
           </div>
 
           <div className="setting-group">
-            <label className="setting-title">Page</label>
+            <label htmlFor={`${fieldIds}-field-5`} className="setting-title">
+              Page
+            </label>
             <PageNumberInput
+              id={`${fieldIds}-field-5`}
               value={targetPage}
               max={s.info?.pages || 1}
               onChange={setTargetPage}
@@ -515,8 +540,11 @@ export function FormManager({
 
           <div className="setting-group" style={{ display: "flex", gap: "12px" }}>
             <div style={{ flex: 1 }}>
-              <label className="setting-title">X Position (pt)</label>
+              <label htmlFor={`${fieldIds}-field-6`} className="setting-title">
+                X Position (pt)
+              </label>
               <input
+                id={`${fieldIds}-field-6`}
                 type="number"
                 value={posX}
                 onChange={(e) => setPosX(Number(e.target.value))}
@@ -524,8 +552,11 @@ export function FormManager({
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label className="setting-title">Y Position from top (pt)</label>
+              <label htmlFor={`${fieldIds}-field-7`} className="setting-title">
+                Y Position from top (pt)
+              </label>
               <input
+                id={`${fieldIds}-field-7`}
                 type="number"
                 value={posY}
                 onChange={(e) => setPosY(Number(e.target.value))}
@@ -534,8 +565,8 @@ export function FormManager({
             </div>
           </div>
 
-          <div className="setting-group">
-            <label className="setting-title">Field Properties</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Field Properties</legend>
             <div style={{ display: "flex", gap: "16px", marginTop: "6px" }}>
               {fieldType === "text" && (
                 <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -543,7 +574,7 @@ export function FormManager({
                     type="checkbox"
                     checked={multiline}
                     onChange={(e) => setMultiline(e.target.checked)}
-                  />
+                  />{" "}
                   Multiline
                 </label>
               )}
@@ -554,7 +585,7 @@ export function FormManager({
                       type="checkbox"
                       checked={required}
                       onChange={(e) => setRequired(e.target.checked)}
-                    />
+                    />{" "}
                     Required
                   </label>
                   <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -562,13 +593,13 @@ export function FormManager({
                       type="checkbox"
                       checked={readOnly}
                       onChange={(e) => setReadOnly(e.target.checked)}
-                    />
+                    />{" "}
                     Read-Only
                   </label>
                 </>
               )}
             </div>
-          </div>
+          </fieldset>
         </div>
 
         <div className="modal-footer">

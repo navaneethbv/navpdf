@@ -71,6 +71,17 @@ describe("ViewerHost", () => {
     fireEvent.pointerUp(frame);
     fireEvent.pointerCancel(frame);
   });
+  it("retains the document when the visual subtree is removed for recovery", async () => {
+    const onReady = vi.fn();
+    const mounted = render(<ViewerHost onReady={onReady} />);
+    const controller = onReady.mock.calls[0][0] as ViewerController;
+    const pdf = { saveDocument: async () => new Uint8Array([37, 80, 68, 70]) };
+    controller.pdf = pdf as never;
+    mounted.unmount();
+    await Promise.resolve();
+    expect(controller.pdf).toBe(pdf);
+  });
+
   it("creates a controller and reports readiness", () => {
     const onReady = vi.fn();
     render(<ViewerHost onReady={onReady} />);

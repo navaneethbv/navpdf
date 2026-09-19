@@ -171,6 +171,7 @@ describe("OcrPanel UI Component (P6.4)", () => {
       expect(mockController.replaceWithBytes).toHaveBeenCalledWith(
         expect.any(Uint8Array),
         expect.stringContaining("OCR Searchable Layer"),
+        { expectedSource: mockController.pdf },
       );
       expect(onClose).toHaveBeenCalled();
     });

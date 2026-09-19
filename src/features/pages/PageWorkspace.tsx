@@ -41,10 +41,11 @@ import { ThumbCanvas } from "../viewer/Thumbnails";
 export function PageWorkspace({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [selected, setSelected] = useState<number[]>([s.page - 1]);
   const [focusedIndex, setFocusedIndex] = useState(
@@ -63,7 +64,7 @@ export function PageWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const replacePdfInputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDialogElement>(null);
   const [structureLoss, setStructureLoss] = useState("");
 
   useEffect(() => {
@@ -125,7 +126,10 @@ export function PageWorkspace({
     try {
       const currentBytes = await controller.pdf.saveDocument();
       const newBytes = await operation(currentBytes);
-      await controller.replaceWithBytes(newBytes, status, options);
+      await controller.replaceWithBytes(newBytes, status, {
+        ...options,
+        expectedSource: sourcePdf,
+      });
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -261,9 +265,7 @@ export function PageWorkspace({
       await controller.replaceWithBytes(
         output,
         action === "insert" ? "PDF pages inserted" : "Page replaced",
-        {
-          preMutationBytes: current,
-        },
+        { expectedSource: sourcePdf, preMutationBytes: current },
       );
       s.set({ status: action === "insert" ? "PDF pages inserted" : "Page replaced" });
     } catch (error) {
@@ -330,6 +332,12 @@ export function PageWorkspace({
       else onClose();
       return;
     }
+    if (
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLSelectElement ||
+      e.target instanceof HTMLTextAreaElement
+    )
+      return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
       e.preventDefault();
       selectAll();
@@ -394,9 +402,9 @@ export function PageWorkspace({
   };
 
   return (
-    <div
+    <dialog
       className="page-workspace-modal"
-      role="region"
+      open
       aria-label="Page Workspace"
       tabIndex={0}
       onKeyDown={handleKeyDown}
@@ -413,9 +421,9 @@ export function PageWorkspace({
         </div>
 
         {structureLoss && (
-          <p className="structure-warning" role="status">
+          <output className="structure-warning">
             {structureLoss} Extracting or splitting produces a new file.
-          </p>
+          </output>
         )}
 
         <div className="page-workspace-toolbar">
@@ -555,7 +563,7 @@ export function PageWorkspace({
       {showCrop && (
         <div className="crop-controls-bar">
           <label>
-            Width (pt):
+            Width (pt):{" "}
             <input
               type="number"
               value={cropWidth}
@@ -563,7 +571,7 @@ export function PageWorkspace({
             />
           </label>
           <label>
-            Height (pt):
+            Height (pt):{" "}
             <input
               type="number"
               value={cropHeight}
@@ -571,11 +579,11 @@ export function PageWorkspace({
             />
           </label>
           <label>
-            X (pt):
+            X (pt):{" "}
             <input type="number" value={cropX} onChange={(e) => setCropX(Number(e.target.value))} />
           </label>
           <label>
-            Y (pt):
+            Y (pt):{" "}
             <input type="number" value={cropY} onChange={(e) => setCropY(Number(e.target.value))} />
           </label>
           <button onClick={handleCrop}>Apply Crop</button>
@@ -586,7 +594,7 @@ export function PageWorkspace({
       {showSplit && (
         <div className="split-controls-bar">
           <label>
-            Page ranges (e.g. 1-2, 3-5):
+            Page ranges (e.g. 1-2, 3-5):{" "}
             <input type="text" value={splitRange} onChange={(e) => setSplitRange(e.target.value)} />
           </label>
           <button onClick={handleSplit} disabled={busy}>
@@ -625,8 +633,8 @@ export function PageWorkspace({
                 e.preventDefault();
                 setDragOverIndex(null);
                 const fromStr = e.dataTransfer.getData("text/plain");
-                const from = fromStr ? parseInt(fromStr, 10) : draggedIndex;
-                if (from !== null && from !== undefined && !isNaN(from)) {
+                const from = fromStr ? Number.parseInt(fromStr, 10) : draggedIndex;
+                if (from !== null && from !== undefined && !Number.isNaN(from)) {
                   void handleDropReorder(from, pageNum);
                 }
                 setDraggedIndex(null);
@@ -650,6 +658,6 @@ export function PageWorkspace({
           );
         })}
       </div>
-    </div>
+    </dialog>
   );
 }

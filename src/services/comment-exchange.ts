@@ -77,78 +77,11 @@ export function parseCommentExchange(
   }
   if (!Array.isArray(input.comments)) throw new Error("The comment file has no comments.");
   const ids = new Set<string>();
-  const comments: Comment[] = [];
-  for (const raw of input.comments) {
-    if (!raw || typeof raw !== "object")
-      throw new Error("The comment file contains an invalid comment.");
-    const comment = raw as Partial<Comment>;
-    if (
-      typeof comment.id !== "string" ||
-      !comment.id ||
-      ids.has(comment.id) ||
-      typeof comment.type !== "string" ||
-      !supportedTypes.has(comment.type) ||
-      typeof comment.page !== "number" ||
-      !Number.isInteger(comment.page) ||
-      comment.page < 1 ||
-      comment.page > expectedPageCount ||
-      typeof comment.text !== "string"
-    )
-      throw new Error("The comment file contains an invalid or duplicate comment.");
-    if (comment.rect !== undefined && !finiteTuple(comment.rect, 4))
-      throw new Error("The comment file contains invalid annotation geometry.");
-    if (comment.line !== undefined && !finiteTuple(comment.line, 4))
-      throw new Error("The comment file contains invalid line geometry.");
-    if (
-      comment.lineEndings !== undefined &&
-      (!Array.isArray(comment.lineEndings) ||
-        comment.lineEndings.length !== 2 ||
-        !comment.lineEndings.every((s) => typeof s === "string"))
-    )
-      throw new Error("The comment file contains invalid line endings.");
-    if (
-      comment.quads !== undefined &&
-      (!Array.isArray(comment.quads) ||
-        !comment.quads.every((q) => finiteTuple(q, 4) || finiteTuple(q, 8)))
-    )
-      throw new Error("The comment file contains invalid text markup quads.");
-    if (comment.color !== undefined && !finiteTuple(comment.color, 3))
-      throw new Error("The comment file contains an invalid annotation color.");
-    if (
-      comment.opacity !== undefined &&
-      (typeof comment.opacity !== "number" ||
-        !Number.isFinite(comment.opacity) ||
-        comment.opacity < 0 ||
-        comment.opacity > 1)
-    )
-      throw new Error("The comment file contains an invalid opacity.");
-    if (
-      comment.width !== undefined &&
-      (typeof comment.width !== "number" ||
-        !Number.isFinite(comment.width) ||
-        comment.width < 0.5 ||
-        comment.width > 20)
-    )
-      throw new Error("The comment file contains an invalid stroke width.");
+  const comments = input.comments.map((raw) => {
+    const comment = parseComment(raw, expectedPageCount, ids);
     ids.add(comment.id);
-    comments.push({
-      id: comment.id,
-      page: comment.page,
-      type: comment.type,
-      text: comment.text,
-      ...(comment.rect ? { rect: comment.rect as Comment["rect"] } : {}),
-      ...(comment.line ? { line: comment.line as Comment["line"] } : {}),
-      ...(comment.lineEndings ? { lineEndings: comment.lineEndings as [string, string] } : {}),
-      ...(comment.quads ? { quads: comment.quads as number[][] } : {}),
-      ...(comment.color ? { color: comment.color as Comment["color"] } : {}),
-      ...(typeof comment.opacity === "number" && Number.isFinite(comment.opacity)
-        ? { opacity: comment.opacity }
-        : {}),
-      ...(typeof comment.width === "number" && Number.isFinite(comment.width)
-        ? { width: comment.width }
-        : {}),
-    });
-  }
+    return comment;
+  });
   return {
     schema: "navpdf-comments",
     version: input.version ?? 2,
@@ -160,4 +93,82 @@ export function parseCommentExchange(
       ? { warning: "Imported legacy version 1 comments matching by page count." }
       : {}),
   };
+}
+
+function parseComment(raw: unknown, expectedPageCount: number, ids: Set<string>): Comment {
+  if (!raw || typeof raw !== "object")
+    throw new Error("The comment file contains an invalid comment.");
+  const comment = raw as Partial<Comment>;
+  if (
+    typeof comment.id !== "string" ||
+    !comment.id ||
+    ids.has(comment.id) ||
+    typeof comment.type !== "string" ||
+    !supportedTypes.has(comment.type) ||
+    typeof comment.page !== "number" ||
+    !Number.isInteger(comment.page) ||
+    comment.page < 1 ||
+    comment.page > expectedPageCount ||
+    typeof comment.text !== "string"
+  )
+    throw new Error("The comment file contains an invalid or duplicate comment.");
+  validateCommentGeometry(comment);
+  return {
+    id: comment.id,
+    page: comment.page,
+    type: comment.type,
+    text: comment.text,
+    ...(comment.rect ? { rect: comment.rect as Comment["rect"] } : {}),
+    ...(comment.line ? { line: comment.line as Comment["line"] } : {}),
+    ...(comment.lineEndings ? { lineEndings: comment.lineEndings as [string, string] } : {}),
+    ...(comment.quads ? { quads: comment.quads as number[][] } : {}),
+    ...(comment.color ? { color: comment.color as Comment["color"] } : {}),
+    ...(typeof comment.opacity === "number" && Number.isFinite(comment.opacity)
+      ? { opacity: comment.opacity }
+      : {}),
+    ...(typeof comment.width === "number" && Number.isFinite(comment.width)
+      ? { width: comment.width }
+      : {}),
+  };
+}
+
+function checkTuple(value: unknown, size: number, name: string) {
+  if (value !== undefined && !finiteTuple(value, size))
+    throw new Error(`The comment file contains invalid ${name}.`);
+}
+
+function validateCommentGeometry(comment: Partial<Comment>) {
+  checkTuple(comment.rect, 4, "annotation geometry");
+  checkTuple(comment.line, 4, "line geometry");
+  if (
+    comment.lineEndings !== undefined &&
+    (!Array.isArray(comment.lineEndings) ||
+      comment.lineEndings.length !== 2 ||
+      !comment.lineEndings.every((s) => typeof s === "string"))
+  )
+    throw new Error("The comment file contains invalid line endings.");
+  if (
+    comment.quads !== undefined &&
+    (!Array.isArray(comment.quads) ||
+      !comment.quads.every((q) => finiteTuple(q, 4) || finiteTuple(q, 8)))
+  )
+    throw new Error("The comment file contains invalid text markup quads.");
+  if (comment.color !== undefined && !finiteTuple(comment.color, 3))
+    throw new Error("The comment file contains an invalid annotation color.");
+  if (
+    comment.opacity !== undefined &&
+    (typeof comment.opacity !== "number" ||
+      !Number.isFinite(comment.opacity) ||
+      comment.opacity < 0 ||
+      comment.opacity > 1)
+  )
+    throw new Error("The comment file contains an invalid opacity.");
+  if (
+    comment.width !== undefined &&
+    (typeof comment.width !== "number" ||
+      !Number.isFinite(comment.width) ||
+      comment.width < 0.5 ||
+      comment.width > 20)
+  )
+    throw new Error("The comment file contains an invalid stroke width.");
 }

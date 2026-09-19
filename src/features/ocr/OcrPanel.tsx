@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useId, useState, useEffect, useRef } from "react";
 import {
   Scan,
   Check,
@@ -30,10 +30,11 @@ function languageName(code: string): string {
 export function OcrPanel({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
   const s = useWorkspace();
   const [engineInfo, setEngineInfo] = useState<OcrEngineInfo | null>(null);
   const [engineError, setEngineError] = useState<string | null>(null);
@@ -159,7 +160,7 @@ export function OcrPanel({
           const dataUrl = canvas.toDataURL("image/png");
           const encoded = dataUrl.split(",")[1];
           if (!encoded) throw new Error("Unable to encode the OCR page.");
-          imageBytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+          imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0)!);
         } finally {
           canvas.width = 0;
           canvas.height = 0;
@@ -185,6 +186,7 @@ export function OcrPanel({
         await controller.replaceWithBytes(
           updatedBytes,
           `OCR Searchable Layer (${results.length} pages)`,
+          { expectedSource: sourcePdf },
         );
         s.set({
           status: `OCR searchable layer successfully applied to ${results.length} page(s).`,
@@ -210,6 +212,7 @@ export function OcrPanel({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const ocrActionLabel = mode === "searchable" ? "Apply Searchable Layer" : "Recognize Text";
   return (
     <FeatureDialog title="Scan & OCR" onClose={onClose} busy={running}>
       <div className="modal-dialog">
@@ -303,8 +306,8 @@ export function OcrPanel({
             </div>
           )}
 
-          <div className="setting-group">
-            <label className="setting-title">Target Pages</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Target Pages</legend>
             <div className="tab-buttons-bar">
               <button
                 className={targetScope === "current" ? "active" : ""}
@@ -341,11 +344,14 @@ export function OcrPanel({
                 disabled={running}
               />
             )}
-          </div>
+          </fieldset>
 
           <div className="setting-group">
-            <label className="setting-title">Recognition Language</label>
+            <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+              Recognition Language
+            </label>
             <select
+              id={`${fieldIds}-field-1`}
               value={selectedLang}
               onChange={(e) => setSelectedLang(e.target.value)}
               disabled={running}
@@ -358,8 +364,8 @@ export function OcrPanel({
             </select>
           </div>
 
-          <div className="setting-group">
-            <label className="setting-title">OCR Action</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">OCR Action</legend>
             <div className="tab-buttons-bar">
               <button
                 className={mode === "searchable" ? "active" : ""}
@@ -383,7 +389,7 @@ export function OcrPanel({
                 ? "Aligns invisible text over scanned images so words can be selected, copied, and searched without changing appearance."
                 : "Extracts recognized text directly into plain text without modifying the PDF document."}
             </p>
-          </div>
+          </fieldset>
 
           {running && (
             <div className="ocr-progress-box" style={{ marginTop: "12px" }}>
@@ -473,11 +479,7 @@ export function OcrPanel({
                   }
                   className="button-primary"
                 >
-                  {hasExistingWarning && replaceExisting
-                    ? "Continue & Start OCR"
-                    : mode === "searchable"
-                      ? "Apply Searchable Layer"
-                      : "Recognize Text"}
+                  {hasExistingWarning && replaceExisting ? "Continue & Start OCR" : ocrActionLabel}
                 </button>
               )}
             </>

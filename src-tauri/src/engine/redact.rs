@@ -205,6 +205,7 @@ pub fn apply(
         }
     }
     sanitize_document(&mut doc, &pages, &options, &mut report)?;
+    prune_content_resources(&mut doc, &pages)?;
     doc.prune_objects();
     let output = super::save(&mut doc)?;
     super::check_cancelled(cancel)?;
@@ -363,6 +364,120 @@ fn redact_page(
     Ok(())
 }
 
+// Materialize inherited resources before severing obsolete bindings. A form may
+// borrow its caller's resources, so each retained form gets its effective resources
+// before its caller is pruned. Other pages keep their own still-used originals.
+fn prune_content_resources(
+    doc: &mut Document,
+    pages: &BTreeMap<u32, ObjectId>,
+) -> Result<(), String> {
+    for page in pages.values() {
+        super::own_page_resources(doc, *page)?;
+    }
+    for page in pages.values() {
+        let ops = super::page_operations(doc, *page)?;
+        let resources = Resources::for_page(doc, *page).materialize(doc);
+        let resources = prune_resources(doc, resources, &ops, 0)?;
+        doc.get_dictionary_mut(*page)
+            .map_err(|_| "The page resources are invalid.")?
+            .set("Resources", resources);
+    }
+    for object in doc.objects.values_mut() {
+        if let Ok(dict) = object.as_dict_mut() {
+            if dict
+                .get(b"Type")
+                .and_then(Object::as_name)
+                .is_ok_and(|name| name == b"Pages")
+            {
+                dict.remove(b"Resources");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn prune_resources(
+    doc: &mut Document,
+    mut resources: Dictionary,
+    ops: &[Operation],
+    depth: usize,
+) -> Result<Dictionary, String> {
+    if depth > content::MAX_FORM_DEPTH {
+        return Err("Nested form resources are too deep to redact safely.".into());
+    }
+    let names: HashSet<Vec<u8>> = ops
+        .iter()
+        .filter(|op| op.operator == "Do")
+        .filter_map(|op| op.operands.first()?.as_name().ok().map(<[u8]>::to_vec))
+        .collect();
+    let mut retained = Dictionary::new();
+    for name in names {
+        let Some((id, object)) =
+            Resources::from_dictionary(&resources).lookup(doc, b"XObject", &name)
+        else {
+            return Err("A painted resource could not be resolved safely.".into());
+        };
+        let mut target = id.map(Object::Reference).unwrap_or_else(|| object.clone());
+        if let Ok(stream) = object.as_stream() {
+            if stream
+                .dict
+                .get(b"Subtype")
+                .and_then(Object::as_name)
+                .is_ok_and(|s| s == b"Form")
+            {
+                let mut cloned = stream.clone();
+                let nested =
+                    Resources::for_form(doc, &stream.dict, &Resources::from_dictionary(&resources))
+                        .materialize(doc);
+                let nested_ops = super::stream_operations(stream)?;
+                let cleaned = prune_resources(doc, nested, &nested_ops, depth + 1)?;
+                cloned.dict.set("Resources", cleaned);
+                target = Object::Reference(doc.add_object(cloned));
+            }
+        }
+        retained.set(name, target);
+    }
+    resources.set("XObject", retained);
+    let mut states = Dictionary::new();
+    for op in ops.iter().filter(|op| op.operator == "gs") {
+        let name = op
+            .operands
+            .first()
+            .and_then(|o| o.as_name().ok())
+            .ok_or("A graphics state name is invalid.")?;
+        let (id, object) = Resources::from_dictionary(&resources)
+            .lookup(doc, b"ExtGState", name)
+            .ok_or("A graphics state could not be resolved safely.")?;
+        states.set(
+            name.to_vec(),
+            id.map(Object::Reference).unwrap_or_else(|| object.clone()),
+        );
+    }
+    resources.set("ExtGState", states);
+    Ok(resources)
+}
+
+fn validate_graphics_stack(ops: &[Operation]) -> Result<(), String> {
+    let mut depth = 0_usize;
+    for op in ops {
+        match op.operator.as_str() {
+            "q" => {
+                depth += 1;
+                if depth > 1024 {
+                    return Err("Graphics state nesting is too deep to redact safely.".into());
+                }
+            }
+            "Q" => {
+                depth = depth
+                    .checked_sub(1)
+                    .ok_or("Unbalanced graphics state cannot be redacted safely.")?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 fn open_graphics_states(ops: &[Operation]) -> usize {
     ops.iter()
         .fold(0_usize, |depth, op| match op.operator.as_str() {
@@ -385,6 +500,29 @@ impl<'a> Rewriter<'a, '_> {
         depth: usize,
         additions: &mut Vec<ResourceAddition>,
     ) -> Result<(Vec<Operation>, bool), String> {
+        validate_graphics_stack(ops)?;
+        if !self.regions.is_empty() {
+            for op in ops.iter().filter(|op| op.operator == "gs") {
+                let name = op
+                    .operands
+                    .first()
+                    .and_then(|o| o.as_name().ok())
+                    .ok_or("A graphics state name is invalid.")?;
+                let (_, state) = resources
+                    .lookup(self.doc, b"ExtGState", name)
+                    .ok_or("A graphics state could not be resolved safely.")?;
+                let state = state
+                    .as_dict()
+                    .map_err(|_| "A graphics state is invalid.")?;
+                if state.get(b"SMask").is_ok_and(|mask| {
+                    !deref(self.doc, mask)
+                        .as_name()
+                        .is_ok_and(|name| name == b"None")
+                }) {
+                    return Err("Soft-mask graphics states cannot be redacted safely. The document is unchanged.".into());
+                }
+            }
+        }
         let items = content::scan(self.doc, ops, resources, base, self.hidden);
         let mut replacements: BTreeMap<usize, Vec<Operation>> = BTreeMap::new();
         let mut dropped = vec![false; ops.len()];
@@ -487,7 +625,9 @@ impl<'a> Rewriter<'a, '_> {
                 }
             }
         }
-        let changed = !replacements.is_empty() || dropped.contains(&true);
+        let changed = !replacements.is_empty()
+            || dropped.contains(&true)
+            || ops.iter().any(|op| op.operator == "BDC");
         let mut output = Vec::with_capacity(ops.len());
         for (index, op) in ops.iter().enumerate() {
             if dropped[index] {
@@ -495,7 +635,15 @@ impl<'a> Rewriter<'a, '_> {
             }
             match replacements.remove(&index) {
                 Some(new_ops) => output.extend(new_ops),
-                None => output.push(op.clone()),
+                None => {
+                    let mut clean = op.clone();
+                    if clean.operator == "BDC" {
+                        for operand in &mut clean.operands {
+                            remove_keys(operand, &[b"ActualText", b"Alt", b"E"]);
+                        }
+                    }
+                    output.push(clean);
+                }
             }
         }
         Ok((output, changed))
@@ -587,6 +735,9 @@ impl<'a> Rewriter<'a, '_> {
             return Ok(None);
         }
         let mut template = stream.dict.clone();
+        // Alternate and prepress images may contain a second, unredacted raster.
+        template.remove(b"Alternates");
+        template.remove(b"OPI");
         if let Ok(mask_reference) = stream.dict.get(b"SMask") {
             let Ok(mask_id) = mask_reference.as_reference() else {
                 return Ok(None);
@@ -607,7 +758,11 @@ impl<'a> Rewriter<'a, '_> {
                     alpha.fill(region, &[255]);
                 }
             }
-            let mask_stream = images::encode_flate(&alpha, &mask.dict);
+            let mut mask_template = mask.dict.clone();
+            for key in [b"Alternates".as_slice(), b"OPI", b"SMask"] {
+                mask_template.remove(key);
+            }
+            let mask_stream = images::encode_flate(&alpha, &mask_template);
             template.set(
                 "SMask",
                 Object::Reference(self.plan.allocate(Object::Stream(mask_stream))),
@@ -1132,7 +1287,15 @@ fn sanitize_document(
 ) -> Result<(), String> {
     let catalog = catalog_id(doc)?;
     let mut catalog_keys: Vec<&[u8]> = vec![b"StructTreeRoot", b"MarkInfo"];
-    let mut keys: Vec<&[u8]> = vec![b"Thumb", b"StructParents", b"StructParent", b"XFA"];
+    let mut keys: Vec<&[u8]> = vec![
+        b"Thumb",
+        b"StructParents",
+        b"StructParent",
+        b"XFA",
+        b"ActualText",
+        b"Alt",
+        b"E",
+    ];
     if options.remove_metadata {
         doc.trailer.remove(b"Info");
         keys.extend([b"Metadata".as_slice(), b"PieceInfo", b"LastModified"]);
@@ -1828,6 +1991,136 @@ mod tests {
             "the other page keeps the shared form"
         );
         assert!(page_two_pixels.unwrap().iter().all(|value| *value == 200));
+    }
+
+    #[test]
+    fn obsolete_images_are_unreachable_through_inherited_and_form_resources() {
+        for variant in ["inherited", "nested", "unused-mask", "alternate"] {
+            let (mut doc, page) = page_document("q 100 0 0 100 0 0 cm /Im Do Q", dictionary! {});
+            let pixels = vec![173; 64];
+            let image = doc.add_object(Stream::new(
+                dictionary! {
+                    "Type" => "XObject", "Subtype" => "Image", "Width" => 8, "Height" => 8,
+                    "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8
+                },
+                pixels.clone(),
+            ));
+            let parent = doc
+                .get_dictionary(page)
+                .unwrap()
+                .get(b"Parent")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let mut resources = doc
+                .get_dictionary_mut(page)
+                .unwrap()
+                .remove(b"Resources")
+                .unwrap()
+                .as_dict()
+                .unwrap()
+                .clone();
+            resources.set("XObject", dictionary! { "Im" => image });
+            if variant == "nested" {
+                let form = doc.add_object(Stream::new(dictionary! {
+                    "Type" => "XObject", "Subtype" => "Form", "BBox" => vec![0.into(), 0.into(), 100.into(), 100.into()]
+                }, b"q 100 0 0 100 0 0 cm /Im Do Q".to_vec()));
+                resources
+                    .get_mut(b"XObject")
+                    .unwrap()
+                    .as_dict_mut()
+                    .unwrap()
+                    .set("Fm", form);
+                super::super::set_page_content(&mut doc, page, b"/Fm Do".to_vec()).unwrap();
+            }
+            if variant == "unused-mask" {
+                let form = doc.add_object(Stream::new(dictionary! {
+                    "Type" => "XObject", "Subtype" => "Form",
+                    "BBox" => vec![0.into(), 0.into(), 100.into(), 100.into()],
+                    "Resources" => dictionary! { "XObject" => dictionary! { "Original" => image } }
+                }, b"/Original Do".to_vec()));
+                resources.set("ExtGState", dictionary! {
+                    "Unused" => dictionary! { "SMask" => dictionary! { "S" => "Luminosity", "G" => form } }
+                });
+            }
+            if variant == "alternate" {
+                let alternate = doc.add_object(doc.get_object(image).unwrap().clone());
+                let alternates = doc.add_object(vec![Object::Dictionary(dictionary! {
+                    "Image" => alternate, "DefaultForPrinting" => true
+                })]);
+                doc.get_object_mut(image)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap()
+                    .dict
+                    .set("Alternates", alternates);
+            }
+            doc.get_dictionary_mut(parent)
+                .unwrap()
+                .set("Resources", resources);
+            let source = super::super::save(&mut doc).unwrap();
+            let (output, report) = apply(
+                &source,
+                &request(vec![region(1, Rect::new(0.0, 50.0, 50.0, 100.0))], &[]),
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+            assert!(report.audit.passed);
+            let saved = super::super::load(&output).unwrap();
+            let images: Vec<_> = saved
+                .objects
+                .values()
+                .filter_map(|o| o.as_stream().ok())
+                .filter(|stream| {
+                    stream
+                        .dict
+                        .get(b"Subtype")
+                        .and_then(Object::as_name)
+                        .is_ok_and(|s| s == b"Image")
+                })
+                .collect();
+            assert_eq!(images.len(), 1, "resource variant: {variant}");
+            assert_ne!(images::decode(&saved, images[0]).unwrap().pixels, pixels);
+        }
+    }
+
+    #[test]
+    fn replacement_text_is_removed_without_supplied_audit_terms() {
+        for property in [
+            "<< /ActualText (SECRET) /Alt (SECRET) /E (SECRET) >>",
+            "/Props",
+        ] {
+            let text = format!("/Span {property} BDC BT /F1 12 Tf 72 700 Td (SECRET) Tj ET EMC");
+            let (mut doc, page) = page_document(&text, dictionary! {});
+            doc.get_dictionary_mut(page).unwrap().get_mut(b"Resources").unwrap().as_dict_mut().unwrap()
+                .set("Properties", dictionary! { "Props" => dictionary! { "ActualText" => Object::string_literal("SECRET") } });
+            let source = super::super::save(&mut doc).unwrap();
+            let (output, _) = apply(
+                &source,
+                &request(vec![region(1, Rect::new(0.0, 650.0, 600.0, 750.0))], &[]),
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+            assert!(!contains(&decompressed(&output), b"SECRET"));
+            assert!(!contains(&output, b"SECRET"));
+        }
+    }
+
+    #[test]
+    fn ambiguous_graphics_stack_is_rejected() {
+        for text in [
+            format!("{}{}", "q ".repeat(1025), LINE),
+            format!("Q {LINE}"),
+        ] {
+            let (mut doc, _) = page_document(&text, dictionary! {});
+            let source = super::super::save(&mut doc).unwrap();
+            assert!(apply(
+                &source,
+                &request(vec![region(1, Rect::new(0.0, 650.0, 600.0, 750.0))], &[]),
+                &AtomicBool::new(false)
+            )
+            .is_err());
+        }
     }
 
     #[test]

@@ -43,7 +43,7 @@ describe("decorations content safety (DS-01)", () => {
       expect(streams.some((s) => s.includes("72 700"))).toBe(true);
     }
     const hasChanged = (s: string) => s.includes("Changed") || s.includes("4368616E676564");
-    expect((await streamsOfFirstPage(twice)).filter(hasChanged).length).toBe(1);
+    expect((await streamsOfFirstPage(twice)).filter(hasChanged)).toHaveLength(1);
     expect((await streamsOfFirstPage(removed)).some(hasChanged)).toBe(false);
   });
 

@@ -46,7 +46,7 @@ export function stripExternalPageLinks(doc: PDFDocument, keptPages: Set<number>)
     if (names) {
       for (let i = 0; i < names.size(); i += 2) {
         const k = names.lookup(i);
-        const nameStr = k instanceof PDFString || k instanceof PDFHexString ? k.asString() : "";
+        const nameStr = k instanceof PDFString || k instanceof PDFHexString ? k.decodeText() : "";
         if (nameStr === targetName) {
           const val = names.lookup(i + 1);
           if (val instanceof PDFArray) return val;
@@ -86,7 +86,7 @@ export function stripExternalPageLinks(doc: PDFDocument, keptPages: Set<number>)
       destObj instanceof PDFHexString
     ) {
       const name =
-        destObj instanceof PDFName ? destObj.asString().replace(/^\//, "") : destObj.asString();
+        destObj instanceof PDFName ? destObj.asString().replace(/^\//, "") : destObj.decodeText();
       const resolved = resolveNamedDest(name);
       if (resolved) {
         return resolveTargetPageIndex(resolved);

@@ -39,24 +39,14 @@ import {
   addTextMarkupAnnotations,
   deleteAnnotation,
   updateAnnotation,
-  annotationIdentifier,
   type TextMarkupKind,
 } from "../../services/document-commands";
-import {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFHexString,
-  PDFName,
-  PDFNumber,
-  PDFString,
-} from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
+import { readComment } from "../../services/pdf/read-comment";
 import { installHighlightInterop } from "./highlight-interop";
 import { readTextSelectionGeometry } from "./selection-geometry";
 import { createCommentExchange, parseCommentExchange } from "../../services/comment-exchange";
 import { contentIdentity } from "../../services/document-identity";
-
-const finite = (value: number) => Number.isFinite(value);
 
 export class ViewerController {
   readonly bus = new EventBus();
@@ -87,6 +77,7 @@ export class ViewerController {
   private storageModified = false;
   private mutationQueue = new MutationQueue();
   private identity: string | null = null;
+  private replacing = false;
 
   async mutate<T>(label: string, fn: () => Promise<T>): Promise<T> {
     useWorkspace.getState().set({ busy: true, status: label });
@@ -164,7 +155,7 @@ export class ViewerController {
     on("textlayerrendered", ({ error }: { error?: unknown }) => {
       if (error)
         useWorkspace.getState().set({
-          error: `Text selection could not be prepared: ${String(error)}`,
+          error: `Text selection could not be prepared: ${error instanceof Error ? error.message : "Unknown rendering error"}`,
         });
     });
     on("pagerendered", ({ error }: { error?: unknown } = {}) => {
@@ -176,7 +167,7 @@ export class ViewerController {
           : {}),
       });
       if (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : "Unknown rendering error";
         state.set({
           error: `Page ${this.viewer.currentPageNumber} could not be rendered: ${message}`,
         });
@@ -271,7 +262,9 @@ export class ViewerController {
     try {
       await (await pdf.getPage(1)).getTextContent({ disableNormalization: true });
     } catch (error) {
-      useWorkspace.getState().set({ error: `Text extraction failed: ${String(error)}` });
+      useWorkspace.getState().set({
+        error: `Text extraction failed: ${error instanceof Error ? error.message : "Unknown rendering error"}`,
+      });
     }
     const outline = await pdf.getOutline();
     if (generation !== this.generation) return;
@@ -372,6 +365,7 @@ export class ViewerController {
     bytes: Uint8Array,
     status: string,
     options?: {
+      expectedSource?: PDFDocumentProxy | null;
       pageMapping?: number[];
       warnings?: string[];
       /** Drop earlier revisions, e.g. after redaction or unlocking, so undo cannot restore them. */
@@ -380,6 +374,46 @@ export class ViewerController {
       preMutationBytes?: Uint8Array;
     },
   ) {
+    if (this.replacing) throw new Error("Another document replacement is in progress.");
+    const wasBusy = useWorkspace.getState().busy;
+    this.replacing = true;
+    useWorkspace.getState().set({ busy: true });
+    try {
+      return await this.commitReplacement(bytes, status, options);
+    } finally {
+      this.replacing = false;
+      useWorkspace.getState().set({ busy: wasBusy });
+    }
+  }
+  private async commitReplacement(
+    bytes: Uint8Array,
+    status: string,
+    options?: {
+      expectedSource?: PDFDocumentProxy | null;
+      pageMapping?: number[];
+      warnings?: string[];
+      /** Drop earlier revisions, e.g. after redaction or unlocking, so undo cannot restore them. */
+      resetHistory?: boolean;
+      /** Pre-mutation document bytes to record in undo history without re-serializing. */
+      preMutationBytes?: Uint8Array;
+    },
+  ) {
+    const source = options?.expectedSource === undefined ? this.pdf : options.expectedSource;
+    const documentId = useWorkspace.getState().document?.id;
+    const generation = this.generation;
+    const ensureSource = () => {
+      if (
+        options?.expectedSource === null ||
+        this.pdf !== source ||
+        this.generation !== generation ||
+        useWorkspace.getState().document?.id !== documentId
+      ) {
+        throw new Error(
+          "The document changed while this operation was running. Run the tool again on the current document.",
+        );
+      }
+    };
+    ensureSource();
     this.editor?.commitOrRemove();
     // PDF.js transfers the candidate buffer to its worker while loading it.
     // Keep an owned copy for history and later rollback bookkeeping.
@@ -391,6 +425,7 @@ export class ViewerController {
           ? await this.pdf.saveDocument()
           : null))
       : null;
+    ensureSource();
     if (previousBytes) {
       this.history.adopt({
         bytes: previousBytes,
@@ -402,12 +437,20 @@ export class ViewerController {
     const previousPdf = this.pdf;
     const previousState = useWorkspace.getState();
     const previousTask = this.revisionTask;
-    let loaded: PDFDocumentProxy;
+    let loaded: PDFDocumentProxy | undefined;
     let nativeRevisionId: string | undefined;
     try {
       loaded = await task.promise;
+      ensureSource();
       await this.attach(loaded);
       await this.viewer.firstPagePromise;
+      if (
+        this.pdf !== loaded ||
+        this.generation !== generation + 1 ||
+        useWorkspace.getState().document?.id !== documentId
+      ) {
+        throw new Error("The document changed before the operation could be committed.");
+      }
       nativeRevisionId = await this.commitNativeRevision(
         historyBytes,
         loaded.numPages,
@@ -415,11 +458,16 @@ export class ViewerController {
       );
     } catch (error) {
       await task.destroy().catch(() => {});
-      if (previousPdf && this.pdf !== previousPdf) {
+      if (
+        previousPdf &&
+        loaded &&
+        this.pdf === loaded &&
+        useWorkspace.getState().document?.id === documentId
+      ) {
         await this.attach(previousPdf);
         this.goTo(previousState.page);
+        useWorkspace.getState().set(previousState);
       }
-      useWorkspace.getState().set(previousState);
       throw error;
     }
     this.revisionTask = task;
@@ -545,9 +593,16 @@ export class ViewerController {
     this.revisionTask = null;
     if (revision) await revision.destroy().catch(() => {});
   }
-  destroy() {
-    void this.detach();
+  /** Release DOM listeners while the app owner retains the PDF for emergency saving. */
+  suspendView() {
     this.abort.abort();
+    this.searchGeneration++;
+    clearTimeout(this.searchTimer);
+    clearTimeout(this.pageTimer);
+  }
+  destroy() {
+    this.suspendView();
+    void this.detach();
   }
   setLayout(layout: Layout) {
     this.viewer.scrollMode = layout === "single" ? ScrollMode.PAGE : ScrollMode.VERTICAL;
@@ -598,13 +653,14 @@ export class ViewerController {
     try {
       this.viewer.annotationEditorMode = {
         mode:
-          tool === "highlight"
-            ? AnnotationEditorType.HIGHLIGHT
-            : tool === "ink" || tool === "draw"
-              ? AnnotationEditorType.INK
-              : tool === "text"
-                ? AnnotationEditorType.FREETEXT
-                : AnnotationEditorType.NONE,
+          (
+            {
+              highlight: AnnotationEditorType.HIGHLIGHT,
+              ink: AnnotationEditorType.INK,
+              draw: AnnotationEditorType.INK,
+              text: AnnotationEditorType.FREETEXT,
+            } as Record<string, number>
+          )[tool] ?? AnnotationEditorType.NONE,
       };
     } catch {
       // Suppress throw if PDF.js refuses annotation mode due to permissions
@@ -637,9 +693,9 @@ export class ViewerController {
       const viewport = page.getViewport({ scale: 1 });
       const hex = useWorkspace.getState().highlightColor;
       const color: [number, number, number] = [
-        parseInt(hex.slice(1, 3), 16) / 255,
-        parseInt(hex.slice(3, 5), 16) / 255,
-        parseInt(hex.slice(5, 7), 16) / 255,
+        Number.parseInt(hex.slice(1, 3), 16) / 255,
+        Number.parseInt(hex.slice(3, 5), 16) / 255,
+        Number.parseInt(hex.slice(5, 7), 16) / 255,
       ];
       const bytes = await this.pdf!.saveDocument();
       const [ptX, ptY] =
@@ -665,9 +721,9 @@ export class ViewerController {
       const state = useWorkspace.getState();
       const hex = state.inkColor;
       const color: [number, number, number] = [
-        parseInt(hex.slice(1, 3), 16) / 255,
-        parseInt(hex.slice(3, 5), 16) / 255,
-        parseInt(hex.slice(5, 7), 16) / 255,
+        Number.parseInt(hex.slice(1, 3), 16) / 255,
+        Number.parseInt(hex.slice(3, 5), 16) / 255,
+        Number.parseInt(hex.slice(5, 7), 16) / 255,
       ];
       const bytes = await this.pdf!.saveDocument();
       const shaped = await addShapeAnnotation(bytes, {
@@ -708,9 +764,9 @@ export class ViewerController {
     return this.mutate(status, async () => {
       const hex = useWorkspace.getState().highlightColor;
       const color: [number, number, number] = [
-        parseInt(hex.slice(1, 3), 16) / 255,
-        parseInt(hex.slice(3, 5), 16) / 255,
-        parseInt(hex.slice(5, 7), 16) / 255,
+        Number.parseInt(hex.slice(1, 3), 16) / 255,
+        Number.parseInt(hex.slice(3, 5), 16) / 255,
+        Number.parseInt(hex.slice(5, 7), 16) / 255,
       ];
       const bytes = await this.pdf!.saveDocument();
       const marked = await addTextMarkupAnnotations(
@@ -1104,17 +1160,18 @@ export class ViewerController {
   async readComments() {
     if (!this.pdf) return;
     const generation = this.generation;
+    const pdf = this.pdf;
     const comments: Comment[] = [];
     let pdfLibDoc: PDFDocument | null = null;
     try {
-      const bytes = await this.pdf.saveDocument();
+      const bytes = await pdf.saveDocument();
       pdfLibDoc = await PDFDocument.load(bytes);
     } catch {
       // Fallback to PDF.js data only in mock environments
     }
 
-    for (let p = 1; p <= this.pdf.numPages; p++) {
-      const page = await this.pdf.getPage(p);
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
       const annotations: unknown[] = await page.getAnnotations();
       if (generation !== this.generation) return;
 
@@ -1123,178 +1180,12 @@ export class ViewerController {
       const annotsPdfLib = pagePdfLib?.node.Annots();
 
       for (const raw of annotations) {
-        const a = raw as {
-          id: string;
-          annotationName?: string;
-          subtype?: string;
-          contentsObj?: { str: string };
-          rect?: number[];
-          lineCoordinates?: number[];
-          lineEndings?: string[];
-          name?: string;
-          inReplyTo?: string;
-          state?: string;
-          quadPoints?: number[];
-          color?: ArrayLike<number>;
-          opacity?: number;
-          borderStyle?: { width?: number };
-        };
-        if (
-          a.subtype === "Text" ||
-          a.subtype === "Highlight" ||
-          a.subtype === "Underline" ||
-          a.subtype === "StrikeOut" ||
-          a.subtype === "Square" ||
-          a.subtype === "Circle" ||
-          a.subtype === "Line" ||
-          a.subtype === "Stamp"
-        ) {
-          const id = a.annotationName || a.id;
-          let isArrow = false;
-          let lineEndings: [string, string] | undefined =
-            a.lineEndings && a.lineEndings.length === 2
-              ? [a.lineEndings[0], a.lineEndings[1]]
-              : undefined;
-          if (lineEndings && lineEndings.some((le) => le && le.toLowerCase().includes("arrow"))) {
-            isArrow = true;
-          }
-
-          let pdfLibLine: [number, number, number, number] | undefined;
-          let pdfLibQuads: number[][] | undefined;
-
-          if (annotsPdfLib) {
-            for (let i = 0; i < annotsPdfLib.size(); i++) {
-              const d = annotsPdfLib.lookup(i, PDFDict);
-              const nm = d.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.asString();
-              const entry = annotsPdfLib.get(i);
-              if (nm === id || annotationIdentifier(entry) === id || id === `annot_${i}`) {
-                const rawL = d.lookupMaybe(PDFName.of("L"), PDFArray);
-                if (rawL && rawL.size() === 4) {
-                  pdfLibLine = [
-                    (rawL.get(0) as PDFNumber).asNumber(),
-                    (rawL.get(1) as PDFNumber).asNumber(),
-                    (rawL.get(2) as PDFNumber).asNumber(),
-                    (rawL.get(3) as PDFNumber).asNumber(),
-                  ];
-                }
-                const rawLE = d.lookupMaybe(PDFName.of("LE"), PDFArray);
-                if (rawLE && rawLE.size() === 2) {
-                  const s0 = rawLE.lookupMaybe(0, PDFName)?.decodeText() ?? "None";
-                  const s1 = rawLE.lookupMaybe(1, PDFName)?.decodeText() ?? "None";
-                  lineEndings = [s0, s1];
-                  if (s0.toLowerCase().includes("arrow") || s1.toLowerCase().includes("arrow")) {
-                    isArrow = true;
-                  }
-                }
-                const rawQP = d.lookupMaybe(PDFName.of("QuadPoints"), PDFArray);
-                if (rawQP && rawQP.size() >= 8) {
-                  const qList: number[][] = [];
-                  for (let k = 0; k + 7 < rawQP.size(); k += 8) {
-                    const qx1 = Math.min(
-                      (rawQP.get(k) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 2) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 4) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 6) as PDFNumber).asNumber(),
-                    );
-                    const qy1 = Math.min(
-                      (rawQP.get(k + 1) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 3) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 5) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 7) as PDFNumber).asNumber(),
-                    );
-                    const qx2 = Math.max(
-                      (rawQP.get(k) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 2) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 4) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 6) as PDFNumber).asNumber(),
-                    );
-                    const qy2 = Math.max(
-                      (rawQP.get(k + 1) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 3) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 5) as PDFNumber).asNumber(),
-                      (rawQP.get(k + 7) as PDFNumber).asNumber(),
-                    );
-                    qList.push([qx1, qy1, qx2, qy2]);
-                  }
-                  if (qList.length > 0) pdfLibQuads = qList;
-                }
-                break;
-              }
-            }
-          }
-
-          const commentType = isArrow ? "Arrow" : a.subtype;
-          const comment: Comment = {
-            id,
-            page: p,
-            type: commentType,
-            text: a.contentsObj?.str || `${commentType} annotation`,
-          };
-          if (a.subtype === "Stamp") comment.stampName = a.name;
-          if (a.inReplyTo) comment.replyTo = a.inReplyTo;
-          if (
-            a.state === "Accepted" ||
-            a.state === "Rejected" ||
-            a.state === "Cancelled" ||
-            a.state === "Completed"
-          )
-            comment.reviewState = a.state;
-          if (a.rect?.length === 4 && a.rect.every(finite))
-            comment.rect = [a.rect[0], a.rect[1], a.rect[2], a.rect[3]];
-          if (pdfLibLine) {
-            comment.line = pdfLibLine;
-          } else if (a.lineCoordinates?.length === 4 && a.lineCoordinates.every(finite)) {
-            comment.line = [
-              a.lineCoordinates[0],
-              a.lineCoordinates[1],
-              a.lineCoordinates[2],
-              a.lineCoordinates[3],
-            ];
-          }
-          if (lineEndings) comment.lineEndings = lineEndings;
-          if (pdfLibQuads) {
-            comment.quads = pdfLibQuads;
-          } else if (a.quadPoints && a.quadPoints.length >= 8) {
-            const qList: number[][] = [];
-            for (let k = 0; k + 7 < a.quadPoints.length; k += 8) {
-              const qx1 = Math.min(
-                a.quadPoints[k],
-                a.quadPoints[k + 2],
-                a.quadPoints[k + 4],
-                a.quadPoints[k + 6],
-              );
-              const qy1 = Math.min(
-                a.quadPoints[k + 1],
-                a.quadPoints[k + 3],
-                a.quadPoints[k + 5],
-                a.quadPoints[k + 7],
-              );
-              const qx2 = Math.max(
-                a.quadPoints[k],
-                a.quadPoints[k + 2],
-                a.quadPoints[k + 4],
-                a.quadPoints[k + 6],
-              );
-              const qy2 = Math.max(
-                a.quadPoints[k + 1],
-                a.quadPoints[k + 3],
-                a.quadPoints[k + 5],
-                a.quadPoints[k + 7],
-              );
-              qList.push([qx1, qy1, qx2, qy2]);
-            }
-            if (qList.length > 0) comment.quads = qList;
-          }
-          if (a.color?.length === 3)
-            comment.color = [a.color[0] / 255, a.color[1] / 255, a.color[2] / 255];
-          if (a.opacity !== undefined && finite(a.opacity)) comment.opacity = a.opacity;
-          if (a.borderStyle?.width !== undefined && finite(a.borderStyle.width))
-            comment.width = a.borderStyle.width;
-          comments.push(comment);
-        }
+        const comment = readComment(raw, p, annotsPdfLib);
+        if (comment) comments.push(comment);
       }
       if (p % 20 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
+    if (generation !== this.generation) return;
     const state = useWorkspace.getState();
     state.set({
       comments,

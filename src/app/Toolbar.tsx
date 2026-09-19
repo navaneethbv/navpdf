@@ -43,11 +43,13 @@ export function Toolbar({
   open,
   save,
   home,
-}: ControllerProps & {
-  open: () => void;
-  save: (as: boolean) => void;
-  home: () => void;
-}) {
+}: Readonly<
+  ControllerProps & {
+    open: () => void;
+    save: (as: boolean) => void;
+    home: () => void;
+  }
+>) {
   const s = useWorkspace();
   const disabled = !s.document || s.busy;
   const toggleMode = (mode: ToolMode) => s.set({ toolMode: s.toolMode === mode ? null : mode });
@@ -187,7 +189,7 @@ export function Toolbar({
   );
 }
 
-export function QuickToolRail({ controller }: ControllerProps) {
+export function QuickToolRail({ controller }: Readonly<ControllerProps>) {
   const s = useWorkspace();
   const disabled = !s.document || s.busy;
   const readOnly = disabled || !s.editingAllowed || !!s.info?.encrypted;
@@ -299,7 +301,7 @@ export function QuickToolRail({ controller }: ControllerProps) {
   );
 }
 
-export function NavigationRail({ controller }: ControllerProps) {
+export function NavigationRail({ controller }: Readonly<ControllerProps>) {
   const s = useWorkspace();
   const disabled = !s.document || s.busy;
   const pageInput = useRef<HTMLInputElement>(null);
@@ -429,7 +431,7 @@ export function NavigationRail({ controller }: ControllerProps) {
           </summary>
           <div className="rail-popover view-options">
             <label>
-              Zoom
+              Zoom{" "}
               <select
                 aria-label="Zoom percentage"
                 value={s.zoom}
@@ -445,7 +447,7 @@ export function NavigationRail({ controller }: ControllerProps) {
               </select>
             </label>
             <label>
-              Page display
+              Page display{" "}
               <select
                 aria-label="Page layout"
                 value={s.layout}
@@ -489,7 +491,7 @@ export function Statusbar() {
   return (
     <footer className="statusbar">
       <span className={`status-light ${s.busy ? "working" : ""}`} />
-      <span role="status">{s.status}</span>
+      <output>{s.status}</output>
       <div className="statusbar-space" />
       {s.document && (
         <span>

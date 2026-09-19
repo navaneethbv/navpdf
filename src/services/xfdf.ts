@@ -1,17 +1,31 @@
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString } from "pdf-lib";
+import { pdfText } from "./pdf/text-string.ts";
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFNumber,
+  PDFRef,
+  PDFString,
+  PDFHexString,
+} from "pdf-lib";
 
 const MAX_XFDF_BYTES = 10 * 1024 * 1024;
 const xmlEscape = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  value
+    .replaceAll(/&/g, "&amp;")
+    .replaceAll(/</g, "&lt;")
+    .replaceAll(/>/g, "&gt;")
+    .replaceAll(/"/g, "&quot;");
 const xmlUnescape = (value: string) =>
   value
-    .replace(/&quot;/g, '"')
-    .replace(/&gt;/g, ">")
-    .replace(/&lt;/g, "<")
-    .replace(/&amp;/g, "&");
+    .replaceAll(/&quot;/g, '"')
+    .replaceAll(/&gt;/g, ">")
+    .replaceAll(/&lt;/g, "<")
+    .replaceAll(/&amp;/g, "&");
 const attrs = (source: string) => {
   const values = new Map<string, string>();
-  for (const match of source.matchAll(/([A-Za-z][\w:-]*)\s*=\s*"([^"]*)"/g))
+  for (const match of source.matchAll(/(?:^|\s)([A-Za-z][\w:-]*)\s*=\s*"([^"]*)"/g))
     values.set(match[1], xmlUnescape(match[2]));
   return values;
 };
@@ -40,7 +54,8 @@ export async function exportXfdf(pdfBytes: Uint8Array): Promise<string> {
       const rect = annotation.lookupMaybe(PDFName.of("Rect"), PDFArray)?.asRectangle();
       if (!rect) continue;
       const name =
-        annotation.lookupMaybe(PDFName.of("NM"), PDFString)?.asString() ?? `annot-${index}`;
+        annotation.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ??
+        `annot-${index}`;
       const annotationRef = annots.get(index);
       if (annotationRef instanceof PDFRef) annotationNames.set(annotationRef.toString(), name);
     }
@@ -56,8 +71,10 @@ export async function exportXfdf(pdfBytes: Uint8Array): Promise<string> {
       const rect = annotation.lookupMaybe(PDFName.of("Rect"), PDFArray)?.asRectangle();
       if (!rect) continue;
       const name =
-        annotation.lookupMaybe(PDFName.of("NM"), PDFString)?.asString() ?? `annot-${index}`;
-      const contents = annotation.lookupMaybe(PDFName.of("Contents"), PDFString)?.asString() ?? "";
+        annotation.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ??
+        `annot-${index}`;
+      const contents =
+        annotation.lookupMaybe(PDFName.of("Contents"), PDFString, PDFHexString)?.decodeText() ?? "";
       const stamp = annotation.lookupMaybe(PDFName.of("Name"), PDFName)?.decodeText();
       const irt = annotation.get(PDFName.of("IRT"));
       const irtName = irt instanceof PDFRef ? annotationNames.get(irt.toString()) : undefined;
@@ -123,8 +140,8 @@ export async function importXfdf(pdfBytes: Uint8Array, xml: string): Promise<Uin
       ...(quadPoints ? { QuadPoints: quadPoints } : {}),
       F: 4,
       P: page.ref,
-      NM: PDFString.of(attributes.get("name") ?? `xfdf-${Date.now()}-${pageIndex}`),
-      Contents: PDFString.of(xmlUnescape(contents)),
+      NM: pdfText(attributes.get("name") ?? `xfdf-${Date.now()}-${pageIndex}`),
+      Contents: pdfText(xmlUnescape(contents)),
       ...(tag === "stamp" ? { Name: PDFName.of(attributes.get("stamp") ?? "Approved") } : {}),
     });
     const replyTo = attributes.get("inreplyto");

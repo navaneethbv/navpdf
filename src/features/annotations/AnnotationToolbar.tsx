@@ -28,10 +28,10 @@ const colors = [
 export function AnnotationToolbar({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
   const s = useWorkspace();
   const isBlocked = !controller || s.busy || !!s.info?.encrypted || !s.editingAllowed;
 

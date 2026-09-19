@@ -6,12 +6,12 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   label,
-}: {
+}: Readonly<{
   options: readonly { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
   label: string;
-}) {
+}>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const move = (event: KeyboardEvent<HTMLButtonElement>, direction: -1 | 1) => {
     const index = options.findIndex((option) => option.value === value);
@@ -23,7 +23,7 @@ export function SegmentedControl<T extends string>({
   };
 
   return (
-    <div role="group" aria-label={label} className="segmented-control">
+    <fieldset aria-label={label} className="segmented-control">
       {options.map((option, index) => (
         <button
           key={option.value}
@@ -42,6 +42,6 @@ export function SegmentedControl<T extends string>({
           {option.label}
         </button>
       ))}
-    </div>
+    </fieldset>
   );
 }

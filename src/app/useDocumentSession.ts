@@ -46,6 +46,20 @@ export function useDocumentSession(controller: ViewerController | null) {
       })
       .catch(report);
   }, [report]);
+  useEffect(() => {
+    if (!controller || controller.pdf || !task.current) return;
+    let active = true;
+    // Opening another document resets the render boundary and mounts a fresh
+    // viewer. Reattach the successfully committed session task to that view.
+    void task.current.promise
+      .then(async (pdf) => {
+        if (active && !controller.pdf) await controller.attach(pdf);
+      })
+      .catch(report);
+    return () => {
+      active = false;
+    };
+  }, [controller, report]);
   const refreshLocal = useCallback(async () => {
     useWorkspace.getState().set({ local: await desktop.localState() });
   }, []);
@@ -117,7 +131,8 @@ export function useDocumentSession(controller: ViewerController | null) {
         // Commit before retiring any previous resource. Cleanup errors cannot
         // roll back to a proxy that has already been destroyed.
         // attach() read these from the candidate; reset() must not discard them.
-        const { bookmarks, comments, formNotice, hasDigitalSignature } = useWorkspace.getState();
+        const { bookmarks, comments, formNotice, hasDigitalSignature, pageLabels, editingAllowed } =
+          useWorkspace.getState();
         task.current = candidate;
         useWorkspace.getState().reset();
         useWorkspace.getState().set({
@@ -129,6 +144,8 @@ export function useDocumentSession(controller: ViewerController | null) {
           comments,
           formNotice,
           hasDigitalSignature,
+          pageLabels,
+          editingAllowed,
           dirty: recovering || !!descriptor.unsaved,
           info: {
             pages: loaded.numPages,

@@ -40,6 +40,54 @@ import { DesignTools } from "../features/design/DesignTools";
 import { ExportOptions } from "../features/convert/ExportOptions";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
+function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "docx" {
+  const formats = {
+    "office-pptx": "pptx-text",
+    "office-xlsx": "xlsx",
+    "office-rtf": "rtf",
+  } as const;
+  return formats[modal as keyof typeof formats] ?? "docx";
+}
+
+function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
+  const state = useWorkspace.getState();
+  if (controller?.pdf && ["Home", "End"].includes(event.key)) {
+    event.preventDefault();
+    if (event.key === "Home") controller.goToFirst();
+    else controller.goToLast();
+  }
+  if (event.key === "Escape") {
+    if (state.readMode) {
+      state.set({ readMode: false });
+      return;
+    }
+    state.set({ selectedAnnotationId: null, hasSelection: false });
+    controller?.setTool("select");
+  }
+}
+
+function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController | null): boolean {
+  const directions: Record<string, [number, number]> = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowDown: [0, -1],
+    ArrowUp: [0, 1],
+  };
+  const direction = directions[event.key];
+  if (direction) {
+    event.preventDefault();
+    const distance = event.shiftKey ? 10 : 1;
+    void controller?.moveSelectedAnnotation(direction[0] * distance, direction[1] * distance);
+    return true;
+  }
+  if (["Delete", "Backspace"].includes(event.key)) {
+    event.preventDefault();
+    void controller?.deleteSelectedAnnotation();
+    return true;
+  }
+  return false;
+}
+
 export default function App() {
   const [controller, setController] = useState<ViewerController | null>(null),
     [passwordValue, setPasswordValue] = useState("");
@@ -47,6 +95,9 @@ export default function App() {
   const s = useWorkspace();
   const session = useDocumentSession(controller);
   const ready = useCallback((value: ViewerController) => setController(value), []);
+  // The app owns document lifetime. A render boundary can remove ViewerHost
+  // while its controller must remain available to the emergency Save a copy.
+  useEffect(() => () => controller?.destroy(), [controller]);
   const open = useCallback(() => {
     if (native) session.open();
     else input.current?.click();
@@ -86,64 +137,38 @@ export default function App() {
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLSelectElement ||
         (event.target instanceof HTMLElement && event.target.isContentEditable);
-      if ((event.ctrlKey || event.metaKey) && !editable) {
-        const action = event.key.toLowerCase();
-        if (["o", "s", "f", "p", "w", "z", ",", "0", "+", "=", "-"].includes(action)) {
-          event.preventDefault();
-          if (action === "o") open();
-          if (action === "s") void session.save(event.shiftKey);
-          if (action === "f" && state.document) state.set({ sidebar: "search" });
-          if (action === "p" && state.document) state.set({ activeModal: "print" });
-          if (action === "w") session.home();
-          if (action === "z") {
+      if (editable) return;
+      if (event.ctrlKey || event.metaKey) {
+        const actions: Record<string, () => void> = {
+          o: open,
+          s: () => {
+            void session.save(event.shiftKey);
+          },
+          f: () => {
+            if (state.document) state.set({ sidebar: "search" });
+          },
+          p: () => {
+            if (state.document) state.set({ activeModal: "print" });
+          },
+          w: session.home,
+          z: () => {
             if (event.shiftKey) controller?.redo();
             else controller?.undo();
-          }
-          if (action === ",") state.set({ settingsOpen: true });
-          if (action === "0") controller?.zoom("page-fit");
-          if (action === "+" || action === "=") controller?.zoom((state.zoom / 100) * 1.15);
-          if (action === "-") controller?.zoom(state.zoom / 100 / 1.15);
+          },
+          ",": () => state.set({ settingsOpen: true }),
+          "0": () => controller?.zoom("page-fit"),
+          "+": () => controller?.zoom((state.zoom / 100) * 1.15),
+          "=": () => controller?.zoom((state.zoom / 100) * 1.15),
+          "-": () => controller?.zoom(state.zoom / 100 / 1.15),
+        };
+        const command = actions[event.key.toLowerCase()];
+        if (command) {
+          event.preventDefault();
+          command();
         }
       }
-      if (!editable && event.key === "Home" && controller?.pdf) {
-        event.preventDefault();
-        controller.goToFirst();
-      }
-      if (!editable && event.key === "End" && controller?.pdf) {
-        event.preventDefault();
-        controller.goToLast();
-      }
-      if (
-        !editable &&
-        state.selectedAnnotationId &&
-        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
-      ) {
-        event.preventDefault();
-        const distance = event.shiftKey ? 10 : 1;
-        const dx =
-          event.key === "ArrowLeft" ? -distance : event.key === "ArrowRight" ? distance : 0;
-        const dy = event.key === "ArrowDown" ? -distance : event.key === "ArrowUp" ? distance : 0;
-        void controller?.moveSelectedAnnotation(dx, dy);
-      }
-      if (
-        !editable &&
-        (event.key === "Delete" || event.key === "Backspace") &&
-        state.selectedAnnotationId
-      ) {
-        event.preventDefault();
-        void controller?.deleteSelectedAnnotation();
-        return;
-      }
-      if (!editable && event.key === "Escape" && !state.busy) {
-        if (state.readMode) {
-          state.set({ readMode: false });
-          return;
-        }
-        if (state.selectedAnnotationId) {
-          state.set({ selectedAnnotationId: null, hasSelection: false });
-        }
-        controller?.setTool("select");
-      }
+      if (state.selectedAnnotationId && handleAnnotationKey(event, controller)) return;
+      handleWorkspaceNavigation(event, controller);
     }
     window.addEventListener("keydown", key, true);
     function warn(event: BeforeUnloadEvent) {
@@ -216,39 +241,38 @@ export default function App() {
           return;
         }
       }
-      switch (payload) {
-        case "first-page":
+      const actions: Record<string, () => void> = {
+        "first-page": () => {
           controller?.goToFirst();
-          break;
-        case "last-page":
+        },
+        "last-page": () => {
           controller?.goToLast();
-          break;
-        case "next-page":
+        },
+        "next-page": () => {
           if (state.document) controller?.goTo(Math.min(state.page + 1, state.info?.pages ?? 1));
-          break;
-        case "previous-page":
+        },
+        "previous-page": () => {
           if (state.document) controller?.goTo(Math.max(state.page - 1, 1));
-          break;
-        case "rotate-view":
+        },
+        "rotate-view": () => {
           if (state.document) controller?.rotateView(90);
-          break;
-        case "actual-size":
+        },
+        "actual-size": () => {
           controller?.zoom(1);
-          break;
-        case "read-mode":
+        },
+        "read-mode": () => {
           if (state.document) state.set({ readMode: !state.readMode });
-          break;
-        case "night-mode":
+        },
+        "night-mode": () => {
           if (state.document) state.set({ nightMode: !state.nightMode });
-          break;
-        case "all-tools":
+        },
+        "all-tools": () => {
           state.set({ toolMode: state.toolMode ? null : "all" });
-          break;
-        case "quick-tools":
+        },
+        "quick-tools": () => {
           state.set({ quickRailVisible: !state.quickRailVisible });
-          break;
-        case "tour":
-        case "tips":
+        },
+        tour: () => {
           if (
             state.busy ||
             state.settingsOpen ||
@@ -258,68 +282,80 @@ export default function App() {
           )
             return;
           state.set({ activeModal: payload });
-          break;
-        case "open":
+        },
+        tips: () => {
+          if (
+            state.busy ||
+            state.settingsOpen ||
+            state.activeModal ||
+            session.password ||
+            session.confirm
+          )
+            return;
+          state.set({ activeModal: payload });
+        },
+        open: () => {
           open();
-          break;
-        case "save":
+        },
+        save: () => {
           void session.save();
-          break;
-        case "save-as":
+        },
+        "save-as": () => {
           void session.save(true);
-          break;
-        case "print":
+        },
+        print: () => {
           if (state.document) state.set({ activeModal: "print" });
-          break;
-        case "home":
+        },
+        home: () => {
           session.home();
-          break;
-        case "organize":
+        },
+        organize: () => {
           if (state.document) state.set({ activeModal: "page-workspace" });
-          break;
-        case "undo":
+        },
+        undo: () => {
           controller?.undo();
-          break;
-        case "redo":
+        },
+        redo: () => {
           controller?.redo();
-          break;
-        case "find":
+        },
+        find: () => {
           state.set({ sidebar: "search" });
-          break;
-        case "settings":
+        },
+        settings: () => {
           state.set({ settingsOpen: true });
-          break;
-        case "highlight":
+        },
+        highlight: () => {
           if (!state.info?.encrypted) controller?.setTool("highlight");
-          break;
-        case "select":
+        },
+        select: () => {
           controller?.setTool("select");
-          break;
-        case "tools:add-text":
+        },
+        "tools:add-text": () => {
           if (state.document) state.set({ activeModal: "add-text" });
-          break;
-        case "tools:add-image":
+        },
+        "tools:add-image": () => {
           if (state.document) state.set({ activeModal: "add-image" });
-          break;
-        case "tools:annotations":
+        },
+        "tools:annotations": () => {
           if (state.document) state.set({ activeModal: "annotations" });
-          break;
-        case "tools:redact":
+        },
+        "tools:redact": () => {
           if (state.document) state.set({ activeModal: "redact" });
-          break;
-        case "fit-page":
+        },
+        "fit-page": () => {
           controller?.zoom("page-fit");
-          break;
-        case "fit-width":
+        },
+        "fit-width": () => {
           controller?.zoom("page-width");
-          break;
-        case "zoom-in":
+        },
+        "zoom-in": () => {
           controller?.zoom((state.zoom / 100) * 1.15);
-          break;
-        case "zoom-out":
+        },
+        "zoom-out": () => {
           controller?.zoom(state.zoom / 100 / 1.15);
-          break;
-      }
+        },
+      };
+      actions[payload]?.();
     }).then((fn) => {
       if (disposed) fn();
       else cleanup = fn;
@@ -449,9 +485,9 @@ export default function App() {
           >
             <p>{session.password.name}</p>
             <label>
-              Password
+              Password{" "}
               <input
-                autoFocus
+                data-autofocus
                 type="password"
                 autoComplete="off"
                 value={passwordValue}
@@ -592,15 +628,7 @@ export default function App() {
         ) && (
           <OfficeExport
             controller={controller}
-            initialFormat={
-              s.activeModal === "office-pptx"
-                ? "pptx-text"
-                : s.activeModal === "office-xlsx"
-                  ? "xlsx"
-                  : s.activeModal === "office-rtf"
-                    ? "rtf"
-                    : "docx"
-            }
+            initialFormat={officeFormat(s.activeModal)}
             onClose={() => s.set({ activeModal: null })}
           />
         )}

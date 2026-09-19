@@ -231,6 +231,7 @@ describe("Safe links and attachments", () => {
         expect(mockController.replaceWithBytes).toHaveBeenCalledWith(
           expect.any(Uint8Array),
           expect.stringContaining("attached.txt"),
+          { expectedSource: mockController.pdf },
         );
       });
     });

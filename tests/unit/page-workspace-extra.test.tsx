@@ -147,7 +147,7 @@ describe("PageWorkspace selection and moves", () => {
     const controller = await mockController();
     const onClose = vi.fn();
     render(<PageWorkspace controller={controller as never} onClose={onClose} />);
-    const modal = screen.getByRole("region", { name: "Page Workspace" });
+    const modal = screen.getByRole("dialog", { name: "Page Workspace" });
 
     // ArrowRight moves focus and selects next page (Page 2, index 1)
     fireEvent.keyDown(modal, { key: "ArrowRight" });

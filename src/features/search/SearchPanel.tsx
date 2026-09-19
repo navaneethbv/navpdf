@@ -1,8 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-export function SearchPanel({ controller }: { controller: ViewerController }) {
+export function SearchPanel({ controller }: Readonly<{ controller: ViewerController }>) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
   const query = useWorkspace((s) => s.searchQuery),
     matchCase = useWorkspace((s) => s.matchCase),
     wholeWord = useWorkspace((s) => s.wholeWord),
@@ -19,7 +23,7 @@ export function SearchPanel({ controller }: { controller: ViewerController }) {
       <label className="search-input">
         <Search size={16} />
         <input
-          autoFocus
+          ref={inputRef}
           type="search"
           aria-label="Search document"
           placeholder="Find in document"

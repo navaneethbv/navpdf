@@ -17,7 +17,13 @@ function clampPage(value: number, min: number, max: number): number {
   return Math.max(safeMin, Math.min(safeValue, safeMax));
 }
 
-export function PageNumberInput({ value, min = 1, max, onChange, ...props }: PageNumberInputProps) {
+export function PageNumberInput({
+  value,
+  min = 1,
+  max,
+  onChange,
+  ...props
+}: Readonly<PageNumberInputProps>) {
   const safeValue = clampPage(value, min, max);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {

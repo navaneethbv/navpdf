@@ -72,6 +72,7 @@ describe("FormManager", () => {
       expect(controller.replaceWithBytes).toHaveBeenCalledWith(
         new Uint8Array([9, 9, 9]),
         'Form field "CustomerName" created',
+        { expectedSource: controller.pdf },
       );
       expect(onClose).toHaveBeenCalled();
     });

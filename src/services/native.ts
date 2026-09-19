@@ -10,9 +10,9 @@ export async function openDocument(file?: File): Promise<DocumentDescriptor | nu
   if (!file) return native ? invoke<DocumentDescriptor | null>("open_document") : null;
   if (file.size > 1024 ** 3) throw new Error("Choose a PDF smaller than 1 GB.");
   if (native) {
-    const name = JSON.stringify(file.name).replace(
+    const name = JSON.stringify(file.name).replaceAll(
       /[^\x20-\x7e]/g,
-      (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      (char) => String.raw`\u${char.codePointAt(0)!.toString(16).padStart(4, "0")}`,
     );
     return invoke<DocumentDescriptor>("import_document", new Uint8Array(await file.arrayBuffer()), {
       headers: { "x-document-name": name },
@@ -86,11 +86,10 @@ export async function localState(): Promise<LocalState> {
     }
   }
   return {
-    preferences: raw
-      ? stored && typeof stored === "object"
+    preferences:
+      stored && typeof stored === "object"
         ? { ...defaultPreferences, ...(stored as Partial<Preferences>), networkAccess: false }
-        : defaultPreferences
-      : defaultPreferences,
+        : defaultPreferences,
     recents: [],
     recoveries: [],
   };

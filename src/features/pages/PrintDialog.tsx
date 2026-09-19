@@ -10,10 +10,10 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 export function PrintDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
   const s = useWorkspace();
   const [rangeMode, setRangeMode] = useState<RangeMode>("all");
   const [customRange, setCustomRange] = useState("");
@@ -121,8 +121,8 @@ export function PrintDialog({
         </div>
 
         <div className="modal-body">
-          <div className="setting-group">
-            <label className="setting-title">Page Range</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Page Range</legend>
             <div className="radio-group">
               <label>
                 <input
@@ -130,7 +130,7 @@ export function PrintDialog({
                   name="range"
                   checked={rangeMode === "all"}
                   onChange={() => setRangeMode("all")}
-                />
+                />{" "}
                 All pages ({s.info?.pages || 1} pages)
               </label>
               <label>
@@ -139,7 +139,7 @@ export function PrintDialog({
                   name="range"
                   checked={rangeMode === "current"}
                   onChange={() => setRangeMode("current")}
-                />
+                />{" "}
                 Current page (Page {s.page})
               </label>
               <label>
@@ -148,7 +148,7 @@ export function PrintDialog({
                   name="range"
                   checked={rangeMode === "custom"}
                   onChange={() => setRangeMode("custom")}
-                />
+                />{" "}
                 Pages:
               </label>
               {rangeMode === "custom" && (
@@ -161,7 +161,7 @@ export function PrintDialog({
                 />
               )}
             </div>
-          </div>
+          </fieldset>
 
           <p className="field-hint">
             Orientation, scale, and destination are chosen in the system print dialog that opens
@@ -169,9 +169,9 @@ export function PrintDialog({
           </p>
 
           {hasMixedDimensions && (
-            <p className="structure-warning" role="status" style={{ marginTop: 12 }}>
+            <output className="structure-warning" style={{ marginTop: 12 }}>
               {mixedDimensionsNote}
-            </p>
+            </output>
           )}
         </div>
 

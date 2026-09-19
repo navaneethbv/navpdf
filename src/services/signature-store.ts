@@ -131,7 +131,8 @@ function stableSignatureId(item: { name?: string; type?: string; dataUrl?: strin
   const input = `${item.name ?? "Signature"}\u0000${item.type ?? "signature"}\u0000${item.dataUrl ?? ""}`;
   let hash = 2166136261;
   for (let offset = 0; offset < input.length; offset++) {
-    hash ^= input.charCodeAt(offset);
+    // Preserve existing signature identifiers by hashing individual UTF-16 code units.
+    hash ^= input.at(offset)!.codePointAt(0)!;
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16).padStart(8, "0");

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { PDFDocument, rgb } from "pdf-lib";
+import { artifactPath } from "./local-paths.mjs";
 
-const output = resolve(process.argv[2] ?? "output/perf/heavy-40.pdf");
+const output = artifactPath(process.argv[2] ?? "output/perf/heavy-40.pdf");
 const pages = Number.parseInt(process.argv[3] ?? "40", 10);
 if (!Number.isInteger(pages) || pages < 1 || pages > 500) {
   throw new Error("Page count must be an integer between 1 and 500.");

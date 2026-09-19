@@ -6,12 +6,12 @@ export function ExternalLinkDialog({
   reason,
   onClose,
   onOpen,
-}: {
+}: Readonly<{
   url: string;
   reason?: string;
   onClose: () => void;
   onOpen: (allowHost: boolean) => void;
-}) {
+}>) {
   const [allowHost, setAllowHost] = useState(false);
   const copy = () => {
     void navigator.clipboard?.writeText(url).catch(() => undefined);
@@ -34,7 +34,7 @@ export function ExternalLinkDialog({
                 type="checkbox"
                 checked={allowHost}
                 onChange={(event) => setAllowHost(event.target.checked)}
-              />
+              />{" "}
               Allow this host for this session
             </label>
           )}

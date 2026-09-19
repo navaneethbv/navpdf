@@ -20,7 +20,7 @@ const tabs = [
   { id: "search", label: "Search", icon: Search },
   { id: "comments", label: "Comments", icon: MessageSquare },
 ] as const;
-export function Sidebar({ controller }: { controller: ViewerController }) {
+export function Sidebar({ controller }: Readonly<{ controller: ViewerController }>) {
   const tab = useWorkspace((s) => s.sidebar),
     bookmarks = useWorkspace((s) => s.bookmarks),
     comments = useWorkspace((s) => s.comments),
@@ -47,6 +47,81 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
         .catch(() => set({ error: "Comments could not be read from this PDF." }));
     if (tab !== "search") controller.closeSearch();
   }, [controller, tab, set]);
+  const renderPanel = () => {
+    if (tab === "pages") return <Thumbnails controller={controller} />;
+    if (tab === "search") return <SearchPanel controller={controller} />;
+    if (tab === "bookmarks")
+      return (
+        <div className="sidebar-scroll">
+          {bookmarks.length ? (
+            <BookmarkTree nodes={bookmarks} controller={controller} />
+          ) : (
+            <p className="empty-message">This PDF has no bookmarks.</p>
+          )}
+        </div>
+      );
+    return (
+      <div className="sidebar-scroll">
+        <div className="comment-actions" aria-label="Local comment exchange">
+          <button
+            type="button"
+            className="button"
+            disabled={comments.length === 0}
+            onClick={() => {
+              void exportComments();
+            }}
+          >
+            <Download size={14} /> Export
+          </button>
+          <button type="button" className="button" onClick={() => importInput.current?.click()}>
+            <Upload size={14} /> Import
+          </button>
+          <input
+            ref={importInput}
+            hidden
+            type="file"
+            accept="application/json,.json"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              void file
+                .text()
+                .then((source) => controller.importComments(source))
+                .then((count) => set({ status: `${count} comments imported` }))
+                .catch((error: unknown) =>
+                  set({ error: error instanceof Error ? error.message : String(error) }),
+                );
+            }}
+          />
+        </div>
+        {comments.length ? (
+          comments.map((c) => (
+            <button
+              className="comment-row"
+              key={`${c.page}-${c.id}`}
+              aria-pressed={selectedId === c.id}
+              onClick={() => {
+                if (typeof controller.selectAnnotation === "function")
+                  controller.selectAnnotation(c.id);
+                else controller.goTo(c.page);
+              }}
+            >
+              <strong>
+                {c.type} · Page {c.page}
+              </strong>
+              <span>{c.text}</span>
+            </button>
+          ))
+        ) : (
+          <p className="empty-message">
+            No saved comments or highlights found. New highlights appear here after saving and
+            reopening.
+          </p>
+        )}
+      </div>
+    );
+  };
   return (
     <aside className="left-sidebar">
       <button
@@ -75,83 +150,14 @@ export function Sidebar({ controller }: { controller: ViewerController }) {
         {tabs.find((t) => t.id === tab)?.label}
         {tab === "comments" ? ` (${comments.length})` : ""}
       </h2>
-      {tab === "pages" ? (
-        <Thumbnails controller={controller} />
-      ) : tab === "search" ? (
-        <SearchPanel controller={controller} />
-      ) : tab === "bookmarks" ? (
-        <div className="sidebar-scroll">
-          {bookmarks.length ? (
-            <BookmarkTree nodes={bookmarks} controller={controller} />
-          ) : (
-            <p className="empty-message">This PDF has no bookmarks.</p>
-          )}
-        </div>
-      ) : (
-        <div className="sidebar-scroll">
-          <div className="comment-actions" aria-label="Local comment exchange">
-            <button
-              type="button"
-              className="button"
-              disabled={comments.length === 0}
-              onClick={() => {
-                void exportComments();
-              }}
-            >
-              <Download size={14} /> Export
-            </button>
-            <button type="button" className="button" onClick={() => importInput.current?.click()}>
-              <Upload size={14} /> Import
-            </button>
-            <input
-              ref={importInput}
-              hidden
-              type="file"
-              accept="application/json,.json"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (!file) return;
-                void file
-                  .text()
-                  .then((source) => controller.importComments(source))
-                  .then((count) => set({ status: `${count} comments imported` }))
-                  .catch((error: unknown) =>
-                    set({ error: error instanceof Error ? error.message : String(error) }),
-                  );
-              }}
-            />
-          </div>
-          {comments.length ? (
-            comments.map((c) => (
-              <button
-                className="comment-row"
-                key={`${c.page}-${c.id}`}
-                aria-pressed={selectedId === c.id}
-                onClick={() => {
-                  if (typeof controller.selectAnnotation === "function")
-                    controller.selectAnnotation(c.id);
-                  else controller.goTo(c.page);
-                }}
-              >
-                <strong>
-                  {c.type} · Page {c.page}
-                </strong>
-                <span>{c.text}</span>
-              </button>
-            ))
-          ) : (
-            <p className="empty-message">
-              No saved comments or highlights found. New highlights appear here after saving and
-              reopening.
-            </p>
-          )}
-        </div>
-      )}
+      {renderPanel()}
     </aside>
   );
 }
-function BookmarkTree({ nodes, controller }: { nodes: Bookmark[]; controller: ViewerController }) {
+function BookmarkTree({
+  nodes,
+  controller,
+}: Readonly<{ nodes: Bookmark[]; controller: ViewerController }>) {
   return (
     <ul className="bookmarks">
       {nodes.map((node, i) => (

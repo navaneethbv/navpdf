@@ -5,8 +5,9 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { artifactPath, localTool } from "./local-paths.mjs";
 
-const output = process.argv[2] ?? "output/release/licenses.json";
+const output = artifactPath(process.argv[2] ?? "output/release/licenses.json");
 const TARGET = "aarch64-apple-darwin";
 // Permissive licenses that only require keeping notices; anything else is listed for review.
 const PERMISSIVE = new Set([
@@ -62,7 +63,7 @@ function permissive(expression) {
 }
 
 const cargo = spawnSync(
-  "cargo",
+  localTool("cargo"),
   [
     "metadata",
     "--manifest-path",
