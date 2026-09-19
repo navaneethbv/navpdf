@@ -36,6 +36,8 @@ export interface ThemeOverrides {
   accent: string | null;
 }
 export interface Preferences {
+  tourCompleted: boolean;
+  showStartupTips: boolean;
   theme: "system" | "light" | "dark";
   lightPalette: ColorPalette;
   darkPalette: ColorPalette;
@@ -116,6 +118,8 @@ export interface DocumentInfo {
   version: string;
 }
 export const defaultPreferences: Preferences = {
+  tourCompleted: false,
+  showStartupTips: true,
   theme: "system",
   lightPalette: "default",
   darkPalette: "default",

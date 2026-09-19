@@ -15,6 +15,7 @@ use tauri::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let result = tauri::Builder::default()
+        .manage(commands::open_queue::PendingOpenRequests::default())
         .setup(|app| {
             let root = app.path().app_data_dir()?;
             fs::create_dir_all(&root)?;
@@ -29,7 +30,6 @@ pub fn run() {
                 .unwrap_or_default();
             app.manage(AppState {
                 documents: Mutex::new(HashMap::new()),
-                pending_open_tokens: Mutex::new(HashMap::new()),
                 local: Mutex::new(local),
                 root,
                 dirty: Mutex::new(false),
@@ -109,9 +109,15 @@ pub fn run() {
                 .separator()
                 .item(&quit)
                 .build()?;
+            let help = SubmenuBuilder::new(app, "Help")
+                .text("tour", "Take a Tour")
+                .text("tips", "Show a Tip")
+                .build()?;
             app.set_menu(
                 MenuBuilder::new(app)
-                    .items(&[&settings, &file, &edit, &view, &annotate, &organize, &tools])
+                    .items(&[
+                        &settings, &file, &edit, &view, &annotate, &organize, &tools, &help,
+                    ])
                     .build()?,
             )?;
             let window =
@@ -140,9 +146,7 @@ pub fn run() {
                         paths, ..
                     }) = event
                     {
-                        if let Some(path) = paths.iter().next().cloned() {
-                            commands::register_open_path(&app_handle, path);
-                        }
+                        commands::register_open_paths(&app_handle, paths.clone());
                     }
                 });
             }
@@ -158,6 +162,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_document,
             open_document_from_token,
+            pending_open_requests,
+            dismiss_open_request,
             open_external_url,
             import_document,
             print_document,
@@ -203,10 +209,12 @@ pub fn run() {
         Ok(app) => app.run(|app, event| match event {
             #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
             tauri::RunEvent::Opened { urls } => {
-                if let Some(url) = urls.into_iter().next() {
-                    if let Ok(path) = url.to_file_path() {
-                        commands::register_open_path(app, path);
-                    }
+                let paths = urls
+                    .into_iter()
+                    .map(|url| url.to_file_path())
+                    .collect::<Result<Vec<_>, _>>();
+                if let Ok(paths) = paths {
+                    commands::register_open_paths(app, paths);
                 }
             }
             tauri::RunEvent::ExitRequested { api, .. } => {

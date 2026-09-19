@@ -19,14 +19,14 @@ export function Dialog({
   const ref = useRef<HTMLDialogElement>(null),
     id = useId();
   useEffect(() => {
-    ref.current?.showModal();
     const d = ref.current;
-    const focus = () => {
-      const target = d?.querySelector<HTMLElement>("[autofocus]");
-      target?.focus();
-    };
-    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
-    else queueMicrotask(focus);
+    const target = d?.querySelector<HTMLElement>("[autofocus], [data-autofocus]");
+    // React's autoFocus focuses before showModal and does not emit the HTML attribute.
+    // Set it before opening so native WebKit chooses the intended initial control,
+    // including when animation frames are suspended in a background window.
+    target?.setAttribute("autofocus", "");
+    d?.showModal();
+    target?.focus();
     return () => d?.close();
   }, []);
   return (

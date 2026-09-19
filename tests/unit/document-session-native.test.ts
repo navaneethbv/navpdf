@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(async () => {}),
+  invoke: vi.fn(async () => []),
   isTauri: () => true,
 }));
 
@@ -27,6 +27,7 @@ vi.mock("../../src/services/native", () => ({
     recoveries: [],
   })),
   openDocument: vi.fn(async () => null),
+  openDocumentFromToken: vi.fn(),
   openRecent: vi.fn(async () => null),
   openRecovery: vi.fn(async () => null),
   releaseDocument: vi.fn(async () => {}),
@@ -247,4 +248,47 @@ it("cancels an in-flight open from the dirty guard", async () => {
     session.cancelConfirm();
   });
   expect(loadPdf).not.toHaveBeenCalled();
+});
+
+it("cancels a queued native open without replacing dirty work or retaining the token", async () => {
+  const request = { token: "queued", error: null };
+  let queued = true;
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === "pending_open_requests") return queued ? [request] : [];
+    if (command === "dismiss_open_request") queued = false;
+  });
+  useWorkspace
+    .getState()
+    .set({ document: doc, dirty: true, activeModal: null, settingsOpen: false });
+  const onOpen = vi.mocked(listen).mock.calls.find(([event]) => event === "open-token")?.[1];
+  await act(async () => onOpen?.({ payload: {} } as never));
+  expect(session.confirm).not.toBeNull();
+  expect(desktop.openDocumentFromToken).not.toHaveBeenCalled();
+  await act(async () => session.cancelConfirm());
+  expect(invoke).toHaveBeenCalledWith("dismiss_open_request", { token: "queued" });
+  expect(useWorkspace.getState()).toMatchObject({ document: doc, dirty: true });
+  expect(queued).toBe(false);
+});
+
+it("releases a queued request after save failure while preserving edits", async () => {
+  let queued = true;
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === "pending_open_requests")
+      return queued ? [{ token: "after-save", error: null }] : [];
+    if (command === "dismiss_open_request") queued = false;
+  });
+  useWorkspace
+    .getState()
+    .set({ document: doc, dirty: true, activeModal: null, settingsOpen: false });
+  (controller as unknown as { pdf: unknown }).pdf = {
+    saveDocument: async () => new Uint8Array([1]),
+    numPages: 2,
+  };
+  vi.mocked(desktop.saveDocument).mockRejectedValueOnce(new Error("disk full"));
+  const onOpen = vi.mocked(listen).mock.calls.find(([event]) => event === "open-token")?.[1];
+  await act(async () => onOpen?.({ payload: {} } as never));
+  await act(async () => session.saveAndContinue());
+  expect(desktop.openDocumentFromToken).not.toHaveBeenCalled();
+  expect(useWorkspace.getState()).toMatchObject({ document: doc, dirty: true });
+  expect(queued).toBe(false);
 });

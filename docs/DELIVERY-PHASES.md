@@ -7,6 +7,20 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 19 native opening and getting started
+
+The [implementation plan](IMPLEMENTATION-PLAN-2026-09-19.md) addresses native file delivery and the requested tour and startup tips.
+PDF association metadata registers NavPDF as an alternate editor.
+Ordered native open requests survive renderer startup and wait for busy operations or dialogs; cancellation releases their opaque tokens.
+Multiple-file batches receive an explicit single-document message.
+A first-launch tour and seven tips are accessible from Help, with persisted tour completion and a startup-tip opt-out that Settings can reverse.
+Native testing found that Enter initially closed the tour; setting autofocus before opening now targets Next or Dismiss.
+Cold-start testing also exposed file delivery before runtime setup; early queue initialization fixes the crash.
+Clean Finder launch and requests deferred behind tour or Tips passed in the rebuilt app.
+These changes do not close the existing conversion, interoperability or distribution gates.
+Current validation evidence is recorded in `docs/VERIFICATION.md`.
+The requested import, export discoverability and compression review follows this delivery.
+
 ## September 18 settings reliability and color themes
 
 The [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md) covers reproduced settings defects and the requested color palettes within Light and Dark modes.
@@ -35,17 +49,17 @@ See the follow-up section in `docs/VERIFICATION.md` for the verification boundar
 
 This checkpoint supersedes the stale progress table below for the pushed worktree on `fix/september-14-review-corrections`.
 
-| Tranche | Current source status | Evidence or open gate |
-| --- | --- | --- |
-| 0 | Complete | Node 24, Rust 1.89, CI guardrails and the `src-tauri/Cargo.toml` Cargo Deny manifest path are configured and pass hosted validation. |
-| 1 | Complete and tested | Data-safety corrections and regressions are present; the required local frontend and Rust checks pass. |
-| 2 | Complete in source | Tasks 2.1 through 2.7 are implemented, including mutation serialization, page-box geometry, comment identity, permission handling, redaction safeguards and native rendering recovery. |
-| 3 | Implemented in source | Tasks 3.1 through 3.8 are covered by the frontend suite; keyboard-only and native dialog checks remain open. |
-| 4 | In progress | Fixture guards, the PDF artifact inspection helper, corpus-driven OCR reporting, acceptance commands and a macOS acceptance job are present and pass hosted validation; Preview and Acrobat reopen checks remain open. |
-| 5 | Partial | Forms editing, crop positioning, image transforms, inserted-image rotation, signature rotation and protection parity are implemented; broader content parity and independent-reader checks remain open. |
-| 6 | Pending | Structural refactors remain open. |
-| 7 | Partial | View modes, navigation, page labels, existing-content editing, protection and redaction are implemented; most Acrobat parity and independent-reader checks remain open. |
-| 8 | Partial | Revision history and native staging use machine-relative byte budgets; native revision recycling and the remaining performance gates remain open. |
+| Tranche | Current source status | Evidence or open gate                                                                                                                                                                                                  |
+| ------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0       | Complete              | Node 24, Rust 1.89, CI guardrails and the `src-tauri/Cargo.toml` Cargo Deny manifest path are configured and pass hosted validation.                                                                                   |
+| 1       | Complete and tested   | Data-safety corrections and regressions are present; the required local frontend and Rust checks pass.                                                                                                                 |
+| 2       | Complete in source    | Tasks 2.1 through 2.7 are implemented, including mutation serialization, page-box geometry, comment identity, permission handling, redaction safeguards and native rendering recovery.                                 |
+| 3       | Implemented in source | Tasks 3.1 through 3.8 are covered by the frontend suite; keyboard-only and native dialog checks remain open.                                                                                                           |
+| 4       | In progress           | Fixture guards, the PDF artifact inspection helper, corpus-driven OCR reporting, acceptance commands and a macOS acceptance job are present and pass hosted validation; Preview and Acrobat reopen checks remain open. |
+| 5       | Partial               | Forms editing, crop positioning, image transforms, inserted-image rotation, signature rotation and protection parity are implemented; broader content parity and independent-reader checks remain open.                |
+| 6       | Pending               | Structural refactors remain open.                                                                                                                                                                                      |
+| 7       | Partial               | View modes, navigation, page labels, existing-content editing, protection and redaction are implemented; most Acrobat parity and independent-reader checks remain open.                                                |
+| 8       | Partial               | Revision history and native staging use machine-relative byte budgets; native revision recycling and the remaining performance gates remain open.                                                                      |
 
 Current local evidence is 504 tests passing across 80 frontend files with 83.39% statement, 75.01% branch, 81.18% function and 86.20% line coverage.
 TypeScript, ESLint, formatting checks, 80 Rust tests with one constrained-volume test ignored, and Clippy with warnings denied pass locally.
@@ -80,10 +94,10 @@ The review found two data-loss defects that affect Phases 5 and 3: repeated deco
 
 Progress on branch `fix/september-14-review-corrections`, recorded September 14, 2026:
 
-| Tranche | Automated status | Native acceptance |
-| --- | --- | --- |
-| 0: environment and guardrails | Implemented; hosted CI result pending the first push | Not applicable |
-| 1: data-safety corrections (Tasks 1.1 to 1.9) | Implemented with regressions; local checks pass | Not run; every task's native check is open |
+| Tranche                                                 | Automated status                                                       | Native acceptance                                       |
+| ------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------- |
+| 0: environment and guardrails                           | Implemented; hosted CI result pending the first push                   | Not applicable                                          |
+| 1: data-safety corrections (Tasks 1.1 to 1.9)           | Implemented with regressions; local checks pass                        | Not run; every task's native check is open              |
 | 2: mutation correctness and geometry (Tasks 2.1 to 2.7) | Implemented with regressions; local checks and Phase 7 acceptance pass | Not run; placement and redaction native checks are open |
 
 Evidence, deliberate deviations from the plan text and remaining limits are recorded in [VERIFICATION.md](VERIFICATION.md).
@@ -102,18 +116,18 @@ Optional remote services require a separate architecture decision; no uploads or
 
 ## Sequence and completion gates
 
-| Phase | Scope | Completion gate | Status |
-| --- | --- | --- | --- |
-| 1 | [Reader reliability and file safety (M0)](phases/01-reader-reliability.md) | Native save, Save As, discard/cancel, failed replacement, quit, recovery, external modification, destination collision, and filesystem failure matrix passes; current highlight toolbar and 500-page round trip verified. | Complete |
-| 2 | [Complete local annotations (M2)](phases/02-local-annotations.md) | Underline, strike-through, sticky notes, ink, free text, shapes and arrows persist with properties, deletion, undo/redo and synchronized comments; keyboard and independent-reader checks pass. | Complete |
-| 3 | [Forms and local Fill & Sign (M4)](phases/03-forms-fill-sign.md) | Standard forms preserve values and appearances; Fill & Sign marks persist accurately; reusable signatures use OS-backed protected storage or explicit session isolation. | Reopened: storage correction and form-placement gaps |
-| 4 | [Page mutations and navigation foundation (M3/M5)](phases/04-pages-mutations.md) | Standard page operations retain PDF integrity, links and page-level metadata; outline/thumbnail/bookmark navigation handles mixed rotations and dimensions. | Reopened: native revision correction needs packaged acceptance |
-| 5 | [Content placement and decoration (M3)](phases/05-content-decoration.md) | Text/images, links, attachments, headers/footers, watermarks, backgrounds and Bates numbering have usable placement controls, Unicode/font handling and independently verified output. | Complete |
-| 6 | [OCR and basic exports (M5)](phases/06-ocr-exports.md) | Measured local OCR engine produces aligned searchable scans; language availability, rotation, cancellation and export memory bounds verified. | Reopened: real OCR implemented; full corpus/native acceptance pending |
-| 7 | [Existing editing, protection and redaction (M6)](phases/07-editing-protection-redaction.md) | Selected engines support scoped existing-object editing, encryption-aware validation, measured compression and independently audited irreversible redaction. | Complete |
-| 8 | [Office conversion and local intelligent tools (M7)](phases/08-conversion-intelligent-tools.md) | Genuine Office output passes a fidelity corpus; supported local generation/translation produces valid artifacts with references, cancellation and explicit model availability. | Complete for approved local scope (AI deferred) |
-| 9 | [Distribution and platform acceptance](phases/09-distribution-platforms.md) | Current DMG builds and installs in a clean account; signing/notarization and supported-platform accessibility, performance, print and interoperability acceptance complete. | Partial: unsigned local macOS package; release gates open |
-| 10 | [Optional services and specialist compatibility (M8)](phases/10-optional-integrations.md) | Separately scoped collaboration, remote signing, certification and media integrations pass privacy, trust and interoperability gates. | Complete for approved local scope (remote declined) |
+| Phase | Scope                                                                                           | Completion gate                                                                                                                                                                                                           | Status                                                                |
+| ----- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 1     | [Reader reliability and file safety (M0)](phases/01-reader-reliability.md)                      | Native save, Save As, discard/cancel, failed replacement, quit, recovery, external modification, destination collision, and filesystem failure matrix passes; current highlight toolbar and 500-page round trip verified. | Complete                                                              |
+| 2     | [Complete local annotations (M2)](phases/02-local-annotations.md)                               | Underline, strike-through, sticky notes, ink, free text, shapes and arrows persist with properties, deletion, undo/redo and synchronized comments; keyboard and independent-reader checks pass.                           | Complete                                                              |
+| 3     | [Forms and local Fill & Sign (M4)](phases/03-forms-fill-sign.md)                                | Standard forms preserve values and appearances; Fill & Sign marks persist accurately; reusable signatures use OS-backed protected storage or explicit session isolation.                                                  | Reopened: storage correction and form-placement gaps                  |
+| 4     | [Page mutations and navigation foundation (M3/M5)](phases/04-pages-mutations.md)                | Standard page operations retain PDF integrity, links and page-level metadata; outline/thumbnail/bookmark navigation handles mixed rotations and dimensions.                                                               | Reopened: native revision correction needs packaged acceptance        |
+| 5     | [Content placement and decoration (M3)](phases/05-content-decoration.md)                        | Text/images, links, attachments, headers/footers, watermarks, backgrounds and Bates numbering have usable placement controls, Unicode/font handling and independently verified output.                                    | Complete                                                              |
+| 6     | [OCR and basic exports (M5)](phases/06-ocr-exports.md)                                          | Measured local OCR engine produces aligned searchable scans; language availability, rotation, cancellation and export memory bounds verified.                                                                             | Reopened: real OCR implemented; full corpus/native acceptance pending |
+| 7     | [Existing editing, protection and redaction (M6)](phases/07-editing-protection-redaction.md)    | Selected engines support scoped existing-object editing, encryption-aware validation, measured compression and independently audited irreversible redaction.                                                              | Complete                                                              |
+| 8     | [Office conversion and local intelligent tools (M7)](phases/08-conversion-intelligent-tools.md) | Genuine Office output passes a fidelity corpus; supported local generation/translation produces valid artifacts with references, cancellation and explicit model availability.                                            | Complete for approved local scope (AI deferred)                       |
+| 9     | [Distribution and platform acceptance](phases/09-distribution-platforms.md)                     | Current DMG builds and installs in a clean account; signing/notarization and supported-platform accessibility, performance, print and interoperability acceptance complete.                                               | Partial: unsigned local macOS package; release gates open             |
+| 10    | [Optional services and specialist compatibility (M8)](phases/10-optional-integrations.md)       | Separately scoped collaboration, remote signing, certification and media integrations pass privacy, trust and interoperability gates.                                                                                     | Complete for approved local scope (remote declined)                   |
 
 Phases 2 and 3 prioritize free Reader gaps over extending existing editor features.
 Their required mutation and placement support must be implemented within those phases before claiming completion; the broader foundation audit remains Phase 4.
@@ -152,22 +166,22 @@ The final Phase 1 acceptance bundle is `src-tauri/target/release/bundle/macos/Na
 Its executable SHA-256 is `4eaefc4b4bb6032f696bd075556a77fe2f6415dfe2dc1923f58dc261134b3f8e`.
 The later Phase 2 source edits require another bundle before their native acceptance.
 
-| Native action | Observed result |
-| --- | --- |
-| Open `reader-500.pdf` from recents | Page 500 rendered at positive 74% zoom. |
-| Author text-selection and freehand highlights on page 500 | Both were visibly rendered with the marker text readable in NavPDF. |
-| Save As `tests/pdf-fixtures/phase1-native-both-20260913.pdf` | Save completed, title changed, and the destination was added to recents. |
-| Close and reopen the saved copy in NavPDF | The 500-page copy reopened on page 500 with both highlights visible. |
-| Open the saved copy in Preview and Acrobat | Both independent readers showed page 500 with the underlying text readable. The saved objects were `/Ink` `/InkHighlight` annotations with `/CA 0.5` because this native path uses the freehand editor. |
-| Save As cancellation | The original title and unsaved state remained after cancelling the native save panel. |
-| Dirty Open with `Discard`, then invalid `damaged.pdf` | The current 500-page document remained open and dirty with the damaged-input error. |
-| Close and quit guards | Keep editing cancelled both actions; explicit discard returned home; quit Save and Continue exited the app. |
-| Recovery after forced process termination | The recovery entry reopened as a dirty 500-page document; Save As cancellation preserved it and successful Save As removed recovery state. |
-| Damaged recovery copy | The failed recovery load left the recovery entry and current workspace intact until explicit discard. |
-| External source replacement before Save | NavPDF reported the external change and preserved the in-memory document and dirty state. |
-| Existing destination collision | The native overwrite prompt appeared; cancelling it preserved the source and dirty state. |
-| Read-only destination | Save failed with the permissions message; the source stayed open and dirty. |
-| Constrained 20 MB HFS+ volume | Initial Save As succeeded with 52 KB remaining; a second Save failed with the original unchanged, and closing still showed the unsaved-changes guard. |
+| Native action                                                | Observed result                                                                                                                                                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Open `reader-500.pdf` from recents                           | Page 500 rendered at positive 74% zoom.                                                                                                                                                                 |
+| Author text-selection and freehand highlights on page 500    | Both were visibly rendered with the marker text readable in NavPDF.                                                                                                                                     |
+| Save As `tests/pdf-fixtures/phase1-native-both-20260913.pdf` | Save completed, title changed, and the destination was added to recents.                                                                                                                                |
+| Close and reopen the saved copy in NavPDF                    | The 500-page copy reopened on page 500 with both highlights visible.                                                                                                                                    |
+| Open the saved copy in Preview and Acrobat                   | Both independent readers showed page 500 with the underlying text readable. The saved objects were `/Ink` `/InkHighlight` annotations with `/CA 0.5` because this native path uses the freehand editor. |
+| Save As cancellation                                         | The original title and unsaved state remained after cancelling the native save panel.                                                                                                                   |
+| Dirty Open with `Discard`, then invalid `damaged.pdf`        | The current 500-page document remained open and dirty with the damaged-input error.                                                                                                                     |
+| Close and quit guards                                        | Keep editing cancelled both actions; explicit discard returned home; quit Save and Continue exited the app.                                                                                             |
+| Recovery after forced process termination                    | The recovery entry reopened as a dirty 500-page document; Save As cancellation preserved it and successful Save As removed recovery state.                                                              |
+| Damaged recovery copy                                        | The failed recovery load left the recovery entry and current workspace intact until explicit discard.                                                                                                   |
+| External source replacement before Save                      | NavPDF reported the external change and preserved the in-memory document and dirty state.                                                                                                               |
+| Existing destination collision                               | The native overwrite prompt appeared; cancelling it preserved the source and dirty state.                                                                                                               |
+| Read-only destination                                        | Save failed with the permissions message; the source stayed open and dirty.                                                                                                                             |
+| Constrained 20 MB HFS+ volume                                | Initial Save As succeeded with 52 KB remaining; a second Save failed with the original unchanged, and closing still showed the unsaved-changes guard.                                                   |
 
 The main native output is `tests/pdf-fixtures/phase1-native-both-20260913.pdf` (460881 bytes).
 Its SHA-256 is `6cac334623e3ca602e0b719d7875d2afe500ade5a0a09aaf4dbd8a139085c28b`.
@@ -215,15 +229,15 @@ The exact native bundle at `src-tauri/target/release/bundle/macos/NavPDF.app` wa
 Its executable SHA-256 is `b0ed2258603d6c87ab6fb73730c604a291194db776fbd3757a3c5ac4dd1543c0`.
 The final Phase 2 artifact is `tests/pdf-fixtures/phase2-native-all-markup-20260913.pdf` (459648 bytes) with SHA-256 `10d46c5c1237716d00f933a53f82934cc99c57059fabf1266484ea8a9fbb4532`.
 
-| Phase 2 action | Observed result |
-| --- | --- |
-| Open the 500-page saved copy in the rebuilt NavPDF | Reopened on page 500 with the saved document clean. |
-| Read comments after reopen | The sidebar listed `Underline · Page 500 sentence`, `Text · Page 500 Native note on page 500`, and `StrikeOut · Page 500 persistent`. |
-| Save As the final three-markup copy | Save completed without the previous macOS packaged-app hang, the title changed, and the status returned to `PDF saved`. |
-| Inspect the saved PDF independently | 500 pages were present, and page 500 contained standard `/Underline`, `/Text`, and `/StrikeOut` objects with expected contents, author, color, opacity, rectangles and quad points. |
-| Open the final copy in Preview | Search found `NEEDLE-0500` on page 500; Preview visibly rendered the underline, strike-through and sticky-note marker. |
-| Open the final copy in Acrobat | Acrobat opened the exact final artifact; its accessibility tree does not expose reliable page navigation in this environment. |
-| Native adapter undo and redo | A temporary sticky note appeared in the comments list, disappeared after Undo with the clean saved revision restored, reappeared after Redo with dirty state, and disappeared again after Undo. |
+| Phase 2 action                                     | Observed result                                                                                                                                                                                 |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Open the 500-page saved copy in the rebuilt NavPDF | Reopened on page 500 with the saved document clean.                                                                                                                                             |
+| Read comments after reopen                         | The sidebar listed `Underline · Page 500 sentence`, `Text · Page 500 Native note on page 500`, and `StrikeOut · Page 500 persistent`.                                                           |
+| Save As the final three-markup copy                | Save completed without the previous macOS packaged-app hang, the title changed, and the status returned to `PDF saved`.                                                                         |
+| Inspect the saved PDF independently                | 500 pages were present, and page 500 contained standard `/Underline`, `/Text`, and `/StrikeOut` objects with expected contents, author, color, opacity, rectangles and quad points.             |
+| Open the final copy in Preview                     | Search found `NEEDLE-0500` on page 500; Preview visibly rendered the underline, strike-through and sticky-note marker.                                                                          |
+| Open the final copy in Acrobat                     | Acrobat opened the exact final artifact; its accessibility tree does not expose reliable page navigation in this environment.                                                                   |
+| Native adapter undo and redo                       | A temporary sticky note appeared in the comments list, disappeared after Undo with the clean saved revision restored, reappeared after Redo with dirty state, and disappeared again after Undo. |
 
 ### September 13 Phase 2.3 shape execution
 

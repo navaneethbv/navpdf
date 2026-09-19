@@ -1,4 +1,5 @@
 pub mod engine;
+pub mod open_queue;
 mod recovery;
 
 use crate::{
@@ -34,6 +35,8 @@ pub struct ThemeOverrides {
 #[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
+    pub tour_completed: bool,
+    pub show_startup_tips: bool,
     pub theme: String,
     pub light_palette: String,
     pub dark_palette: String,
@@ -55,6 +58,8 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            tour_completed: false,
+            show_startup_tips: true,
             theme: "system".into(),
             light_palette: "default".into(),
             dark_palette: "default".into(),
@@ -148,14 +153,12 @@ pub struct RedactionAudit {
 }
 pub struct AppState {
     pub documents: Mutex<HashMap<String, Arc<Opened>>>,
-    pub pending_open_tokens: Mutex<HashMap<String, PathBuf>>,
     pub local: Mutex<LocalData>,
     pub root: PathBuf,
     pub dirty: Mutex<bool>,
     pub saving: Mutex<bool>,
     pub engine: engine::EngineState,
 }
-const MAX_PENDING_OPEN_TOKENS: usize = 32;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenTokenEvent {
@@ -343,52 +346,60 @@ fn is_pdf_path(path: &std::path::Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
 }
 
-/// Convert a path delivered by the operating system into a single-use opaque token.
-/// The renderer never receives or submits the source path.
-pub fn register_open_path(app: &AppHandle, path: PathBuf) {
-    let event = if !is_pdf_path(&path) {
-        OpenTokenEvent {
+/// Retain operating-system requests until the renderer opens or dismisses them.
+/// Source paths stay native; notifications only wake the renderer's queue reader.
+pub fn register_open_paths(app: &AppHandle, paths: Vec<PathBuf>) {
+    let result = app
+        .state::<open_queue::PendingOpenRequests>()
+        .0
+        .lock()
+        .map_err(|_| "Open queue unavailable.".to_string())
+        .and_then(|mut queue| queue.push(paths));
+    let event = match result {
+        Ok(_) => OpenTokenEvent {
             token: None,
-            error: Some("Only PDF files can be opened.".into()),
-        }
-    } else {
-        let token = uuid::Uuid::new_v4().to_string();
-        let registered = app
-            .state::<AppState>()
-            .pending_open_tokens
-            .lock()
-            .map(|mut tokens| {
-                if tokens.len() >= MAX_PENDING_OPEN_TOKENS {
-                    false
-                } else {
-                    tokens.insert(token.clone(), path).is_none()
-                }
-            })
-            .unwrap_or(false);
-        if registered {
-            OpenTokenEvent {
-                token: Some(token),
-                error: None,
-            }
-        } else {
-            OpenTokenEvent {
-                token: None,
-                error: Some("The file could not be queued for opening.".into()),
-            }
-        }
+            error: None,
+        },
+        Err(error) => OpenTokenEvent {
+            token: None,
+            error: Some(error),
+        },
     };
     let _ = app.emit("open-token", event);
 }
 
 #[tauri::command]
-pub async fn open_document_from_token(app: AppHandle, token: String) -> Result<Descriptor, String> {
-    let path = app
-        .state::<AppState>()
-        .pending_open_tokens
+pub fn pending_open_requests(
+    state: State<open_queue::PendingOpenRequests>,
+) -> Result<Vec<open_queue::OpenRequest>, String> {
+    Ok(state
+        .0
         .lock()
         .map_err(|_| "Open queue unavailable.")?
-        .remove(&token)
-        .ok_or("This open request has expired or was already used.")?;
+        .pending())
+}
+
+#[tauri::command]
+pub fn dismiss_open_request(
+    state: State<open_queue::PendingOpenRequests>,
+    token: String,
+) -> Result<(), String> {
+    state
+        .0
+        .lock()
+        .map_err(|_| "Open queue unavailable.")?
+        .dismiss(&token);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_document_from_token(app: AppHandle, token: String) -> Result<Descriptor, String> {
+    let path = app
+        .state::<open_queue::PendingOpenRequests>()
+        .0
+        .lock()
+        .map_err(|_| "Open queue unavailable.")?
+        .take(&token)?;
     if !is_pdf_path(&path) {
         return Err("Only PDF files can be opened.".into());
     }
@@ -1051,7 +1062,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -1075,7 +1085,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -1155,7 +1164,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let state = AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.path().to_path_buf(),
             dirty: Mutex::new(false),
@@ -1186,7 +1194,6 @@ mod tests {
     fn test_state(root: &std::path::Path) -> AppState {
         AppState {
             documents: Mutex::new(HashMap::new()),
-            pending_open_tokens: Mutex::new(HashMap::new()),
             local: Mutex::new(LocalData::default()),
             root: root.to_path_buf(),
             dirty: Mutex::new(false),
@@ -1240,6 +1247,8 @@ mod tests {
             theme: "dark".into(),
             light_palette: "amber".into(),
             dark_palette: "ocean".into(),
+            tour_completed: true,
+            show_startup_tips: false,
             network_access: true,
             ..Preferences::default()
         };
@@ -1249,6 +1258,8 @@ mod tests {
         assert_eq!(saved.preferences.theme, "dark");
         assert_eq!(saved.preferences.light_palette, "amber");
         assert_eq!(saved.preferences.dark_palette, "ocean");
+        assert!(saved.preferences.tour_completed);
+        assert!(!saved.preferences.show_startup_tips);
         assert!(!saved.preferences.network_access);
         assert_eq!(saved.recents.len(), 1);
         assert_eq!(
@@ -1274,6 +1285,8 @@ mod tests {
         let legacy: LocalData =
             serde_json::from_str(r#"{"preferences":{"theme":"light"},"recents":[]}"#).unwrap();
         assert_eq!(legacy.preferences.theme, "light");
+        assert!(!legacy.preferences.tour_completed);
+        assert!(legacy.preferences.show_startup_tips);
         assert_eq!(legacy.preferences.light_palette, "default");
         assert_eq!(legacy.preferences.dark_palette, "default");
         assert!(legacy.preferences.light_overrides.background.is_none());

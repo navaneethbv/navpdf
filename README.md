@@ -14,7 +14,8 @@ See [the implementation review](docs/PR-1-REVIEW.md) for historical limitations 
 
 Available features:
 
-- Native Open, Save, and Save As dialogs.
+- Native Open, Save, and Save As dialogs, plus queued Finder Open With and single-file drag-and-drop.
+- A first-launch tour, seven startup tips, a saved tip opt-out, and Help access to both.
 - Continuous, single-page, and two-page viewing.
 - Fit page, fit width, 25% to 500% zoom, trackpad zoom, and a hand tool.
 - Page navigation and virtualized thumbnails.
@@ -36,6 +37,15 @@ Image-only scans display normally and can use local Apple Vision OCR on macOS to
 Browser preview and other platforms report OCR unavailable.
 Searchable export supports standard-font characters; other recognized text can be extracted without modifying the PDF.
 See [the PR 2 corrective review](docs/PR-2-REVIEW.md) for reopened acceptance gates and remaining capability gaps.
+
+## Getting started
+
+The first launch shows a five-step tour of opening, reading, editing, saving and personalizing the workspace.
+Complete or skip it to continue; Help and tips in the title bar and the native Help menu can reopen it.
+Later launches show a tip unless you check Don't show tips again and dismiss it.
+Settings can turn startup tips back on.
+PDF requests from Finder wait until the tour, tips or other dialogs finish, and unsaved edits retain their normal confirmation.
+NavPDF registers as an alternate PDF editor without changing your default reader.
 
 ## Run locally
 

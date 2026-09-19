@@ -241,6 +241,20 @@ export function Settings() {
             <input type="checkbox" checked={false} disabled /> Allow network access
           </label>
           <p className="muted">Network access is disabled by the application policy.</p>
+          <h3>Getting started</h3>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.showStartupTips}
+              onChange={(e) => {
+                patch({ showStartupTips: e.target.checked });
+              }}
+            />
+            Show tips when NavPDF starts
+          </label>
+          <p className="muted">
+            Revisit the tour or browse tips from Help and tips in the title bar.
+          </p>
           <h3>Editing</h3>
           <div className="form-columns">
             <label>
