@@ -100,7 +100,11 @@ export function ThumbCanvas({
   }, [pdf, page, revision]);
   return (
     <div className="thumb-paper">
-      {failed ? <span>Preview unavailable</span> : <canvas ref={ref} aria-hidden="true" />}
+      {failed ? (
+        <span>Preview unavailable</span>
+      ) : (
+        <canvas ref={ref} aria-label={`Page ${page} preview`} />
+      )}
     </div>
   );
 }

@@ -65,6 +65,7 @@ function previewStyle(draft: Draft, overlay: HTMLElement) {
 
 export function ShapeTool({ controller }: Readonly<{ controller: ViewerController }>) {
   const overlay = useRef<HTMLDivElement>(null);
+  const keyboardTarget = useRef<HTMLButtonElement>(null);
   const active = useRef<{
     pointerId: number;
     page: HTMLElement;
@@ -75,7 +76,7 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
   const kind = useWorkspace((s) => s.shapeKind);
 
   useEffect(() => {
-    overlay.current?.focus();
+    keyboardTarget.current?.focus();
   }, []);
 
   const cancel = () => {
@@ -88,16 +89,16 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
   const pointFor = async (page: HTMLElement, event: PointerEvent) =>
     pdfPoint(controller, page, event.clientX, event.clientY);
 
-  const handleDown = async (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleDown = async (event: PointerEvent) => {
     if (event.button !== 0 || useWorkspace.getState().busy || !controller.pdf) return;
     const page = pageAt(event.clientX, event.clientY);
     if (!page) return;
     event.preventDefault();
-    if (typeof event.currentTarget.setPointerCapture === "function") {
-      event.currentTarget.setPointerCapture(event.pointerId);
+    if (typeof overlay.current?.setPointerCapture === "function") {
+      overlay.current.setPointerCapture(event.pointerId);
     }
     const startClient = { x: event.clientX, y: event.clientY };
-    const startPdf = pointFor(page, event.nativeEvent);
+    const startPdf = pointFor(page, event);
     active.current = { pointerId: event.pointerId, page, startClient, startPdf };
     const resolvedStartPdf = await startPdf;
     if (active.current?.pointerId !== event.pointerId) return;
@@ -109,20 +110,20 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
     });
   };
 
-  const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleMove = (event: PointerEvent) => {
     const current = active.current;
-    if (!current || current.pointerId !== event.pointerId || !draft) return;
+    if (current?.pointerId !== event.pointerId || !draft) return;
     setDraft({
       ...draft,
       currentClient: { x: event.clientX, y: event.clientY },
     });
   };
 
-  const handleUp = async (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleUp = async (event: PointerEvent) => {
     const current = active.current;
-    if (!current || current.pointerId !== event.pointerId) return;
+    if (current?.pointerId !== event.pointerId) return;
     const startPdf = draft?.startPdf ?? (await current.startPdf);
-    const endPdf = await pointFor(current.page, event.nativeEvent);
+    const endPdf = await pointFor(current.page, event);
     active.current = null;
     setDraft(null);
     if (
@@ -139,6 +140,37 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
       });
     }
   };
+
+  useEffect(() => {
+    const element = overlay.current;
+    if (!element) return;
+    const pointerDown = (event: PointerEvent) => {
+      void handleDown(event);
+    };
+    const pointerMove = (event: PointerEvent) => handleMove(event);
+    const pointerUp = (event: PointerEvent) => {
+      void handleUp(event);
+    };
+    const pointerCancel = () => cancel();
+    const keyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancel();
+      }
+    };
+    element.addEventListener("pointerdown", pointerDown);
+    element.addEventListener("pointermove", pointerMove);
+    element.addEventListener("pointerup", pointerUp);
+    element.addEventListener("pointercancel", pointerCancel);
+    element.addEventListener("keydown", keyDown);
+    return () => {
+      element.removeEventListener("pointerdown", pointerDown);
+      element.removeEventListener("pointermove", pointerMove);
+      element.removeEventListener("pointerup", pointerUp);
+      element.removeEventListener("pointercancel", pointerCancel);
+      element.removeEventListener("keydown", keyDown);
+    };
+  }, [cancel, controller, draft]);
 
   const shapePreview = draft && overlay.current ? previewStyle(draft, overlay.current) : null;
   const line =
@@ -157,20 +189,19 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
       className="shape-tool-overlay"
       role="application"
       aria-label={`Draw ${kind.toLowerCase()} shape`}
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          cancel();
-        }
-      }}
-      onPointerDown={(event) => {
-        void handleDown(event);
-      }}
-      onPointerMove={handleMove}
-      onPointerUp={(event) => void handleUp(event)}
-      onPointerCancel={cancel}
     >
+      <button
+        ref={keyboardTarget}
+        type="button"
+        className="shape-tool-keyboard-target"
+        aria-label={`Cancel drawing ${kind.toLowerCase()} shape`}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            cancel();
+          }
+        }}
+      />
       {shapePreview && kind !== "Line" && kind !== "Arrow" && (
         <div className={`shape-preview shape-preview-${kind.toLowerCase()}`} style={shapePreview} />
       )}

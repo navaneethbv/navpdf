@@ -165,11 +165,17 @@ export function RedactionTool({
           : [...current, value],
       );
       const pages = new Set(found.map((match) => match.page)).size;
-      setNotice(
-        found.length
-          ? `Marked ${found.length} match${found.length === 1 ? "" : "es"} on ${pages} page${pages === 1 ? "" : "s"}. The term is also audited after redaction.`
-          : "No text matches were found. The term will still be audited in the redacted output.",
-      );
+      if (found.length) {
+        const matchWord = found.length === 1 ? "match" : "matches";
+        const pageWord = pages === 1 ? "page" : "pages";
+        setNotice(
+          `Marked ${found.length} ${matchWord} on ${pages} ${pageWord}. The term is also audited after redaction.`,
+        );
+      } else {
+        setNotice(
+          "No text matches were found. The term will still be audited in the redacted output.",
+        );
+      }
       setTerm("");
     } catch (error) {
       s.set({ error: errorText(error) });

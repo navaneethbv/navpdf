@@ -176,13 +176,8 @@ function headingLevel(ratio: number): 0 | 1 | 2 {
   return 0;
 }
 
-export function layoutPage(
-  page: number,
-  items: TextItem[],
-  width: number,
-  height: number,
-): PageLayout {
-  const words: Word[] = items
+function pageWords(items: TextItem[]): Word[] {
+  return items
     .filter((item) => item.str.trim())
     .map((item) => ({
       x: item.transform[4],
@@ -191,75 +186,93 @@ export function layoutPage(
       width: item.width,
       text: item.str,
     }));
+}
+
+function layoutColumn(column: Word[]): Line[] {
+  const sorted = [...column].sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines: Line[] = [];
+  for (const word of sorted) {
+    const line = lines.find(
+      (candidate) => Math.abs(candidate.y - word.y) <= Math.max(candidate.size, word.size) * 0.5,
+    );
+    if (line) {
+      line.cells.push({ x: word.x, text: word.text });
+      line.size = Math.max(line.size, word.size);
+      line.x = Math.min(line.x, word.x);
+      continue;
+    }
+    lines.push({
+      x: word.x,
+      y: word.y,
+      size: word.size,
+      cells: [{ x: word.x, text: word.text }],
+      text: "",
+    });
+  }
+  for (const line of lines) {
+    const byX = column
+      .filter((word) => Math.abs(line.y - word.y) <= Math.max(line.size, word.size) * 0.5)
+      .sort((a, b) => a.x - b.x);
+    const cells: Cell[] = [];
+    let previousEnd = -Infinity;
+    for (const word of byX) {
+      const gap = word.x - previousEnd;
+      const last = cells.at(-1);
+      if (last && gap <= line.size * 1.5) {
+        last.text += gap > line.size * 0.15 ? ` ${word.text}` : word.text;
+      } else {
+        cells.push({ x: word.x, text: word.text });
+      }
+      previousEnd = Math.max(previousEnd, word.x + word.width);
+    }
+    line.cells = cells.map((cell) => ({ ...cell, text: cell.text.trim() }));
+    line.text = line.cells.map((cell) => cell.text).join(" ");
+  }
+  return lines.sort((a, b) => b.y - a.y);
+}
+
+function columnParagraphs(columnLines: Line[], body: number): Paragraph[] {
+  const paragraphs: Paragraph[] = [];
+  let current: { text: string; size: number; y: number } | null = null;
+  const flush = () => {
+    if (!current) return;
+    paragraphs.push({ text: current.text, heading: headingLevel(current.size / body) });
+    current = null;
+  };
+  for (const line of columnLines) {
+    const joinable =
+      current &&
+      Math.abs(current.size - line.size) < 0.5 &&
+      current.y - line.y <= line.size * 1.8 &&
+      line.size / body < 1.25;
+    if (current && joinable) {
+      current.text += current.text.endsWith("-") ? line.text : ` ${line.text}`;
+      current.y = line.y;
+      continue;
+    }
+    flush();
+    current = { text: line.text, size: line.size, y: line.y };
+  }
+  flush();
+  return paragraphs;
+}
+
+export function layoutPage(
+  page: number,
+  items: TextItem[],
+  width: number,
+  height: number,
+): PageLayout {
+  const words = pageWords(items);
   const lines: Line[] = [];
   const paragraphs: Paragraph[] = [];
   const sizes = words.map((word) => word.size).sort((a, b) => a - b);
   // The lower median keeps a short page's single title from being treated as body text.
   const body = sizes[Math.floor((sizes.length - 1) / 2)] ?? 10;
   for (const column of splitColumns(words, width)) {
-    const sorted = [...column].sort((a, b) => b.y - a.y || a.x - b.x);
-    const columnLines: Line[] = [];
-    for (const word of sorted) {
-      const line = columnLines.find(
-        (candidate) => Math.abs(candidate.y - word.y) <= Math.max(candidate.size, word.size) * 0.5,
-      );
-      if (line) {
-        line.cells.push({ x: word.x, text: word.text });
-        line.size = Math.max(line.size, word.size);
-        line.x = Math.min(line.x, word.x);
-      } else {
-        columnLines.push({
-          x: word.x,
-          y: word.y,
-          size: word.size,
-          cells: [{ x: word.x, text: word.text }],
-          text: "",
-        });
-      }
-    }
-    for (const line of columnLines) {
-      const byX = [...column]
-        .filter((word) => Math.abs(line.y - word.y) <= Math.max(line.size, word.size) * 0.5)
-        .sort((a, b) => a.x - b.x);
-      const cells: Cell[] = [];
-      let previousEnd = -Infinity;
-      for (const word of byX) {
-        const gap = word.x - previousEnd;
-        const last = cells.at(-1);
-        if (last && gap <= line.size * 1.5) {
-          last.text += gap > line.size * 0.15 ? ` ${word.text}` : word.text;
-        } else {
-          cells.push({ x: word.x, text: word.text });
-        }
-        previousEnd = Math.max(previousEnd, word.x + word.width);
-      }
-      line.cells = cells.map((cell) => ({ ...cell, text: cell.text.trim() }));
-      line.text = line.cells.map((cell) => cell.text).join(" ");
-    }
-    columnLines.sort((a, b) => b.y - a.y);
+    const columnLines = layoutColumn(column);
     lines.push(...columnLines);
-    let current: { text: string; size: number; y: number } | null = null;
-    const flush = () => {
-      if (!current) return;
-      const ratio = current.size / body;
-      paragraphs.push({ text: current.text, heading: headingLevel(ratio) });
-      current = null;
-    };
-    for (const line of columnLines) {
-      const joinable =
-        current &&
-        Math.abs(current.size - line.size) < 0.5 &&
-        current.y - line.y <= line.size * 1.8 &&
-        line.size / body < 1.25;
-      if (current && joinable) {
-        current.text += current.text.endsWith("-") ? line.text : ` ${line.text}`;
-        current.y = line.y;
-      } else {
-        flush();
-        current = { text: line.text, size: line.size, y: line.y };
-      }
-    }
-    flush();
+    paragraphs.push(...columnParagraphs(columnLines, body));
   }
   return { page, width, height, lines, paragraphs };
 }
@@ -279,7 +292,11 @@ const CORE_TYPE = OVERRIDE(
 export function buildDocx(layouts: PageLayout[], title: string) {
   const [first] = layouts;
   const paragraph = (text: string, style?: string) =>
-    `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ""}<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+    [
+      "<w:p>",
+      style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "",
+      `<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`,
+    ].join("");
   const body = layouts
     .map((layout, index) => {
       const content = layout.paragraphs
@@ -393,20 +410,51 @@ export function buildXlsx(sheets: { name: string; rows: string[][] }[]) {
       )
       .join("")}</sheetData></worksheet>`;
   const styles = `${XML}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const worksheetOverrides = sheetNames
+    .map((_, i) =>
+      OVERRIDE(
+        `xl/worksheets/sheet${i + 1}.xml`,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+      ),
+    )
+    .join("");
+  const workbookSheets = sheetNames
+    .map((name, i) => `<sheet name="${escapeXml(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+    .join("");
+  const workbookRelationships = sheetNames
+    .map(
+      (_, i) =>
+        `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`,
+    )
+    .join("");
   return createZip([
     {
       name: "[Content_Types].xml",
-      data: `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${OVERRIDE("xl/workbook.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")}${OVERRIDE("xl/styles.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml")}${sheetNames.map((_, i) => OVERRIDE(`xl/worksheets/sheet${i + 1}.xml`, "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml")).join("")}${CORE_TYPE}</Types>`,
+      data: [
+        XML,
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>',
+        OVERRIDE(
+          "xl/workbook.xml",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+        ),
+        OVERRIDE(
+          "xl/styles.xml",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+        ),
+        worksheetOverrides,
+        CORE_TYPE,
+        "</Types>",
+      ].join(""),
     },
     { name: "_rels/.rels", data: PACKAGE_RELS("xl/workbook.xml", "officeDocument") },
     { name: "docProps/core.xml", data: CORE(sheetNames[0]) },
     {
       name: "xl/workbook.xml",
-      data: `${XML}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetNames.map((name, i) => `<sheet name="${escapeXml(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`,
+      data: `${XML}<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>`,
     },
     {
       name: "xl/_rels/workbook.xml.rels",
-      data: `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetNames.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheetNames.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+      data: `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${workbookRelationships}<Relationship Id="rId${sheetNames.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     },
     { name: "xl/styles.xml", data: styles },
     ...safeSheets.map((sheet, i) => ({
@@ -420,7 +468,26 @@ const DRAWING =
   'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
 const EMPTY_TREE =
   '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>';
-const THEME = `${XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="NavPDF"><a:themeElements><a:clrScheme name="NavPDF"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F3D33"/></a:dk2><a:lt2><a:srgbClr val="EEF3F0"/></a:lt2><a:accent1><a:srgbClr val="25604B"/></a:accent1><a:accent2><a:srgbClr val="8F3F32"/></a:accent2><a:accent3><a:srgbClr val="F5CF58"/></a:accent3><a:accent4><a:srgbClr val="4F81BD"/></a:accent4><a:accent5><a:srgbClr val="9BBB59"/></a:accent5><a:accent6><a:srgbClr val="8064A2"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="NavPDF"><a:majorFont><a:latin typeface="Helvetica"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Helvetica"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="NavPDF"><a:fillStyleLst>${'<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'.repeat(3)}</a:fillStyleLst><a:lnStyleLst>${[6350, 12700, 19050].map((w) => `<a:ln w="${w}"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`).join("")}</a:lnStyleLst><a:effectStyleLst>${"<a:effectStyle><a:effectLst/></a:effectStyle>".repeat(3)}</a:effectStyleLst><a:bgFillStyleLst>${'<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'.repeat(3)}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
+const THEME_SOLID_FILL = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
+const THEME_EFFECT = "<a:effectStyle><a:effectLst/></a:effectStyle>";
+const THEME_LINES = [6350, 12700, 19050]
+  .map((width) => `<a:ln w="${width}">${THEME_SOLID_FILL}</a:ln>`)
+  .join("");
+const THEME = [
+  XML,
+  '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="NavPDF"><a:themeElements>',
+  '<a:clrScheme name="NavPDF"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F3D33"/></a:dk2><a:lt2><a:srgbClr val="EEF3F0"/></a:lt2><a:accent1><a:srgbClr val="25604B"/></a:accent1><a:accent2><a:srgbClr val="8F3F32"/></a:accent2><a:accent3><a:srgbClr val="F5CF58"/></a:accent3><a:accent4><a:srgbClr val="4F81BD"/></a:accent4><a:accent5><a:srgbClr val="9BBB59"/></a:accent5><a:accent6><a:srgbClr val="8064A2"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>',
+  '<a:fontScheme name="NavPDF"><a:majorFont><a:latin typeface="Helvetica"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Helvetica"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>',
+  '<a:fmtScheme name="NavPDF"><a:fillStyleLst>',
+  THEME_SOLID_FILL.repeat(3),
+  "</a:fillStyleLst><a:lnStyleLst>",
+  THEME_LINES,
+  "</a:lnStyleLst><a:effectStyleLst>",
+  THEME_EFFECT.repeat(3),
+  "</a:effectStyleLst><a:bgFillStyleLst>",
+  THEME_SOLID_FILL.repeat(3),
+  "</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>",
+].join("");
 
 /** Genuine PPTX slides: either a full-page picture or editable text boxes per line. */
 export function buildPptx(slides: Slide[], title: string) {
@@ -469,16 +536,51 @@ export function buildPptx(slides: Slide[], title: string) {
   const slideRels = slides
     .map((_, i) => rel(`rId${i + 2}`, "slide", `slides/slide${i + 1}.xml`))
     .join("");
+  const slideOverrides = slides
+    .map((_, i) =>
+      OVERRIDE(
+        `ppt/slides/slide${i + 1}.xml`,
+        "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
+      ),
+    )
+    .join("");
+  const slideIds = slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join("");
+  const contentTypes = [
+    XML,
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>',
+    OVERRIDE(
+      "ppt/presentation.xml",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+    ),
+    OVERRIDE(
+      "ppt/slideMasters/slideMaster1.xml",
+      "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml",
+    ),
+    OVERRIDE(
+      "ppt/slideLayouts/slideLayout1.xml",
+      "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
+    ),
+    OVERRIDE("ppt/theme/theme1.xml", "application/vnd.openxmlformats-officedocument.theme+xml"),
+    slideOverrides,
+    CORE_TYPE,
+    "</Types>",
+  ].join("");
+  const presentation = [
+    XML,
+    `<p:presentation ${DRAWING}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>`,
+    slideIds,
+    `</p:sldIdLst><p:sldSz cx="${cx}" cy="${cy}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+  ].join("");
   return createZip([
     {
       name: "[Content_Types].xml",
-      data: `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>${OVERRIDE("ppt/presentation.xml", "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml")}${OVERRIDE("ppt/slideMasters/slideMaster1.xml", "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml")}${OVERRIDE("ppt/slideLayouts/slideLayout1.xml", "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml")}${OVERRIDE("ppt/theme/theme1.xml", "application/vnd.openxmlformats-officedocument.theme+xml")}${slides.map((_, i) => OVERRIDE(`ppt/slides/slide${i + 1}.xml`, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml")).join("")}${CORE_TYPE}</Types>`,
+      data: contentTypes,
     },
     { name: "_rels/.rels", data: PACKAGE_RELS("ppt/presentation.xml", "officeDocument") },
     { name: "docProps/core.xml", data: CORE(title) },
     {
       name: "ppt/presentation.xml",
-      data: `${XML}<p:presentation ${DRAWING}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join("")}</p:sldIdLst><p:sldSz cx="${cx}" cy="${cy}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      data: presentation,
     },
     {
       name: "ppt/_rels/presentation.xml.rels",
@@ -529,13 +631,12 @@ export function buildRtf(layouts: PageLayout[]) {
           .join("");
       })
       .join("");
-  const pages = layouts.map((layout) =>
-    layout.paragraphs
-      .map(
-        (item) =>
-          `${item.heading ? `\\b\\fs${item.heading === 1 ? 36 : 28} ` : ""}${escape(item.text)}${item.heading ? "\\b0\\fs24" : ""}\\par`,
-      )
-      .join("\n"),
-  );
+  const paragraph = (item: Paragraph) => {
+    const headingSize = item.heading === 1 ? 36 : 28;
+    const headingPrefix = item.heading ? String.raw`\b\fs${headingSize} ` : "";
+    const headingSuffix = item.heading ? String.raw`\b0\fs24` : "";
+    return [headingPrefix, escape(item.text), headingSuffix, String.raw`\par`].join("");
+  };
+  const pages = layouts.map((layout) => layout.paragraphs.map(paragraph).join("\n"));
   return `{\\rtf1\\ansi\\ansicpg1252\\uc1\\deff0{\\fonttbl{\\f0\\fswiss Helvetica;}}\\f0\\fs24\n${pages.join("\n\\page\n")}\n}`;
 }

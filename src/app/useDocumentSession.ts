@@ -8,12 +8,107 @@ import { loadPdf } from "../services/pdf";
 import type { DocumentDescriptor } from "../types/document";
 import { useNativeOpenRequests } from "./useNativeOpenRequests";
 import type { ViewerController } from "../features/viewer/controller";
+type PasswordPrompt = {
+  name: string;
+  reason: number;
+  submit: (password: string) => void;
+};
+
+interface CommitLoadedCandidateOptions {
+  controller: ViewerController;
+  candidate: PDFDocumentLoadingTask;
+  descriptor: DocumentDescriptor;
+  initialPage: number;
+  recovering: boolean;
+  previous: DocumentDescriptor | null;
+  previousTask: PDFDocumentLoadingTask | null;
+  commitTask: () => void;
+  setPassword: (value: PasswordPrompt | null) => void;
+  refreshLocal: () => Promise<void>;
+  report: (error: unknown) => void;
+}
+
+async function commitLoadedCandidate(options: CommitLoadedCandidateOptions): Promise<void> {
+  const {
+    controller,
+    candidate,
+    descriptor,
+    initialPage,
+    recovering,
+    previous,
+    previousTask,
+    commitTask,
+    setPassword,
+    refreshLocal,
+    report,
+  } = options;
+  const loaded = await candidate.promise;
+  setPassword(null);
+  const metadata = await loaded.getMetadata();
+  const info = metadata.info as {
+    Title?: string;
+    Author?: string;
+    PDFFormatVersion?: string;
+    EncryptFilterName?: string;
+  };
+  const encrypted = !!info.EncryptFilterName;
+  await controller.attach(loaded);
+  await controller.viewer.firstPagePromise;
+  if (encrypted) {
+    controller.clearRevisionHistory?.();
+  } else {
+    try {
+      controller.seedRevision?.(
+        await loaded.saveDocument(),
+        loaded.numPages,
+        "Opened PDF",
+        descriptor.revisionId,
+      );
+    } catch {
+      controller.clearRevisionHistory?.();
+    }
+  }
+  if (recovering || descriptor.unsaved) controller.markUnsavedRevision?.();
+
+  const { bookmarks, comments, formNotice, hasDigitalSignature, pageLabels, editingAllowed } =
+    useWorkspace.getState();
+  commitTask();
+  useWorkspace.getState().reset();
+  useWorkspace.getState().set({
+    document: descriptor,
+    toolMode: "all",
+    navigationVisible: false,
+    propertiesVisible: false,
+    bookmarks,
+    comments,
+    formNotice,
+    hasDigitalSignature,
+    pageLabels,
+    editingAllowed,
+    dirty: recovering || !!descriptor.unsaved,
+    info: {
+      pages: loaded.numPages,
+      encrypted,
+      title: info.Title || "",
+      author: info.Author || "",
+      version: info.PDFFormatVersion || "",
+    },
+    status: "Ready",
+    busy: false,
+  });
+  controller.goTo(initialPage);
+  await desktop.markDirty(recovering || !!descriptor.unsaved).catch(report);
+  await refreshLocal().catch(report);
+  if (previous && previous.id !== descriptor.id) {
+    await desktop.discardRecovery(previous.id).catch(report);
+    await desktop.releaseDocument(previous.id).catch(report);
+  }
+  await controller.releaseRevision().catch(report);
+  if (previousTask && previousTask !== candidate) await previousTask.destroy().catch(report);
+}
+
 export function useDocumentSession(controller: ViewerController | null) {
-  const [password, setPassword] = useState<{
-    name: string;
-    reason: number;
-    submit: (password: string) => void;
-  } | null>(null);
+  const [password, setPassword] = useState<PasswordPrompt | null>(null);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const confirmationPending = useRef(false);
   const confirmationCancelled = useRef<(() => void) | null>(null);
@@ -96,79 +191,23 @@ export function useDocumentSession(controller: ViewerController | null) {
           if (loading.current === candidate && Number.isFinite(percent))
             useWorkspace.getState().set({ status: `Opening PDF... ${percent}%` });
         };
-        const loaded = await candidate.promise;
-        setPassword(null);
-        const metadata = await loaded.getMetadata();
-        const info = metadata.info as {
-          Title?: string;
-          Author?: string;
-          PDFFormatVersion?: string;
-          EncryptFilterName?: string;
-        };
-        const encrypted = !!info.EncryptFilterName;
         const previous = useWorkspace.getState().document;
         const previousTask = task.current;
-
-        // Stage and validate candidate attachment BEFORE destroying previous document
-        await controller.attach(loaded);
-        await controller.viewer.firstPagePromise;
-        if (encrypted) {
-          controller.clearRevisionHistory?.();
-        } else {
-          try {
-            controller.seedRevision?.(
-              await loaded.saveDocument(),
-              loaded.numPages,
-              "Opened PDF",
-              descriptor.revisionId,
-            );
-          } catch {
-            controller.clearRevisionHistory?.();
-          }
-        }
-        if (recovering || descriptor.unsaved) controller.markUnsavedRevision?.();
-
-        // Commit before retiring any previous resource. Cleanup errors cannot
-        // roll back to a proxy that has already been destroyed.
-        // attach() read these from the candidate; reset() must not discard them.
-        const { bookmarks, comments, formNotice, hasDigitalSignature, pageLabels, editingAllowed } =
-          useWorkspace.getState();
-        task.current = candidate;
-        useWorkspace.getState().reset();
-        useWorkspace.getState().set({
-          document: descriptor,
-          toolMode: "all",
-          navigationVisible: false,
-          propertiesVisible: false,
-          bookmarks,
-          comments,
-          formNotice,
-          hasDigitalSignature,
-          pageLabels,
-          editingAllowed,
-          dirty: recovering || !!descriptor.unsaved,
-          info: {
-            pages: loaded.numPages,
-            encrypted,
-            title: info.Title || "",
-            author: info.Author || "",
-            version: info.PDFFormatVersion || "",
+        await commitLoadedCandidate({
+          controller,
+          candidate,
+          descriptor,
+          initialPage,
+          recovering,
+          previous,
+          previousTask,
+          commitTask: () => {
+            task.current = candidate;
           },
-          status: "Ready",
-          busy: false,
+          setPassword,
+          refreshLocal,
+          report,
         });
-        controller.goTo(initialPage);
-        await desktop.markDirty(recovering || !!descriptor.unsaved).catch(report);
-        await refreshLocal().catch(report);
-        if (previous && previous.id !== descriptor.id) {
-          // The dirty guard already saved or discarded the previous document's changes.
-          await desktop.discardRecovery(previous.id).catch(report);
-          await desktop.releaseDocument(previous.id).catch(report);
-        }
-        await controller.releaseRevision().catch(report);
-        if (previousTask && previousTask !== candidate) {
-          await previousTask.destroy().catch(report);
-        }
         return true;
       } catch (error) {
         if (candidate !== task.current) {

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Copy, Download, X, Check } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import { safeFileName } from "../../utils/download";
@@ -11,7 +11,7 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
   const [copied, setCopied] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: { clientX: number; clientY: number }) => {
     if (captured) return;
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -19,14 +19,14 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
     setCurrent({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: { clientX: number; clientY: number }) => {
     if (!start || captured) return;
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return;
     setCurrent({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     if (!start || !current || captured) return;
     const x = Math.min(start.x, current.x);
     const y = Math.min(start.y, current.y);
@@ -105,6 +105,22 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
     }
   };
 
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const mouseDown = (event: MouseEvent) => handlePointerDown(event);
+    const mouseMove = (event: MouseEvent) => handlePointerMove(event);
+    const mouseUp = () => handlePointerUp();
+    overlay.addEventListener("mousedown", mouseDown);
+    overlay.addEventListener("mousemove", mouseMove);
+    overlay.addEventListener("mouseup", mouseUp);
+    return () => {
+      overlay.removeEventListener("mousedown", mouseDown);
+      overlay.removeEventListener("mousemove", mouseMove);
+      overlay.removeEventListener("mouseup", mouseUp);
+    };
+  }, [captured, current, start]);
+
   const handleCopy = async () => {
     if (!captured) return;
     try {
@@ -143,9 +159,8 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
     <div
       ref={overlayRef}
       className="snapshot-overlay"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      role="application"
+      aria-label="Snapshot selection area"
     >
       <div className="snapshot-hint">
         {captured ? (

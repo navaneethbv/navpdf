@@ -1174,9 +1174,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let source_path = dir.path().join("secret.pdf");
         let plain = filesystem::tests::fixture();
+        let password = uuid::Uuid::new_v4().simple().to_string();
         let encrypted = crate::engine::protect::protect(
             &plain,
-            &crate::engine::protect::ProtectionRequest::user_only("pw"),
+            &crate::engine::protect::ProtectionRequest::user_only(password),
             1,
         )
         .unwrap();

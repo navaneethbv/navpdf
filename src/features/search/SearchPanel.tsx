@@ -2,6 +2,12 @@ import { useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+
+function resultSummary(count: number, pending: boolean): string {
+  if (pending) return "Searching...";
+  return `${count} ${count === 1 ? "result" : "results"}`;
+}
+
 export function SearchPanel({ controller }: Readonly<{ controller: ViewerController }>) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -14,6 +20,7 @@ export function SearchPanel({ controller }: Readonly<{ controller: ViewerControl
     count = useWorkspace((s) => s.searchCount),
     pending = useWorkspace((s) => s.searchPending),
     set = useWorkspace((s) => s.set);
+  const summary = resultSummary(count, pending);
   useEffect(() => {
     const timer = setTimeout(() => controller.search(), 150);
     return () => clearTimeout(timer);
@@ -53,7 +60,7 @@ export function SearchPanel({ controller }: Readonly<{ controller: ViewerControl
         </label>
       </div>
       <div className="search-summary">
-        <span>{pending ? "Searching..." : `${count} result${count === 1 ? "" : "s"}`}</span>
+        <span>{summary}</span>
         <button
           className="icon-button"
           aria-label="Previous match"
