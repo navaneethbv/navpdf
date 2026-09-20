@@ -172,15 +172,24 @@ function handleLayoutMenuAction(
   state: WorkspaceState,
   controller: ViewerController | null,
 ): boolean {
-  if (["layout-single", "layout-continuous", "layout-spread"].includes(payload)) {
-    controller?.setLayout(payload.slice("layout-".length) as "single" | "continuous" | "spread");
+  const layoutActions = new Map<string, () => void>([
+    ["layout-single", () => controller?.setLayout("single")],
+    ["layout-continuous", () => controller?.setLayout("continuous")],
+    ["layout-spread", () => controller?.setLayout("spread")],
+  ]);
+  const layoutAction = layoutActions.get(payload);
+  if (layoutAction) {
+    layoutAction();
     return true;
   }
-  if (["panel-pages", "panel-bookmarks", "panel-comments"].includes(payload)) {
-    state.set({
-      sidebar: payload.slice("panel-".length) as "pages" | "bookmarks" | "comments",
-      propertiesVisible: false,
-    });
+  const panelActions = new Map<string, () => void>([
+    ["panel-pages", () => state.set({ sidebar: "pages", propertiesVisible: false })],
+    ["panel-bookmarks", () => state.set({ sidebar: "bookmarks", propertiesVisible: false })],
+    ["panel-comments", () => state.set({ sidebar: "comments", propertiesVisible: false })],
+  ]);
+  const panelAction = panelActions.get(payload);
+  if (panelAction) {
+    panelAction();
     return true;
   }
   return false;
