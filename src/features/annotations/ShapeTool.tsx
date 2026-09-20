@@ -63,7 +63,7 @@ function previewStyle(draft: Draft, overlay: HTMLElement) {
   };
 }
 
-export function ShapeTool({ controller }: { controller: ViewerController }) {
+export function ShapeTool({ controller }: Readonly<{ controller: ViewerController }>) {
   const overlay = useRef<HTMLDivElement>(null);
   const active = useRef<{
     pointerId: number;
@@ -164,8 +164,10 @@ export function ShapeTool({ controller }: { controller: ViewerController }) {
           cancel();
         }
       }}
-      onPointerDown={(event) => void handleDown(event)}
-      onPointerMove={(event) => void handleMove(event)}
+      onPointerDown={(event) => {
+        void handleDown(event);
+      }}
+      onPointerMove={handleMove}
       onPointerUp={(event) => void handleUp(event)}
       onPointerCancel={cancel}
     >

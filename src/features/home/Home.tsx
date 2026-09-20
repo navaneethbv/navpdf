@@ -8,13 +8,13 @@ export function Home({
   recover,
   refresh,
   onError,
-}: {
+}: Readonly<{
   open: () => void;
   recent: (id: string, page: number) => void;
   recover: (id: string) => void;
   refresh: () => Promise<void>;
   onError: (e: unknown) => void;
-}) {
+}>) {
   const local = useWorkspace((s) => s.local);
   return (
     <main className="home">
@@ -23,14 +23,11 @@ export function Home({
           <FileText size={35} />
         </div>
         <h1>
-          Your documents.
-          <br />
-          Right where they belong.
+          Your documents. <br /> Right where they belong.
         </h1>
         <p>
-          A focused workspace for reading and marking up PDFs.
-          <br />
-          Private by design. Everything stays on this device.
+          A focused workspace for reading and marking up PDFs. <br /> Private by design. Everything
+          stays on this device.
         </p>
         <button className="button primary" onClick={open}>
           <FolderOpen size={18} /> Open PDF

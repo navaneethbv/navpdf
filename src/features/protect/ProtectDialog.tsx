@@ -68,11 +68,12 @@ export function ProtectDialog({
   controller,
   onClose,
   onSaveUnprotected,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
   onSaveUnprotected?: () => Promise<boolean>;
-}) {
+}>) {
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const ids = useId();
   const [openPassword, setOpenPassword] = useState("");
@@ -85,11 +86,8 @@ export function ProtectDialog({
   const [problem, setProblem] = useState("");
   const encrypted = !!s.info?.encrypted;
   const protectedSource = !!s.info?.protectedSource;
-  const title = encrypted
-    ? "Unlock Protected PDF"
-    : protectedSource
-      ? "Save Protected Document"
-      : "Password Protect PDF";
+  const saveTitle = protectedSource ? "Save Protected Document" : "Password Protect PDF";
+  const title = encrypted ? "Unlock Protected PDF" : saveTitle;
 
   const clearPasswords = () => {
     setOpenPassword("");
@@ -107,6 +105,7 @@ export function ProtectDialog({
     try {
       const bytes = await unlockDocument(doc.id, unlockPassword);
       await controller.replaceWithBytes(bytes, "Unlocked for editing", {
+        expectedSource: sourcePdf,
         resetHistory: true,
       });
       await discardRecovery(doc.id).catch(() => {});

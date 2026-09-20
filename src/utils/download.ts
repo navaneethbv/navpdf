@@ -19,9 +19,9 @@ export function safeFileName(name: string, fallback = "download"): string {
 export async function downloadBlob(blob: Blob, fileName: string): Promise<boolean> {
   if (isTauri()) {
     if (blob.size > 1024 ** 3) throw new Error("The export exceeds the 1 GB limit.");
-    const name = JSON.stringify(safeFileName(fileName)).replace(
+    const name = JSON.stringify(safeFileName(fileName)).replaceAll(
       /[^\x20-\x7e]/g,
-      (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      (char) => String.raw`\u${(char.codePointAt(0) ?? 0).toString(16).padStart(4, "0")}`,
     );
     return invoke<boolean>("export_file", new Uint8Array(await blob.arrayBuffer()), {
       headers: { "x-export-name": name },

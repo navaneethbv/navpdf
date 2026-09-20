@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useEffect, useRef, useState } from "react";
 import { Download, FileText, Image as ImageIcon, X, Sliders } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -11,10 +11,11 @@ const MAX_EXPORT_PIXELS = 32 * 1024 * 1024;
 export function ExportDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
   const s = useWorkspace();
   const [format, setFormat] = useState<"txt" | "png" | "jpg">("txt");
   const [scope, setScope] = useState<"current" | "all" | "range">("all");
@@ -23,7 +24,13 @@ export function ExportDialog({
   const [quality, setQuality] = useState(0.92);
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const cancelled = useRef(false);
+  const active = useRef<{ cancelled: boolean } | null>(null);
+  useEffect(
+    () => () => {
+      if (active.current) active.current.cancelled = true;
+    },
+    [],
+  );
 
   const totalPages = s.info?.pages || 1;
   const baseName = safeFileName((s.document?.name || "document").replace(/\.pdf$/i, ""));
@@ -38,52 +45,39 @@ export function ExportDialog({
     return parsePageRange("custom", customRange, s.page, totalPages);
   };
 
-  const handleExportText = async () => {
-    if (!controller?.pdf) return;
-    cancelled.current = false;
+  const beginExport = () => {
+    if (!controller?.pdf || active.current) return null;
+    const source = controller.pdf;
+    const documentId = s.document?.id;
+    const run = { cancelled: false };
+    active.current = run;
+    const cancelled = () =>
+      run.cancelled ||
+      controller.pdf !== source ||
+      useWorkspace.getState().document?.id !== documentId;
     setExporting(true);
     setProgress(10);
+    return { run, source, cancelled };
+  };
+  const endExport = (run: { cancelled: boolean }) => {
+    if (active.current === run) {
+      active.current = null;
+      setExporting(false);
+    }
+  };
+
+  const handleExportText = async () => {
+    const context = beginExport();
+    if (!context) return;
+    const { run, source, cancelled } = context;
     try {
       const targetIndices = getTargetPages();
       if (targetIndices.length === 0) {
         throw new Error("No valid pages selected for export.");
       }
 
-      const textChunks: string[] = [];
-      for (let i = 0; i < targetIndices.length; i++) {
-        if (cancelled.current) return;
-        const pageNum = targetIndices[i] + 1;
-        setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-        const page = await controller.pdf.getPage(pageNum);
-        const content = await page.getTextContent();
-
-        // Sort items in top-to-bottom, left-to-right reading order
-        const items = content.items
-          // @ts-expect-error item coordinates and string
-          .filter((item) => item.str && item.str.trim())
-          .sort((a, b) => {
-            // @ts-expect-error transform [4] is x, [5] is y in PDF.js
-            const aY = a.transform ? a.transform[5] : 0;
-            // @ts-expect-error transform
-            const bY = b.transform ? b.transform[5] : 0;
-            // PDF y is bottom-up; higher y comes first (higher on page)
-            if (Math.abs(aY - bY) > 6) {
-              return bY - aY;
-            }
-            // Same line: sort by x ascending
-            // @ts-expect-error transform
-            const aX = a.transform ? a.transform[4] : 0;
-            // @ts-expect-error transform
-            const bX = b.transform ? b.transform[4] : 0;
-            return aX - bX;
-          });
-
-        // @ts-expect-error item str
-        const pageText = items.map((item) => item.str).join(" ");
-        textChunks.push(`--- Page ${pageNum} ---\n\n${pageText}\n\n`);
-      }
-
-      if (cancelled.current) return;
+      const textChunks = await collectPagesText(source, targetIndices, cancelled, setProgress);
+      if (!textChunks || cancelled()) return;
 
       const fullText = textChunks.join("\n");
       if (
@@ -93,6 +87,7 @@ export function ExportDialog({
         ))
       )
         return;
+      if (cancelled()) return;
       s.set({
         status:
           targetIndices.length === totalPages
@@ -101,93 +96,57 @@ export function ExportDialog({
       });
       onClose();
     } catch (err) {
-      s.set({ error: err instanceof Error ? err.message : String(err) });
+      if (!cancelled()) s.set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setExporting(false);
+      endExport(run);
     }
   };
 
   const handleExportImage = async () => {
-    if (!controller?.pdf) return;
-    cancelled.current = false;
-    setExporting(true);
-    setProgress(10);
+    const context = beginExport();
+    if (!context) return;
+    const { run, source, cancelled } = context;
     try {
       const targetIndices = getTargetPages();
       if (targetIndices.length === 0) {
         throw new Error("No valid pages selected for export.");
       }
 
-      // 72 DPI scale = 1.0; 150 DPI scale = 2.083; 300 DPI scale = 4.166
-      const scale = dpi === 72 ? 1.0 : dpi === 300 ? 4.166 : 2.083;
-      const mime = format === "jpg" ? "image/jpeg" : "image/png";
+      const scale = dpi / 72;
+      const imgFormat = format === "jpg" ? "jpg" : "png";
 
       for (let i = 0; i < targetIndices.length; i++) {
-        if (cancelled.current) return;
+        if (cancelled()) return;
         const pageNum = targetIndices[i] + 1;
         setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-        const page = await controller.pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale });
-
-        const pixelArea = Math.ceil(viewport.width) * Math.ceil(viewport.height);
-        if (pixelArea > MAX_EXPORT_PIXELS || viewport.width > 8192 || viewport.height > 8192) {
-          throw new Error(
-            `Export resolution too high: page ${pageNum} would exceed maximum dimensions.`,
-          );
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("The page could not be rendered for export.");
-        // Draw white background for JPEGs to prevent black transparency
-        if (format === "jpg") {
-          ctx.fillStyle = "#ffffff";
-          if (typeof ctx.fillRect === "function") {
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-          }
-        }
-        // @ts-expect-error PDF.js render
-        await page.render({ canvasContext: ctx, viewport }).promise;
-
-        if (cancelled.current) return;
-
-        try {
-          const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
-          if (!dataUrl) throw new Error("The image could not be exported.");
-          const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
-          const imageBytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
-          if (
-            !(await downloadBlob(
-              new Blob([imageBytes], { type: mime }),
-              `${baseName}-page-${pageNum}.${format}`,
-            ))
-          )
-            return;
-        } catch (error) {
-          if (error instanceof Error && error.message === "The image could not be exported.") {
-            throw error;
-          }
-          throw new Error("The image could not be exported.", { cause: error });
-        }
+        const page = await source.getPage(pageNum);
+        if (cancelled()) return;
+        const saved = await exportSinglePageImage({
+          page,
+          scale,
+          format: imgFormat,
+          quality,
+          pageNum,
+          baseName,
+        });
+        if (!saved || cancelled()) return;
       }
 
+      if (cancelled()) return;
       s.set({
         status: `Exported ${targetIndices.length} page(s) as ${format.toUpperCase()} (${dpi} DPI).`,
       });
       onClose();
     } catch (err) {
-      s.set({ error: err instanceof Error ? err.message : String(err) });
+      if (!cancelled()) s.set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setExporting(false);
+      endExport(run);
     }
   };
 
   const cancelExport = () => {
     if (!exporting) return;
-    cancelled.current = true;
-    setExporting(false);
+    if (active.current) active.current.cancelled = true;
     s.set({ status: "Export cancelled. No additional pages were downloaded." });
   };
 
@@ -205,59 +164,77 @@ export function ExportDialog({
         </div>
 
         <div className="modal-body">
-          <div className="setting-group">
-            <label className="setting-title">Export Format</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Export Format</legend>
             <div className="tab-buttons-bar">
               <button
+                type="button"
                 className={format === "txt" ? "active" : ""}
                 aria-pressed={format === "txt"}
-                onClick={() => setFormat("txt")}
+                onClick={() => {
+                  setFormat("txt");
+                }}
                 disabled={exporting}
               >
                 <FileText size={15} /> Plain Text (.txt)
               </button>
               <button
+                type="button"
                 className={format === "png" ? "active" : ""}
                 aria-pressed={format === "png"}
-                onClick={() => setFormat("png")}
+                onClick={() => {
+                  setFormat("png");
+                }}
                 disabled={exporting}
               >
                 <ImageIcon size={15} /> PNG Image
               </button>
               <button
+                type="button"
                 className={format === "jpg" ? "active" : ""}
                 aria-pressed={format === "jpg"}
-                onClick={() => setFormat("jpg")}
+                onClick={() => {
+                  setFormat("jpg");
+                }}
                 disabled={exporting}
               >
                 <ImageIcon size={15} /> JPEG Image
               </button>
             </div>
-          </div>
+          </fieldset>
 
-          <div className="setting-group">
-            <label className="setting-title">Page Scope</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Page Scope</legend>
             <div className="tab-buttons-bar">
               <button
+                type="button"
                 className={scope === "all" ? "active" : ""}
                 aria-pressed={scope === "all"}
-                onClick={() => setScope("all")}
+                onClick={() => {
+                  setScope("all");
+                }}
                 disabled={exporting}
               >
                 All Pages ({totalPages})
               </button>
               <button
+                type="button"
                 className={scope === "current" ? "active" : ""}
                 aria-pressed={scope === "current"}
-                onClick={() => setScope("current")}
+                onClick={() => {
+                  setScope("current");
+                }}
                 disabled={exporting}
               >
                 Current Page ({s.page})
               </button>
               <button
+                type="button"
                 className={scope === "range" ? "active" : ""}
                 aria-pressed={scope === "range"}
-                onClick={() => setScope("range")}
+                onClick={() => {
+                  setScope("range");
+                }}
                 disabled={exporting}
               >
                 Custom Range
@@ -268,57 +245,71 @@ export function ExportDialog({
                 type="text"
                 placeholder="e.g. 1-3, 5"
                 value={customRange}
-                onChange={(e) => setCustomRange(e.target.value)}
+                onChange={(e) => {
+                  setCustomRange(e.target.value);
+                }}
                 style={{ marginTop: "8px" }}
                 disabled={exporting}
               />
             )}
-          </div>
+          </fieldset>
 
           {format !== "txt" && (
             <>
-              <div className="setting-group">
-                <label className="setting-title">
-                  <Sliders size={14} style={{ display: "inline", marginRight: "4px" }} />
-                  Resolution (DPI)
-                </label>
+              <fieldset className="setting-group">
+                <legend className="setting-title">
+                  <Sliders size={14} style={{ display: "inline", marginRight: "4px" }} /> Resolution
+                  (DPI)
+                </legend>
                 <div className="tab-buttons-bar">
                   <button
+                    type="button"
                     className={dpi === 72 ? "active" : ""}
-                    onClick={() => setDpi(72)}
+                    onClick={() => {
+                      setDpi(72);
+                    }}
                     disabled={exporting}
                   >
                     72 DPI (Draft)
                   </button>
                   <button
+                    type="button"
                     className={dpi === 150 ? "active" : ""}
-                    onClick={() => setDpi(150)}
+                    onClick={() => {
+                      setDpi(150);
+                    }}
                     disabled={exporting}
                   >
                     150 DPI (Standard)
                   </button>
                   <button
+                    type="button"
                     className={dpi === 300 ? "active" : ""}
-                    onClick={() => setDpi(300)}
+                    onClick={() => {
+                      setDpi(300);
+                    }}
                     disabled={exporting}
                   >
                     300 DPI (High Print)
                   </button>
                 </div>
-              </div>
+              </fieldset>
 
               {format === "jpg" && (
                 <div className="setting-group">
-                  <label className="setting-title">
+                  <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
                     JPEG Quality: {Math.round(quality * 100)}%
                   </label>
                   <input
+                    id={`${fieldIds}-field-1`}
                     type="range"
                     min="0.6"
                     max="1.0"
                     step="0.05"
                     value={quality}
-                    onChange={(e) => setQuality(parseFloat(e.target.value))}
+                    onChange={(e) => {
+                      setQuality(Number.parseFloat(e.target.value));
+                    }}
                     disabled={exporting}
                   />
                 </div>
@@ -361,16 +352,19 @@ export function ExportDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary" disabled={exporting}>
+          <button type="button" onClick={onClose} className="button-secondary" disabled={exporting}>
             Cancel
           </button>
           {exporting && (
-            <button onClick={cancelExport} className="button-secondary">
+            <button type="button" onClick={cancelExport} className="button-secondary">
               Cancel export
             </button>
           )}
           <button
-            onClick={format === "txt" ? handleExportText : handleExportImage}
+            type="button"
+            onClick={() => {
+              void (format === "txt" ? handleExportText() : handleExportImage());
+            }}
             disabled={exporting}
             className="button-primary"
           >
@@ -380,4 +374,90 @@ export function ExportDialog({
       </div>
     </FeatureDialog>
   );
+}
+
+async function collectPagesText(
+  source: NonNullable<ViewerController["pdf"]>,
+  targetIndices: number[],
+  cancelled: () => boolean,
+  onProgress: (percent: number) => void,
+): Promise<string[] | null> {
+  const textChunks: string[] = [];
+  for (let i = 0; i < targetIndices.length; i++) {
+    if (cancelled()) return null;
+    const pageNum = targetIndices[i] + 1;
+    onProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
+    const page = await source.getPage(pageNum);
+    if (cancelled()) return null;
+    const content = await page.getTextContent();
+    // @ts-expect-error PDF.js text items
+    const pageText = extractPageTextContent(content.items);
+    textChunks.push(`--- Page ${pageNum} ---\n\n${pageText}\n\n`);
+  }
+  return textChunks;
+}
+
+function extractPageTextContent(items: Array<{ str?: string; transform?: number[] }>): string {
+  const filtered = items
+    .filter((item) => item.str && item.str.trim())
+    .sort((a, b) => {
+      const aY = a.transform?.[5] ?? 0;
+      const bY = b.transform?.[5] ?? 0;
+      if (Math.abs(aY - bY) > 6) {
+        return bY - aY;
+      }
+      const aX = a.transform?.[4] ?? 0;
+      const bX = b.transform?.[4] ?? 0;
+      return aX - bX;
+    });
+  return filtered.map((item) => item.str).join(" ");
+}
+
+interface RenderPageOptions {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  page: any;
+  scale: number;
+  format: "jpg" | "png";
+  quality: number;
+  pageNum: number;
+  baseName: string;
+}
+
+async function exportSinglePageImage(options: RenderPageOptions): Promise<boolean> {
+  const { page, scale, format, quality, pageNum, baseName } = options;
+  const viewport = page.getViewport({ scale });
+  const pixelArea = Math.ceil(viewport.width) * Math.ceil(viewport.height);
+  if (pixelArea > MAX_EXPORT_PIXELS || viewport.width > 8192 || viewport.height > 8192) {
+    throw new Error(`Export resolution too high: page ${pageNum} would exceed maximum dimensions.`);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("The page could not be rendered for export.");
+  if (format === "jpg") {
+    ctx.fillStyle = "#ffffff";
+    if (typeof ctx.fillRect === "function") {
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  const mime = format === "jpg" ? "image/jpeg" : "image/png";
+  try {
+    const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
+    if (!dataUrl) throw new Error("The image could not be exported.");
+    const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
+    const imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
+    return await downloadBlob(
+      new Blob([imageBytes], { type: mime }),
+      `${baseName}-page-${pageNum}.${format}`,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "The image could not be exported.") {
+      throw error;
+    }
+    throw new Error("The image could not be exported.", { cause: error });
+  }
 }

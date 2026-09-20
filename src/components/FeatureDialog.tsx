@@ -13,7 +13,7 @@ export function FeatureDialog({
   initialFocusRef,
   footer,
   className = "",
-}: {
+}: Readonly<{
   title: string;
   children: ReactNode;
   onClose: () => void;
@@ -21,8 +21,8 @@ export function FeatureDialog({
   initialFocusRef?: RefObject<HTMLElement | null>;
   footer?: ReactNode;
   className?: string;
-}) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+}>) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -39,10 +39,10 @@ export function FeatureDialog({
   }, [initialFocusRef]);
 
   return (
-    <div
+    <dialog
       ref={dialogRef}
       className={`dialog-backdrop ${className}`.trim()}
-      role="dialog"
+      open
       aria-modal="true"
       aria-label={title}
       aria-busy={busy}
@@ -55,6 +55,6 @@ export function FeatureDialog({
     >
       {children}
       {footer ? <div className="modal-footer">{footer}</div> : null}
-    </div>
+    </dialog>
   );
 }

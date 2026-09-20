@@ -1,3 +1,5 @@
+import { localTool } from "./local-paths.mjs";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -90,9 +92,13 @@ for (const sample of corpus.samples) {
 
   const start = performance.now();
   try {
-    const raw = execFileSync("src-tauri/target/debug/examples/ocr_cli", [path], {
-      encoding: "utf8",
-    });
+    const raw = execFileSync(
+      fileURLToPath(new URL("../src-tauri/target/debug/examples/ocr_cli", import.meta.url)),
+      [path],
+      {
+        encoding: "utf8",
+      },
+    );
     const result = JSON.parse(raw);
     const wer = errorRate(sample.referenceText, result.fullText, words);
     const cer = errorRate(sample.referenceText, result.fullText, characters);
@@ -127,7 +133,7 @@ for (const sample of corpus.samples) {
       savedPath,
       await applyOcrSearchableLayer(source, [{ ...result, pageIndex: 0 }]),
     );
-    const extracted = execFileSync("pdftotext", [savedPath, "-"], { encoding: "utf8" });
+    const extracted = execFileSync(localTool("pdftotext"), [savedPath, "-"], { encoding: "utf8" });
     // Existing digital text remains part of the saved document and is expected
     // in an independent text extraction of the searchable output.
     const expectedExtractedText = sample.hasExistingText
@@ -140,7 +146,7 @@ for (const sample of corpus.samples) {
       [sourcePath, beforePng],
       [savedPath, afterPng],
     ]) {
-      execFileSync("pdftoppm", ["-singlefile", "-r", "72", "-png", file, output]);
+      execFileSync(localTool("pdftoppm"), ["-singlefile", "-r", "72", "-png", file, output]);
     }
     const before = await sharp(`${beforePng}.png`).raw().toBuffer();
     const after = await sharp(`${afterPng}.png`).raw().toBuffer();

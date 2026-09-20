@@ -2,7 +2,7 @@
 // `engine_cli`, and checks every output with consumers that do not share the engine's code:
 // poppler utilities, a raw zlib scan of every stream and pixel sampling of rendered pages.
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { constants, inflateSync } from "node:zlib";
 import path from "node:path";
@@ -227,6 +227,8 @@ async function redactionAcceptance(corpus) {
 
 async function protectionAcceptance(corpus) {
   const scenario = "protection";
+  const userPassword = `pass-${randomBytes(12).toString("hex")}`;
+  const ownerPassword = `owner-${randomBytes(12).toString("hex")}`;
   const output = path.join(root, "protected-output.pdf");
   const permissions = {
     print: true,
@@ -239,8 +241,8 @@ async function protectionAcceptance(corpus) {
     accessibility: true,
   };
   const result = await engine("protect", corpus.files.protection, output, {
-    userPassword: "synthetic-open-4821",
-    ownerPassword: "synthetic-owner-9377",
+    userPassword: userPassword,
+    ownerPassword: ownerPassword,
     permissions,
   });
   record(scenario, "engine protected and validated the copy", result.ok, result.error);
@@ -260,7 +262,7 @@ async function protectionAcceptance(corpus) {
   );
   const wrong = run("pdfinfo", ["-upw", "wrong-password", output]);
   record(scenario, "pdfinfo rejects a wrong password", wrong.status !== 0, wrong.stderr.trim());
-  const opened = run("pdfinfo", ["-upw", "synthetic-open-4821", output]);
+  const opened = run("pdfinfo", ["-upw", userPassword, output]);
   record(
     scenario,
     "pdfinfo opens with the user password as AES-256",
@@ -270,7 +272,7 @@ async function protectionAcceptance(corpus) {
       /Pages:\s+3/.test(opened.stdout),
     opened.stdout.split("\n").find((line) => line.startsWith("Encrypted")),
   );
-  const owner = run("pdfinfo", ["-opw", "synthetic-owner-9377", output]);
+  const owner = run("pdfinfo", ["-opw", ownerPassword, output]);
   record(
     scenario,
     "pdfinfo opens with the owner password",
@@ -284,7 +286,7 @@ async function protectionAcceptance(corpus) {
       /change:no/.test(opened.stdout) &&
       /print:yes/.test(opened.stdout),
   );
-  const userText = run("pdftotext", ["-upw", "synthetic-open-4821", output, "-"]);
+  const userText = run("pdftotext", ["-upw", userPassword, output, "-"]);
   record(
     scenario,
     "informational: poppler text extraction with the open password",
@@ -293,14 +295,14 @@ async function protectionAcceptance(corpus) {
       ? "poppler extracts text despite copy:no (advisory flag not enforced by this reader)"
       : "poppler refused extraction",
   );
-  const ownerText = run("pdftotext", ["-opw", "synthetic-owner-9377", output, "-"]).stdout;
+  const ownerText = run("pdftotext", ["-opw", ownerPassword, output, "-"]).stdout;
   record(
     scenario,
     "pdftotext reads text with the owner password",
     ownerText.includes("PROTECT-PAGE-3"),
   );
   const refused = await engine("unlock", output, path.join(root, "unlocked-refused.pdf"), {
-    password: "synthetic-open-4821",
+    password: userPassword,
   });
   record(
     scenario,
@@ -310,7 +312,7 @@ async function protectionAcceptance(corpus) {
   );
   const unlockedPath = path.join(root, "unlocked-output.pdf");
   const unlocked = await engine("unlock", output, unlockedPath, {
-    password: "synthetic-owner-9377",
+    password: ownerPassword,
   });
   const plain = unlocked.ok ? run("pdftotext", [unlockedPath, "-"]).stdout : "";
   record(

@@ -21,6 +21,14 @@ export function useNativeOpenRequests(
     const needsRefresh = (): boolean => requested;
     let unlisten: (() => void) | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    const handleRequest = async (request: OpenRequest) => {
+      if (request.error) {
+        await invoke("dismiss_open_request", { token: request.token });
+        report(request.error);
+        return;
+      }
+      await open(request.token);
+    };
     const drain = async () => {
       requested = true;
       if (running || disposed) return;
@@ -41,13 +49,7 @@ export function useNativeOpenRequests(
             retry = setTimeout(() => void drain(), 250);
             return;
           }
-          if (request.error) {
-            await invoke("dismiss_open_request", { token: request.token });
-            report(request.error);
-          } else {
-            // This includes the unsaved-changes decision, opening and cleanup.
-            await open(request.token);
-          }
+          await handleRequest(request);
         }
       } catch (error) {
         if (!isDisposed()) report(error);

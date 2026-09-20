@@ -39,7 +39,10 @@ export const colorPalettes: { value: ColorPalette; label: string }[] = [
 ];
 
 export function resolveTheme(theme: ThemePreference, systemDark: boolean) {
-  return theme === "system" ? (systemDark ? "dark" : "light") : theme;
+  if (theme === "system") {
+    return systemDark ? "dark" : "light";
+  }
+  return theme;
 }
 
 export function applyTheme(

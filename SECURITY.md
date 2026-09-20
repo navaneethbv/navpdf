@@ -1,21 +1,24 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+NavPDF currently develops the 0.2.x release line.
+Use the latest release and report problems against the current main branch when possible.
+Older development builds do not receive separate security backports.
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+## Reporting a vulnerability
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Use [GitHub private vulnerability reporting](https://github.com/navaneethbv/navpdf/security/advisories/new) for security issues.
+Include the affected version, operating system, reproduction steps and the expected security boundary.
+Use a synthetic PDF that demonstrates the issue without personal or confidential information.
+Do not post exploit details, passwords, signature assets or sensitive documents in public issues.
 
-## Reporting a Vulnerability
+Reports are reviewed by the repository maintainer; no response-time guarantee is currently offered.
+A fix is considered verified only after relevant regression tests and independent saved-output checks pass.
 
-Use this section to tell people how to report a vulnerability.
+## Security boundaries
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+PDFs, attachments, extracted text and metadata are untrusted input.
+Embedded scripts are disabled, external links require confirmation, and attachments are never launched automatically.
+Document processing is local; security reports must not include private user documents.
+Encrypted input remains read-only until explicitly unlocked, and decrypted recovery copies must not be written.
+Secure redaction must remove underlying content and pass text, object, image and hidden-data checks.
+Signature appearances do not provide cryptographic certification.

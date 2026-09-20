@@ -40,6 +40,66 @@ import { DesignTools } from "../features/design/DesignTools";
 import { ExportOptions } from "../features/convert/ExportOptions";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
+function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "docx" {
+  switch (modal) {
+    case "office-pptx":
+      return "pptx-text";
+    case "office-xlsx":
+      return "xlsx";
+    case "office-rtf":
+      return "rtf";
+    default:
+      return "docx";
+  }
+}
+
+function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
+  const state = useWorkspace.getState();
+  if (controller?.pdf && ["Home", "End"].includes(event.key)) {
+    event.preventDefault();
+    if (event.key === "Home") controller.goToFirst();
+    else controller.goToLast();
+  }
+  if (event.key === "Escape") {
+    if (state.readMode) {
+      state.set({ readMode: false });
+      return;
+    }
+    state.set({ selectedAnnotationId: null, hasSelection: false });
+    controller?.setTool("select");
+  }
+}
+
+function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController | null): boolean {
+  let dx = 0;
+  let dy = 0;
+  switch (event.key) {
+    case "ArrowLeft":
+      dx = -1;
+      break;
+    case "ArrowRight":
+      dx = 1;
+      break;
+    case "ArrowDown":
+      dy = -1;
+      break;
+    case "ArrowUp":
+      dy = 1;
+      break;
+    case "Delete":
+    case "Backspace":
+      event.preventDefault();
+      void controller?.deleteSelectedAnnotation();
+      return true;
+    default:
+      return false;
+  }
+  event.preventDefault();
+  const distance = event.shiftKey ? 10 : 1;
+  void controller?.moveSelectedAnnotation(dx * distance, dy * distance);
+  return true;
+}
+
 export default function App() {
   const [controller, setController] = useState<ViewerController | null>(null),
     [passwordValue, setPasswordValue] = useState("");
@@ -47,6 +107,9 @@ export default function App() {
   const s = useWorkspace();
   const session = useDocumentSession(controller);
   const ready = useCallback((value: ViewerController) => setController(value), []);
+  // The app owns document lifetime. A render boundary can remove ViewerHost
+  // while its controller must remain available to the emergency Save a copy.
+  useEffect(() => () => controller?.destroy(), [controller]);
   const open = useCallback(() => {
     if (native) session.open();
     else input.current?.click();
@@ -86,64 +149,57 @@ export default function App() {
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLSelectElement ||
         (event.target instanceof HTMLElement && event.target.isContentEditable);
-      if ((event.ctrlKey || event.metaKey) && !editable) {
-        const action = event.key.toLowerCase();
-        if (["o", "s", "f", "p", "w", "z", ",", "0", "+", "=", "-"].includes(action)) {
-          event.preventDefault();
-          if (action === "o") open();
-          if (action === "s") void session.save(event.shiftKey);
-          if (action === "f" && state.document) state.set({ sidebar: "search" });
-          if (action === "p" && state.document) state.set({ activeModal: "print" });
-          if (action === "w") session.home();
-          if (action === "z") {
+      if (editable) return;
+      if (event.ctrlKey || event.metaKey) {
+        switch (event.key.toLowerCase()) {
+          case "o":
+            event.preventDefault();
+            open();
+            break;
+          case "s":
+            event.preventDefault();
+            void session.save(event.shiftKey);
+            break;
+          case "f":
+            event.preventDefault();
+            if (state.document) state.set({ sidebar: "search" });
+            break;
+          case "p":
+            event.preventDefault();
+            if (state.document) state.set({ activeModal: "print" });
+            break;
+          case "w":
+            event.preventDefault();
+            session.home();
+            break;
+          case "z":
+            event.preventDefault();
             if (event.shiftKey) controller?.redo();
             else controller?.undo();
-          }
-          if (action === ",") state.set({ settingsOpen: true });
-          if (action === "0") controller?.zoom("page-fit");
-          if (action === "+" || action === "=") controller?.zoom((state.zoom / 100) * 1.15);
-          if (action === "-") controller?.zoom(state.zoom / 100 / 1.15);
+            break;
+          case ",":
+            event.preventDefault();
+            state.set({ settingsOpen: true });
+            break;
+          case "0":
+            event.preventDefault();
+            controller?.zoom("page-fit");
+            break;
+          case "+":
+          case "=":
+            event.preventDefault();
+            controller?.zoom((state.zoom / 100) * 1.15);
+            break;
+          case "-":
+            event.preventDefault();
+            controller?.zoom(state.zoom / 100 / 1.15);
+            break;
+          default:
+            break;
         }
       }
-      if (!editable && event.key === "Home" && controller?.pdf) {
-        event.preventDefault();
-        controller.goToFirst();
-      }
-      if (!editable && event.key === "End" && controller?.pdf) {
-        event.preventDefault();
-        controller.goToLast();
-      }
-      if (
-        !editable &&
-        state.selectedAnnotationId &&
-        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
-      ) {
-        event.preventDefault();
-        const distance = event.shiftKey ? 10 : 1;
-        const dx =
-          event.key === "ArrowLeft" ? -distance : event.key === "ArrowRight" ? distance : 0;
-        const dy = event.key === "ArrowDown" ? -distance : event.key === "ArrowUp" ? distance : 0;
-        void controller?.moveSelectedAnnotation(dx, dy);
-      }
-      if (
-        !editable &&
-        (event.key === "Delete" || event.key === "Backspace") &&
-        state.selectedAnnotationId
-      ) {
-        event.preventDefault();
-        void controller?.deleteSelectedAnnotation();
-        return;
-      }
-      if (!editable && event.key === "Escape" && !state.busy) {
-        if (state.readMode) {
-          state.set({ readMode: false });
-          return;
-        }
-        if (state.selectedAnnotationId) {
-          state.set({ selectedAnnotationId: null, hasSelection: false });
-        }
-        controller?.setTool("select");
-      }
+      if (state.selectedAnnotationId && handleAnnotationKey(event, controller)) return;
+      handleWorkspaceNavigation(event, controller);
     }
     window.addEventListener("keydown", key, true);
     function warn(event: BeforeUnloadEvent) {
@@ -197,22 +253,25 @@ export default function App() {
         return;
       }
       if (state.document) {
-        const layout = new Map<string, "single" | "continuous" | "spread">([
-          ["layout-single", "single"],
-          ["layout-continuous", "continuous"],
-          ["layout-spread", "spread"],
-        ]).get(payload);
-        if (layout) {
-          controller?.setLayout(layout);
+        if (
+          payload === "layout-single" ||
+          payload === "layout-continuous" ||
+          payload === "layout-spread"
+        ) {
+          controller?.setLayout(
+            payload.slice("layout-".length) as "single" | "continuous" | "spread",
+          );
           return;
         }
-        const panel = new Map<string, "pages" | "bookmarks" | "comments">([
-          ["panel-pages", "pages"],
-          ["panel-bookmarks", "bookmarks"],
-          ["panel-comments", "comments"],
-        ]).get(payload);
-        if (panel) {
-          state.set({ sidebar: panel, propertiesVisible: false });
+        if (
+          payload === "panel-pages" ||
+          payload === "panel-bookmarks" ||
+          payload === "panel-comments"
+        ) {
+          state.set({
+            sidebar: payload.slice("panel-".length) as "pages" | "bookmarks" | "comments",
+            propertiesVisible: false,
+          });
           return;
         }
       }
@@ -256,7 +315,7 @@ export default function App() {
             session.password ||
             session.confirm
           )
-            return;
+            break;
           state.set({ activeModal: payload });
           break;
         case "open":
@@ -319,6 +378,8 @@ export default function App() {
         case "zoom-out":
           controller?.zoom(state.zoom / 100 / 1.15);
           break;
+        default:
+          break;
       }
     }).then((fn) => {
       if (disposed) fn();
@@ -344,6 +405,7 @@ export default function App() {
           <AlertCircle size={17} />
           <span>{s.error}</span>
           <button
+            type="button"
             className="icon-button"
             onClick={() => s.set({ error: "" })}
             aria-label="Dismiss error"
@@ -357,6 +419,7 @@ export default function App() {
           <Info size={17} />
           <span>{s.formNotice}</span>
           <button
+            type="button"
             className="icon-button"
             onClick={() => s.set({ formNotice: null })}
             aria-label="Dismiss form notice"
@@ -422,6 +485,7 @@ export default function App() {
             {s.local.recents.length ? (
               s.local.recents.map((item) => (
                 <button
+                  type="button"
                   className="button"
                   key={item.id}
                   onClick={() => {
@@ -449,9 +513,9 @@ export default function App() {
           >
             <p>{session.password.name}</p>
             <label>
-              Password
+              Password{" "}
               <input
-                autoFocus
+                data-autofocus
                 type="password"
                 autoComplete="off"
                 value={passwordValue}
@@ -467,7 +531,9 @@ export default function App() {
               <button type="button" className="button" onClick={session.cancelPassword}>
                 Cancel
               </button>
-              <button className="button primary">Unlock PDF</button>
+              <button type="submit" className="button primary">
+                Unlock PDF
+              </button>
             </div>
           </form>
         </Dialog>
@@ -479,13 +545,14 @@ export default function App() {
             changes.
           </p>
           <div className="dialog-actions">
-            <button className="button" onClick={session.cancelConfirm}>
+            <button type="button" className="button" onClick={session.cancelConfirm}>
               Keep editing
             </button>
-            <button className="button" onClick={session.discardAndContinue}>
+            <button type="button" className="button" onClick={session.discardAndContinue}>
               Discard
             </button>
             <button
+              type="button"
               className="button primary"
               disabled={s.busy}
               onClick={() => void session.saveAndContinue()}
@@ -592,15 +659,7 @@ export default function App() {
         ) && (
           <OfficeExport
             controller={controller}
-            initialFormat={
-              s.activeModal === "office-pptx"
-                ? "pptx-text"
-                : s.activeModal === "office-xlsx"
-                  ? "xlsx"
-                  : s.activeModal === "office-rtf"
-                    ? "rtf"
-                    : "docx"
-            }
+            initialFormat={officeFormat(s.activeModal)}
             onClose={() => s.set({ activeModal: null })}
           />
         )}

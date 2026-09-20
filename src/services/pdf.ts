@@ -28,9 +28,9 @@ export const nativePdfOptions = {
 export class LocalRangeTransport extends PDFDataRangeTransport {
   private cancelled = false;
   constructor(
-    private descriptor: DocumentDescriptor,
+    private readonly descriptor: DocumentDescriptor,
     initial: Uint8Array<ArrayBuffer>,
-    private failure: (error: Error) => void,
+    private readonly failure: (error: Error) => void,
   ) {
     // Mark a complete initial read as finished. Leaving a small document in
     // the incomplete state makes PDF.js wait for an end-of-stream signal while

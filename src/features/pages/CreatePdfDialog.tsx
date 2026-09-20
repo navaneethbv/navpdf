@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useId, useState, useRef, useEffect } from "react";
 import { FilePlus, Combine, Check, X, ArrowUp, ArrowDown } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
@@ -22,11 +22,12 @@ export function CreatePdfDialog({
   onLoad,
   onClose,
   initialTab = "blank",
-}: {
+}: Readonly<{
   initialTab?: "blank" | "combine";
   onLoad: (file: File) => void;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
   const s = useWorkspace();
   const [tab, setTab] = useState<"blank" | "combine">(initialTab);
   const [pageCount, setPageCount] = useState(1);
@@ -89,8 +90,7 @@ export function CreatePdfDialog({
       const mergeInputs: MergeInputItem[] = [];
       const manifestSummary: string[] = [];
 
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
+      for (const item of items) {
         const buffer = isImageFile(item.file)
           ? await imageFileToPdf(item.file)
           : new Uint8Array(await item.file.arrayBuffer());
@@ -156,6 +156,7 @@ export function CreatePdfDialog({
     });
   };
 
+  const createLabel = tab === "blank" ? "Create PDF" : "Combine & Open";
   return (
     <FeatureDialog title="Create PDF" onClose={onClose} busy={creating}>
       <div className="modal-dialog">
@@ -190,8 +191,11 @@ export function CreatePdfDialog({
           {tab === "blank" ? (
             <div key="blank-section">
               <div className="setting-group">
-                <label className="setting-title">Page Count</label>
+                <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+                  Page Count
+                </label>
                 <input
+                  id={`${fieldIds}-field-1`}
                   key="blank-page-count"
                   type="number"
                   min={1}
@@ -203,8 +207,11 @@ export function CreatePdfDialog({
               </div>
 
               <div className="setting-group">
-                <label className="setting-title">Page Size</label>
+                <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                  Page Size
+                </label>
                 <select
+                  id={`${fieldIds}-field-2`}
                   value={pageSize}
                   onChange={(e) => setPageSize(e.target.value as "a4" | "letter")}
                   className="select-input"
@@ -257,6 +264,7 @@ export function CreatePdfDialog({
                       </div>
                       <div className="combine-file-actions">
                         <button
+                          type="button"
                           className="icon-button"
                           onClick={() => moveItem(i, -1)}
                           disabled={i === 0}
@@ -266,6 +274,7 @@ export function CreatePdfDialog({
                           <ArrowUp size={14} />
                         </button>
                         <button
+                          type="button"
                           className="icon-button"
                           onClick={() => moveItem(i, 1)}
                           disabled={i === items.length - 1}
@@ -275,6 +284,7 @@ export function CreatePdfDialog({
                           <ArrowDown size={14} />
                         </button>
                         <button
+                          type="button"
                           className="icon-button danger"
                           onClick={() => removeItem(i)}
                           title="Remove file"
@@ -288,21 +298,20 @@ export function CreatePdfDialog({
                 </div>
               )}
 
-              {structureLoss && (
-                <p className="structure-warning" role="status">
-                  {structureLoss}
-                </p>
-              )}
+              {structureLoss && <output className="structure-warning">{structureLoss}</output>}
             </div>
           )}
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           <button
-            onClick={tab === "blank" ? handleCreateBlank : handleCombineFiles}
+            type="button"
+            onClick={() => {
+              void (tab === "blank" ? handleCreateBlank() : handleCombineFiles());
+            }}
             disabled={
               creating ||
               (tab === "blank" &&
@@ -311,8 +320,7 @@ export function CreatePdfDialog({
             }
             className="button-primary"
           >
-            <Check size={16} />{" "}
-            {creating ? "Creating..." : tab === "blank" ? "Create PDF" : "Combine & Open"}
+            <Check size={16} /> {creating ? "Creating..." : createLabel}
           </button>
         </div>
       </div>

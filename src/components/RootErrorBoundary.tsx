@@ -36,7 +36,7 @@ export class RootErrorBoundary extends Component<Props, State> {
     }
   }
 
-  private saveCopy = async () => {
+  private readonly saveCopy = async () => {
     const pdf = this.props.controller?.pdf;
     if (!pdf) {
       this.setState({ saveError: "The current document is no longer available." });

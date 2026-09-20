@@ -5,11 +5,11 @@ export function CustomColors({
   mode,
   value,
   onChange,
-}: {
+}: Readonly<{
   mode: "Light" | "Dark";
   value: ThemeOverrides;
   onChange: (value: ThemeOverrides) => void;
-}) {
+}>) {
   const defaults =
     mode === "Light"
       ? { background: "#ffffff", accent: "#1768c4" }
@@ -43,7 +43,7 @@ export function CustomColors({
               onChange={(event) => {
                 change(event.target.checked ? fallback : null);
               }}
-            />
+            />{" "}
             Custom {mode.toLowerCase()} {key}
           </label>
           <input

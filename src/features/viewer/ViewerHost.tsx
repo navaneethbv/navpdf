@@ -10,10 +10,10 @@ import * as desktop from "../../services/native";
 export function ViewerHost({
   onReady,
   controller,
-}: {
+}: Readonly<{
   onReady: (controller: ViewerController) => void;
   controller?: ViewerController | null;
-}) {
+}>) {
   const container = useRef<HTMLDivElement>(null),
     pages = useRef<HTMLDivElement>(null);
   const tool = useWorkspace((s) => s.tool),
@@ -123,7 +123,7 @@ export function ViewerHost({
     return () => {
       resize.disconnect();
       abort.abort();
-      controller.destroy();
+      controller.suspendView();
     };
   }, [onReady]);
   useEffect(() => {
@@ -171,9 +171,7 @@ export function ViewerHost({
               void navigator.clipboard?.writeText(window.getSelection()?.toString() ?? "");
             if (id === "highlight" || id === "underline" || id === "strike")
               void controller
-                .addTextMarkup(
-                  id === "highlight" ? "Highlight" : id === "underline" ? "Underline" : "StrikeOut",
-                )
+                .addTextMarkup(markupType(id))
                 .catch((error: unknown) => useWorkspace.getState().set({ error: String(error) }));
             if (id === "note") useWorkspace.getState().set({ activeModal: "sticky-note" });
             if (id === "redact")
@@ -218,4 +216,10 @@ export function ViewerHost({
       )}
     </div>
   );
+}
+
+function markupType(id: string): "Highlight" | "Underline" | "StrikeOut" {
+  if (id === "underline") return "Underline";
+  if (id === "strike") return "StrikeOut";
+  return "Highlight";
 }

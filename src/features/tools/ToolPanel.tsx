@@ -46,7 +46,7 @@ interface ToolItem {
   disabled?: boolean;
 }
 
-export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => void }) {
+export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose: () => void }>) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(false);
   const s = useWorkspace();
@@ -356,23 +356,25 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     },
   ];
 
-  tools.push({
-    id: "export-pdf",
-    label: "Export a PDF",
-    description: "Word, PowerPoint, Excel, images and text",
-    category: "convert",
-    icon: Download,
-    action: () => s.set({ activeModal: "export-options" }),
-    disabled: !hasDoc,
-  });
-  tools.push({
-    id: "import-pdf",
-    label: "Import / Convert to PDF",
-    description: "Create a PDF from PDFs, PNG or JPEG images",
-    category: "pages",
-    icon: FilePlus,
-    action: () => s.set({ activeModal: "import-pdf" }),
-  });
+  tools.push(
+    {
+      id: "export-pdf",
+      label: "Export a PDF",
+      description: "Word, PowerPoint, Excel, images and text",
+      category: "convert",
+      icon: Download,
+      action: () => s.set({ activeModal: "export-options" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "import-pdf",
+      label: "Import / Convert to PDF",
+      description: "Create a PDF from PDFs, PNG or JPEG images",
+      category: "pages",
+      icon: FilePlus,
+      action: () => s.set({ activeModal: "import-pdf" }),
+    },
+  );
   const preferred = [
     "edit-existing",
     "export-pdf",
@@ -409,19 +411,10 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
     return t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
   });
 
-  const title =
-    mode === "all"
-      ? "All Tools"
-      : mode === "edit"
-        ? "Edit PDF"
-        : mode === "convert"
-          ? "Convert & Export"
-          : mode === "esign"
-            ? "Fill & Sign"
-            : "Create PDF";
+  const title = getToolPanelTitle(mode);
 
   return (
-    <div className="tool-drawer" role="region" aria-label={title}>
+    <section className="tool-drawer" aria-label={title}>
       <div className="tool-drawer-header">
         <div className="tool-drawer-title">
           <h3>{title}</h3>
@@ -477,6 +470,21 @@ export function ToolPanel({ mode, onClose }: { mode: ToolMode; onClose: () => vo
           {expanded ? "View less" : "View more"}
         </button>
       )}
-    </div>
+    </section>
   );
+}
+
+function getToolPanelTitle(mode: ToolMode): string {
+  switch (mode) {
+    case "all":
+      return "All Tools";
+    case "edit":
+      return "Edit PDF";
+    case "convert":
+      return "Convert & Export";
+    case "esign":
+      return "Fill & Sign";
+    default:
+      return "Create PDF";
+  }
 }

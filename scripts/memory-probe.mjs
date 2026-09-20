@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { artifactPath } from "./local-paths.mjs";
 import { PDFDocument } from "pdf-lib";
 
-const input = resolve(process.argv[2] ?? "output/perf/heavy-40.pdf");
+const input = artifactPath(process.argv[2] ?? "output/perf/heavy-40.pdf", [
+  "output",
+  "tests/pdf-fixtures",
+]);
 const json = process.argv.includes("--json");
 const bytes = new Uint8Array(await readFile(input));
 const before = process.memoryUsage();

@@ -22,10 +22,11 @@ interface AttachmentItem extends EmbeddedAttachmentSummary {
 export function AttachmentsDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -70,7 +71,9 @@ export function AttachmentsDialog({
         bytes,
         `Attached by NavPDF on ${new Date().toLocaleDateString()}`,
       );
-      await controller.replaceWithBytes(newBytes, `File "${file.name}" attached to PDF`);
+      await controller.replaceWithBytes(newBytes, `File "${file.name}" attached to PDF`, {
+        expectedSource: sourcePdf,
+      });
       setAttachments((prev) => [
         ...prev.filter((a) => a.name !== file.name),
         { name: file.name, size: file.size, data: bytes },
@@ -117,7 +120,9 @@ export function AttachmentsDialog({
           status: "Deleted objects remain in the file until saved from the desktop app.",
         });
       }
-      await controller.replaceWithBytes(newBytes, `Attachment "${item.name}" removed from PDF`);
+      await controller.replaceWithBytes(newBytes, `Attachment "${item.name}" removed from PDF`, {
+        expectedSource: sourcePdf,
+      });
       setAttachments((prev) => prev.filter((a) => a.name !== item.name));
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -126,6 +131,54 @@ export function AttachmentsDialog({
     }
   };
 
+  const renderAttachments = () => {
+    if (loadError)
+      return (
+        <p className="error-text" role="alert">
+          {loadError}
+        </p>
+      );
+    if (attachments.length === 0)
+      return <p className="empty-message">No embedded attachments in this document.</p>;
+    return attachments.map((att, idx) => (
+      <div key={`${att.name}-${idx}`} className="attachment-row">
+        <div className="attachment-info">
+          <Paperclip size={16} />
+          <span className="attachment-name">{att.name}</span>
+          <span className="attachment-size">
+            ({att.size !== undefined ? `${Math.round(att.size / 1024)} KB` : "unknown size"})
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "6px" }}>
+          <button
+            type="button"
+            className="icon-button"
+            title="Download attachment"
+            onClick={() => {
+              void handleDownloadAttachment(att);
+            }}
+            disabled={saving}
+            aria-label={`Download ${att.name}`}
+          >
+            <Download size={16} />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            title="Delete attachment"
+            onClick={() => {
+              void handleDeleteAttachment(att);
+            }}
+            disabled={saving}
+            aria-label={`Delete ${att.name}`}
+            style={{ color: "var(--accent-red, #d32f2f)" }}
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+    ));
+  };
   return (
     <FeatureDialog title="PDF Attachments" onClose={onClose} busy={saving}>
       <div className="modal-dialog">
@@ -134,7 +187,7 @@ export function AttachmentsDialog({
             <Paperclip size={18} />
             <h3>File Attachments</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -142,8 +195,11 @@ export function AttachmentsDialog({
         <div className="modal-body">
           <div className="attachments-action-bar">
             <button
+              type="button"
               className="button-primary"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                fileInputRef.current?.click();
+              }}
               disabled={saving}
             >
               <Plus size={16} /> Attach New File...
@@ -152,60 +208,17 @@ export function AttachmentsDialog({
               ref={fileInputRef}
               type="file"
               style={{ display: "none" }}
-              onChange={handleAddFile}
+              onChange={(e) => {
+                void handleAddFile(e);
+              }}
             />
           </div>
 
-          <div className="attachments-list">
-            {loadError ? (
-              <p className="error-text" role="alert">
-                {loadError}
-              </p>
-            ) : attachments.length === 0 ? (
-              <p className="empty-message">No embedded attachments in this document.</p>
-            ) : (
-              attachments.map((att, idx) => (
-                <div key={idx} className="attachment-row">
-                  <div className="attachment-info">
-                    <Paperclip size={16} />
-                    <span className="attachment-name">{att.name}</span>
-                    <span className="attachment-size">
-                      (
-                      {att.size !== undefined
-                        ? `${Math.round(att.size / 1024)} KB`
-                        : "unknown size"}
-                      )
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <button
-                      className="icon-button"
-                      title="Download attachment"
-                      onClick={() => handleDownloadAttachment(att)}
-                      disabled={saving}
-                      aria-label={`Download ${att.name}`}
-                    >
-                      <Download size={16} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      title="Delete attachment"
-                      onClick={() => handleDeleteAttachment(att)}
-                      disabled={saving}
-                      aria-label={`Delete ${att.name}`}
-                      style={{ color: "var(--accent-red, #d32f2f)" }}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <div className="attachments-list">{renderAttachments()}</div>
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Close
           </button>
         </div>

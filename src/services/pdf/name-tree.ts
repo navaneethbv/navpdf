@@ -20,7 +20,7 @@ export function decodeNameTreeKey(keyObj: unknown): string {
   if (typeof (keyObj as { value?: string }).value === "string") {
     return (keyObj as { value: string }).value;
   }
-  return String(keyObj);
+  return typeof keyObj === "string" ? keyObj : "";
 }
 
 /**

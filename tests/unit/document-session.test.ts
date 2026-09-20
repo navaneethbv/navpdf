@@ -242,6 +242,8 @@ it("keeps signature, form and comment findings from attach across the store rese
   const comment = { id: "c1", page: 1, kind: "Text", contents: "Check", author: "" };
   vi.mocked(controller.attach).mockImplementation(async () => {
     useWorkspace.getState().set({
+      pageLabels: ["i", "ii"],
+      editingAllowed: false,
       hasDigitalSignature: true,
       formNotice: "XFA forms are not supported.",
       comments: [comment] as never,
@@ -250,6 +252,8 @@ it("keeps signature, form and comment findings from attach across the store rese
   await act(async () => expect(await session.load(next)).toBe(true));
   expect(useWorkspace.getState()).toMatchObject({
     document: next,
+    pageLabels: ["i", "ii"],
+    editingAllowed: false,
     hasDigitalSignature: true,
     formNotice: "XFA forms are not supported.",
     comments: [comment],

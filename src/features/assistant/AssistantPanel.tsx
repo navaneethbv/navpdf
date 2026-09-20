@@ -30,7 +30,7 @@ export function rankPassages(
   const passages: Passage[] = [];
   for (const { page, text } of pages) {
     const sentences = text
-      .replace(/\s+/g, " ")
+      .replaceAll(/\s+/g, " ")
       .trim()
       .split(/(?<=[.!?])\s+/);
     let buffer = "";
@@ -55,16 +55,17 @@ export function rankPassages(
     }
     flush();
   }
-  return passages.sort((a, b) => b.score - a.score || a.page - b.page).slice(0, limit);
+  passages.sort((a, b) => b.score - a.score || a.page - b.page);
+  return passages.slice(0, limit);
 }
 
 export function AssistantPanel({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
   const s = useWorkspace();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Passage[] | null>(null);
@@ -168,11 +169,11 @@ export function AssistantPanel({
               </button>
             </div>
           )}
-          {results && results.length === 0 && (
-            <p className="field-hint" role="status">
+          {results?.length === 0 && (
+            <output className="field-hint">
               No passage in this document contains enough of those words, so there is nothing to
               cite. Try different words.
-            </p>
+            </output>
           )}
           {results && results.length > 0 && (
             <div className="citations-list">

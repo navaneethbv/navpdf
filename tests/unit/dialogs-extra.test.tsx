@@ -220,6 +220,8 @@ describe("DecorationsDialog inputs", () => {
     seedDocument();
     render(<DecorationsDialog controller={{ pdf: null } as never} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Apply to All Pages"));
+    expect(useWorkspace.getState().dirty).toBe(false);
+    expect(screen.getByText("Apply to All Pages").textContent).toBe("Apply to All Pages");
   });
 });
 
@@ -335,6 +337,7 @@ describe("PrintDialog extras", () => {
     seedDocument();
     render(<PrintDialog controller={null} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Print"));
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
   it("rejects a custom range that selects no pages", async () => {
@@ -401,6 +404,8 @@ describe("OfficeExport formats", () => {
     seedDocument();
     render(<OfficeExport controller={null} onClose={() => {}} />);
     fireEvent.click(screen.getByText("Export File"));
+    expect(useWorkspace.getState().status).not.toMatch(/exported/i);
+    expect(screen.getByText("Export File")).toBeTruthy();
   });
 });
 
@@ -495,7 +500,7 @@ describe("RedactionTool inputs", () => {
     seedDocument(4);
     render(<RedactionTool controller={null} onClose={() => {}} />);
     const numbers = document.querySelectorAll('.modal-body input[type="number"]');
-    expect(numbers.length).toBe(5);
+    expect(numbers).toHaveLength(5);
     numbers.forEach((input, i) => {
       fireEvent.change(input, { target: { value: String(i + 2) } });
     });

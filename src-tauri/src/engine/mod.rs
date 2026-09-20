@@ -93,26 +93,7 @@ pub fn set_page_content(
 /// Copies inherited and shared resources onto the page as direct dictionaries, so names
 /// added for one page cannot change other pages that share the original resources.
 pub fn own_page_resources(doc: &mut Document, page_id: ObjectId) -> Result<(), String> {
-    let merged = {
-        let mut merged = Dictionary::new();
-        for source in content::page_resource_dictionaries(doc, page_id) {
-            for (key, value) in source.iter() {
-                let value = content::deref(doc, value);
-                if !merged.has(key) {
-                    merged.set(key.clone(), value.clone());
-                } else if let (Ok(Object::Dictionary(existing)), Object::Dictionary(extra)) =
-                    (merged.get_mut(key), value)
-                {
-                    for (name, entry) in extra.iter() {
-                        if !existing.has(name) {
-                            existing.set(name.clone(), entry.clone());
-                        }
-                    }
-                }
-            }
-        }
-        merged
-    };
+    let merged = content::Resources::for_page(doc, page_id).materialize(doc);
     doc.get_dictionary_mut(page_id)
         .map_err(|_| "The page could not be updated.")?
         .set("Resources", merged);

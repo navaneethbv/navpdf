@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useId, useState, useMemo } from "react";
 import { Heading, Droplets, Hash, Layers, Trash2, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -17,10 +17,12 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 export function DecorationsDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [tab, setTab] = useState<"watermark" | "header-footer" | "bates" | "background">(
     "watermark",
@@ -78,9 +80,9 @@ export function DecorationsDialog({
   const pageRangeError = pageRange.error;
 
   const hexToRgb = (hex: string): [number, number, number] => {
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const r = Number.parseInt(hex.slice(1, 3), 16) / 255;
+    const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
+    const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
     return [r, g, b];
   };
 
@@ -103,6 +105,7 @@ export function DecorationsDialog({
         await controller.replaceWithBytes(
           result.bytes,
           `Applied Bates numbering (${result.manifest.items.length} pages indexed)`,
+          { expectedSource: sourcePdf },
         );
       } else {
         const options: DocumentDecorationsOptions = {
@@ -141,7 +144,9 @@ export function DecorationsDialog({
         }
 
         const newBytes = await applyDocumentDecorations(currentBytes, options);
-        await controller.replaceWithBytes(newBytes, `Decorations applied (${tab})`);
+        await controller.replaceWithBytes(newBytes, `Decorations applied (${tab})`, {
+          expectedSource: sourcePdf,
+        });
       }
 
       onClose();
@@ -172,6 +177,7 @@ export function DecorationsDialog({
       await controller.replaceWithBytes(
         cleanedBytes,
         "Removed app-owned decorations from document",
+        { expectedSource: sourcePdf },
       );
       onClose();
     } catch (err) {
@@ -229,8 +235,11 @@ export function DecorationsDialog({
           {tab === "watermark" && (
             <>
               <div className="setting-group">
-                <label className="setting-title">Watermark Text</label>
+                <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+                  Watermark Text
+                </label>
                 <input
+                  id={`${fieldIds}-field-1`}
                   type="text"
                   value={watermarkText}
                   onChange={(e) => setWatermarkText(e.target.value)}
@@ -239,8 +248,11 @@ export function DecorationsDialog({
               </div>
               <div className="settings-row">
                 <div className="setting-group">
-                  <label className="setting-title">Font Size (pt)</label>
+                  <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                    Font Size (pt)
+                  </label>
                   <input
+                    id={`${fieldIds}-field-2`}
                     type="number"
                     min={12}
                     max={120}
@@ -250,8 +262,11 @@ export function DecorationsDialog({
                   />
                 </div>
                 <div className="setting-group">
-                  <label className="setting-title">Rotation (degrees)</label>
+                  <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
+                    Rotation (degrees)
+                  </label>
                   <select
+                    id={`${fieldIds}-field-3`}
                     value={watermarkRotation}
                     onChange={(e) => setWatermarkRotation(Number(e.target.value))}
                     className="select-input"
@@ -265,10 +280,11 @@ export function DecorationsDialog({
               </div>
               <div className="settings-row">
                 <div className="setting-group">
-                  <label className="setting-title">
+                  <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
                     Opacity ({Math.round(watermarkOpacity * 100)}%)
                   </label>
                   <input
+                    id={`${fieldIds}-field-4`}
                     type="range"
                     min="0.05"
                     max="0.8"
@@ -278,8 +294,11 @@ export function DecorationsDialog({
                   />
                 </div>
                 <div className="setting-group">
-                  <label className="setting-title">Color</label>
+                  <label htmlFor={`${fieldIds}-field-5`} className="setting-title">
+                    Color
+                  </label>
                   <input
+                    id={`${fieldIds}-field-5`}
                     type="color"
                     value={watermarkColor}
                     onChange={(e) => setWatermarkColor(e.target.value)}
@@ -292,8 +311,8 @@ export function DecorationsDialog({
 
           {tab === "header-footer" && (
             <>
-              <div className="setting-group">
-                <label className="setting-title">Header (Top)</label>
+              <fieldset className="setting-group">
+                <legend className="setting-title">Header (Top)</legend>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
                   <input
                     type="text"
@@ -317,10 +336,10 @@ export function DecorationsDialog({
                     className="text-input"
                   />
                 </div>
-              </div>
+              </fieldset>
 
-              <div className="setting-group">
-                <label className="setting-title">Footer (Bottom)</label>
+              <fieldset className="setting-group">
+                <legend className="setting-title">Footer (Bottom)</legend>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
                   <input
                     type="text"
@@ -344,7 +363,7 @@ export function DecorationsDialog({
                     className="text-input"
                   />
                 </div>
-              </div>
+              </fieldset>
 
               <p className="field-hint">
                 Available tokens: &#123;page&#125;, &#123;total&#125;, &#123;date&#125;,
@@ -357,8 +376,11 @@ export function DecorationsDialog({
             <>
               <div className="settings-row">
                 <div className="setting-group">
-                  <label className="setting-title">Prefix</label>
+                  <label htmlFor={`${fieldIds}-field-6`} className="setting-title">
+                    Prefix
+                  </label>
                   <input
+                    id={`${fieldIds}-field-6`}
                     type="text"
                     value={batesPrefix}
                     onChange={(e) => setBatesPrefix(e.target.value)}
@@ -366,8 +388,11 @@ export function DecorationsDialog({
                   />
                 </div>
                 <div className="setting-group">
-                  <label className="setting-title">Suffix</label>
+                  <label htmlFor={`${fieldIds}-field-7`} className="setting-title">
+                    Suffix
+                  </label>
                   <input
+                    id={`${fieldIds}-field-7`}
                     type="text"
                     value={batesSuffix}
                     onChange={(e) => setBatesSuffix(e.target.value)}
@@ -378,8 +403,11 @@ export function DecorationsDialog({
 
               <div className="settings-row">
                 <div className="setting-group">
-                  <label className="setting-title">Start Number</label>
+                  <label htmlFor={`${fieldIds}-field-8`} className="setting-title">
+                    Start Number
+                  </label>
                   <input
+                    id={`${fieldIds}-field-8`}
                     type="number"
                     min={1}
                     value={batesStart}
@@ -388,8 +416,11 @@ export function DecorationsDialog({
                   />
                 </div>
                 <div className="setting-group">
-                  <label className="setting-title">Digits Padding</label>
+                  <label htmlFor={`${fieldIds}-field-9`} className="setting-title">
+                    Digits Padding
+                  </label>
                   <input
+                    id={`${fieldIds}-field-9`}
                     type="number"
                     min={1}
                     max={12}
@@ -401,8 +432,11 @@ export function DecorationsDialog({
               </div>
 
               <div className="setting-group">
-                <label className="setting-title">Position on Page</label>
+                <label htmlFor={`${fieldIds}-field-10`} className="setting-title">
+                  Position on Page
+                </label>
                 <select
+                  id={`${fieldIds}-field-10`}
                   value={batesPosition}
                   onChange={(e) => setBatesPosition(e.target.value as typeof batesPosition)}
                   className="select-input"
@@ -426,8 +460,11 @@ export function DecorationsDialog({
           {tab === "background" && (
             <>
               <div className="setting-group">
-                <label className="setting-title">Background Tint Color</label>
+                <label htmlFor={`${fieldIds}-field-11`} className="setting-title">
+                  Background Tint Color
+                </label>
                 <input
+                  id={`${fieldIds}-field-11`}
                   type="color"
                   value={bgColor}
                   onChange={(e) => setBgColor(e.target.value)}
@@ -435,10 +472,11 @@ export function DecorationsDialog({
                 />
               </div>
               <div className="setting-group">
-                <label className="setting-title">
+                <label htmlFor={`${fieldIds}-field-12`} className="setting-title">
                   Tint Opacity ({Math.round(bgOpacity * 100)}%)
                 </label>
                 <input
+                  id={`${fieldIds}-field-12`}
                   type="range"
                   min="0.05"
                   max="0.8"
@@ -450,7 +488,7 @@ export function DecorationsDialog({
             </>
           )}
 
-          <div
+          <fieldset
             className="setting-group"
             style={{
               marginTop: "16px",
@@ -458,7 +496,7 @@ export function DecorationsDialog({
               paddingTop: "12px",
             }}
           >
-            <label className="setting-title">Page Scope</label>
+            <legend className="setting-title">Page Scope</legend>
             <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <input
@@ -466,7 +504,7 @@ export function DecorationsDialog({
                   name="pageScope"
                   checked={pageScope === "all"}
                   onChange={() => setPageScope("all")}
-                />
+                />{" "}
                 All Pages ({s.info?.pages || 1})
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -475,7 +513,7 @@ export function DecorationsDialog({
                   name="pageScope"
                   checked={pageScope === "custom"}
                   onChange={() => setPageScope("custom")}
-                />
+                />{" "}
                 Custom Range
               </label>
             </div>
@@ -484,6 +522,7 @@ export function DecorationsDialog({
                 <input
                   type="text"
                   placeholder="e.g. 1-3, 5"
+                  aria-label="Custom page range"
                   value={customRange}
                   onChange={(e) => setCustomRange(e.target.value)}
                   className="text-input"
@@ -496,35 +535,50 @@ export function DecorationsDialog({
                 )}
               </>
             )}
-          </div>
+          </fieldset>
         </div>
 
         <div className="modal-footer" style={{ display: "flex", justifyContent: "space-between" }}>
           <button
-            onClick={handleRemoveDecorations}
+            type="button"
+            onClick={() => {
+              void handleRemoveDecorations();
+            }}
             disabled={applying}
             className="button-secondary"
             style={{ color: "var(--accent-red, #d32f2f)" }}
             title="Remove existing decorations from document"
           >
-            <Trash2 size={15} style={{ marginRight: "4px" }} />
-            Remove Decorations
+            <Trash2 size={15} style={{ marginRight: "4px" }} /> Remove Decorations
           </button>
 
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={onClose} className="button-secondary">
+            <button type="button" onClick={onClose} className="button-secondary">
               Cancel
             </button>
-            <button onClick={handleApply} disabled={applying} className="button-primary">
-              {applying
-                ? "Applying..."
-                : pageScope === "all"
-                  ? "Apply to All Pages"
-                  : `Apply to ${parsedPageRange?.length ?? 0} Pages`}
+            <button
+              type="button"
+              onClick={() => {
+                void handleApply();
+              }}
+              disabled={applying}
+              className="button-primary"
+            >
+              {getApplyButtonLabel(applying, pageScope, parsedPageRange?.length ?? 0)}
             </button>
           </div>
         </div>
       </div>
     </FeatureDialog>
   );
+}
+
+function getApplyButtonLabel(
+  applying: boolean,
+  pageScope: "all" | "custom",
+  pageCount: number,
+): string {
+  if (applying) return "Applying...";
+  if (pageScope === "all") return "Apply to All Pages";
+  return `Apply to ${pageCount} Pages`;
 }

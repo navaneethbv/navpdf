@@ -167,6 +167,7 @@ describe("DecorationsDialog and decoration commands", () => {
         expect(mockController.replaceWithBytes).toHaveBeenCalledWith(
           expect.any(Uint8Array),
           expect.stringContaining("Removed"),
+          { expectedSource: mockController.pdf },
         );
         expect(onClose).toHaveBeenCalled();
       });

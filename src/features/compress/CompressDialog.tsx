@@ -43,10 +43,10 @@ export function formatBytes(bytes: number) {
 export function CompressDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
   const s = useWorkspace();
   const [preset, setPreset] = useState<CompressionPreset>("balanced");
   const [running, setRunning] = useState(false);
@@ -54,6 +54,7 @@ export function CompressDialog({
   const applyingRef = useRef(false);
   const [result, setResult] = useState<EngineResult<CompressionReport> | null>(null);
   const job = useRef<string | null>(null);
+  const resultSource = useRef(controller?.pdf);
   const report = result?.report;
 
   const analyze = async () => {
@@ -67,7 +68,10 @@ export function CompressDialog({
       controller.editor?.commitOrRemove();
       const bytes = await pdf.saveDocument();
       const outcome = await compressDocument(bytes, preset, jobId);
-      if (job.current === jobId) setResult(outcome);
+      if (job.current === jobId) {
+        resultSource.current = pdf;
+        setResult(outcome);
+      }
     } catch (error) {
       if (job.current === jobId)
         s.set({ error: error instanceof Error ? error.message : String(error) });
@@ -96,6 +100,7 @@ export function CompressDialog({
       await controller.replaceWithBytes(
         result.bytes,
         `Compressed (${label}): saved ${formatBytes(saved)}`,
+        { expectedSource: resultSource.current },
       );
       onClose();
     } catch (error) {
@@ -108,6 +113,35 @@ export function CompressDialog({
 
   const change = report ? report.afterBytes - report.beforeBytes : 0;
 
+  const renderAction = () => {
+    if (running)
+      return (
+        <button type="button" onClick={cancel} className="button-secondary">
+          Cancel Analysis
+        </button>
+      );
+    if (result?.bytes)
+      return (
+        <button
+          type="button"
+          onClick={() => void apply()}
+          disabled={applying}
+          className="button-primary"
+        >
+          <Check size={16} /> Apply Compressed Version
+        </button>
+      );
+    return (
+      <button
+        type="button"
+        onClick={() => void analyze()}
+        disabled={!native || !controller?.pdf}
+        className="button-primary"
+      >
+        <Minimize2 size={16} /> Analyze Compression
+      </button>
+    );
+  };
   return (
     <FeatureDialog title="Compress PDF" onClose={onClose} busy={running || applying}>
       <div className="modal-dialog">
@@ -142,7 +176,7 @@ export function CompressDialog({
                   }}
                 />
                 <span>
-                  <strong>{item.label}</strong>
+                  {item.label}
                   <span className="field-hint">{item.description}</span>
                 </span>
               </label>
@@ -199,26 +233,15 @@ export function CompressDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary" disabled={running || applying}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="button-secondary"
+            disabled={running || applying}
+          >
             {report ? "Done" : "Close"}
           </button>
-          {running ? (
-            <button onClick={cancel} className="button-secondary">
-              Cancel Analysis
-            </button>
-          ) : result?.bytes ? (
-            <button onClick={() => void apply()} disabled={applying} className="button-primary">
-              <Check size={16} /> Apply Compressed Version
-            </button>
-          ) : (
-            <button
-              onClick={() => void analyze()}
-              disabled={!native || !controller?.pdf}
-              className="button-primary"
-            >
-              <Minimize2 size={16} /> Analyze Compression
-            </button>
-          )}
+          {renderAction()}
         </div>
       </div>
     </FeatureDialog>

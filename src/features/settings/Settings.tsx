@@ -80,7 +80,7 @@ export function Settings() {
         <fieldset className="settings-fields" disabled={saving} aria-label="Preferences">
           <h3>Appearance</h3>
           <label htmlFor="settings-theme">
-            Theme
+            Theme{" "}
             <select
               id="settings-theme"
               value={preferences.theme}
@@ -99,7 +99,7 @@ export function Settings() {
           </label>
           <div className="form-columns">
             <label>
-              Light palette
+              Light palette{" "}
               <select
                 value={preferences.lightPalette}
                 onChange={(e) => {
@@ -114,7 +114,7 @@ export function Settings() {
               </select>
             </label>
             <label>
-              Dark palette
+              Dark palette{" "}
               <select
                 value={preferences.darkPalette}
                 onChange={(e) => {
@@ -156,7 +156,7 @@ export function Settings() {
           <h3>PDF viewing</h3>
           <div className="form-columns">
             <label>
-              Default zoom
+              Default zoom{" "}
               <select
                 value={preferences.defaultZoom}
                 onChange={(e) => {
@@ -171,7 +171,7 @@ export function Settings() {
               </select>
             </label>
             <label>
-              Page layout
+              Page layout{" "}
               <select
                 value={preferences.layout}
                 onChange={(e) => {
@@ -196,7 +196,7 @@ export function Settings() {
           </label>
           <h3>General & privacy</h3>
           <label>
-            Default save behavior
+            Default save behavior{" "}
             <select
               value={preferences.saveBehavior}
               onChange={(e) => {
@@ -249,7 +249,7 @@ export function Settings() {
               onChange={(e) => {
                 patch({ showStartupTips: e.target.checked });
               }}
-            />
+            />{" "}
             Show tips when NavPDF starts
           </label>
           <p className="muted">
@@ -258,7 +258,7 @@ export function Settings() {
           <h3>Editing</h3>
           <div className="form-columns">
             <label>
-              Default annotation color
+              Default annotation color{" "}
               <input
                 type="color"
                 value={preferences.annotationColor}
@@ -268,7 +268,7 @@ export function Settings() {
               />
             </label>
             <label>
-              Default stroke width
+              Default stroke width{" "}
               <input
                 type="number"
                 min={1}
@@ -286,7 +286,7 @@ export function Settings() {
           <h3>OCR</h3>
           <div className="form-columns">
             <label>
-              Default language
+              Default language{" "}
               <input
                 value={preferences.ocrLanguage}
                 onChange={(e) => {
@@ -296,7 +296,7 @@ export function Settings() {
               />
             </label>
             <label>
-              Default page scope
+              Default page scope{" "}
               <select
                 value={preferences.ocrScope}
                 onChange={(e) => {
@@ -318,7 +318,7 @@ export function Settings() {
           <button type="button" className="button" onClick={close} disabled={saving}>
             Cancel
           </button>
-          <button className="button primary" disabled={saving}>
+          <button type="submit" className="button primary" disabled={saving}>
             {saving ? "Saving settings…" : "Save settings"}
           </button>
         </div>

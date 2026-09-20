@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useId, useState, useMemo } from "react";
 import { Link as LinkIcon, X, AlertTriangle, ExternalLink, Bookmark } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
@@ -15,10 +15,12 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 export function LinkDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [linkType, setLinkType] = useState<"url" | "page">("url");
   const [url, setUrl] = useState("https://");
@@ -69,6 +71,7 @@ export function LinkDialog({
         linkType === "url"
           ? `Added URL link to page ${placementPage}`
           : `Added page jump to page ${targetPage}`,
+        { expectedSource: sourcePdf },
       );
       onClose();
     } catch (err) {
@@ -93,6 +96,7 @@ export function LinkDialog({
 
         <div className="tab-buttons-bar">
           <button
+            type="button"
             className={linkType === "url" ? "active" : ""}
             aria-pressed={linkType === "url"}
             onClick={() => setLinkType("url")}
@@ -100,6 +104,7 @@ export function LinkDialog({
             <ExternalLink size={15} /> External URL
           </button>
           <button
+            type="button"
             className={linkType === "page" ? "active" : ""}
             aria-pressed={linkType === "page"}
             onClick={() => setLinkType("page")}
@@ -110,8 +115,11 @@ export function LinkDialog({
 
         <div className="modal-body">
           <div className="setting-group">
-            <label className="setting-title">Placement Page</label>
+            <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+              Placement Page
+            </label>
             <PageNumberInput
+              id={`${fieldIds}-field-1`}
               value={placementPage}
               max={s.info?.pages || 1}
               onChange={setPlacementPage}
@@ -121,8 +129,11 @@ export function LinkDialog({
 
           {linkType === "url" ? (
             <div className="setting-group">
-              <label className="setting-title">Destination URL</label>
+              <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                Destination URL
+              </label>
               <input
+                id={`${fieldIds}-field-2`}
                 type="text"
                 placeholder="https://example.com"
                 value={url}
@@ -152,8 +163,11 @@ export function LinkDialog({
             </div>
           ) : (
             <div className="setting-group">
-              <label className="setting-title">Jump to Page Number</label>
+              <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
+                Jump to Page Number
+              </label>
               <PageNumberInput
+                id={`${fieldIds}-field-3`}
                 value={targetPage}
                 max={s.info?.pages || 1}
                 onChange={setTargetPage}
@@ -164,8 +178,11 @@ export function LinkDialog({
 
           <div className="settings-row">
             <div className="setting-group">
-              <label className="setting-title">Position X (pt)</label>
+              <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
+                Position X (pt)
+              </label>
               <input
+                id={`${fieldIds}-field-4`}
                 type="number"
                 value={rectX}
                 onChange={(e) => setRectX(Number(e.target.value))}
@@ -173,8 +190,11 @@ export function LinkDialog({
               />
             </div>
             <div className="setting-group">
-              <label className="setting-title">Position Y (pt)</label>
+              <label htmlFor={`${fieldIds}-field-5`} className="setting-title">
+                Position Y (pt)
+              </label>
               <input
+                id={`${fieldIds}-field-5`}
                 type="number"
                 value={rectY}
                 onChange={(e) => setRectY(Number(e.target.value))}
@@ -185,8 +205,11 @@ export function LinkDialog({
 
           <div className="settings-row">
             <div className="setting-group">
-              <label className="setting-title">Width (pt)</label>
+              <label htmlFor={`${fieldIds}-field-6`} className="setting-title">
+                Width (pt)
+              </label>
               <input
+                id={`${fieldIds}-field-6`}
                 type="number"
                 min={10}
                 value={rectWidth}
@@ -195,8 +218,11 @@ export function LinkDialog({
               />
             </div>
             <div className="setting-group">
-              <label className="setting-title">Height (pt)</label>
+              <label htmlFor={`${fieldIds}-field-7`} className="setting-title">
+                Height (pt)
+              </label>
               <input
+                id={`${fieldIds}-field-7`}
                 type="number"
                 min={10}
                 value={rectHeight}
@@ -208,11 +234,14 @@ export function LinkDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           <button
-            onClick={handleAddLink}
+            type="button"
+            onClick={() => {
+              void handleAddLink();
+            }}
             disabled={saving || (linkType === "url" && !urlValidation.valid)}
             className="button-primary"
           >

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
-export function Properties({ controller }: { controller: ViewerController }) {
+export function Properties({ controller }: Readonly<{ controller: ViewerController }>) {
   const s = useWorkspace();
   const selected = s.comments.find((comment) => comment.id === s.selectedAnnotationId);
   const selectedShape =
@@ -26,25 +26,164 @@ export function Properties({ controller }: { controller: ViewerController }) {
     setLocalOpacity(selected?.opacity ?? s.inkOpacity);
     setLocalText(selected?.text ?? "");
   }, [selected?.id, selected?.width, selected?.opacity, selected?.text, s.inkWidth, s.inkOpacity]);
-  return (
-    <aside className="properties">
-      <button
-        className="icon-button panel-close"
-        aria-label="Close properties panel"
-        onClick={() => s.set({ propertiesVisible: false, selectedAnnotationId: null })}
-      >
-        <X size={18} />
-      </button>
-      <h2>
-        {selected
-          ? "Annotation properties"
-          : s.tool === "highlight"
-            ? "Highlight properties"
-            : s.tool === "shape"
-              ? "Shape properties"
-              : "Document"}
-      </h2>
-      {selected ? (
+  const renderAnnotationControls = () => {
+    if (!selected) return null;
+    if (selectedShape)
+      return (
+        <>
+          <p className="muted">
+            Selected from the page or Comments. Changes are written as standard PDF annotation
+            properties.
+          </p>
+          <label className="color-label">
+            Stroke color{" "}
+            <input
+              type="color"
+              aria-label="Selected annotation color"
+              value={selectedColor}
+              onChange={(event) => {
+                const value = event.target.value;
+                s.set({ inkColor: value });
+                void controller.updateSelectedAnnotation({
+                  color: [
+                    Number.parseInt(value.slice(1, 3), 16) / 255,
+                    Number.parseInt(value.slice(3, 5), 16) / 255,
+                    Number.parseInt(value.slice(5, 7), 16) / 255,
+                  ],
+                });
+              }}
+            />
+          </label>
+          <label className="range-label">
+            Stroke width{" "}
+            <input
+              type="range"
+              min="0.5"
+              max="12"
+              step="0.5"
+              aria-label="Selected annotation width"
+              value={localWidth}
+              onChange={(event) => setLocalWidth(Number(event.target.value))}
+              onPointerUp={() => {
+                void controller.updateSelectedAnnotation({
+                  width: localWidth,
+                });
+              }}
+            />
+            <span>{localWidth.toFixed(1)} pt</span>
+          </label>
+          <label className="range-label">
+            Opacity{" "}
+            <input
+              type="range"
+              min="0.1"
+              max="1"
+              step="0.05"
+              aria-label="Selected annotation opacity"
+              value={localOpacity}
+              onChange={(event) => setLocalOpacity(Number(event.target.value))}
+              onPointerUp={() => {
+                void controller.updateSelectedAnnotation({
+                  opacity: localOpacity,
+                });
+              }}
+            />
+            <span>{Math.round(localOpacity * 100)}%</span>
+          </label>
+          <fieldset
+            className="property-button-grid"
+
+            aria-label="Move selected annotation"
+          >
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.moveSelectedAnnotation(-8, 0)}
+            >
+              Move left
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.moveSelectedAnnotation(8, 0)}
+            >
+              Move right
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.moveSelectedAnnotation(0, 8)}
+            >
+              Move up
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.moveSelectedAnnotation(0, -8)}
+            >
+              Move down
+            </button>
+          </fieldset>
+          <fieldset
+            className="property-button-grid"
+
+            aria-label="Resize selected annotation"
+          >
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.resizeSelectedAnnotation(8, 0)}
+            >
+              Widen
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.resizeSelectedAnnotation(-8, 0)}
+            >
+              Narrow
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.resizeSelectedAnnotation(0, 8)}
+            >
+              Taller
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.resizeSelectedAnnotation(0, -8)}
+            >
+              Shorter
+            </button>
+          </fieldset>
+        </>
+      );
+    if (selected.type === "Text")
+      return (
+        <label>
+          Note text{" "}
+          <textarea
+            aria-label="Selected note text"
+            value={localText}
+            rows={5}
+            onChange={(event) => setLocalText(event.target.value)}
+            onBlur={() => {
+              if (localText !== selected.text) {
+                void controller.updateSelectedAnnotation({
+                  contents: localText,
+                });
+              }
+            }}
+          />
+        </label>
+      );
+    return <p className="muted">This annotation can be navigated and deleted here.</p>;
+  };
+  const renderProperties = () => {
+    if (selected)
+      return (
         <>
           <div className="properties-icon">
             {selectedShape ? <Square size={25} /> : <Info size={23} />}
@@ -52,149 +191,9 @@ export function Properties({ controller }: { controller: ViewerController }) {
           <h3>
             {selected.type} on page {selected.page}
           </h3>
-          {selectedShape ? (
-            <>
-              <p className="muted">
-                Selected from the page or Comments. Changes are written as standard PDF annotation
-                properties.
-              </p>
-              <label className="color-label">
-                Stroke color
-                <input
-                  type="color"
-                  aria-label="Selected annotation color"
-                  value={selectedColor}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    s.set({ inkColor: value });
-                    void controller.updateSelectedAnnotation({
-                      color: [
-                        parseInt(value.slice(1, 3), 16) / 255,
-                        parseInt(value.slice(3, 5), 16) / 255,
-                        parseInt(value.slice(5, 7), 16) / 255,
-                      ],
-                    });
-                  }}
-                />
-              </label>
-              <label className="range-label">
-                Stroke width
-                <input
-                  type="range"
-                  min="0.5"
-                  max="12"
-                  step="0.5"
-                  aria-label="Selected annotation width"
-                  value={localWidth}
-                  onChange={(event) => setLocalWidth(Number(event.target.value))}
-                  onPointerUp={() => {
-                    void controller.updateSelectedAnnotation({
-                      width: localWidth,
-                    });
-                  }}
-                />
-                <span>{localWidth.toFixed(1)} pt</span>
-              </label>
-              <label className="range-label">
-                Opacity
-                <input
-                  type="range"
-                  min="0.1"
-                  max="1"
-                  step="0.05"
-                  aria-label="Selected annotation opacity"
-                  value={localOpacity}
-                  onChange={(event) => setLocalOpacity(Number(event.target.value))}
-                  onPointerUp={() => {
-                    void controller.updateSelectedAnnotation({
-                      opacity: localOpacity,
-                    });
-                  }}
-                />
-                <span>{Math.round(localOpacity * 100)}%</span>
-              </label>
-              <div
-                className="property-button-grid"
-                role="group"
-                aria-label="Move selected annotation"
-              >
-                <button
-                  className="button"
-                  onClick={() => void controller.moveSelectedAnnotation(-8, 0)}
-                >
-                  Move left
-                </button>
-                <button
-                  className="button"
-                  onClick={() => void controller.moveSelectedAnnotation(8, 0)}
-                >
-                  Move right
-                </button>
-                <button
-                  className="button"
-                  onClick={() => void controller.moveSelectedAnnotation(0, 8)}
-                >
-                  Move up
-                </button>
-                <button
-                  className="button"
-                  onClick={() => void controller.moveSelectedAnnotation(0, -8)}
-                >
-                  Move down
-                </button>
-              </div>
-              <div
-                className="property-button-grid"
-                role="group"
-                aria-label="Resize selected annotation"
-              >
-                <button
-                  className="button"
-                  onClick={() => void controller.resizeSelectedAnnotation(8, 0)}
-                >
-                  Widen
-                </button>
-                <button
-                  className="button"
-                  onClick={() => void controller.resizeSelectedAnnotation(-8, 0)}
-                >
-                  Narrow
-                </button>
-                <button
-                  className="button"
-                  onClick={() => void controller.resizeSelectedAnnotation(0, 8)}
-                >
-                  Taller
-                </button>
-                <button
-                  className="button"
-                  onClick={() => void controller.resizeSelectedAnnotation(0, -8)}
-                >
-                  Shorter
-                </button>
-              </div>
-            </>
-          ) : selected.type === "Text" ? (
-            <label>
-              Note text
-              <textarea
-                aria-label="Selected note text"
-                value={localText}
-                rows={5}
-                onChange={(event) => setLocalText(event.target.value)}
-                onBlur={() => {
-                  if (localText !== selected.text) {
-                    void controller.updateSelectedAnnotation({
-                      contents: localText,
-                    });
-                  }
-                }}
-              />
-            </label>
-          ) : (
-            <p className="muted">This annotation can be navigated and deleted here.</p>
-          )}
+          {renderAnnotationControls()}
           <button
+            type="button"
             className="button"
             disabled={s.busy}
             onClick={() => void controller.deleteSelectedAnnotation()}
@@ -202,7 +201,9 @@ export function Properties({ controller }: { controller: ViewerController }) {
             <Trash2 size={16} /> Delete selected
           </button>
         </>
-      ) : s.tool === "highlight" ? (
+      );
+    if (s.tool === "highlight")
+      return (
         <>
           <div className="properties-icon">
             <Highlighter size={25} />
@@ -212,7 +213,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
             Select text on the page to highlight it. You can also draw a freehand highlight.
           </p>
           <label className="color-label">
-            Color
+            Color{" "}
             <input
               type="color"
               aria-label="Highlight color"
@@ -223,6 +224,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
           <div className="color-swatches">
             {["#f5cf58", "#80d49b", "#8cc9f7", "#f3a1c0"].map((c) => (
               <button
+                type="button"
                 key={c}
                 style={{ background: c }}
                 aria-label={`Highlight ${c}`}
@@ -236,6 +238,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
             color or delete it.
           </p>
           <button
+            type="button"
             className="button"
             disabled={!s.hasSelection || s.busy}
             onClick={() => controller.deleteSelected()}
@@ -243,7 +246,9 @@ export function Properties({ controller }: { controller: ViewerController }) {
             <Trash2 size={16} /> Delete selected
           </button>
         </>
-      ) : s.tool === "shape" ? (
+      );
+    if (s.tool === "shape")
+      return (
         <>
           <div className="properties-icon">
             {s.shapeKind === "Circle" ? <Circle size={25} /> : <Square size={25} />}
@@ -254,7 +259,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
             drawing mode.
           </p>
           <label className="color-label">
-            Stroke color
+            Stroke color{" "}
             <input
               type="color"
               aria-label="Shape stroke color"
@@ -263,7 +268,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
             />
           </label>
           <label className="range-label">
-            Stroke width
+            Stroke width{" "}
             <input
               type="range"
               min="0.5"
@@ -276,7 +281,7 @@ export function Properties({ controller }: { controller: ViewerController }) {
             <span>{s.inkWidth.toFixed(1)} pt</span>
           </label>
           <label className="range-label">
-            Opacity
+            Opacity{" "}
             <input
               type="range"
               min="0.1"
@@ -293,46 +298,68 @@ export function Properties({ controller }: { controller: ViewerController }) {
             highlights.
           </p>
         </>
-      ) : (
-        <>
-          <div className="properties-icon">
-            <Info size={23} />
+      );
+    return (
+      <>
+        <div className="properties-icon">
+          <Info size={23} />
+        </div>
+        <h3>{s.info?.title || s.document?.name}</h3>
+        <dl>
+          <dt>Pages</dt>
+          <dd>{s.info?.pages}</dd>
+          <dt>File size</dt>
+          <dd>{((s.document?.size || 0) / 1024 / 1024).toFixed(2)} MB</dd>
+          <dt>PDF version</dt>
+          <dd>{s.info?.version || "Unknown"}</dd>
+          <dt>Author</dt>
+          <dd>{s.info?.author || "Not specified"}</dd>
+          <dt>Protection</dt>
+          <dd>{s.info?.encrypted ? "Password protected" : "Unencrypted"}</dd>
+        </dl>
+        {s.info?.encrypted && (
+          <p className="tip">
+            <LockKeyhole size={16} /> This file is open for reading. Unlock it from Password Protect
+            to edit it or save a copy.
+          </p>
+        )}
+        {!s.info?.encrypted && (
+          <div className="reader-hint">
+            <Highlighter size={22} />
+            <strong>A little clarity goes a long way.</strong>
+            <p>Select Highlight to mark a passage, then save the PDF to keep it.</p>
+            <button
+              type="button"
+              className="button"
+              disabled={s.busy || s.info?.encrypted}
+              onClick={() => controller.setTool("highlight")}
+            >
+              Highlight text
+            </button>
           </div>
-          <h3>{s.info?.title || s.document?.name}</h3>
-          <dl>
-            <dt>Pages</dt>
-            <dd>{s.info?.pages}</dd>
-            <dt>File size</dt>
-            <dd>{((s.document?.size || 0) / 1024 / 1024).toFixed(2)} MB</dd>
-            <dt>PDF version</dt>
-            <dd>{s.info?.version || "Unknown"}</dd>
-            <dt>Author</dt>
-            <dd>{s.info?.author || "Not specified"}</dd>
-            <dt>Protection</dt>
-            <dd>{s.info?.encrypted ? "Password protected" : "Unencrypted"}</dd>
-          </dl>
-          {s.info?.encrypted && (
-            <p className="tip">
-              <LockKeyhole size={16} /> This file is open for reading. Unlock it from Password
-              Protect to edit it or save a copy.
-            </p>
-          )}
-          {!s.info?.encrypted && (
-            <div className="reader-hint">
-              <Highlighter size={22} />
-              <strong>A little clarity goes a long way.</strong>
-              <p>Select Highlight to mark a passage, then save the PDF to keep it.</p>
-              <button
-                className="button"
-                disabled={s.busy || s.info?.encrypted}
-                onClick={() => controller.setTool("highlight")}
-              >
-                Highlight text
-              </button>
-            </div>
-          )}
-        </>
-      )}
+        )}
+      </>
+    );
+  };
+  return (
+    <aside className="properties">
+      <button
+        type="button"
+        className="icon-button panel-close"
+        aria-label="Close properties panel"
+        onClick={() => s.set({ propertiesVisible: false, selectedAnnotationId: null })}
+      >
+        <X size={18} />
+      </button>
+      <h2>{getSidebarTitle(Boolean(selected), s.tool)}</h2>
+      {renderProperties()}
     </aside>
   );
+}
+
+function getSidebarTitle(selected: boolean, tool: string): string {
+  if (selected) return "Annotation properties";
+  if (tool === "highlight") return "Highlight properties";
+  if (tool === "shape") return "Shape properties";
+  return "Document";
 }

@@ -93,6 +93,7 @@ vi.mock("../../src/services/pdf", () => ({
   loadPdf: vi.fn(),
 }));
 
+import { openDocument, saveDocument } from "../../src/services/native";
 import App from "../../src/app/App";
 import { useWorkspace } from "../../src/stores/workspace";
 
@@ -228,6 +229,8 @@ describe("App keyboard and menus", () => {
       menu({ payload: "fit-width" });
       menu({ payload: "zoom-out" });
     });
+    expect(openDocument).toHaveBeenCalledOnce();
+    expect(saveDocument).not.toHaveBeenCalled();
   });
 
   it("routes organize, tool, view, annotation, and settings menu actions", () => {
@@ -364,9 +367,10 @@ describe("App keyboard and menus", () => {
     }
   });
 
-  it("saves through the toolbar callback", () => {
+  it("does not save before the PDF revision attaches", () => {
     seedDocument();
     render(<App />);
     fireEvent.click(screen.getByLabelText("Save PDF"));
+    expect(saveDocument).not.toHaveBeenCalled();
   });
 });

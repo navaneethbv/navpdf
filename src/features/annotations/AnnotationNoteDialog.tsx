@@ -6,10 +6,10 @@ import type { ViewerController } from "../viewer/controller";
 export function AnnotationNoteDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController;
   onClose: () => void;
-}) {
+}>) {
   const [contents, setContents] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -21,8 +21,8 @@ export function AnnotationNoteDialog({
     try {
       await controller.addStickyNote(contents);
       onClose();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+    } catch (error_) {
+      setError(error_ instanceof Error ? error_.message : String(error_));
     } finally {
       setSaving(false);
     }
@@ -41,9 +41,9 @@ export function AnnotationNoteDialog({
           <span>Page {controller.currentPage()}</span>
         </div>
         <label>
-          Note
+          Note{" "}
           <textarea
-            autoFocus
+            data-autofocus
             rows={5}
             value={contents}
             onChange={(event) => setContents(event.target.value)}

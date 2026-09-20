@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useId, useState, useEffect, useRef } from "react";
 import {
   Scan,
   Check,
@@ -30,10 +30,11 @@ function languageName(code: string): string {
 export function OcrPanel({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
   const s = useWorkspace();
   const [engineInfo, setEngineInfo] = useState<OcrEngineInfo | null>(null);
   const [engineError, setEngineError] = useState<string | null>(null);
@@ -159,7 +160,7 @@ export function OcrPanel({
           const dataUrl = canvas.toDataURL("image/png");
           const encoded = dataUrl.split(",")[1];
           if (!encoded) throw new Error("Unable to encode the OCR page.");
-          imageBytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+          imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
         } finally {
           canvas.width = 0;
           canvas.height = 0;
@@ -185,6 +186,7 @@ export function OcrPanel({
         await controller.replaceWithBytes(
           updatedBytes,
           `OCR Searchable Layer (${results.length} pages)`,
+          { expectedSource: sourcePdf },
         );
         s.set({
           status: `OCR searchable layer successfully applied to ${results.length} page(s).`,
@@ -210,6 +212,7 @@ export function OcrPanel({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const ocrActionLabel = mode === "searchable" ? "Apply Searchable Layer" : "Recognize Text";
   return (
     <FeatureDialog title="Scan & OCR" onClose={onClose} busy={running}>
       <div className="modal-dialog">
@@ -218,7 +221,13 @@ export function OcrPanel({
             <Scan size={18} />
             <h3>Optical Character Recognition (OCR)</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close" disabled={running}>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close"
+            disabled={running}
+          >
             <X size={18} />
           </button>
         </div>
@@ -303,10 +312,11 @@ export function OcrPanel({
             </div>
           )}
 
-          <div className="setting-group">
-            <label className="setting-title">Target Pages</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">Target Pages</legend>
             <div className="tab-buttons-bar">
               <button
+                type="button"
                 className={targetScope === "current" ? "active" : ""}
                 aria-pressed={targetScope === "current"}
                 onClick={() => setTargetScope("current")}
@@ -315,6 +325,7 @@ export function OcrPanel({
                 Current Page ({s.page})
               </button>
               <button
+                type="button"
                 className={targetScope === "all" ? "active" : ""}
                 aria-pressed={targetScope === "all"}
                 onClick={() => setTargetScope("all")}
@@ -323,6 +334,7 @@ export function OcrPanel({
                 All Pages ({totalPages})
               </button>
               <button
+                type="button"
                 className={targetScope === "range" ? "active" : ""}
                 aria-pressed={targetScope === "range"}
                 onClick={() => setTargetScope("range")}
@@ -341,11 +353,14 @@ export function OcrPanel({
                 disabled={running}
               />
             )}
-          </div>
+          </fieldset>
 
           <div className="setting-group">
-            <label className="setting-title">Recognition Language</label>
+            <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+              Recognition Language
+            </label>
             <select
+              id={`${fieldIds}-field-1`}
               value={selectedLang}
               onChange={(e) => setSelectedLang(e.target.value)}
               disabled={running}
@@ -358,10 +373,11 @@ export function OcrPanel({
             </select>
           </div>
 
-          <div className="setting-group">
-            <label className="setting-title">OCR Action</label>
+          <fieldset className="setting-group">
+            <legend className="setting-title">OCR Action</legend>
             <div className="tab-buttons-bar">
               <button
+                type="button"
                 className={mode === "searchable" ? "active" : ""}
                 aria-pressed={mode === "searchable"}
                 onClick={() => setMode("searchable")}
@@ -370,6 +386,7 @@ export function OcrPanel({
                 <Layers size={14} /> Searchable PDF Layer
               </button>
               <button
+                type="button"
                 className={mode === "extract" ? "active" : ""}
                 aria-pressed={mode === "extract"}
                 onClick={() => setMode("extract")}
@@ -383,7 +400,7 @@ export function OcrPanel({
                 ? "Aligns invisible text over scanned images so words can be selected, copied, and searched without changing appearance."
                 : "Extracts recognized text directly into plain text without modifying the PDF document."}
             </p>
-          </div>
+          </fieldset>
 
           {running && (
             <div className="ocr-progress-box" style={{ marginTop: "12px" }}>
@@ -424,7 +441,10 @@ export function OcrPanel({
                   <Check size={16} /> <span>Recognized Text</span>
                 </div>
                 <button
-                  onClick={handleCopyText}
+                  type="button"
+                  onClick={() => {
+                    void handleCopyText();
+                  }}
                   className="button-secondary"
                   style={{ padding: "4px 8px", fontSize: "12px" }}
                 >
@@ -449,6 +469,7 @@ export function OcrPanel({
         <div className="modal-footer">
           {running ? (
             <button
+              type="button"
               onClick={() => {
                 cancelledRef.current = true;
                 setStatusText("Cancelling...");
@@ -459,12 +480,15 @@ export function OcrPanel({
             </button>
           ) : (
             <>
-              <button onClick={onClose} className="button-secondary">
+              <button type="button" onClick={onClose} className="button-secondary">
                 {recognizedText ? "Done" : "Cancel"}
               </button>
               {!recognizedText && (
                 <button
-                  onClick={handleStartOcr}
+                  type="button"
+                  onClick={() => {
+                    void handleStartOcr();
+                  }}
                   disabled={
                     running ||
                     !engineInfo ||
@@ -473,11 +497,7 @@ export function OcrPanel({
                   }
                   className="button-primary"
                 >
-                  {hasExistingWarning && replaceExisting
-                    ? "Continue & Start OCR"
-                    : mode === "searchable"
-                      ? "Apply Searchable Layer"
-                      : "Recognize Text"}
+                  {hasExistingWarning && replaceExisting ? "Continue & Start OCR" : ocrActionLabel}
                 </button>
               )}
             </>

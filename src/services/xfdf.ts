@@ -1,17 +1,31 @@
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString } from "pdf-lib";
+import { pdfText } from "./pdf/text-string.ts";
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFNumber,
+  PDFRef,
+  PDFString,
+  PDFHexString,
+} from "pdf-lib";
 
 const MAX_XFDF_BYTES = 10 * 1024 * 1024;
 const xmlEscape = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 const xmlUnescape = (value: string) =>
   value
-    .replace(/&quot;/g, '"')
-    .replace(/&gt;/g, ">")
-    .replace(/&lt;/g, "<")
-    .replace(/&amp;/g, "&");
+    .replaceAll("&quot;", '"')
+    .replaceAll("&gt;", ">")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&amp;", "&");
 const attrs = (source: string) => {
   const values = new Map<string, string>();
-  for (const match of source.matchAll(/([A-Za-z][\w:-]*)\s*=\s*"([^"]*)"/g))
+  for (const match of source.matchAll(/(?:^|\s)([A-Za-z][\w:-]*)\s*=\s*"([^"]*)"/g))
     values.set(match[1], xmlUnescape(match[2]));
   return values;
 };
@@ -40,7 +54,8 @@ export async function exportXfdf(pdfBytes: Uint8Array): Promise<string> {
       const rect = annotation.lookupMaybe(PDFName.of("Rect"), PDFArray)?.asRectangle();
       if (!rect) continue;
       const name =
-        annotation.lookupMaybe(PDFName.of("NM"), PDFString)?.asString() ?? `annot-${index}`;
+        annotation.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ??
+        `annot-${index}`;
       const annotationRef = annots.get(index);
       if (annotationRef instanceof PDFRef) annotationNames.set(annotationRef.toString(), name);
     }
@@ -56,8 +71,10 @@ export async function exportXfdf(pdfBytes: Uint8Array): Promise<string> {
       const rect = annotation.lookupMaybe(PDFName.of("Rect"), PDFArray)?.asRectangle();
       if (!rect) continue;
       const name =
-        annotation.lookupMaybe(PDFName.of("NM"), PDFString)?.asString() ?? `annot-${index}`;
-      const contents = annotation.lookupMaybe(PDFName.of("Contents"), PDFString)?.asString() ?? "";
+        annotation.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ??
+        `annot-${index}`;
+      const contents =
+        annotation.lookupMaybe(PDFName.of("Contents"), PDFString, PDFHexString)?.decodeText() ?? "";
       const stamp = annotation.lookupMaybe(PDFName.of("Name"), PDFName)?.decodeText();
       const irt = annotation.get(PDFName.of("IRT"));
       const irtName = irt instanceof PDFRef ? annotationNames.get(irt.toString()) : undefined;
@@ -67,9 +84,13 @@ export async function exportXfdf(pdfBytes: Uint8Array): Promise<string> {
             (quadPoints.get(i) as PDFNumber).asNumber(),
           ).join(",")
         : "";
+      const irtAttr = irtName ? ` inreplyto="${xmlEscape(irtName)}"` : "";
+      const stampAttr = stamp ? ` stamp="${xmlEscape(stamp)}"` : "";
+      const quadElem = quad ? `<quadpoints>${quad}</quadpoints>` : "";
+      const contentsElem = contents ? `<contents>${xmlEscape(contents)}</contents>` : "";
       const tag = annotationTag(subtype);
       annotationXml.push(
-        `<${tag} page="${pageIndex}" rect="${rect.x},${rect.y},${rect.x + rect.width},${rect.y + rect.height}" name="${xmlEscape(name)}"${irtName ? ` inreplyto="${xmlEscape(irtName)}"` : ""}${stamp ? ` stamp="${xmlEscape(stamp)}"` : ""}>${quad ? `<quadpoints>${quad}</quadpoints>` : ""}${contents ? `<contents>${xmlEscape(contents)}</contents>` : ""}</${tag}>`,
+        `<${tag} page="${pageIndex}" rect="${rect.x},${rect.y},${rect.x + rect.width},${rect.y + rect.height}" name="${xmlEscape(name)}"${irtAttr}${stampAttr}>${quadElem}${contentsElem}</${tag}>`,
       );
     }
   }
@@ -108,13 +129,13 @@ export async function importXfdf(pdfBytes: Uint8Array, xml: string): Promise<Uin
     let quadPoints: number[] | undefined;
     if (["highlight", "underline", "strikeout"].includes(tag)) {
       const geometry =
-        attributes.get("coords") ?? body.match(/<quadpoints>([\s\S]*?)<\/quadpoints>/i)?.[1];
+        attributes.get("coords") ?? /<quadpoints>([\s\S]*?)<\/quadpoints>/i.exec(body)?.[1];
       quadPoints = numbers(geometry);
       if (!geometry?.trim() || quadPoints.length % 8 !== 0 || !quadPoints.every(Number.isFinite)) {
         throw new Error("The XFDF text markup has invalid or missing quadrilateral geometry.");
       }
     }
-    const contents = body.match(/<contents>([\s\S]*?)<\/contents>/i)?.[1] ?? "";
+    const contents = /<contents>([\s\S]*?)<\/contents>/i.exec(body)?.[1] ?? "";
     const subtype = tag === "strikeout" ? "StrikeOut" : tag[0].toUpperCase() + tag.slice(1);
     const annotation = context.obj({
       Type: "Annot",
@@ -123,8 +144,8 @@ export async function importXfdf(pdfBytes: Uint8Array, xml: string): Promise<Uin
       ...(quadPoints ? { QuadPoints: quadPoints } : {}),
       F: 4,
       P: page.ref,
-      NM: PDFString.of(attributes.get("name") ?? `xfdf-${Date.now()}-${pageIndex}`),
-      Contents: PDFString.of(xmlUnescape(contents)),
+      NM: pdfText(attributes.get("name") ?? `xfdf-${Date.now()}-${pageIndex}`),
+      Contents: pdfText(xmlUnescape(contents)),
       ...(tag === "stamp" ? { Name: PDFName.of(attributes.get("stamp") ?? "Approved") } : {}),
     });
     const replyTo = attributes.get("inreplyto");

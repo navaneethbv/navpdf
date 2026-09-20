@@ -12,13 +12,13 @@ export function ContextMenu({
   actions,
   onAction,
   onClose,
-}: {
+}: Readonly<{
   x: number;
   y: number;
   actions: ContextMenuAction[];
   onAction: (id: string) => void;
   onClose: () => void;
-}) {
+}>) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const first = ref.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
@@ -37,6 +37,7 @@ export function ContextMenu({
       ref={ref}
       className="context-menu"
       role="menu"
+      tabIndex={-1}
       aria-label="Selection actions"
       style={{ left: x, top: y }}
       onContextMenu={(event) => event.preventDefault()}

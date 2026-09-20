@@ -16,10 +16,11 @@ const emptyMetadata: DocumentMetadata = {
 export function PropertiesDialog({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const sourcePdf = controller?.pdf;
   const [metadata, setMetadata] = useState<DocumentMetadata>(emptyMetadata);
   const [keywords, setKeywords] = useState("");
   const [loading, setLoading] = useState(true);
@@ -57,7 +58,7 @@ export function PropertiesDialog({
   return (
     <FeatureDialog title="Document properties" onClose={onClose} busy={loading || saving}>
       {loading ? (
-        <p role="status">Reading document properties...</p>
+        <output>Reading document properties...</output>
       ) : (
         <form
           className="settings-form"
@@ -77,6 +78,7 @@ export function PropertiesDialog({
               const bytes = await controller.pdf.saveDocument();
               const changed = await writeMetadata(bytes, next);
               await controller.replaceWithBytes(changed, "Document properties updated", {
+                expectedSource: sourcePdf,
                 preMutationBytes: bytes,
               });
               set({ status: "Document properties updated" });
@@ -89,28 +91,28 @@ export function PropertiesDialog({
           }}
         >
           <label>
-            Title
+            Title{" "}
             <input
               value={metadata.title}
               onChange={(event) => update("title", event.target.value)}
             />
           </label>
           <label>
-            Author
+            Author{" "}
             <input
               value={metadata.author}
               onChange={(event) => update("author", event.target.value)}
             />
           </label>
           <label>
-            Subject
+            Subject{" "}
             <input
               value={metadata.subject}
               onChange={(event) => update("subject", event.target.value)}
             />
           </label>
           <label>
-            Keywords
+            Keywords{" "}
             <input
               value={keywords}
               onChange={(event) => setKeywords(event.target.value)}
@@ -118,14 +120,14 @@ export function PropertiesDialog({
             />
           </label>
           <label>
-            Creator
+            Creator{" "}
             <input
               value={metadata.creator}
               onChange={(event) => update("creator", event.target.value)}
             />
           </label>
           <label>
-            Producer
+            Producer{" "}
             <input
               value={metadata.producer}
               onChange={(event) => update("producer", event.target.value)}
@@ -140,7 +142,7 @@ export function PropertiesDialog({
             <button type="button" className="button" onClick={onClose} disabled={saving}>
               Cancel
             </button>
-            <button className="button primary" disabled={saving}>
+            <button type="submit" className="button primary" disabled={saving}>
               Save properties
             </button>
           </div>

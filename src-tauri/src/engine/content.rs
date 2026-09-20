@@ -58,6 +58,31 @@ pub fn page_resource_dictionaries(doc: &Document, page_id: ObjectId) -> Vec<&Dic
 }
 
 impl<'a> Resources<'a> {
+    pub fn from_dictionary(dict: &'a Dictionary) -> Self {
+        Self { dicts: vec![dict] }
+    }
+
+    pub fn materialize(&self, doc: &Document) -> Dictionary {
+        let mut merged = Dictionary::new();
+        for source in &self.dicts {
+            for (key, value) in source.iter() {
+                let value = deref(doc, value);
+                if !merged.has(key) {
+                    merged.set(key.clone(), value.clone());
+                } else if let (Ok(Object::Dictionary(existing)), Object::Dictionary(extra)) =
+                    (merged.get_mut(key), value)
+                {
+                    for (name, entry) in extra.iter() {
+                        if !existing.has(name) {
+                            existing.set(name.clone(), entry.clone());
+                        }
+                    }
+                }
+            }
+        }
+        merged
+    }
+
     pub fn for_page(doc: &'a Document, page_id: ObjectId) -> Self {
         Self {
             dicts: page_resource_dictionaries(doc, page_id),

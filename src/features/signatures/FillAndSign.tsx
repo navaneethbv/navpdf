@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useId, useState, useRef, useEffect } from "react";
 import {
   PenLine,
   Check,
@@ -34,10 +34,12 @@ import { PageNumberInput } from "../../components/PageNumberInput";
 export function FillAndSign({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const fieldIds = useId();
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [tab, setTab] = useState<"library" | "draw" | "type" | "import" | "marks">("library");
   const [signatures, setSignatures] = useState<SavedSignature[]>(() => {
@@ -242,7 +244,9 @@ export function FillAndSign({
       });
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(newBytes, "Signature appearance placed on page");
+      await controller.replaceWithBytes(newBytes, "Signature appearance placed on page", {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -310,7 +314,9 @@ export function FillAndSign({
       }
 
       const newBytes = await doc.save();
-      await controller.replaceWithBytes(newBytes, `Mark (${symbol}) placed on document`);
+      await controller.replaceWithBytes(newBytes, `Mark (${symbol}) placed on document`, {
+        expectedSource: sourcePdf,
+      });
       onClose();
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -327,7 +333,7 @@ export function FillAndSign({
             <PenLine size={18} />
             <h3>Fill & Sign</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
             <XIcon size={18} />
           </button>
         </div>
@@ -375,7 +381,9 @@ export function FillAndSign({
                 type="button"
                 className="button-primary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
-                onClick={() => handleMigrate(true)}
+                onClick={() => {
+                  void handleMigrate(true);
+                }}
               >
                 Migrate to Secure Storage
               </button>
@@ -383,7 +391,9 @@ export function FillAndSign({
                 type="button"
                 className="button-secondary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
-                onClick={() => handleMigrate(false)}
+                onClick={() => {
+                  void handleMigrate(false);
+                }}
               >
                 Discard Plaintext
               </button>
@@ -491,55 +501,7 @@ export function FillAndSign({
                       <div className="sig-meta">
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span>{sig.name}</span>
-                          {sig.storage === "session" ? (
-                            <span
-                              title="Session-only (in memory)"
-                              style={{
-                                fontSize: "10px",
-                                padding: "1px 4px",
-                                borderRadius: "3px",
-                                background: "rgba(100, 100, 100, 0.15)",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "2px",
-                              }}
-                            >
-                              <Clock size={10} /> Session
-                            </span>
-                          ) : sig.storage === "legacy" ? (
-                            <span
-                              title="Unprotected legacy storage (not encrypted by OS)"
-                              data-testid="unprotected-badge"
-                              style={{
-                                fontSize: "10px",
-                                padding: "1px 4px",
-                                borderRadius: "3px",
-                                background: "rgba(220, 38, 38, 0.15)",
-                                color: "var(--color-danger, #dc2626)",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "2px",
-                              }}
-                            >
-                              <AlertTriangle size={10} /> Unprotected
-                            </span>
-                          ) : (
-                            <span
-                              title="Encrypted in OS storage"
-                              style={{
-                                fontSize: "10px",
-                                padding: "1px 4px",
-                                borderRadius: "3px",
-                                background: "rgba(37, 96, 75, 0.15)",
-                                color: "var(--color-primary, #25604b)",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "2px",
-                              }}
-                            >
-                              <Lock size={10} /> Protected
-                            </span>
-                          )}
+                          <SignatureStorageBadge storage={sig.storage} />
                         </div>
                         <button
                           type="button"
@@ -570,7 +532,7 @@ export function FillAndSign({
                   name="sigType"
                   checked={sigType === "signature"}
                   onChange={() => setSigType("signature")}
-                />
+                />{" "}
                 Signature
               </label>
               <label
@@ -581,7 +543,7 @@ export function FillAndSign({
                   name="sigType"
                   checked={sigType === "initials"}
                   onChange={() => setSigType("initials")}
-                />
+                />{" "}
                 Initials
               </label>
               <label
@@ -597,7 +559,7 @@ export function FillAndSign({
                   type="checkbox"
                   checked={sessionOnly}
                   onChange={(e) => setSessionOnly(e.target.checked)}
-                />
+                />{" "}
                 Session only (do not persist)
               </label>
             </div>
@@ -619,7 +581,13 @@ export function FillAndSign({
                 <button type="button" className="button-secondary" onClick={clearCanvas}>
                   Clear
                 </button>
-                <button type="button" className="button-primary" onClick={handleSaveDrawn}>
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={() => {
+                    void handleSaveDrawn();
+                  }}
+                >
                   Save Signature
                 </button>
               </div>
@@ -650,7 +618,9 @@ export function FillAndSign({
               <button
                 type="button"
                 className="button-primary"
-                onClick={handleSaveTyped}
+                onClick={() => {
+                  void handleSaveTyped();
+                }}
                 disabled={!typedName.trim()}
               >
                 Save Signature
@@ -670,7 +640,9 @@ export function FillAndSign({
               <button
                 type="button"
                 className="button-primary"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  fileInputRef.current?.click();
+                }}
               >
                 <Upload size={16} /> Choose Image File...
               </button>
@@ -682,23 +654,53 @@ export function FillAndSign({
 
           {tab === "marks" && (
             <div className="quick-marks-grid">
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("check")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("check");
+                }}
+              >
                 <Check size={24} />
                 <span>Checkmark</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("cross")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("cross");
+                }}
+              >
                 <XIcon size={24} />
                 <span>Cross</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("dot")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("dot");
+                }}
+              >
                 <Circle size={20} />
                 <span>Dot</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("box")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("box");
+                }}
+              >
                 <Square size={20} />
                 <span>Box</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("line")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("line");
+                }}
+              >
                 <Minus size={24} />
                 <span>Line</span>
               </button>
@@ -718,8 +720,11 @@ export function FillAndSign({
               }}
             >
               <div>
-                <label className="setting-title">Page</label>
+                <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+                  Page
+                </label>
                 <PageNumberInput
+                  id={`${fieldIds}-field-1`}
                   value={targetPage}
                   max={s.info?.pages || 1}
                   onChange={setTargetPage}
@@ -727,8 +732,11 @@ export function FillAndSign({
                 />
               </div>
               <div>
-                <label className="setting-title">X (pt)</label>
+                <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                  X (pt)
+                </label>
                 <input
+                  id={`${fieldIds}-field-2`}
                   type="number"
                   value={posX}
                   onChange={(e) => setPosX(Number(e.target.value))}
@@ -736,8 +744,11 @@ export function FillAndSign({
                 />
               </div>
               <div>
-                <label className="setting-title">Y From Top (pt)</label>
+                <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
+                  Y From Top (pt)
+                </label>
                 <input
+                  id={`${fieldIds}-field-3`}
                   type="number"
                   value={posY}
                   onChange={(e) => setPosY(Number(e.target.value))}
@@ -746,8 +757,11 @@ export function FillAndSign({
               </div>
               {tab === "library" && (
                 <div>
-                  <label className="setting-title">Width (pt)</label>
+                  <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
+                    Width (pt)
+                  </label>
                   <input
+                    id={`${fieldIds}-field-4`}
                     type="number"
                     min={40}
                     max={400}
@@ -797,7 +811,9 @@ export function FillAndSign({
           {tab === "library" && selectedSig && (
             <button
               type="button"
-              onClick={handlePlaceSignature}
+              onClick={() => {
+                void handlePlaceSignature();
+              }}
               disabled={saving}
               className="button-primary"
             >
@@ -807,5 +823,63 @@ export function FillAndSign({
         </div>
       </div>
     </FeatureDialog>
+  );
+}
+
+function SignatureStorageBadge({ storage }: Readonly<{ storage?: string }>) {
+  if (storage === "session") {
+    return (
+      <span
+        title="Session-only (in memory)"
+        style={{
+          fontSize: "10px",
+          padding: "1px 4px",
+          borderRadius: "3px",
+          background: "rgba(100, 100, 100, 0.15)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "2px",
+        }}
+      >
+        <Clock size={10} /> Session
+      </span>
+    );
+  }
+  if (storage === "legacy") {
+    return (
+      <span
+        title="Unprotected legacy storage (not encrypted by OS)"
+        data-testid="unprotected-badge"
+        style={{
+          fontSize: "10px",
+          padding: "1px 4px",
+          borderRadius: "3px",
+          background: "rgba(220, 38, 38, 0.15)",
+          color: "var(--color-danger, #dc2626)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "2px",
+        }}
+      >
+        <AlertTriangle size={10} /> Unprotected
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Encrypted in OS storage"
+      style={{
+        fontSize: "10px",
+        padding: "1px 4px",
+        borderRadius: "3px",
+        background: "rgba(37, 96, 75, 0.15)",
+        color: "var(--color-primary, #25604b)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "2px",
+      }}
+    >
+      <Lock size={10} /> Protected
+    </span>
   );
 }

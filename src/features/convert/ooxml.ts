@@ -134,10 +134,10 @@ export function escapeXml(text: string) {
   return Array.from(text)
     .filter(isXmlCharacter)
     .join("")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 interface Word {
@@ -170,6 +170,12 @@ function splitColumns(words: Word[], pageWidth: number): Word[][] {
 }
 
 /** Groups text items into reading-order lines, table cells and paragraphs. */
+function headingLevel(ratio: number): 0 | 1 | 2 {
+  if (ratio >= 1.6) return 1;
+  if (ratio >= 1.25) return 2;
+  return 0;
+}
+
 export function layoutPage(
   page: number,
   items: TextItem[],
@@ -219,7 +225,7 @@ export function layoutPage(
       let previousEnd = -Infinity;
       for (const word of byX) {
         const gap = word.x - previousEnd;
-        const last = cells[cells.length - 1];
+        const last = cells.at(-1);
         if (last && gap <= line.size * 1.5) {
           last.text += gap > line.size * 0.15 ? ` ${word.text}` : word.text;
         } else {
@@ -236,7 +242,7 @@ export function layoutPage(
     const flush = () => {
       if (!current) return;
       const ratio = current.size / body;
-      paragraphs.push({ text: current.text, heading: ratio >= 1.6 ? 1 : ratio >= 1.25 ? 2 : 0 });
+      paragraphs.push({ text: current.text, heading: headingLevel(ratio) });
       current = null;
     };
     for (const line of columnLines) {
@@ -310,7 +316,7 @@ export function tableRows(layout: PageLayout, tolerance = 12): string[][] {
   for (const x of layout.lines
     .flatMap((line) => line.cells.map((cell) => cell.x))
     .sort((a, b) => a - b)) {
-    if (!anchors.length || x - anchors[anchors.length - 1] > tolerance) anchors.push(x);
+    if (!anchors.length || x - (anchors.at(-1) ?? 0) > tolerance) anchors.push(x);
   }
   return layout.lines.map((line) => {
     const row: string[] = new Array(anchors.length).fill("");
@@ -320,7 +326,7 @@ export function tableRows(layout: PageLayout, tolerance = 12): string[][] {
         if (anchors[index] <= cell.x + tolerance / 2) column = index;
       row[column] = row[column] ? `${row[column]} ${cell.text}` : cell.text;
     }
-    while (row.length && !row[row.length - 1]) row.pop();
+    while (row.length && !row.at(-1)) row.pop();
     return row;
   });
 }
@@ -343,7 +349,7 @@ export function cellValue(text: string): CellValue {
   }
   const numeric = /^(\()?-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?(\))?$/.exec(trimmed);
   if (numeric && Boolean(numeric[1]) === Boolean(numeric[5])) {
-    const value = Number(trimmed.replace(/[(),]/g, ""));
+    const value = Number(trimmed.replaceAll(/[(),]/g, ""));
     if (Number.isFinite(value))
       return { kind: "number", value: numeric[1] ? -Math.abs(value) : value };
   }
@@ -353,7 +359,7 @@ export function cellValue(text: string): CellValue {
 function columnName(index: number) {
   let name = "";
   for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26))
-    name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+    name = String.fromCodePoint(65 + ((n - 1) % 26)) + name;
   return name;
 }
 
@@ -363,7 +369,7 @@ export function buildXlsx(sheets: { name: string; rows: string[][] }[]) {
   const sheetNames = safeSheets.map((sheet, index) => {
     let name =
       sheet.name
-        .replace(/[\\/?*[\]:]/g, " ")
+        .replaceAll(/[\\/?*[\]:]/g, " ")
         .slice(0, 31)
         .trim() || `Sheet${index + 1}`;
     while (names.has(name)) name = `${name.slice(0, 28)} ${index + 1}`;
@@ -445,17 +451,19 @@ export function buildPptx(slides: Slide[], title: string) {
             return `<p:sp><p:nvSpPr><p:cNvPr id="${shapeId++}" name="Text ${shapeId}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${x}" y="${Math.max(0, y)}"/><a:ext cx="${width}" cy="${height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="${size}" dirty="0"/><a:t>${escapeXml(box.text)}</a:t></a:r></a:p></p:txBody></p:sp>`;
           })
           .join("");
-    entries.push({
-      name: `ppt/slides/slide${number}.xml`,
-      data: `${XML}<p:sld ${DRAWING}><p:cSld><p:spTree>${EMPTY_TREE}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
-    });
-    entries.push({
-      name: `ppt/slides/_rels/slide${number}.xml.rels`,
-      data: rels(
-        rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml") +
-          (slide.image ? rel("rId2", "image", `../media/page${number}.png`) : ""),
-      ),
-    });
+    entries.push(
+      {
+        name: `ppt/slides/slide${number}.xml`,
+        data: `${XML}<p:sld ${DRAWING}><p:cSld><p:spTree>${EMPTY_TREE}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+      },
+      {
+        name: `ppt/slides/_rels/slide${number}.xml.rels`,
+        data: rels(
+          rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml") +
+            (slide.image ? rel("rId2", "image", `../media/page${number}.png`) : ""),
+        ),
+      },
+    );
     if (slide.image) entries.push({ name: `ppt/media/page${number}.png`, data: slide.image });
   });
   const slideRels = slides
@@ -516,7 +524,9 @@ export function buildRtf(layouts: PageLayout[]) {
           code > 0xffff
             ? [0xd800 + ((code - 0x10000) >> 10), 0xdc00 + ((code - 0x10000) & 0x3ff)]
             : [code];
-        return units.map((unit) => `\\u${unit > 0x7fff ? unit - 0x10000 : unit}?`).join("");
+        return units
+          .map((unit) => String.raw`\u${unit > 0x7fff ? unit - 0x10000 : unit}?`)
+          .join("");
       })
       .join("");
   const pages = layouts.map((layout) =>

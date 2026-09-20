@@ -35,7 +35,8 @@ it("waits for preferences and walks through the first-launch tour only once", as
   fireEvent.click(screen.getByRole("button", { name: "Back" }));
   expect(screen.getByText("Step 1 of 5")).toBeTruthy();
   for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Get started" })));
+  fireEvent.click(screen.getByRole("button", { name: "Get started" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull());
   expect(savePreferences).toHaveBeenCalledWith(
     expect.objectContaining({ tourCompleted: true, showStartupTips: true }),
   );
@@ -56,7 +57,8 @@ it("saves tip opt-out on dismissal and keeps manual help available", async () =>
   expect(screen.getByText(/Tip \d of/).textContent).not.toBe(before);
   fireEvent.click(screen.getByRole("checkbox", { name: "Don’t show tips again" }));
   expect(savePreferences).not.toHaveBeenCalled();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Dismiss" })));
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull());
   expect(useWorkspace.getState().local.preferences.showStartupTips).toBe(false);
   unmount();
   render(<GettingStarted ready />);
@@ -87,7 +89,8 @@ it("retains a failed opt-out and blocks duplicate saves until the write finishes
   expect(screen.getByRole("alert").textContent).toContain("could not be saved");
   expect(useWorkspace.getState().local.preferences.showStartupTips).toBe(true);
   expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Dismiss" })));
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull());
   expect(useWorkspace.getState().local.preferences.showStartupTips).toBe(false);
 });
 it("dismisses a tip without opting out and postpones startup during other dialogs", async () => {
@@ -99,7 +102,8 @@ it("dismisses a tip without opting out and postpones startup during other dialog
   render(<GettingStarted ready />);
   expect(screen.queryByText("A tip for your workspace")).toBeNull();
   act(() => useWorkspace.getState().set({ settingsOpen: false }));
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Dismiss" })));
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull());
   expect(savePreferences).not.toHaveBeenCalled();
   expect(useWorkspace.getState().local.preferences.showStartupTips).toBe(true);
 });

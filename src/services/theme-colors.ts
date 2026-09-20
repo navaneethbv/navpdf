@@ -5,7 +5,7 @@ export function isThemeColor(value: unknown): value is string {
 }
 
 function channels(hex: string) {
-  return [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+  return [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
 }
 
 function readableText(background: string) {

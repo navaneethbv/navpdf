@@ -13,7 +13,9 @@ interface SelectionBox {
 
 const shapeTypes = new Set(["Square", "Circle", "Line"]);
 
-export function AnnotationSelectionLayer({ controller }: { controller: ViewerController }) {
+export function AnnotationSelectionLayer({
+  controller,
+}: Readonly<{ controller: ViewerController }>) {
   const tool = useWorkspace((s) => s.tool);
   const comments = useWorkspace((s) => s.comments);
   const selectedId = useWorkspace((s) => s.selectedAnnotationId);

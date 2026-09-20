@@ -48,10 +48,11 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 export function RedactionTool({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
+  const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const ids = useId();
   const [marks, setMarks] = useState<Mark[]>(() =>
@@ -74,10 +75,18 @@ export function RedactionTool({
   const [report, setReport] = useState<RedactionReport | null>(null);
   const [notice, setNotice] = useState("");
   const job = useRef<string | null>(null);
+  const committing = useRef(false);
   const viewer = controller?.viewer as unknown as ViewerLike | undefined;
   const pageCount = s.info?.pages ?? 1;
 
-  useEffect(() => () => useWorkspace.getState().set({ redactionSelection: [] }), []);
+  useEffect(
+    () => () => {
+      if (job.current && !committing.current) void cancelEngineJob(job.current);
+      job.current = null;
+      useWorkspace.getState().set({ redactionSelection: [] });
+    },
+    [],
+  );
 
   useEffect(
     () =>
@@ -204,7 +213,11 @@ export function RedactionTool({
       );
       if (job.current !== jobId) return;
       if (!result.bytes) throw new Error("The redaction engine returned no document.");
-      await controller.replaceWithBytes(result.bytes, "Redactions applied", { resetHistory: true });
+      committing.current = true;
+      await controller.replaceWithBytes(result.bytes, "Redactions applied", {
+        expectedSource: sourcePdf,
+        resetHistory: true,
+      });
       await discardRecovery(doc.id).catch(() => {});
       setReport(result.report);
       setMarks([]);
@@ -221,11 +234,13 @@ export function RedactionTool({
         s.set({ error: errorText(error) });
       }
     } finally {
+      committing.current = false;
       if (job.current === jobId) job.current = null;
     }
   };
 
   const cancel = () => {
+    if (committing.current) return;
     if (job.current) void cancelEngineJob(job.current);
     job.current = null;
     setStage("confirm");
@@ -250,9 +265,9 @@ export function RedactionTool({
   );
 
   return (
-    <aside
+    <dialog
       className="redaction-panel"
-      role="dialog"
+      open
       aria-modal="false"
       aria-label="Redact Sensitive Content"
     >
@@ -261,7 +276,12 @@ export function RedactionTool({
           <EyeOff size={18} />
           <h3>Redact Sensitive Content</h3>
         </div>
-        <button className="icon-button" onClick={onClose} aria-label="Close">
+        <button
+          className="icon-button"
+          onClick={onClose}
+          aria-label="Close"
+          disabled={stage === "running"}
+        >
           <X size={18} />
         </button>
       </div>
@@ -328,11 +348,7 @@ export function RedactionTool({
                 Add Region
               </button>
             </details>
-            {notice && (
-              <p className="field-hint" role="status">
-                {notice}
-              </p>
-            )}
+            {notice && <output className="field-hint">{notice}</output>}
 
             <div className="setting-group">
               <span className="setting-title">Marked regions ({marks.length})</span>
@@ -410,7 +426,7 @@ export function RedactionTool({
                   type="checkbox"
                   checked={acknowledged}
                   onChange={(event) => setAcknowledged(event.target.checked)}
-                />
+                />{" "}
                 I understand this removes the document's digital signatures, which redaction
                 invalidates.
               </label>
@@ -498,6 +514,6 @@ export function RedactionTool({
           </button>
         )}
       </div>
-    </aside>
+    </dialog>
   );
 }

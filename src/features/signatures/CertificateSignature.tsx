@@ -35,10 +35,10 @@ const releaseCertificate = () => void forgetCertificate().catch(() => {});
 export function CertificateSignature({
   controller,
   onClose,
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
-}) {
+}>) {
   const s = useWorkspace();
   const ids = useId();
   const documentId = s.document?.id;

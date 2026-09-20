@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFDict } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFName,
+  PDFArray,
+  PDFNumber,
+  PDFDict,
+  PDFString,
+  PDFHexString,
+} from "pdf-lib";
 import { stripExternalPageLinks } from "../../src/services/pdf/link-targets";
 
 describe("stripExternalPageLinks (DS-03)", () => {
@@ -74,4 +82,34 @@ describe("stripExternalPageLinks (DS-03)", () => {
     const survivingDest = survivingDict.lookup(PDFName.of("Dest")) as PDFArray;
     expect(survivingDest.get(0)).toEqual(page1.ref);
   });
+});
+
+it("terminates cyclic named-destination trees and preserves decoded destinations", async () => {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage();
+  const removedPage = doc.addPage();
+  const tree = doc.context.obj({});
+  const treeRef = doc.context.register(tree);
+  const leaf = doc.context.obj({
+    Names: [
+      PDFString.of("caf\\351"),
+      doc.context.obj({ D: [page.ref, PDFName.of("Fit")] }),
+      PDFHexString.fromText("other"),
+      doc.context.obj([removedPage.ref, PDFName.of("Fit")]),
+    ],
+  });
+  tree.set(PDFName.of("Kids"), doc.context.obj([treeRef, doc.context.register(leaf)]));
+  doc.catalog.set(PDFName.of("Names"), doc.context.obj({ Dests: treeRef }));
+  const good = doc.context.register(
+    doc.context.obj({ Subtype: "Link", Dest: PDFHexString.fromText("café") }),
+  );
+  const bad = doc.context.register(
+    doc.context.obj({ Subtype: "Link", Dest: PDFString.of("other") }),
+  );
+  const unknown = doc.context.register(
+    doc.context.obj({ Subtype: "Link", Dest: PDFString.of("missing") }),
+  );
+  page.node.set(PDFName.of("Annots"), doc.context.obj([good, bad, unknown]));
+  expect(stripExternalPageLinks(doc, new Set([0]))).toBe(2);
+  expect(page.node.Annots()?.asArray()).toEqual([good]);
 });

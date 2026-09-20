@@ -3,7 +3,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "./controller";
 const ROW = 187;
-export function Thumbnails({ controller }: { controller: ViewerController }) {
+export function Thumbnails({ controller }: Readonly<{ controller: ViewerController }>) {
   const page = useWorkspace((s) => s.page),
     count = useWorkspace((s) => s.info?.pages || 0),
     revision = useWorkspace((s) => s.revision),
@@ -54,11 +54,11 @@ export function ThumbCanvas({
   pdf,
   page,
   revision,
-}: {
+}: Readonly<{
   pdf?: PDFDocumentProxy | null;
   page: number;
   revision: number;
-}) {
+}>) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {

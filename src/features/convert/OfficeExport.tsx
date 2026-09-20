@@ -112,15 +112,36 @@ async function pagePicture(
   };
 }
 
+function textExport(format: Format, pages: PageLayout[], baseName: string) {
+  if (format === "docx") return buildDocx(pages, baseName);
+  if (format === "xlsx")
+    return buildXlsx(pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) })));
+  if (format === "pptx-text")
+    return buildPptx(
+      pages.map((page) => ({
+        width: page.width,
+        height: page.height,
+        boxes: page.lines.map((line) => ({
+          x: line.x,
+          y: line.y,
+          size: line.size,
+          text: line.text,
+        })),
+      })),
+      baseName,
+    );
+  return buildRtf(pages);
+}
+
 export function OfficeExport({
   controller,
   onClose,
   initialFormat = "docx",
-}: {
+}: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
   initialFormat?: Format;
-}) {
+}>) {
   const s = useWorkspace();
   const [format, setFormat] = useState<Format>(initialFormat);
   const [running, setRunning] = useState(false);
@@ -149,8 +170,7 @@ export function OfficeExport({
     if (!pdf) return null;
     const numbers = pageNumbers ?? Array.from({ length: pdf.numPages }, (_, i) => i + 1);
     const result: PageLayout[] = [];
-    for (let index = 0; index < numbers.length; index++) {
-      const number = numbers[index];
+    for (const number of numbers) {
       if (cancelled.current) return null;
       setProgress(`Reading page ${number} of ${numbers.length}…`);
       const page = (await pdf.getPage(number)) as unknown as PageProxy;
@@ -200,28 +220,7 @@ export function OfficeExport({
           throw new Error(
             "This PDF has no text layer to convert. Run OCR first, or export page pictures.",
           );
-        bytes =
-          format === "docx"
-            ? buildDocx(pages, baseName)
-            : format === "xlsx"
-              ? buildXlsx(
-                  pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) })),
-                )
-              : format === "pptx-text"
-                ? buildPptx(
-                    pages.map((page) => ({
-                      width: page.width,
-                      height: page.height,
-                      boxes: page.lines.map((line) => ({
-                        x: line.x,
-                        y: line.y,
-                        size: line.size,
-                        text: line.text,
-                      })),
-                    })),
-                    baseName,
-                  )
-                : buildRtf(pages);
+        bytes = textExport(format, pages, baseName);
       }
       if (cancelled.current) return;
       if (
@@ -269,7 +268,7 @@ export function OfficeExport({
                   }}
                 />
                 <span>
-                  <strong>{item.label}</strong>
+                  {item.label}
                   <span className="field-hint">{item.description}</span>
                 </span>
               </label>
@@ -320,6 +319,7 @@ export function OfficeExport({
           </fieldset>
           {format === "xlsx" && (
             <button
+              type="button"
               className="button-secondary"
               onClick={() => void previewCells()}
               disabled={running}
@@ -328,19 +328,19 @@ export function OfficeExport({
             </button>
           )}
           {preview && (
-            <div className="table-preview" role="region" aria-label="Cell preview">
+            <section className="table-preview" aria-label="Cell preview">
               <table>
                 <tbody>
                   {preview.map((row, r) => (
-                    <tr key={r}>
+                    <tr key={`row-${r}-${row.slice(0, 2).join(":")}`}>
                       {row.map((cell, c) => (
-                        <td key={c}>{cell}</td>
+                        <td key={`cell-${r}-${c}-${cell.slice(0, 8)}`}>{cell}</td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
           )}
           {progress && (
             <p className="field-hint" aria-live="polite">
@@ -352,6 +352,7 @@ export function OfficeExport({
         <div className="modal-footer">
           {running ? (
             <button
+              type="button"
               onClick={() => {
                 cancelled.current = true;
                 s.set({ status: "Export cancelled" });
@@ -361,11 +362,12 @@ export function OfficeExport({
               Cancel Export
             </button>
           ) : (
-            <button onClick={onClose} className="button-secondary">
+            <button type="button" onClick={onClose} className="button-secondary">
               Close
             </button>
           )}
           <button
+            type="button"
             onClick={() => void exportFile()}
             disabled={running || !controller?.pdf}
             className="button-primary"

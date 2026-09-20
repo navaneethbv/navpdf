@@ -40,6 +40,25 @@ describe("ExportDialog Hardening (P6.5)", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps cancellation pending until the original page request settles", async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(mockController.pdf!.getPage).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as never,
+    );
+    const onClose = vi.fn();
+    render(<ExportDialog controller={mockController} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    fireEvent.click(screen.getByRole("button", { name: /Cancel Export/i }));
+    expect(screen.queryByRole("button", { name: "Export" })).toBeNull();
+    const getTextContent = vi.fn();
+    finish({ getTextContent });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Export" })).toBeTruthy());
+    expect(getTextContent).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("renders format selection and default scope", () => {
     render(<ExportDialog controller={mockController} onClose={vi.fn()} />);
 

@@ -133,7 +133,7 @@ describe("engine service", () => {
       documentId: "doc",
       password: "synthetic-open",
     });
-    expect(unlocked.length).toBe(3);
+    expect(unlocked).toHaveLength(3);
     await service.cancelEngineJob("job-9");
     expect(invoke).toHaveBeenCalledWith("engine_cancel", { jobId: "job-9" });
     expect(service.newJobId()).toMatch(/[0-9a-f-]{36}/);
