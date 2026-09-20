@@ -29,22 +29,54 @@ function readPngHeader(bytes: Uint8Array, view: DataView): ImageHeader | null {
   return validatedHeader("png", view.getUint32(16), view.getUint32(20));
 }
 
+type JpegMarker = {
+  marker: number;
+  offset: number;
+};
+
+type JpegSegment = {
+  marker: number;
+  length: number;
+  offset: number;
+};
+
+function readJpegMarker(bytes: Uint8Array, offset: number): JpegMarker | null {
+  if (bytes.at(offset) !== 0xff) return null;
+  while (bytes.at(offset) === 0xff) offset++;
+  const marker = bytes.at(offset);
+  return marker === undefined ? null : { marker, offset: offset + 1 };
+}
+
+function readJpegSegment(
+  bytes: Uint8Array,
+  view: DataView,
+  marker: JpegMarker,
+): JpegSegment | null {
+  if (marker.marker === 0xda || marker.marker === 0xd9) return null;
+  if (marker.marker === 0x01 || (marker.marker >= 0xd0 && marker.marker <= 0xd7))
+    return { marker: marker.marker, length: 0, offset: marker.offset };
+  if (marker.offset + 2 > bytes.length) return null;
+  const length = view.getUint16(marker.offset);
+  if (length < 2 || marker.offset + length > bytes.length) return null;
+  return { marker: marker.marker, length, offset: marker.offset };
+}
+
 function readJpegHeader(bytes: Uint8Array, view: DataView): ImageHeader | null {
   if (bytes.length < 4 || view.getUint16(0) !== 0xffd8) return null;
 
   let offset = 2;
   while (offset + 4 <= bytes.length) {
-    if (bytes.at(offset) !== 0xff) return null;
-    while (bytes.at(offset) === 0xff) offset++;
-    const marker = bytes.at(offset++);
-    if (marker === undefined || marker === 0xda || marker === 0xd9) return null;
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-    if (offset + 2 > bytes.length) return null;
-    const length = view.getUint16(offset);
-    if (length < 2 || offset + length > bytes.length) return null;
-    if (JPEG_DIMENSION_MARKERS.has(marker) && length >= 8)
-      return validatedHeader("jpeg", view.getUint16(offset + 5), view.getUint16(offset + 3));
-    offset += length;
+    const marker = readJpegMarker(bytes, offset);
+    if (!marker) return null;
+    const segment = readJpegSegment(bytes, view, marker);
+    if (!segment) return null;
+    if (JPEG_DIMENSION_MARKERS.has(segment.marker) && segment.length >= 8)
+      return validatedHeader(
+        "jpeg",
+        view.getUint16(segment.offset + 5),
+        view.getUint16(segment.offset + 3),
+      );
+    offset = segment.offset + segment.length;
   }
   return null;
 }
