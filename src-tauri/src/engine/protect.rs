@@ -162,8 +162,9 @@ mod key_length_tests {
         let (mut doc, _) =
             page_document("BT /F1 12 Tf 72 700 Td (Key length) Tj ET", dictionary! {});
         let source = crate::engine::save(&mut doc).unwrap();
+        let user_password = uuid::Uuid::new_v4().simple().to_string();
         let request = ProtectionRequest {
-            user_password: "synthetic-open".to_string().into(),
+            user_password: user_password.into(),
             owner_password: String::new().into(),
             permissions: PermissionRequest::all(),
         };

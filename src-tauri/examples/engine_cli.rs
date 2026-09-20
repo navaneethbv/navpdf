@@ -7,19 +7,24 @@
 
 use navpdf_lib::engine::{self, compress, protect, redact, sign};
 use serde_json::{json, Value};
+use std::io::{self, Write};
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
-use std::{env, fs, io};
+use std::{env, fs};
 
 fn main() -> ExitCode {
     match run() {
         Ok(report) => {
-            println!("{report}");
+            let mut out = io::stdout().lock();
+            let _ = out.write_all(report.to_string().as_bytes());
+            let _ = out.write_all(b"\n");
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("{error}");
+            let mut err = io::stderr().lock();
+            let _ = err.write_all(error.as_bytes());
+            let _ = err.write_all(b"\n");
             ExitCode::FAILURE
         }
     }
