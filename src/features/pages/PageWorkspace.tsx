@@ -505,7 +505,9 @@ export function PageWorkspace({
           <button
             type="button"
             title="Duplicate selected pages"
-            onClick={() => void handleDuplicate()}
+            onClick={() => {
+              void handleDuplicate();
+            }}
             disabled={selected.length === 0 || busy}
           >
             <Plus size={17} />
@@ -514,7 +516,9 @@ export function PageWorkspace({
           <button
             type="button"
             title="Insert pages from a PDF"
-            onClick={() => pdfInputRef.current?.click()}
+            onClick={() => {
+              pdfInputRef.current?.click();
+            }}
             disabled={busy}
           >
             <Plus size={17} />
@@ -523,7 +527,9 @@ export function PageWorkspace({
           <button
             type="button"
             title="Replace the selected page"
-            onClick={() => replacePdfInputRef.current?.click()}
+            onClick={() => {
+              replacePdfInputRef.current?.click();
+            }}
             disabled={selected.length !== 1 || busy}
           >
             <ImageIcon size={17} />
@@ -532,7 +538,9 @@ export function PageWorkspace({
           <button
             type="button"
             title="Insert Image as Page"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              fileInputRef.current?.click();
+            }}
             disabled={busy}
           >
             <ImageIcon size={17} />
@@ -552,14 +560,18 @@ export function PageWorkspace({
             type="file"
             accept="application/pdf,.pdf"
             hidden
-            onChange={(event) => void handleImportPdf(event, "insert")}
+            onChange={(event) => {
+              void handleImportPdf(event, "insert");
+            }}
           />
           <input
             ref={replacePdfInputRef}
             type="file"
             accept="application/pdf,.pdf"
             hidden
-            onChange={(event) => void handleImportPdf(event, "replace")}
+            onChange={(event) => {
+              void handleImportPdf(event, "replace");
+            }}
           />
           <button
             type="button"
@@ -583,7 +595,13 @@ export function PageWorkspace({
             <Crop size={17} />
             <span>Crop</span>
           </button>
-          <button type="button" title="Split PDF" onClick={() => setShowSplit(!showSplit)}>
+          <button
+            type="button"
+            title="Split PDF"
+            onClick={() => {
+              setShowSplit(!showSplit);
+            }}
+          >
             <Split size={17} />
             <span>Split</span>
           </button>
@@ -632,7 +650,12 @@ export function PageWorkspace({
           >
             Apply Crop
           </button>
-          <button type="button" onClick={() => setShowCrop(false)}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowCrop(false);
+            }}
+          >
             Cancel
           </button>
         </div>

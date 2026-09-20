@@ -640,7 +640,9 @@ export function FillAndSign({
               <button
                 type="button"
                 className="button-primary"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  fileInputRef.current?.click();
+                }}
               >
                 <Upload size={16} /> Choose Image File...
               </button>

@@ -197,7 +197,9 @@ export function AttachmentsDialog({
             <button
               type="button"
               className="button-primary"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                fileInputRef.current?.click();
+              }}
               disabled={saving}
             >
               <Plus size={16} /> Attach New File...

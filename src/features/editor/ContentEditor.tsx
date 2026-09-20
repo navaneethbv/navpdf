@@ -347,7 +347,9 @@ export function ContentEditor({
                 <button
                   type="button"
                   className="button-secondary"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                  }}
                   disabled={saving}
                 >
                   Choose PNG or JPEG...
