@@ -182,7 +182,9 @@ export function PrintDialog({
           </button>
           <button
             type="button"
-            onClick={handlePrint}
+            onClick={() => {
+              void handlePrint();
+            }}
             disabled={printing}
             className="button-primary"
           >

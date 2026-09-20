@@ -132,7 +132,7 @@ export function ContentEditor({
             {type === "text" ? <Type size={18} /> : <ImageIcon size={18} />}
             <h3>{type === "text" ? "Add Text to Page" : "Insert Image"}</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -345,6 +345,7 @@ export function ContentEditor({
               <fieldset className="setting-group">
                 <legend className="setting-title">Select Image File</legend>
                 <button
+                  type="button"
                   className="button-secondary"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={saving}
@@ -356,7 +357,9 @@ export function ContentEditor({
                   type="file"
                   accept="image/png, image/jpeg"
                   style={{ display: "none" }}
-                  onChange={handleApplyImage}
+                  onChange={(e) => {
+                    void handleApplyImage(e);
+                  }}
                 />
               </fieldset>
             </>
@@ -364,12 +367,15 @@ export function ContentEditor({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           {type === "text" && (
             <button
-              onClick={handleApplyText}
+              type="button"
+              onClick={() => {
+                void handleApplyText();
+              }}
               disabled={saving || !text.trim() || !coverage.valid}
               className="button-primary"
             >

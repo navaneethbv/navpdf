@@ -239,7 +239,9 @@ export function LinkDialog({
           </button>
           <button
             type="button"
-            onClick={handleAddLink}
+            onClick={() => {
+              void handleAddLink();
+            }}
             disabled={saving || (linkType === "url" && !urlValidation.valid)}
             className="button-primary"
           >

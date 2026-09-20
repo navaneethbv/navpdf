@@ -411,8 +411,12 @@ export function PageWorkspace({
           <span className="selected-count">
             {selected.length} of {totalPages} selected
           </span>
-          <button onClick={selectAll}>Select All</button>
-          <button onClick={selectNone}>Deselect</button>
+          <button type="button" onClick={selectAll}>
+            Select All
+          </button>
+          <button type="button" onClick={selectNone}>
+            Deselect
+          </button>
         </div>
 
         {structureLoss && (
@@ -423,57 +427,83 @@ export function PageWorkspace({
 
         <div className="page-workspace-toolbar">
           <button
+            type="button"
             title="Rotate CW (90°)"
-            onClick={() => handleRotate(90)}
+            onClick={() => {
+              void handleRotate(90);
+            }}
             disabled={selected.length === 0 || busy}
           >
             <RotateCw size={17} />
             <span>Rotate CW</span>
           </button>
           <button
+            type="button"
             title="Rotate CCW (-90°)"
-            onClick={() => handleRotate(-90)}
+            onClick={() => {
+              void handleRotate(-90);
+            }}
             disabled={selected.length === 0 || busy}
           >
             <RotateCcw size={17} />
             <span>Rotate CCW</span>
           </button>
           <button
+            type="button"
             title="Move Page Left"
-            onClick={() => handleMove(-1)}
+            onClick={() => {
+              void handleMove(-1);
+            }}
             disabled={selected.length !== 1 || selected[0] === 0 || busy}
           >
             <ArrowLeft size={17} />
           </button>
           <button
+            type="button"
             title="Move Page Right"
-            onClick={() => handleMove(1)}
+            onClick={() => {
+              void handleMove(1);
+            }}
             disabled={selected.length !== 1 || selected[0] === totalPages - 1 || busy}
           >
             <ArrowRight size={17} />
           </button>
           <button
+            type="button"
             title="Delete selected pages"
             className="danger"
-            onClick={handleDelete}
+            onClick={() => {
+              void handleDelete();
+            }}
             disabled={selected.length === 0 || selected.length >= totalPages || busy}
           >
             <Trash2 size={17} />
             <span>Delete</span>
           </button>
           <button
+            type="button"
             title="Extract selected pages as new PDF"
-            onClick={handleExtract}
+            onClick={() => {
+              void handleExtract();
+            }}
             disabled={selected.length === 0 || busy}
           >
             <Download size={17} />
             <span>Extract</span>
           </button>
-          <button title="Insert Blank Page" onClick={handleInsertBlank} disabled={busy}>
+          <button
+            type="button"
+            title="Insert Blank Page"
+            onClick={() => {
+              void handleInsertBlank();
+            }}
+            disabled={busy}
+          >
             <Plus size={17} />
             <span>Blank</span>
           </button>
           <button
+            type="button"
             title="Duplicate selected pages"
             onClick={() => void handleDuplicate()}
             disabled={selected.length === 0 || busy}
@@ -482,6 +512,7 @@ export function PageWorkspace({
             <span>Duplicate</span>
           </button>
           <button
+            type="button"
             title="Insert pages from a PDF"
             onClick={() => pdfInputRef.current?.click()}
             disabled={busy}
@@ -490,6 +521,7 @@ export function PageWorkspace({
             <span>Insert PDF</span>
           </button>
           <button
+            type="button"
             title="Replace the selected page"
             onClick={() => replacePdfInputRef.current?.click()}
             disabled={selected.length !== 1 || busy}
@@ -498,6 +530,7 @@ export function PageWorkspace({
             <span>Replace</span>
           </button>
           <button
+            type="button"
             title="Insert Image as Page"
             onClick={() => fileInputRef.current?.click()}
             disabled={busy}
@@ -510,7 +543,9 @@ export function PageWorkspace({
             type="file"
             accept="image/png, image/jpeg"
             style={{ display: "none" }}
-            onChange={handleInsertImage}
+            onChange={(event) => {
+              void handleInsertImage(event);
+            }}
           />
           <input
             ref={pdfInputRef}
@@ -527,29 +562,37 @@ export function PageWorkspace({
             onChange={(event) => void handleImportPdf(event, "replace")}
           />
           <button
+            type="button"
             title="Crop Page"
-            onClick={async () => {
-              if (!showCrop && controller?.pdf && selected.length > 0) {
-                try {
-                  const pdfPage = await controller.pdf.getPage(selected[0] + 1);
-                  const vp = pdfPage.getViewport({ scale: 1 });
-                  setCropWidth(Math.round(vp.width));
-                  setCropHeight(Math.round(vp.height));
-                } catch {
-                  // ignore
+            onClick={() => {
+              void (async () => {
+                if (!showCrop && controller?.pdf && selected.length > 0) {
+                  try {
+                    const pdfPage = await controller.pdf.getPage(selected[0] + 1);
+                    const vp = pdfPage.getViewport({ scale: 1 });
+                    setCropWidth(Math.round(vp.width));
+                    setCropHeight(Math.round(vp.height));
+                  } catch {
+                    // ignore
+                  }
                 }
-              }
-              setShowCrop(!showCrop);
+                setShowCrop(!showCrop);
+              })();
             }}
           >
             <Crop size={17} />
             <span>Crop</span>
           </button>
-          <button title="Split PDF" onClick={() => setShowSplit(!showSplit)}>
+          <button type="button" title="Split PDF" onClick={() => setShowSplit(!showSplit)}>
             <Split size={17} />
             <span>Split</span>
           </button>
-          <button className="icon-button" onClick={onClose} aria-label="Close page manager">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close page manager"
+          >
             <X size={20} />
           </button>
         </div>
@@ -581,8 +624,17 @@ export function PageWorkspace({
             Y (pt):{" "}
             <input type="number" value={cropY} onChange={(e) => setCropY(Number(e.target.value))} />
           </label>
-          <button onClick={handleCrop}>Apply Crop</button>
-          <button onClick={() => setShowCrop(false)}>Cancel</button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleCrop();
+            }}
+          >
+            Apply Crop
+          </button>
+          <button type="button" onClick={() => setShowCrop(false)}>
+            Cancel
+          </button>
         </div>
       )}
 

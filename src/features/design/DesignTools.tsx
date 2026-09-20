@@ -245,7 +245,9 @@ export function DesignTools({
           </button>
           <button
             type="button"
-            onClick={handleGenerateCover}
+            onClick={() => {
+              void handleGenerateCover();
+            }}
             disabled={generating || !title.trim()}
             className="button-primary"
           >

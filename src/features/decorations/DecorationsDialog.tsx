@@ -540,7 +540,10 @@ export function DecorationsDialog({
 
         <div className="modal-footer" style={{ display: "flex", justifyContent: "space-between" }}>
           <button
-            onClick={handleRemoveDecorations}
+            type="button"
+            onClick={() => {
+              void handleRemoveDecorations();
+            }}
             disabled={applying}
             className="button-secondary"
             style={{ color: "var(--accent-red, #d32f2f)" }}
@@ -555,7 +558,9 @@ export function DecorationsDialog({
             </button>
             <button
               type="button"
-              onClick={handleApply}
+              onClick={() => {
+                void handleApply();
+              }}
               disabled={applying}
               className="button-primary"
             >

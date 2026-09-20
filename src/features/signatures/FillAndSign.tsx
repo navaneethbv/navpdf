@@ -333,7 +333,7 @@ export function FillAndSign({
             <PenLine size={18} />
             <h3>Fill & Sign</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
             <XIcon size={18} />
           </button>
         </div>
@@ -381,7 +381,9 @@ export function FillAndSign({
                 type="button"
                 className="button-primary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
-                onClick={() => handleMigrate(true)}
+                onClick={() => {
+                  void handleMigrate(true);
+                }}
               >
                 Migrate to Secure Storage
               </button>
@@ -389,7 +391,9 @@ export function FillAndSign({
                 type="button"
                 className="button-secondary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
-                onClick={() => handleMigrate(false)}
+                onClick={() => {
+                  void handleMigrate(false);
+                }}
               >
                 Discard Plaintext
               </button>
@@ -577,7 +581,13 @@ export function FillAndSign({
                 <button type="button" className="button-secondary" onClick={clearCanvas}>
                   Clear
                 </button>
-                <button type="button" className="button-primary" onClick={handleSaveDrawn}>
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={() => {
+                    void handleSaveDrawn();
+                  }}
+                >
                   Save Signature
                 </button>
               </div>
@@ -608,7 +618,9 @@ export function FillAndSign({
               <button
                 type="button"
                 className="button-primary"
-                onClick={handleSaveTyped}
+                onClick={() => {
+                  void handleSaveTyped();
+                }}
                 disabled={!typedName.trim()}
               >
                 Save Signature
@@ -640,23 +652,53 @@ export function FillAndSign({
 
           {tab === "marks" && (
             <div className="quick-marks-grid">
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("check")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("check");
+                }}
+              >
                 <Check size={24} />
                 <span>Checkmark</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("cross")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("cross");
+                }}
+              >
                 <XIcon size={24} />
                 <span>Cross</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("dot")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("dot");
+                }}
+              >
                 <Circle size={20} />
                 <span>Dot</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("box")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("box");
+                }}
+              >
                 <Square size={20} />
                 <span>Box</span>
               </button>
-              <button type="button" className="mark-card" onClick={() => handlePlaceMark("line")}>
+              <button
+                type="button"
+                className="mark-card"
+                onClick={() => {
+                  void handlePlaceMark("line");
+                }}
+              >
                 <Minus size={24} />
                 <span>Line</span>
               </button>
@@ -767,7 +809,9 @@ export function FillAndSign({
           {tab === "library" && selectedSig && (
             <button
               type="button"
-              onClick={handlePlaceSignature}
+              onClick={() => {
+                void handlePlaceSignature();
+              }}
               disabled={saving}
               className="button-primary"
             >

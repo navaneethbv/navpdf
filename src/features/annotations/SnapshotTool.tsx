@@ -151,7 +151,12 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
         {captured ? (
           <div className="snapshot-actions">
             <span>Snapshot captured!</span>
-            <button type="button" onClick={handleCopy}>
+            <button
+              type="button"
+              onClick={() => {
+                void handleCopy();
+              }}
+            >
               {copied ? <Check size={16} /> : <Copy size={16} />}
               <span>{copied ? "Copied" : "Copy to Clipboard"}</span>
             </button>

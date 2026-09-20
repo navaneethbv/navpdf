@@ -154,7 +154,9 @@ export function AttachmentsDialog({
             type="button"
             className="icon-button"
             title="Download attachment"
-            onClick={() => handleDownloadAttachment(att)}
+            onClick={() => {
+              void handleDownloadAttachment(att);
+            }}
             disabled={saving}
             aria-label={`Download ${att.name}`}
           >
@@ -164,7 +166,9 @@ export function AttachmentsDialog({
             type="button"
             className="icon-button"
             title="Delete attachment"
-            onClick={() => handleDeleteAttachment(att)}
+            onClick={() => {
+              void handleDeleteAttachment(att);
+            }}
             disabled={saving}
             aria-label={`Delete ${att.name}`}
             style={{ color: "var(--accent-red, #d32f2f)" }}
@@ -183,7 +187,7 @@ export function AttachmentsDialog({
             <Paperclip size={18} />
             <h3>File Attachments</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -202,7 +206,9 @@ export function AttachmentsDialog({
               ref={fileInputRef}
               type="file"
               style={{ display: "none" }}
-              onChange={handleAddFile}
+              onChange={(e) => {
+                void handleAddFile(e);
+              }}
             />
           </div>
 

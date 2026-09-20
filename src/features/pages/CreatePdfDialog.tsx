@@ -309,7 +309,9 @@ export function CreatePdfDialog({
           </button>
           <button
             type="button"
-            onClick={tab === "blank" ? handleCreateBlank : handleCombineFiles}
+            onClick={() => {
+              void (tab === "blank" ? handleCreateBlank() : handleCombineFiles());
+            }}
             disabled={
               creating ||
               (tab === "blank" &&

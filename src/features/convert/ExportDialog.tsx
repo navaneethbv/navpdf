@@ -362,7 +362,9 @@ export function ExportDialog({
           )}
           <button
             type="button"
-            onClick={format === "txt" ? handleExportText : handleExportImage}
+            onClick={() => {
+              void (format === "txt" ? handleExportText() : handleExportImage());
+            }}
             disabled={exporting}
             className="button-primary"
           >

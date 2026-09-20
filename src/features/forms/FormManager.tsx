@@ -332,7 +332,7 @@ export function FormManager({
             <CheckSquare size={18} />
             <h3>Prepare Form Fields</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -602,7 +602,9 @@ export function FormManager({
           </button>
           <button
             type="button"
-            onClick={handleAddField}
+            onClick={() => {
+              void handleAddField();
+            }}
             disabled={saving || !fieldName.trim()}
             className="button-primary"
           >
