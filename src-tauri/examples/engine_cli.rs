@@ -6,26 +6,48 @@
 //! `verify` prints the signature report and writes no output file.
 
 use navpdf_lib::engine::{self, compress, protect, redact, sign};
-use serde_json::{json, Value};
+use serde::Serialize;
+use serde_json::Value;
+use std::io::{self, Write};
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
-use std::{env, fs, io};
+use std::{env, fs};
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum CliReport {
+    Redact(redact::RedactionReport),
+    Protect {
+        pages: u32,
+    },
+    Unlock {},
+    Compress(compress::CompressionReport),
+    Sign {
+        certificate: sign::CertificateSummary,
+        pages: u32,
+    },
+    Verify(Vec<sign::SignatureInfo>),
+}
 
 fn main() -> ExitCode {
     match run() {
         Ok(report) => {
-            println!("{report}");
+            let mut out = io::stdout().lock();
+            let _ = serde_json::to_writer(&mut out, &report);
+            let _ = out.write_all(b"\n");
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("{error}");
+            let mut err = io::stderr().lock();
+            let _ = err.write_all(error.as_bytes());
+            let _ = err.write_all(b"\n");
             ExitCode::FAILURE
         }
     }
 }
 
-fn run() -> Result<Value, String> {
+fn run() -> Result<CliReport, String> {
     let args: Vec<String> = env::args().skip(1).collect();
     let [operation, input, output, request] = args.as_slice() else {
         return Err(
@@ -47,14 +69,14 @@ fn run() -> Result<Value, String> {
             let request: redact::RedactionRequest = parse(request)?;
             let (result, report) = redact::apply(&bytes, &request, &cancel)?;
             fs::write(output, result).map_err(|error| format!("Cannot write {output}: {error}"))?;
-            Ok(json!(report))
+            Ok(CliReport::Redact(report))
         }
         "protect" => {
             let request: protect::ProtectionRequest = parse(request)?;
             let pages = engine::load(&bytes)?.get_pages().len() as u32;
             let result = protect::protect(&bytes, &request, pages)?;
             fs::write(output, result).map_err(|error| format!("Cannot write {output}: {error}"))?;
-            Ok(json!({ "pages": pages }))
+            Ok(CliReport::Protect { pages })
         }
         "unlock" => {
             let password = request["password"]
@@ -62,7 +84,7 @@ fn run() -> Result<Value, String> {
                 .ok_or("A password is required.")?;
             let result = protect::unlock(&bytes, password)?;
             fs::write(output, result).map_err(|error| format!("Cannot write {output}: {error}"))?;
-            Ok(json!({}))
+            Ok(CliReport::Unlock {})
         }
         "compress" => {
             let preset: compress::CompressionPreset = parse(request["preset"].clone())?;
@@ -71,7 +93,7 @@ fn run() -> Result<Value, String> {
                 fs::write(output, result)
                     .map_err(|error| format!("Cannot write {output}: {error}"))?;
             }
-            Ok(json!(report))
+            Ok(CliReport::Compress(report))
         }
         "sign" => {
             let path = request["identity"]
@@ -94,9 +116,12 @@ fn run() -> Result<Value, String> {
             let signed = sign::sign(&bytes, &identity, &options, SystemTime::now())?;
             sign::validate_signed(&signed, pages)?;
             fs::write(output, signed).map_err(|error| format!("Cannot write {output}: {error}"))?;
-            Ok(json!({ "certificate": identity.summary, "pages": pages }))
+            Ok(CliReport::Sign {
+                certificate: identity.summary,
+                pages,
+            })
         }
-        "verify" => Ok(json!(sign::verify(&bytes)?)),
+        "verify" => Ok(CliReport::Verify(sign::verify(&bytes)?)),
         other => Err(format!("Unknown operation {other}.")),
     }
 }
