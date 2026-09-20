@@ -161,9 +161,10 @@ function BookmarkTree({
   return (
     <ul className="bookmarks">
       {nodes.map((node, i) => (
-        <li key={i}>
+        <li key={`${node.title}-${i}`}>
           {node.destination ? (
             <button
+              type="button"
               onClick={() => {
                 const dest = node.destination;
                 if (!dest) return;

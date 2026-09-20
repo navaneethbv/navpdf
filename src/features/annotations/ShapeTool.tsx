@@ -164,8 +164,8 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
           cancel();
         }
       }}
-      onPointerDown={(event) => void handleDown(event)}
-      onPointerMove={(event) => void handleMove(event)}
+      onPointerDown={handleDown}
+      onPointerMove={handleMove}
       onPointerUp={(event) => void handleUp(event)}
       onPointerCancel={cancel}
     >

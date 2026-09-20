@@ -1156,7 +1156,7 @@ export async function addFormField(
     let radioGroup: PDFRadioGroup;
     if (rg) {
       if (!(rg instanceof PDFRadioGroup)) {
-        throw new Error(`Field "${groupName}" already exists and is not a radio group.`);
+        throw new TypeError(`Field "${groupName}" already exists and is not a radio group.`);
       }
       radioGroup = rg;
     } else {
@@ -1356,14 +1356,12 @@ function wrapText(
       const width = font.widthOfTextAtSize(testLine, fontSize);
       if (width <= maxWidth) {
         currentLine = testLine;
+      } else if (currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
       } else {
-        if (currentLine) {
-          lines.push(currentLine);
-          currentLine = word;
-        } else {
-          lines.push(word);
-          currentLine = "";
-        }
+        lines.push(word);
+        currentLine = "";
       }
     }
     if (currentLine) {
@@ -2164,9 +2162,7 @@ export async function listEmbeddedAttachments(
             }
           }
         }
-        if (size === undefined) {
-          size = (stream as { getContents: () => Uint8Array }).getContents().length;
-        }
+        size ??= (stream as { getContents: () => Uint8Array }).getContents().length;
       }
     }
     list.push({ name: nameStr, size, description });
@@ -2438,13 +2434,15 @@ export async function applyOcrSearchableLayer(
           0,
         );
         const horizontalScale = (wNorm * width) / advance;
-        ops.push({
-          toString: () => `/${fontKey.asString().slice(1)} ${fontSize} Tf`,
-        });
-        ops.push({
-          toString: () => `${horizontalScale.toFixed(6)} 0 0 1 ${x} ${y} Tm`,
-        });
-        ops.push({ toString: () => `${encodedText} Tj` });
+        ops.push(
+          {
+            toString: () => `/${fontKey.asString().slice(1)} ${fontSize} Tf`,
+          },
+          {
+            toString: () => `${horizontalScale.toFixed(6)} 0 0 1 ${x} ${y} Tm`,
+          },
+          { toString: () => `${encodedText} Tj` },
+        );
       }
     }
     ops.push({ toString: () => "0 Tr\nET\nQ" });

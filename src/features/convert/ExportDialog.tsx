@@ -76,20 +76,8 @@ export function ExportDialog({
         throw new Error("No valid pages selected for export.");
       }
 
-      const textChunks: string[] = [];
-      for (let i = 0; i < targetIndices.length; i++) {
-        if (cancelled()) return;
-        const pageNum = targetIndices[i] + 1;
-        setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-        const page = await source.getPage(pageNum);
-        if (cancelled()) return;
-        const content = await page.getTextContent();
-        // @ts-expect-error PDF.js text items
-        const pageText = extractPageTextContent(content.items);
-        textChunks.push(`--- Page ${pageNum} ---\n\n${pageText}\n\n`);
-      }
-
-      if (cancelled()) return;
+      const textChunks = await collectPagesText(source, targetIndices, cancelled, setProgress);
+      if (!textChunks || cancelled()) return;
 
       const fullText = textChunks.join("\n");
       if (
@@ -386,17 +374,38 @@ export function ExportDialog({
   );
 }
 
+async function collectPagesText(
+  source: NonNullable<ViewerController["pdf"]>,
+  targetIndices: number[],
+  cancelled: () => boolean,
+  onProgress: (percent: number) => void,
+): Promise<string[] | null> {
+  const textChunks: string[] = [];
+  for (let i = 0; i < targetIndices.length; i++) {
+    if (cancelled()) return null;
+    const pageNum = targetIndices[i] + 1;
+    onProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
+    const page = await source.getPage(pageNum);
+    if (cancelled()) return null;
+    const content = await page.getTextContent();
+    // @ts-expect-error PDF.js text items
+    const pageText = extractPageTextContent(content.items);
+    textChunks.push(`--- Page ${pageNum} ---\n\n${pageText}\n\n`);
+  }
+  return textChunks;
+}
+
 function extractPageTextContent(items: Array<{ str?: string; transform?: number[] }>): string {
   const filtered = items
     .filter((item) => item.str && item.str.trim())
     .sort((a, b) => {
-      const aY = a.transform ? a.transform[5] : 0;
-      const bY = b.transform ? b.transform[5] : 0;
+      const aY = a.transform?.[5] ?? 0;
+      const bY = b.transform?.[5] ?? 0;
       if (Math.abs(aY - bY) > 6) {
         return bY - aY;
       }
-      const aX = a.transform ? a.transform[4] : 0;
-      const bX = b.transform ? b.transform[5] : 0;
+      const aX = a.transform?.[4] ?? 0;
+      const bX = b.transform?.[4] ?? 0;
       return aX - bX;
     });
   return filtered.map((item) => item.str).join(" ");

@@ -173,6 +173,7 @@ export function DesignTools({
             <legend className="setting-title">Template Style</legend>
             <div className="tab-buttons-bar">
               <button
+                type="button"
                 className={template === "modern" ? "active" : ""}
                 aria-pressed={template === "modern"}
                 onClick={() => setTemplate("modern")}
@@ -180,6 +181,7 @@ export function DesignTools({
                 Modern Accent
               </button>
               <button
+                type="button"
                 className={template === "corporate" ? "active" : ""}
                 aria-pressed={template === "corporate"}
                 onClick={() => setTemplate("corporate")}
@@ -187,6 +189,7 @@ export function DesignTools({
                 Corporate
               </button>
               <button
+                type="button"
                 className={template === "minimal" ? "active" : ""}
                 aria-pressed={template === "minimal"}
                 onClick={() => setTemplate("minimal")}
@@ -237,10 +240,11 @@ export function DesignTools({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleGenerateCover}
             disabled={generating || !title.trim()}
             className="button-primary"

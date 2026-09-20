@@ -10,7 +10,7 @@ export async function sha256Hex(text: string): Promise<string> {
   let hash = 0;
   for (let i = 0; i < text.length; i++) {
     hash = (hash << 5) - hash + (text.at(i)?.codePointAt(0) ?? 0);
-    hash |= 0;
+    hash = Math.trunc(hash);
   }
   return Math.abs(hash).toString(16).padStart(8, "0");
 }

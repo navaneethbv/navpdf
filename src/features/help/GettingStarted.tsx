@@ -87,7 +87,9 @@ export function GettingStarted({ ready }: Readonly<{ ready: boolean }>) {
   return <GuideDialog key={mode} mode={mode} />;
 }
 
-function GuideDialog({ mode }: Readonly<{ mode: "help" | "tour" | "tips" }>) {
+type GuideMode = "help" | "tour" | "tips";
+
+function GuideDialog({ mode }: Readonly<{ mode: GuideMode }>) {
   const [step, setStep] = useState(0);
   const [tip, setTip] = useState(() => Math.floor(Date.now() / 86_400_000) % tips.length);
   const [hideTips, setHideTips] = useState(false);
@@ -234,7 +236,7 @@ function getGuideTitle(mode: "help" | "tour" | "tips"): string {
   }
 }
 
-function getGuideCard(mode: "help" | "tour" | "tips", step: number, tip: number) {
+function getGuideCard(mode: GuideMode, step: number, tip: number) {
   if (mode === "tour") {
     const current = steps.at(step) ?? steps[0];
     return {
@@ -255,17 +257,13 @@ function getGuideCard(mode: "help" | "tour" | "tips", step: number, tip: number)
   };
 }
 
-async function persistGuidePreferences(
-  mode: "help" | "tour" | "tips",
-  hideTips: boolean,
-): Promise<boolean> {
+async function persistGuidePreferences(mode: GuideMode, hideTips: boolean): Promise<void> {
   const state = useWorkspace.getState();
   const patch: Partial<Preferences> = {};
   if (mode === "tour" && !state.local.preferences.tourCompleted) patch.tourCompleted = true;
   if (mode === "tips" && hideTips) patch.showStartupTips = false;
-  if (Object.keys(patch).length === 0) return true;
+  if (Object.keys(patch).length === 0) return;
   const preferences = { ...state.local.preferences, ...patch };
   await savePreferences(preferences);
   useWorkspace.getState().set({ local: { ...state.local, preferences } });
-  return true;
 }

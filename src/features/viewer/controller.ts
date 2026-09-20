@@ -3,9 +3,9 @@ import {
   AnnotationMode,
   AnnotationEditorParamsType,
   PermissionFlag,
+  type PDFDocumentProxy,
+  type PDFDocumentLoadingTask,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
-import type { PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
-import type { PDFDocumentLoadingTask } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { AnnotationEditorUIManager } from "pdfjs-dist/types/src/display/editor/tools";
 import {
   EventBus,
@@ -67,7 +67,7 @@ export class ViewerController {
   private started = 0;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
   private pageTimer: ReturnType<typeof setTimeout> | undefined;
-  private contexts = new Map<number, string>();
+  private readonly contexts = new Map<number, string>();
   private abort = new AbortController();
   private searchGeneration = 0;
   readonly history = new RevisionHistory();
@@ -75,7 +75,7 @@ export class ViewerController {
   private nativeCanRedo = false;
   private committedRevisionId: string | undefined;
   private storageModified = false;
-  private mutationQueue = new MutationQueue();
+  private readonly mutationQueue = new MutationQueue();
   private identity: string | null = null;
   private replacing = false;
 
@@ -635,8 +635,7 @@ export class ViewerController {
   goToPage(labelOrNumber: string | number) {
     if (typeof labelOrNumber === "string") {
       const label = labelOrNumber.trim();
-      const labelIndex =
-        useWorkspace.getState().pageLabels?.findIndex((item) => item === label) ?? -1;
+      const labelIndex = useWorkspace.getState().pageLabels?.indexOf(label) ?? -1;
       if (labelIndex >= 0) {
         this.goTo(labelIndex + 1);
         return;

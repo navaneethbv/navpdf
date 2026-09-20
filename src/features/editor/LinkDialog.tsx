@@ -96,6 +96,7 @@ export function LinkDialog({
 
         <div className="tab-buttons-bar">
           <button
+            type="button"
             className={linkType === "url" ? "active" : ""}
             aria-pressed={linkType === "url"}
             onClick={() => setLinkType("url")}
@@ -103,6 +104,7 @@ export function LinkDialog({
             <ExternalLink size={15} /> External URL
           </button>
           <button
+            type="button"
             className={linkType === "page" ? "active" : ""}
             aria-pressed={linkType === "page"}
             onClick={() => setLinkType("page")}
@@ -232,10 +234,11 @@ export function LinkDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleAddLink}
             disabled={saving || (linkType === "url" && !urlValidation.valid)}
             className="button-primary"

@@ -318,7 +318,7 @@ export function Settings() {
           <button type="button" className="button" onClick={close} disabled={saving}>
             Cancel
           </button>
-          <button className="button primary" disabled={saving}>
+          <button type="submit" className="button primary" disabled={saving}>
             {saving ? "Saving settings…" : "Save settings"}
           </button>
         </div>

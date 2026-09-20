@@ -151,15 +151,20 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
         {captured ? (
           <div className="snapshot-actions">
             <span>Snapshot captured!</span>
-            <button onClick={handleCopy}>
+            <button type="button" onClick={handleCopy}>
               {copied ? <Check size={16} /> : <Copy size={16} />}
               <span>{copied ? "Copied" : "Copy to Clipboard"}</span>
             </button>
-            <button onClick={handleDownload}>
+            <button type="button" onClick={handleDownload}>
               <Download size={16} />
               <span>Download PNG</span>
             </button>
-            <button onClick={onClose} className="icon-button">
+            <button
+              type="button"
+              onClick={onClose}
+              className="icon-button"
+              aria-label="Close snapshot"
+            >
               <X size={16} />
             </button>
           </div>

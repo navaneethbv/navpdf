@@ -356,23 +356,25 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
     },
   ];
 
-  tools.push({
-    id: "export-pdf",
-    label: "Export a PDF",
-    description: "Word, PowerPoint, Excel, images and text",
-    category: "convert",
-    icon: Download,
-    action: () => s.set({ activeModal: "export-options" }),
-    disabled: !hasDoc,
-  });
-  tools.push({
-    id: "import-pdf",
-    label: "Import / Convert to PDF",
-    description: "Create a PDF from PDFs, PNG or JPEG images",
-    category: "pages",
-    icon: FilePlus,
-    action: () => s.set({ activeModal: "import-pdf" }),
-  });
+  tools.push(
+    {
+      id: "export-pdf",
+      label: "Export a PDF",
+      description: "Word, PowerPoint, Excel, images and text",
+      category: "convert",
+      icon: Download,
+      action: () => s.set({ activeModal: "export-options" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "import-pdf",
+      label: "Import / Convert to PDF",
+      description: "Create a PDF from PDFs, PNG or JPEG images",
+      category: "pages",
+      icon: FilePlus,
+      action: () => s.set({ activeModal: "import-pdf" }),
+    },
+  );
   const preferred = [
     "edit-existing",
     "export-pdf",

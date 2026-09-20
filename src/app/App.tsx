@@ -405,6 +405,7 @@ export default function App() {
           <AlertCircle size={17} />
           <span>{s.error}</span>
           <button
+            type="button"
             className="icon-button"
             onClick={() => s.set({ error: "" })}
             aria-label="Dismiss error"
@@ -418,6 +419,7 @@ export default function App() {
           <Info size={17} />
           <span>{s.formNotice}</span>
           <button
+            type="button"
             className="icon-button"
             onClick={() => s.set({ formNotice: null })}
             aria-label="Dismiss form notice"
@@ -483,6 +485,7 @@ export default function App() {
             {s.local.recents.length ? (
               s.local.recents.map((item) => (
                 <button
+                  type="button"
                   className="button"
                   key={item.id}
                   onClick={() => {

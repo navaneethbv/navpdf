@@ -170,8 +170,7 @@ export function OfficeExport({
     if (!pdf) return null;
     const numbers = pageNumbers ?? Array.from({ length: pdf.numPages }, (_, i) => i + 1);
     const result: PageLayout[] = [];
-    for (let index = 0; index < numbers.length; index++) {
-      const number = numbers[index];
+    for (const number of numbers) {
       if (cancelled.current) return null;
       setProgress(`Reading page ${number} of ${numbers.length}…`);
       const page = (await pdf.getPage(number)) as unknown as PageProxy;
@@ -320,6 +319,7 @@ export function OfficeExport({
           </fieldset>
           {format === "xlsx" && (
             <button
+              type="button"
               className="button-secondary"
               onClick={() => void previewCells()}
               disabled={running}
@@ -332,9 +332,9 @@ export function OfficeExport({
               <table>
                 <tbody>
                   {preview.map((row, r) => (
-                    <tr key={r}>
+                    <tr key={`row-${r}-${row.slice(0, 2).join(":")}`}>
                       {row.map((cell, c) => (
-                        <td key={c}>{cell}</td>
+                        <td key={`cell-${r}-${c}-${cell.slice(0, 8)}`}>{cell}</td>
                       ))}
                     </tr>
                   ))}
@@ -352,6 +352,7 @@ export function OfficeExport({
         <div className="modal-footer">
           {running ? (
             <button
+              type="button"
               onClick={() => {
                 cancelled.current = true;
                 s.set({ status: "Export cancelled" });
@@ -361,11 +362,12 @@ export function OfficeExport({
               Cancel Export
             </button>
           ) : (
-            <button onClick={onClose} className="button-secondary">
+            <button type="button" onClick={onClose} className="button-secondary">
               Close
             </button>
           )}
           <button
+            type="button"
             onClick={() => void exportFile()}
             disabled={running || !controller?.pdf}
             className="button-primary"

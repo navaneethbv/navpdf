@@ -55,7 +55,8 @@ export function rankPassages(
     }
     flush();
   }
-  return passages.sort((a, b) => b.score - a.score || a.page - b.page).slice(0, limit);
+  passages.sort((a, b) => b.score - a.score || a.page - b.page);
+  return passages.slice(0, limit);
 }
 
 export function AssistantPanel({
@@ -168,7 +169,7 @@ export function AssistantPanel({
               </button>
             </div>
           )}
-          {results && results.length === 0 && (
+          {results?.length === 0 && (
             <output className="field-hint">
               No passage in this document contains enough of those words, so there is nothing to
               cite. Try different words.

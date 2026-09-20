@@ -90,8 +90,7 @@ export function CreatePdfDialog({
       const mergeInputs: MergeInputItem[] = [];
       const manifestSummary: string[] = [];
 
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
+      for (const item of items) {
         const buffer = isImageFile(item.file)
           ? await imageFileToPdf(item.file)
           : new Uint8Array(await item.file.arrayBuffer());
@@ -265,6 +264,7 @@ export function CreatePdfDialog({
                       </div>
                       <div className="combine-file-actions">
                         <button
+                          type="button"
                           className="icon-button"
                           onClick={() => moveItem(i, -1)}
                           disabled={i === 0}
@@ -274,6 +274,7 @@ export function CreatePdfDialog({
                           <ArrowUp size={14} />
                         </button>
                         <button
+                          type="button"
                           className="icon-button"
                           onClick={() => moveItem(i, 1)}
                           disabled={i === items.length - 1}
@@ -283,6 +284,7 @@ export function CreatePdfDialog({
                           <ArrowDown size={14} />
                         </button>
                         <button
+                          type="button"
                           className="icon-button danger"
                           onClick={() => removeItem(i)}
                           title="Remove file"
@@ -302,10 +304,11 @@ export function CreatePdfDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
           <button
+            type="button"
             onClick={tab === "blank" ? handleCreateBlank : handleCombineFiles}
             disabled={
               creating ||

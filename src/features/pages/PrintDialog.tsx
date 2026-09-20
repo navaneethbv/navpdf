@@ -155,6 +155,7 @@ export function PrintDialog({
                 <input
                   type="text"
                   placeholder="e.g. 1-3, 5"
+                  aria-label="Custom page range"
                   value={customRange}
                   onChange={(e) => setCustomRange(e.target.value)}
                   className="text-input"
@@ -176,10 +177,15 @@ export function PrintDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
-          <button onClick={handlePrint} disabled={printing} className="button-primary">
+          <button
+            type="button"
+            onClick={handlePrint}
+            disabled={printing}
+            className="button-primary"
+          >
             {printing ? "Preparing..." : "Print"}
           </button>
         </div>

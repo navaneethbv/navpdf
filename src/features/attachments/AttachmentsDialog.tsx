@@ -141,7 +141,7 @@ export function AttachmentsDialog({
     if (attachments.length === 0)
       return <p className="empty-message">No embedded attachments in this document.</p>;
     return attachments.map((att, idx) => (
-      <div key={idx} className="attachment-row">
+      <div key={`${att.name}-${idx}`} className="attachment-row">
         <div className="attachment-info">
           <Paperclip size={16} />
           <span className="attachment-name">{att.name}</span>
@@ -151,6 +151,7 @@ export function AttachmentsDialog({
         </div>
         <div style={{ display: "flex", gap: "6px" }}>
           <button
+            type="button"
             className="icon-button"
             title="Download attachment"
             onClick={() => handleDownloadAttachment(att)}
@@ -160,6 +161,7 @@ export function AttachmentsDialog({
             <Download size={16} />
           </button>
           <button
+            type="button"
             className="icon-button"
             title="Delete attachment"
             onClick={() => handleDeleteAttachment(att)}
@@ -189,6 +191,7 @@ export function AttachmentsDialog({
         <div className="modal-body">
           <div className="attachments-action-bar">
             <button
+              type="button"
               className="button-primary"
               onClick={() => fileInputRef.current?.click()}
               disabled={saving}
@@ -207,7 +210,7 @@ export function AttachmentsDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary">
+          <button type="button" onClick={onClose} className="button-secondary">
             Close
           </button>
         </div>

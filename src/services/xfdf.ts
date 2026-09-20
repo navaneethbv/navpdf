@@ -84,9 +84,13 @@ export async function exportXfdf(pdfBytes: Uint8Array): Promise<string> {
             (quadPoints.get(i) as PDFNumber).asNumber(),
           ).join(",")
         : "";
+      const irtAttr = irtName ? ` inreplyto="${xmlEscape(irtName)}"` : "";
+      const stampAttr = stamp ? ` stamp="${xmlEscape(stamp)}"` : "";
+      const quadElem = quad ? `<quadpoints>${quad}</quadpoints>` : "";
+      const contentsElem = contents ? `<contents>${xmlEscape(contents)}</contents>` : "";
       const tag = annotationTag(subtype);
       annotationXml.push(
-        `<${tag} page="${pageIndex}" rect="${rect.x},${rect.y},${rect.x + rect.width},${rect.y + rect.height}" name="${xmlEscape(name)}"${irtName ? ` inreplyto="${xmlEscape(irtName)}"` : ""}${stamp ? ` stamp="${xmlEscape(stamp)}"` : ""}>${quad ? `<quadpoints>${quad}</quadpoints>` : ""}${contents ? `<contents>${xmlEscape(contents)}</contents>` : ""}</${tag}>`,
+        `<${tag} page="${pageIndex}" rect="${rect.x},${rect.y},${rect.x + rect.width},${rect.y + rect.height}" name="${xmlEscape(name)}"${irtAttr}${stampAttr}>${quadElem}${contentsElem}</${tag}>`,
       );
     }
   }
@@ -125,13 +129,13 @@ export async function importXfdf(pdfBytes: Uint8Array, xml: string): Promise<Uin
     let quadPoints: number[] | undefined;
     if (["highlight", "underline", "strikeout"].includes(tag)) {
       const geometry =
-        attributes.get("coords") ?? body.match(/<quadpoints>([\s\S]*?)<\/quadpoints>/i)?.[1];
+        attributes.get("coords") ?? /<quadpoints>([\s\S]*?)<\/quadpoints>/i.exec(body)?.[1];
       quadPoints = numbers(geometry);
       if (!geometry?.trim() || quadPoints.length % 8 !== 0 || !quadPoints.every(Number.isFinite)) {
         throw new Error("The XFDF text markup has invalid or missing quadrilateral geometry.");
       }
     }
-    const contents = body.match(/<contents>([\s\S]*?)<\/contents>/i)?.[1] ?? "";
+    const contents = /<contents>([\s\S]*?)<\/contents>/i.exec(body)?.[1] ?? "";
     const subtype = tag === "strikeout" ? "StrikeOut" : tag[0].toUpperCase() + tag.slice(1);
     const annotation = context.obj({
       Type: "Annot",

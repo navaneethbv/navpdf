@@ -522,6 +522,7 @@ export function DecorationsDialog({
                 <input
                   type="text"
                   placeholder="e.g. 1-3, 5"
+                  aria-label="Custom page range"
                   value={customRange}
                   onChange={(e) => setCustomRange(e.target.value)}
                   className="text-input"
@@ -549,19 +550,30 @@ export function DecorationsDialog({
           </button>
 
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={onClose} className="button-secondary">
+            <button type="button" onClick={onClose} className="button-secondary">
               Cancel
             </button>
-            <button onClick={handleApply} disabled={applying} className="button-primary">
-              {applying
-                ? "Applying..."
-                : pageScope === "all"
-                  ? "Apply to All Pages"
-                  : `Apply to ${parsedPageRange?.length ?? 0} Pages`}
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={applying}
+              className="button-primary"
+            >
+              {getApplyButtonLabel(applying, pageScope, parsedPageRange?.length ?? 0)}
             </button>
           </div>
         </div>
       </div>
     </FeatureDialog>
   );
+}
+
+function getApplyButtonLabel(
+  applying: boolean,
+  pageScope: "all" | "custom",
+  pageCount: number,
+): string {
+  if (applying) return "Applying...";
+  if (pageScope === "all") return "Apply to All Pages";
+  return `Apply to ${pageCount} Pages`;
 }

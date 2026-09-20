@@ -37,6 +37,7 @@ export function ContextMenu({
       ref={ref}
       className="context-menu"
       role="menu"
+      tabIndex={-1}
       aria-label="Selection actions"
       style={{ left: x, top: y }}
       onContextMenu={(event) => event.preventDefault()}

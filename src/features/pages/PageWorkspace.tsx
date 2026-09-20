@@ -96,7 +96,7 @@ export function PageWorkspace({
 
   const toggleSelect = (index: number, e: React.MouseEvent) => {
     if (e.shiftKey && selected.length > 0) {
-      const last = selected[selected.length - 1];
+      const last = selected.at(-1) ?? index;
       const start = Math.min(last, index);
       const end = Math.max(last, index);
       const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
@@ -235,11 +235,7 @@ export function PageWorkspace({
       (bytes) => duplicatePages(bytes, selected),
       `Duplicated ${selected.length} page(s)`,
       {
-        pageMapping: computeInsertMapping(
-          totalPages,
-          selected[selected.length - 1] + 1,
-          selected.length,
-        ),
+        pageMapping: computeInsertMapping(totalPages, (selected.at(-1) ?? 0) + 1, selected.length),
       },
     );
   };
@@ -397,7 +393,6 @@ export function PageWorkspace({
       e.preventDefault();
       if (e.shiftKey) void handleRotate(-90);
       else void handleRotate(90);
-      return;
     }
   };
 

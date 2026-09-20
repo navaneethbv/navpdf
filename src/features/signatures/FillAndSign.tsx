@@ -497,55 +497,7 @@ export function FillAndSign({
                       <div className="sig-meta">
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span>{sig.name}</span>
-                          {sig.storage === "session" ? (
-                            <span
-                              title="Session-only (in memory)"
-                              style={{
-                                fontSize: "10px",
-                                padding: "1px 4px",
-                                borderRadius: "3px",
-                                background: "rgba(100, 100, 100, 0.15)",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "2px",
-                              }}
-                            >
-                              <Clock size={10} /> Session
-                            </span>
-                          ) : sig.storage === "legacy" ? (
-                            <span
-                              title="Unprotected legacy storage (not encrypted by OS)"
-                              data-testid="unprotected-badge"
-                              style={{
-                                fontSize: "10px",
-                                padding: "1px 4px",
-                                borderRadius: "3px",
-                                background: "rgba(220, 38, 38, 0.15)",
-                                color: "var(--color-danger, #dc2626)",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "2px",
-                              }}
-                            >
-                              <AlertTriangle size={10} /> Unprotected
-                            </span>
-                          ) : (
-                            <span
-                              title="Encrypted in OS storage"
-                              style={{
-                                fontSize: "10px",
-                                padding: "1px 4px",
-                                borderRadius: "3px",
-                                background: "rgba(37, 96, 75, 0.15)",
-                                color: "var(--color-primary, #25604b)",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "2px",
-                              }}
-                            >
-                              <Lock size={10} /> Protected
-                            </span>
-                          )}
+                          <SignatureStorageBadge storage={sig.storage} />
                         </div>
                         <button
                           type="button"
@@ -825,5 +777,63 @@ export function FillAndSign({
         </div>
       </div>
     </FeatureDialog>
+  );
+}
+
+function SignatureStorageBadge({ storage }: Readonly<{ storage?: string }>) {
+  if (storage === "session") {
+    return (
+      <span
+        title="Session-only (in memory)"
+        style={{
+          fontSize: "10px",
+          padding: "1px 4px",
+          borderRadius: "3px",
+          background: "rgba(100, 100, 100, 0.15)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "2px",
+        }}
+      >
+        <Clock size={10} /> Session
+      </span>
+    );
+  }
+  if (storage === "legacy") {
+    return (
+      <span
+        title="Unprotected legacy storage (not encrypted by OS)"
+        data-testid="unprotected-badge"
+        style={{
+          fontSize: "10px",
+          padding: "1px 4px",
+          borderRadius: "3px",
+          background: "rgba(220, 38, 38, 0.15)",
+          color: "var(--color-danger, #dc2626)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "2px",
+        }}
+      >
+        <AlertTriangle size={10} /> Unprotected
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Encrypted in OS storage"
+      style={{
+        fontSize: "10px",
+        padding: "1px 4px",
+        borderRadius: "3px",
+        background: "rgba(37, 96, 75, 0.15)",
+        color: "var(--color-primary, #25604b)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "2px",
+      }}
+    >
+      <Lock size={10} /> Protected
+    </span>
   );
 }

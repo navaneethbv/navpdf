@@ -96,18 +96,28 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
             aria-label="Move selected annotation"
           >
             <button
+              type="button"
               className="button"
               onClick={() => void controller.moveSelectedAnnotation(-8, 0)}
             >
               Move left
             </button>
-            <button className="button" onClick={() => void controller.moveSelectedAnnotation(8, 0)}>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.moveSelectedAnnotation(8, 0)}
+            >
               Move right
             </button>
-            <button className="button" onClick={() => void controller.moveSelectedAnnotation(0, 8)}>
+            <button
+              type="button"
+              className="button"
+              onClick={() => void controller.moveSelectedAnnotation(0, 8)}
+            >
               Move up
             </button>
             <button
+              type="button"
               className="button"
               onClick={() => void controller.moveSelectedAnnotation(0, -8)}
             >
@@ -120,24 +130,28 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
             aria-label="Resize selected annotation"
           >
             <button
+              type="button"
               className="button"
               onClick={() => void controller.resizeSelectedAnnotation(8, 0)}
             >
               Widen
             </button>
             <button
+              type="button"
               className="button"
               onClick={() => void controller.resizeSelectedAnnotation(-8, 0)}
             >
               Narrow
             </button>
             <button
+              type="button"
               className="button"
               onClick={() => void controller.resizeSelectedAnnotation(0, 8)}
             >
               Taller
             </button>
             <button
+              type="button"
               className="button"
               onClick={() => void controller.resizeSelectedAnnotation(0, -8)}
             >
@@ -179,6 +193,7 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
           </h3>
           {renderAnnotationControls()}
           <button
+            type="button"
             className="button"
             disabled={s.busy}
             onClick={() => void controller.deleteSelectedAnnotation()}
@@ -209,6 +224,7 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
           <div className="color-swatches">
             {["#f5cf58", "#80d49b", "#8cc9f7", "#f3a1c0"].map((c) => (
               <button
+                type="button"
                 key={c}
                 style={{ background: c }}
                 aria-label={`Highlight ${c}`}
@@ -222,6 +238,7 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
             color or delete it.
           </p>
           <button
+            type="button"
             className="button"
             disabled={!s.hasSelection || s.busy}
             onClick={() => controller.deleteSelected()}
@@ -312,6 +329,7 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
             <strong>A little clarity goes a long way.</strong>
             <p>Select Highlight to mark a passage, then save the PDF to keep it.</p>
             <button
+              type="button"
               className="button"
               disabled={s.busy || s.info?.encrypted}
               onClick={() => controller.setTool("highlight")}
@@ -326,6 +344,7 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
   return (
     <aside className="properties">
       <button
+        type="button"
         className="icon-button panel-close"
         aria-label="Close properties panel"
         onClick={() => s.set({ propertiesVisible: false, selectedAnnotationId: null })}

@@ -21,8 +21,8 @@ export function AnnotationNoteDialog({
     try {
       await controller.addStickyNote(contents);
       onClose();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+    } catch (error_) {
+      setError(error_ instanceof Error ? error_.message : String(error_));
     } finally {
       setSaving(false);
     }

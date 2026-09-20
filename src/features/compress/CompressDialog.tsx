@@ -116,18 +116,24 @@ export function CompressDialog({
   const renderAction = () => {
     if (running)
       return (
-        <button onClick={cancel} className="button-secondary">
+        <button type="button" onClick={cancel} className="button-secondary">
           Cancel Analysis
         </button>
       );
     if (result?.bytes)
       return (
-        <button onClick={() => void apply()} disabled={applying} className="button-primary">
+        <button
+          type="button"
+          onClick={() => void apply()}
+          disabled={applying}
+          className="button-primary"
+        >
           <Check size={16} /> Apply Compressed Version
         </button>
       );
     return (
       <button
+        type="button"
         onClick={() => void analyze()}
         disabled={!native || !controller?.pdf}
         className="button-primary"
@@ -227,7 +233,12 @@ export function CompressDialog({
         </div>
 
         <div className="modal-footer">
-          <button onClick={onClose} className="button-secondary" disabled={running || applying}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="button-secondary"
+            disabled={running || applying}
+          >
             {report ? "Done" : "Close"}
           </button>
           {renderAction()}
