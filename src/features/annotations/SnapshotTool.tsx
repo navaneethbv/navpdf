@@ -11,7 +11,7 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
   const [copied, setCopied] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: { clientX: number; clientY: number }) => {
     if (captured) return;
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -19,14 +19,14 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
     setCurrent({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: { clientX: number; clientY: number }) => {
     if (!start || captured) return;
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return;
     setCurrent({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     if (!start || !current || captured) return;
     const x = Math.min(start.x, current.x);
     const y = Math.min(start.y, current.y);
@@ -143,9 +143,18 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
     <div
       ref={overlayRef}
       className="snapshot-overlay"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      role="application"
+      aria-label="Snapshot selection area"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onMouseDown={handlePointerDown}
+      onMouseMove={handlePointerMove}
+      onMouseUp={handlePointerUp}
     >
       <div className="snapshot-hint">
         {captured ? (

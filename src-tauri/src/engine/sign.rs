@@ -1122,7 +1122,9 @@ mod tests {
     use x509_cert::spki::SubjectPublicKeyInfoOwned;
     use x509_cert::time::Validity;
 
-    const PASSWORD: &str = "synthetic-test-identity";
+    fn test_password() -> String {
+        uuid::Uuid::new_v4().simple().to_string()
+    }
 
     /// A one-page PDF with an existing text field and a referenced annotation array.
     fn pdf(modern: bool) -> Vec<u8> {
@@ -1176,19 +1178,27 @@ mod tests {
         (key, certificate)
     }
 
-    fn keystore(pkcs8: &[u8], certificate: &Certificate) -> Vec<u8> {
+    fn keystore(pkcs8: &[u8], certificate: &Certificate, password: &str) -> Vec<u8> {
         let chain = [p12_keystore::Certificate::from_der(&certificate.to_der().unwrap()).unwrap()];
         let mut store = KeyStore::new();
         store.add_entry(
             "signer",
             KeyStoreEntry::PrivateKeyChain(PrivateKeyChain::new(pkcs8, [1_u8], chain)),
         );
-        store.writer(PASSWORD).write().unwrap()
+        store.writer(password).write().unwrap()
     }
 
-    fn p256_identity() -> Vec<u8> {
+    fn p256_identity() -> (Vec<u8>, String) {
         let (key, certificate) = p256_parts();
-        keystore(key.to_pkcs8_der().unwrap().as_bytes(), &certificate)
+        let password = test_password();
+        (
+            keystore(
+                key.to_pkcs8_der().unwrap().as_bytes(),
+                &certificate,
+                &password,
+            ),
+            password,
+        )
     }
 
     /// Offsets of the `<` and just past the `>` of the only signature value.
@@ -1205,7 +1215,8 @@ mod tests {
     #[test]
     fn signs_incrementally_and_verifies_the_whole_document() {
         let source = pdf(false);
-        let identity = load_identity(&p256_identity(), PASSWORD, SystemTime::now()).unwrap();
+        let (identity_file, password) = p256_identity();
+        let identity = load_identity(&identity_file, &password, SystemTime::now()).unwrap();
         assert_eq!(identity.summary.key_type, "ECDSA P-256");
         assert!(identity.summary.subject.contains("Synthetic Signer"));
         assert!(identity.summary.self_signed);
@@ -1291,7 +1302,8 @@ mod tests {
         assert_eq!(Document::load_mem(&damaged).unwrap().xref_start, offset - 1);
         assert!(damaged[offset - 1].is_ascii_whitespace());
 
-        let identity = load_identity(&p256_identity(), PASSWORD, SystemTime::now()).unwrap();
+        let (identity_file, password) = p256_identity();
+        let identity = load_identity(&identity_file, &password, SystemTime::now()).unwrap();
         let request = SignRequest {
             reason: "Approved".into(),
             location: "Test lab".into(),
@@ -1305,7 +1317,8 @@ mod tests {
 
     #[test]
     fn reports_changes_inside_and_after_the_signed_range() {
-        let identity = load_identity(&p256_identity(), PASSWORD, SystemTime::now()).unwrap();
+        let (identity_file, password) = p256_identity();
+        let identity = load_identity(&identity_file, &password, SystemTime::now()).unwrap();
         let signed = sign(
             &pdf(false),
             &identity,
@@ -1344,7 +1357,8 @@ mod tests {
 
     #[test]
     fn certification_is_limited_to_the_first_signature() {
-        let identity = load_identity(&p256_identity(), PASSWORD, SystemTime::now()).unwrap();
+        let (identity_file, password) = p256_identity();
+        let identity = load_identity(&identity_file, &password, SystemTime::now()).unwrap();
         let now = SystemTime::now();
         let certify = |level| SignRequest {
             certification: level,
@@ -1394,36 +1408,40 @@ mod tests {
 
     #[test]
     fn refuses_wrong_passwords_invalid_dates_and_foreign_keys() {
-        let file = p256_identity();
+        let (file, password) = p256_identity();
         let now = SystemTime::now();
-        assert!(load_identity(&file, "wrong", now).is_err());
+        assert!(load_identity(&file, &test_password(), now).is_err());
         let later = now + Duration::from_secs(7200);
-        assert!(load_identity(&file, PASSWORD, later)
+        assert!(load_identity(&file, &password, later)
             .err()
             .unwrap()
             .contains("expired"));
         let earlier = now - Duration::from_secs(7200);
-        assert!(load_identity(&file, PASSWORD, earlier)
+        assert!(load_identity(&file, &password, earlier)
             .err()
             .unwrap()
             .contains("not valid yet"));
 
         let (_, certificate) = p256_parts();
         let (other_key, _) = p256_parts();
-        let foreign = keystore(other_key.to_pkcs8_der().unwrap().as_bytes(), &certificate);
-        assert!(load_identity(&foreign, PASSWORD, now)
+        let foreign = keystore(
+            other_key.to_pkcs8_der().unwrap().as_bytes(),
+            &certificate,
+            &password,
+        );
+        assert!(load_identity(&foreign, &password, now)
             .err()
             .unwrap()
             .contains("does not belong"));
-        assert!(load_identity(&[0; 16], PASSWORD, now).is_err());
+        assert!(load_identity(&[0; 16], &password, now).is_err());
         assert!(
-            load_identity(&vec![0; MAX_IDENTITY_BYTES + 1], PASSWORD, now)
+            load_identity(&vec![0; MAX_IDENTITY_BYTES + 1], &password, now)
                 .err()
                 .unwrap()
                 .contains("too large")
         );
 
-        let identity = load_identity(&file, PASSWORD, now).unwrap();
+        let identity = load_identity(&file, &password, now).unwrap();
         let long = SignRequest {
             reason: "x".repeat(MAX_TEXT_CHARS + 1),
             ..SignRequest::default()
@@ -1442,8 +1460,13 @@ mod tests {
                 .unwrap()
                 .build::<rsa::pkcs1v15::Signature>()
                 .unwrap();
-        let file = keystore(private.to_pkcs8_der().unwrap().as_bytes(), &certificate);
-        let identity = load_identity(&file, PASSWORD, SystemTime::now()).unwrap();
+        let password = test_password();
+        let file = keystore(
+            private.to_pkcs8_der().unwrap().as_bytes(),
+            &certificate,
+            &password,
+        );
+        let identity = load_identity(&file, &password, SystemTime::now()).unwrap();
         assert_eq!(identity.summary.key_type, "RSA 2048-bit");
         let signed = sign(
             &pdf(true),

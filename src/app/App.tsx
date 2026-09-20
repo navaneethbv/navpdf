@@ -100,6 +100,175 @@ function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController 
   return true;
 }
 
+type WorkspaceState = ReturnType<typeof useWorkspace.getState>;
+type SessionActions = ReturnType<typeof useDocumentSession>;
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
+function handleShortcut(
+  event: KeyboardEvent,
+  state: WorkspaceState,
+  controller: ViewerController | null,
+  session: SessionActions,
+  open: () => void,
+): boolean {
+  if (!(event.ctrlKey || event.metaKey)) return false;
+  const actions: Record<string, () => void> = {
+    o: () => open(),
+    s: () => void session.save(event.shiftKey),
+    f: () => {
+      if (state.document) state.set({ sidebar: "search" });
+    },
+    p: () => {
+      if (state.document) state.set({ activeModal: "print" });
+    },
+    w: () => session.home(),
+    z: () => (event.shiftKey ? controller?.redo() : controller?.undo()),
+    ",": () => state.set({ settingsOpen: true }),
+    "0": () => controller?.zoom("page-fit"),
+    "+": () => controller?.zoom((state.zoom / 100) * 1.15),
+    "=": () => controller?.zoom((state.zoom / 100) * 1.15),
+    "-": () => controller?.zoom(state.zoom / 100 / 1.15),
+  };
+  const action = actions[event.key.toLowerCase()];
+  if (!action) return false;
+  event.preventDefault();
+  action();
+  return true;
+}
+
+const creationMenuActions = ["create-pdf", "import-pdf", "combine-pdf", "open-recent"];
+const documentMenuActions = [
+  "edit-objects",
+  "page-workspace",
+  "office-export",
+  "office-pptx",
+  "office-xlsx",
+  "office-rtf",
+  "convert",
+  "compress",
+  "protect",
+  "properties",
+  "ocr",
+  "forms",
+  "fill-sign",
+];
+
+function handleLayoutMenuAction(
+  payload: string,
+  state: WorkspaceState,
+  controller: ViewerController | null,
+): boolean {
+  if (["layout-single", "layout-continuous", "layout-spread"].includes(payload)) {
+    controller?.setLayout(payload.slice("layout-".length) as "single" | "continuous" | "spread");
+    return true;
+  }
+  if (["panel-pages", "panel-bookmarks", "panel-comments"].includes(payload)) {
+    state.set({
+      sidebar: payload.slice("panel-".length) as "pages" | "bookmarks" | "comments",
+      propertiesVisible: false,
+    });
+    return true;
+  }
+  return false;
+}
+
+function menuActions(
+  state: WorkspaceState,
+  controller: ViewerController | null,
+  session: SessionActions,
+  open: () => void,
+): Record<string, () => void> {
+  return {
+    "first-page": () => controller?.goToFirst(),
+    "last-page": () => controller?.goToLast(),
+    "next-page": () => {
+      if (state.document) controller?.goTo(Math.min(state.page + 1, state.info?.pages ?? 1));
+    },
+    "previous-page": () => {
+      if (state.document) controller?.goTo(Math.max(state.page - 1, 1));
+    },
+    "rotate-view": () => {
+      if (state.document) controller?.rotateView(90);
+    },
+    "actual-size": () => controller?.zoom(1),
+    "read-mode": () => {
+      if (state.document) state.set({ readMode: !state.readMode });
+    },
+    "night-mode": () => {
+      if (state.document) state.set({ nightMode: !state.nightMode });
+    },
+    "all-tools": () => state.set({ toolMode: state.toolMode ? null : "all" }),
+    "quick-tools": () => state.set({ quickRailVisible: !state.quickRailVisible }),
+    open,
+    save: () => void session.save(),
+    "save-as": () => void session.save(true),
+    print: () => {
+      if (state.document) state.set({ activeModal: "print" });
+    },
+    home: () => session.home(),
+    organize: () => {
+      if (state.document) state.set({ activeModal: "page-workspace" });
+    },
+    undo: () => controller?.undo(),
+    redo: () => controller?.redo(),
+    find: () => state.set({ sidebar: "search" }),
+    settings: () => state.set({ settingsOpen: true }),
+    highlight: () => {
+      if (!state.info?.encrypted) controller?.setTool("highlight");
+    },
+    select: () => controller?.setTool("select"),
+    "tools:add-text": () => {
+      if (state.document) state.set({ activeModal: "add-text" });
+    },
+    "tools:add-image": () => {
+      if (state.document) state.set({ activeModal: "add-image" });
+    },
+    "tools:annotations": () => {
+      if (state.document) state.set({ activeModal: "annotations" });
+    },
+    "tools:redact": () => {
+      if (state.document) state.set({ activeModal: "redact" });
+    },
+    "fit-page": () => controller?.zoom("page-fit"),
+    "fit-width": () => controller?.zoom("page-width"),
+    "zoom-in": () => controller?.zoom((state.zoom / 100) * 1.15),
+    "zoom-out": () => controller?.zoom(state.zoom / 100 / 1.15),
+  };
+}
+
+function handleMenuAction(
+  payload: string,
+  state: WorkspaceState,
+  controller: ViewerController | null,
+  session: SessionActions,
+  open: () => void,
+) {
+  if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
+  if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
+    return;
+  if (
+    creationMenuActions.includes(payload) ||
+    (state.document && documentMenuActions.includes(payload))
+  ) {
+    state.set({ activeModal: payload });
+    return;
+  }
+  if (state.document && handleLayoutMenuAction(payload, state, controller)) return;
+  if (payload === "tour" || payload === "tips") {
+    state.set({ activeModal: payload });
+    return;
+  }
+  menuActions(state, controller, session, open)[payload]?.();
+}
+
 export default function App() {
   const [controller, setController] = useState<ViewerController | null>(null),
     [passwordValue, setPasswordValue] = useState("");
@@ -144,60 +313,8 @@ export default function App() {
         event.stopImmediatePropagation();
         return;
       }
-      const editable =
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement ||
-        event.target instanceof HTMLSelectElement ||
-        (event.target instanceof HTMLElement && event.target.isContentEditable);
-      if (editable) return;
-      if (event.ctrlKey || event.metaKey) {
-        switch (event.key.toLowerCase()) {
-          case "o":
-            event.preventDefault();
-            open();
-            break;
-          case "s":
-            event.preventDefault();
-            void session.save(event.shiftKey);
-            break;
-          case "f":
-            event.preventDefault();
-            if (state.document) state.set({ sidebar: "search" });
-            break;
-          case "p":
-            event.preventDefault();
-            if (state.document) state.set({ activeModal: "print" });
-            break;
-          case "w":
-            event.preventDefault();
-            session.home();
-            break;
-          case "z":
-            event.preventDefault();
-            if (event.shiftKey) controller?.redo();
-            else controller?.undo();
-            break;
-          case ",":
-            event.preventDefault();
-            state.set({ settingsOpen: true });
-            break;
-          case "0":
-            event.preventDefault();
-            controller?.zoom("page-fit");
-            break;
-          case "+":
-          case "=":
-            event.preventDefault();
-            controller?.zoom((state.zoom / 100) * 1.15);
-            break;
-          case "-":
-            event.preventDefault();
-            controller?.zoom(state.zoom / 100 / 1.15);
-            break;
-          default:
-            break;
-        }
-      }
+      if (isEditableTarget(event.target)) return;
+      handleShortcut(event, state, controller, session, open);
       if (state.selectedAnnotationId && handleAnnotationKey(event, controller)) return;
       handleWorkspaceNavigation(event, controller);
     }
@@ -205,7 +322,6 @@ export default function App() {
     function warn(event: BeforeUnloadEvent) {
       if (useWorkspace.getState().dirty) {
         event.preventDefault();
-        event.returnValue = "";
       }
     }
     window.addEventListener("beforeunload", warn);
@@ -219,168 +335,7 @@ export default function App() {
     let cleanup: (() => void) | undefined;
     let disposed = false;
     void listen<string>("menu-action", ({ payload }) => {
-      const state = useWorkspace.getState();
-      if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
-      if (
-        state.busy ||
-        state.settingsOpen ||
-        session.password ||
-        session.confirm ||
-        state.activeModal
-      )
-        return;
-      const creationActions = ["create-pdf", "import-pdf", "combine-pdf", "open-recent"];
-      const documentActions = [
-        "edit-objects",
-        "page-workspace",
-        "office-export",
-        "office-pptx",
-        "office-xlsx",
-        "office-rtf",
-        "convert",
-        "compress",
-        "protect",
-        "properties",
-        "ocr",
-        "forms",
-        "fill-sign",
-      ];
-      if (
-        creationActions.includes(payload) ||
-        (state.document && documentActions.includes(payload))
-      ) {
-        state.set({ activeModal: payload });
-        return;
-      }
-      if (state.document) {
-        if (
-          payload === "layout-single" ||
-          payload === "layout-continuous" ||
-          payload === "layout-spread"
-        ) {
-          controller?.setLayout(
-            payload.slice("layout-".length) as "single" | "continuous" | "spread",
-          );
-          return;
-        }
-        if (
-          payload === "panel-pages" ||
-          payload === "panel-bookmarks" ||
-          payload === "panel-comments"
-        ) {
-          state.set({
-            sidebar: payload.slice("panel-".length) as "pages" | "bookmarks" | "comments",
-            propertiesVisible: false,
-          });
-          return;
-        }
-      }
-      switch (payload) {
-        case "first-page":
-          controller?.goToFirst();
-          break;
-        case "last-page":
-          controller?.goToLast();
-          break;
-        case "next-page":
-          if (state.document) controller?.goTo(Math.min(state.page + 1, state.info?.pages ?? 1));
-          break;
-        case "previous-page":
-          if (state.document) controller?.goTo(Math.max(state.page - 1, 1));
-          break;
-        case "rotate-view":
-          if (state.document) controller?.rotateView(90);
-          break;
-        case "actual-size":
-          controller?.zoom(1);
-          break;
-        case "read-mode":
-          if (state.document) state.set({ readMode: !state.readMode });
-          break;
-        case "night-mode":
-          if (state.document) state.set({ nightMode: !state.nightMode });
-          break;
-        case "all-tools":
-          state.set({ toolMode: state.toolMode ? null : "all" });
-          break;
-        case "quick-tools":
-          state.set({ quickRailVisible: !state.quickRailVisible });
-          break;
-        case "tour":
-        case "tips":
-          if (
-            state.busy ||
-            state.settingsOpen ||
-            state.activeModal ||
-            session.password ||
-            session.confirm
-          )
-            break;
-          state.set({ activeModal: payload });
-          break;
-        case "open":
-          open();
-          break;
-        case "save":
-          void session.save();
-          break;
-        case "save-as":
-          void session.save(true);
-          break;
-        case "print":
-          if (state.document) state.set({ activeModal: "print" });
-          break;
-        case "home":
-          session.home();
-          break;
-        case "organize":
-          if (state.document) state.set({ activeModal: "page-workspace" });
-          break;
-        case "undo":
-          controller?.undo();
-          break;
-        case "redo":
-          controller?.redo();
-          break;
-        case "find":
-          state.set({ sidebar: "search" });
-          break;
-        case "settings":
-          state.set({ settingsOpen: true });
-          break;
-        case "highlight":
-          if (!state.info?.encrypted) controller?.setTool("highlight");
-          break;
-        case "select":
-          controller?.setTool("select");
-          break;
-        case "tools:add-text":
-          if (state.document) state.set({ activeModal: "add-text" });
-          break;
-        case "tools:add-image":
-          if (state.document) state.set({ activeModal: "add-image" });
-          break;
-        case "tools:annotations":
-          if (state.document) state.set({ activeModal: "annotations" });
-          break;
-        case "tools:redact":
-          if (state.document) state.set({ activeModal: "redact" });
-          break;
-        case "fit-page":
-          controller?.zoom("page-fit");
-          break;
-        case "fit-width":
-          controller?.zoom("page-width");
-          break;
-        case "zoom-in":
-          controller?.zoom((state.zoom / 100) * 1.15);
-          break;
-        case "zoom-out":
-          controller?.zoom(state.zoom / 100 / 1.15);
-          break;
-        default:
-          break;
-      }
+      handleMenuAction(payload, useWorkspace.getState(), controller, session, open);
     }).then((fn) => {
       if (disposed) fn();
       else cleanup = fn;

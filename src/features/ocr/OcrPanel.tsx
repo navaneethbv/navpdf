@@ -18,6 +18,77 @@ import type { OcrEngineInfo, OcrPageResult } from "../../types/operations";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
+type PdfDocument = NonNullable<ViewerController["pdf"]>;
+
+function pageWithinOcrLimit(width: number, height: number): boolean {
+  return (
+    width > 0 &&
+    height > 0 &&
+    Number.isFinite(width * height) &&
+    width <= 8192 &&
+    height <= 8192 &&
+    width * height <= 16_000_000
+  );
+}
+
+async function pageImage(
+  sourcePdf: PdfDocument,
+  pageNumber: number,
+  ensureCurrent: () => void,
+): Promise<Uint8Array> {
+  const page = await sourcePdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 2.0, rotation: 0 });
+  if (!pageWithinOcrLimit(viewport.width, viewport.height)) {
+    throw new Error("This page exceeds the OCR image size limit.");
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  try {
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Unable to render the OCR page.");
+    await page.render({ canvas, canvasContext: context, viewport }).promise;
+    ensureCurrent();
+    const encoded = canvas.toDataURL("image/png").split(",")[1];
+    if (!encoded) throw new Error("Unable to encode the OCR page.");
+    return Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
+  } finally {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
+
+async function recognizeOcrPages(
+  sourcePdf: PdfDocument,
+  targetIndices: number[],
+  totalPages: number,
+  language: string,
+  cancelled: () => boolean,
+  ensureCurrent: () => void,
+  onProgress: (value: number) => void,
+  onStatus: (value: string) => void,
+  onCancel: () => void,
+): Promise<{ results: OcrPageResult[]; text: string[] }> {
+  const results: OcrPageResult[] = [];
+  const text: string[] = [];
+  for (let index = 0; index < targetIndices.length; index++) {
+    if (cancelled()) {
+      onCancel();
+      return { results, text };
+    }
+    const pageIndex = targetIndices[index];
+    const pageNumber = pageIndex + 1;
+    onProgress(Math.round((index / targetIndices.length) * 85) + 5);
+    onStatus(`Recognizing page ${pageNumber} of ${totalPages}...`);
+    const imageBytes = await pageImage(sourcePdf, pageNumber, ensureCurrent);
+    const result = await ocrRecognizePage(imageBytes, { pageIndex, language });
+    ensureCurrent();
+    results.push(result);
+    text.push(`--- Page ${pageNumber} ---\n${result.fullText}`);
+  }
+  return { results, text };
+}
+
 function languageName(code: string): string {
   try {
     const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
@@ -107,7 +178,6 @@ export function OcrPanel({
       const pdfBytes = await sourcePdf.saveDocument();
       ensureCurrent();
 
-      // Check for existing text if not already confirmed
       if (!replaceExisting && mode === "searchable") {
         for (const idx of targetIndices) {
           const hasText = await detectExistingText(pdfBytes, idx);
@@ -119,62 +189,19 @@ export function OcrPanel({
         }
       }
 
-      const results: OcrPageResult[] = [];
-      const textAccumulator: string[] = [];
-
-      for (let i = 0; i < targetIndices.length; i++) {
-        if (cancelledRef.current) {
-          s.set({ status: "OCR processing cancelled by user." });
-          return;
-        }
-
-        const pageIndex = targetIndices[i];
-        const pageNum = pageIndex + 1;
-        const pct = Math.round((i / targetIndices.length) * 85) + 5;
-        setProgress(pct);
-        setStatusText(`Recognizing page ${pageNum} of ${totalPages}...`);
-
-        const page = await sourcePdf.getPage(pageNum);
-        // Use unrotated crop coordinates so OCR boxes map back into PDF space.
-        const viewport = page.getViewport({ scale: 2.0, rotation: 0 });
-        if (
-          viewport.width <= 0 ||
-          viewport.height <= 0 ||
-          !Number.isFinite(viewport.width * viewport.height) ||
-          viewport.width > 8192 ||
-          viewport.height > 8192 ||
-          viewport.width * viewport.height > 16_000_000
-        ) {
-          throw new Error("This page exceeds the OCR image size limit.");
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d");
-
-        let imageBytes: Uint8Array;
-        try {
-          if (!ctx) throw new Error("Unable to render the OCR page.");
-          await page.render({ canvas, canvasContext: ctx, viewport }).promise;
-          ensureCurrent();
-          const dataUrl = canvas.toDataURL("image/png");
-          const encoded = dataUrl.split(",")[1];
-          if (!encoded) throw new Error("Unable to encode the OCR page.");
-          imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
-        } finally {
-          canvas.width = 0;
-          canvas.height = 0;
-        }
-
-        const pageResult = await ocrRecognizePage(imageBytes, {
-          pageIndex,
-          language: selectedLang,
-        });
-        ensureCurrent();
-
-        results.push(pageResult);
-        textAccumulator.push(`--- Page ${pageNum} ---\n${pageResult.fullText}`);
-      }
+      const recognized = await recognizeOcrPages(
+        sourcePdf,
+        targetIndices,
+        totalPages,
+        selectedLang,
+        () => cancelledRef.current,
+        ensureCurrent,
+        setProgress,
+        setStatusText,
+        () => s.set({ status: "OCR processing cancelled by user." }),
+      );
+      if (cancelledRef.current) return;
+      const { results, text: textAccumulator } = recognized;
 
       setProgress(90);
       ensureCurrent();

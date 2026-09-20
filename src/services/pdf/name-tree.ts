@@ -9,6 +9,41 @@ export interface EmbeddedFileEntry {
   indexInNames: number;
 }
 
+function traverseEmbeddedFiles(
+  doc: PDFDocument,
+  node: PDFDict,
+  visited: Set<PDFDict>,
+  results: EmbeddedFileEntry[],
+) {
+  if (visited.has(node)) return;
+  visited.add(node);
+  const kids = doc.context.lookup(node.get(PDFName.of("Kids")));
+  if (kids instanceof PDFArray) {
+    for (let index = 0; index < kids.size(); index++) {
+      const kid = doc.context.lookup(kids.get(index));
+      if (kid instanceof PDFDict) traverseEmbeddedFiles(doc, kid, visited, results);
+    }
+    return;
+  }
+  const names = doc.context.lookup(node.get(PDFName.of("Names")));
+  if (!(names instanceof PDFArray)) return;
+  for (let index = 0; index < names.size(); index += 2) {
+    const keyItem = names.get(index);
+    const valItem = names.get(index + 1);
+    const keyResolved = doc.context.lookup(keyItem);
+    const valResolved = doc.context.lookup(valItem);
+    if (!(valResolved instanceof PDFDict)) continue;
+    results.push({
+      name: decodeNameTreeKey(keyResolved),
+      nameObj: keyResolved as PDFObject,
+      fileSpec: valResolved,
+      fileSpecRef: valItem instanceof PDFRef ? valItem : undefined,
+      containingDict: node,
+      indexInNames: index,
+    });
+  }
+}
+
 export function decodeNameTreeKey(keyObj: unknown): string {
   if (!keyObj) return "";
   if (typeof (keyObj as { decodeText?: () => string }).decodeText === "function") {
@@ -35,46 +70,6 @@ export function walkEmbeddedFiles(doc: PDFDocument): EmbeddedFileEntry[] {
   if (!(efObj instanceof PDFDict)) return [];
 
   const results: EmbeddedFileEntry[] = [];
-  const visited = new Set<PDFDict>();
-
-  function traverse(node: PDFDict) {
-    if (visited.has(node)) return;
-    visited.add(node);
-
-    const kids = doc.context.lookup(node.get(PDFName.of("Kids")));
-    if (kids instanceof PDFArray) {
-      for (let i = 0; i < kids.size(); i++) {
-        const kid = doc.context.lookup(kids.get(i));
-        if (kid instanceof PDFDict) {
-          traverse(kid);
-        }
-      }
-      return;
-    }
-
-    const names = doc.context.lookup(node.get(PDFName.of("Names")));
-    if (names instanceof PDFArray) {
-      for (let i = 0; i < names.size(); i += 2) {
-        const keyItem = names.get(i);
-        const valItem = names.get(i + 1);
-        const keyResolved = doc.context.lookup(keyItem);
-        const valResolved = doc.context.lookup(valItem);
-
-        if (valResolved instanceof PDFDict) {
-          const name = decodeNameTreeKey(keyResolved);
-          results.push({
-            name,
-            nameObj: keyResolved as PDFObject,
-            fileSpec: valResolved,
-            fileSpecRef: valItem instanceof PDFRef ? valItem : undefined,
-            containingDict: node,
-            indexInNames: i,
-          });
-        }
-      }
-    }
-  }
-
-  traverse(efObj);
+  traverseEmbeddedFiles(doc, efObj, new Set<PDFDict>(), results);
   return results;
 }

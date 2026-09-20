@@ -8,6 +8,37 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 
 const MAX_EXPORT_PIXELS = 32 * 1024 * 1024;
 
+async function exportImagePages(
+  source: NonNullable<ViewerController["pdf"]>,
+  targetIndices: number[],
+  cancelled: () => boolean,
+  setProgress: (value: number) => void,
+  dpi: number,
+  format: "txt" | "png" | "jpg",
+  quality: number,
+  baseName: string,
+): Promise<boolean> {
+  const scale = dpi / 72;
+  const imageFormat = format === "jpg" ? "jpg" : "png";
+  for (let i = 0; i < targetIndices.length; i++) {
+    if (cancelled()) return false;
+    const pageNum = targetIndices[i] + 1;
+    setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
+    const page = await source.getPage(pageNum);
+    if (cancelled()) return false;
+    const saved = await exportSinglePageImage({
+      page,
+      scale,
+      format: imageFormat,
+      quality,
+      pageNum,
+      baseName,
+    });
+    if (!saved) return false;
+  }
+  return !cancelled();
+}
+
 export function ExportDialog({
   controller,
   onClose,
@@ -112,27 +143,17 @@ export function ExportDialog({
         throw new Error("No valid pages selected for export.");
       }
 
-      const scale = dpi / 72;
-      const imgFormat = format === "jpg" ? "jpg" : "png";
-
-      for (let i = 0; i < targetIndices.length; i++) {
-        if (cancelled()) return;
-        const pageNum = targetIndices[i] + 1;
-        setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-        const page = await source.getPage(pageNum);
-        if (cancelled()) return;
-        const saved = await exportSinglePageImage({
-          page,
-          scale,
-          format: imgFormat,
-          quality,
-          pageNum,
-          baseName,
-        });
-        if (!saved || cancelled()) return;
-      }
-
-      if (cancelled()) return;
+      const exported = await exportImagePages(
+        source,
+        targetIndices,
+        cancelled,
+        setProgress,
+        dpi,
+        format,
+        quality,
+        baseName,
+      );
+      if (!exported) return;
       s.set({
         status: `Exported ${targetIndices.length} page(s) as ${format.toUpperCase()} (${dpi} DPI).`,
       });
@@ -399,7 +420,7 @@ async function collectPagesText(
 
 function extractPageTextContent(items: Array<{ str?: string; transform?: number[] }>): string {
   const filtered = items
-    .filter((item) => item.str && item.str.trim())
+    .filter((item) => item.str?.trim())
     .sort((a, b) => {
       const aY = a.transform?.[5] ?? 0;
       const bY = b.transform?.[5] ?? 0;

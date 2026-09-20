@@ -8,7 +8,7 @@ import { CustomColors } from "./CustomColors";
 export function Settings() {
   const initial = useWorkspace((s) => s.local.preferences),
     set = useWorkspace((s) => s.set);
-  const [preferences, update] = useState<Preferences>(initial),
+  const [preferences, setPreferences] = useState<Preferences>(initial),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const savePending = useRef(false);
@@ -40,7 +40,7 @@ export function Settings() {
     [],
   );
   const patch = (value: Partial<Preferences>) => {
-    update({ ...preferences, ...value });
+    setPreferences({ ...preferences, ...value });
   };
   const close = () => {
     if (!savePending.current) set({ settingsOpen: false });

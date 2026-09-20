@@ -181,6 +181,37 @@ export function OfficeExport({
     return result;
   };
 
+  const buildPictureFile = async (
+    pdf: NonNullable<ViewerController["pdf"]>,
+    pageNumbers: number[],
+  ): Promise<Uint8Array | null> => {
+    if (pageNumbers.length > MAX_PICTURE_SLIDES) {
+      throw new Error(
+        `Picture slides are limited to ${MAX_PICTURE_SLIDES} pages. Export a page range first.`,
+      );
+    }
+    const slides: Slide[] = [];
+    for (const number of pageNumbers) {
+      if (cancelled.current) return null;
+      setProgress(`Rendering page ${number} of ${pageNumbers.length}…`);
+      slides.push(await pagePicture((await pdf.getPage(number)) as unknown as PageProxy));
+    }
+    return buildPptx(slides, baseName);
+  };
+
+  const buildTextFile = async (
+    pageNumbers: number[],
+  ): Promise<Uint8Array<ArrayBuffer> | string | null> => {
+    const pages = await layouts(pageNumbers);
+    if (!pages) return null;
+    if (!pages.some((page) => page.lines.length)) {
+      throw new Error(
+        "This PDF has no text layer to convert. Run OCR first, or export page pictures.",
+      );
+    }
+    return textExport(format, pages, baseName);
+  };
+
   const run = async (work: () => Promise<void>) => {
     cancelled.current = false;
     setRunning(true);
@@ -200,32 +231,16 @@ export function OfficeExport({
       if (!pdf) return;
       if (pageRange.error || !pageRange.pages?.length) return;
       const pageNumbers = pageRange.pages.map((page) => page + 1);
-      let bytes: Uint8Array<ArrayBuffer> | string;
-      if (format === "pptx-images") {
-        if (pageNumbers.length > MAX_PICTURE_SLIDES)
-          throw new Error(
-            `Picture slides are limited to ${MAX_PICTURE_SLIDES} pages. Export a page range first.`,
-          );
-        const slides: Slide[] = [];
-        for (const number of pageNumbers) {
-          if (cancelled.current) return;
-          setProgress(`Rendering page ${number} of ${pageNumbers.length}…`);
-          slides.push(await pagePicture((await pdf.getPage(number)) as unknown as PageProxy));
-        }
-        bytes = buildPptx(slides, baseName);
-      } else {
-        const pages = await layouts(pageNumbers);
-        if (!pages) return;
-        if (!pages.some((page) => page.lines.length))
-          throw new Error(
-            "This PDF has no text layer to convert. Run OCR first, or export page pictures.",
-          );
-        bytes = textExport(format, pages, baseName);
-      }
-      if (cancelled.current) return;
+      const bytes =
+        format === "pptx-images"
+          ? await buildPictureFile(pdf, pageNumbers)
+          : await buildTextFile(pageNumbers);
+      if (!bytes || cancelled.current) return;
+      const blobData: BlobPart =
+        typeof bytes === "string" ? bytes : (new Uint8Array(bytes) as Uint8Array<ArrayBuffer>);
       if (
         !(await downloadBlob(
-          new Blob([bytes], { type: selected.mime }),
+          new Blob([blobData], { type: selected.mime }),
           `${baseName}.${selected.extension}`,
         ))
       )

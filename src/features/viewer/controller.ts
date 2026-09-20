@@ -48,6 +48,166 @@ import { readTextSelectionGeometry } from "./selection-geometry";
 import { createCommentExchange, parseCommentExchange } from "../../services/comment-exchange";
 import { contentIdentity } from "../../services/document-identity";
 
+type OutlineItem = NonNullable<Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>>[number];
+
+function mapBookmarks(nodes: OutlineItem[]): Bookmark[] {
+  return nodes
+    .filter((node) => node.dest || (node.items && node.items.length > 0))
+    .map((node) => ({
+      title: node.title,
+      destination: (node.dest as string | unknown[]) ?? null,
+      children: node.items ? mapBookmarks(node.items) : [],
+    }));
+}
+
+function searchTextItem(item: unknown): string {
+  if (!item || typeof item !== "object" || !("str" in item)) return "";
+  const textItem = item as { str: string; hasEOL?: boolean };
+  return textItem.str + (textItem.hasEOL ? "\n" : "");
+}
+
+async function inspectDocumentCapabilities(pdf: PDFDocumentProxy) {
+  const result: {
+    formNotice: string | null;
+    hasDigitalSignature: boolean;
+    editingAllowed?: boolean;
+  } = {
+    formNotice: null,
+    hasDigitalSignature: false,
+  };
+  if (pdf.isPureXfa || Boolean(pdf.allXfaHtml)) {
+    result.formNotice = "XFA forms are not supported. Form elements are read-only or unavailable.";
+  }
+  try {
+    const actions = await pdf.getJSActions();
+    if (actions && actions.size > 0) {
+      result.formNotice = "Script-based calculations and actions are disabled for document safety.";
+    }
+  } catch {
+    // Some PDF.js versions do not expose JavaScript actions.
+  }
+  try {
+    const fieldObjects = await pdf.getFieldObjects();
+    result.hasDigitalSignature = Boolean(
+      fieldObjects &&
+      [...fieldObjects.values()].some((fields) =>
+        fields.some((field) => {
+          const value = field as { type?: string; subtype?: string };
+          return value.type === "signature" || value.subtype === "Sig";
+        }),
+      ),
+    );
+  } catch {
+    // Field inspection is best effort for malformed forms.
+  }
+  try {
+    if (typeof pdf.getPermissions === "function") {
+      const permissions = await pdf.getPermissions();
+      result.editingAllowed = !permissions || permissions.has(PermissionFlag.MODIFY_CONTENTS);
+    }
+  } catch {
+    // Keep the default editing policy when permissions cannot be read.
+  }
+  return result;
+}
+
+function commentQuads(comment: Comment) {
+  if (comment.quads && comment.quads.length > 0) {
+    return comment.quads.map((quad) => ({
+      x1: quad.length === 4 ? quad[0] : Math.min(quad[0], quad[2], quad[4], quad[6]),
+      y1: quad.length === 4 ? quad[1] : Math.min(quad[1], quad[3], quad[5], quad[7]),
+      x2: quad.length === 4 ? quad[2] : Math.max(quad[0], quad[2], quad[4], quad[6]),
+      y2: quad.length === 4 ? quad[3] : Math.max(quad[1], quad[3], quad[5], quad[7]),
+    }));
+  }
+  return [
+    {
+      x1: Math.min(comment.rect![0], comment.rect![2]),
+      y1: Math.min(comment.rect![1], comment.rect![3]),
+      x2: Math.max(comment.rect![0], comment.rect![2]),
+      y2: Math.max(comment.rect![1], comment.rect![3]),
+    },
+  ];
+}
+
+async function importCommentGeometry(
+  bytes: Uint8Array,
+  comment: Comment,
+): Promise<Uint8Array | null> {
+  if (!comment.rect) return null;
+  if (comment.type === "Text") {
+    return addStickyNoteToPdf(bytes, {
+      page: comment.page,
+      x: comment.rect[0],
+      y: comment.rect[3],
+      size: Math.max(
+        12,
+        Math.min(
+          64,
+          Math.min(
+            Math.abs(comment.rect[2] - comment.rect[0]),
+            Math.abs(comment.rect[3] - comment.rect[1]),
+          ),
+        ),
+      ),
+      contents: comment.text,
+      color: comment.color,
+      id: comment.id,
+    });
+  }
+  if (["Highlight", "Underline", "StrikeOut"].includes(comment.type)) {
+    return addTextMarkupAnnotations(bytes, comment.type as TextMarkupKind, [
+      {
+        page: comment.page,
+        quads: commentQuads(comment),
+        contents: comment.text,
+        color: comment.color,
+        opacity: comment.opacity,
+        id: comment.id,
+      },
+    ]);
+  }
+  if (["Square", "Circle", "Line", "Arrow"].includes(comment.type)) {
+    const start: [number, number] = comment.line
+      ? [comment.line[0], comment.line[1]]
+      : [comment.rect[0], comment.rect[1]];
+    const end: [number, number] = comment.line
+      ? [comment.line[2], comment.line[3]]
+      : [comment.rect[2], comment.rect[3]];
+    return addShapeAnnotation(bytes, {
+      page: comment.page,
+      kind: comment.type as ShapeKind,
+      start,
+      end,
+      color: comment.color,
+      width: comment.width,
+      opacity: comment.opacity,
+      id: comment.id,
+    });
+  }
+  return null;
+}
+
+async function readPageComments(
+  pdf: PDFDocumentProxy,
+  pdfLibDoc: PDFDocument | null,
+  pageNumber: number,
+  generation: number,
+  currentGeneration: () => number,
+): Promise<Comment[] | null> {
+  const page = await pdf.getPage(pageNumber);
+  const annotations: unknown[] = await page.getAnnotations();
+  if (generation !== currentGeneration()) return null;
+  const pagePdfLib =
+    pdfLibDoc && pageNumber - 1 < pdfLibDoc.getPageCount()
+      ? pdfLibDoc.getPage(pageNumber - 1)
+      : null;
+  const annotsPdfLib = pagePdfLib?.node.Annots();
+  return annotations
+    .map((raw) => readComment(raw, pageNumber, annotsPdfLib))
+    .filter((comment): comment is Comment => comment !== null);
+}
+
 export class ViewerController {
   readonly bus = new EventBus();
   readonly links = new PDFLinkService({
@@ -68,7 +228,7 @@ export class ViewerController {
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
   private pageTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly contexts = new Map<number, string>();
-  private abort = new AbortController();
+  private readonly abort = new AbortController();
   private searchGeneration = 0;
   readonly history = new RevisionHistory();
   private nativeCanUndo = false;
@@ -268,67 +428,11 @@ export class ViewerController {
     }
     const outline = await pdf.getOutline();
     if (generation !== this.generation) return;
-    type OutlineItem = NonNullable<Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>>[number];
-    const map = (nodes: OutlineItem[]): Bookmark[] =>
-      nodes
-        .filter((n) => n.dest || (n.items && n.items.length > 0))
-        .map((n) => ({
-          title: n.title,
-          destination: (n.dest as string | unknown[]) ?? null,
-          children: n.items ? map(n.items) : [],
-        }));
-    useWorkspace.getState().set({ bookmarks: outline ? map(outline) : [] });
+    useWorkspace.getState().set({ bookmarks: outline ? mapBookmarks(outline) : [] });
 
     // Inspect forms, XFA, scripts, and digital signatures. Clear the previous document's
     // findings first so the session can carry these values across its store reset.
-    useWorkspace.getState().set({ formNotice: null, hasDigitalSignature: false });
-    if (pdf.isPureXfa || Boolean(pdf.allXfaHtml)) {
-      useWorkspace.getState().set({
-        formNotice: "XFA forms are not supported. Form elements are read-only or unavailable.",
-      });
-    }
-    try {
-      const js = await pdf.getJSActions();
-      if (js && js.size > 0) {
-        useWorkspace.getState().set({
-          formNotice: "Script-based calculations and actions are disabled for document safety.",
-        });
-      }
-    } catch {
-      // ignore
-    }
-    try {
-      const fieldObjects = await pdf.getFieldObjects();
-      if (fieldObjects) {
-        let hasSig = false;
-        for (const fields of fieldObjects.values()) {
-          for (const f of fields) {
-            const fieldObj = f as { type?: string; subtype?: string };
-            if (fieldObj.type === "signature" || fieldObj.subtype === "Sig") {
-              hasSig = true;
-              break;
-            }
-          }
-          if (hasSig) break;
-        }
-        if (hasSig) {
-          useWorkspace.getState().set({ hasDigitalSignature: true });
-        }
-      }
-    } catch {
-      // ignore
-    }
-    try {
-      if (typeof pdf.getPermissions === "function") {
-        // PDF.js resolves null when the document sets no restrictions.
-        const perms = await pdf.getPermissions();
-        useWorkspace
-          .getState()
-          .set({ editingAllowed: !perms || perms.has(PermissionFlag.MODIFY_CONTENTS) });
-      }
-    } catch {
-      // ignore
-    }
+    useWorkspace.getState().set(await inspectDocumentCapabilities(pdf));
 
     this.identity = await contentIdentity(pdf).catch(() => null);
     await this.readComments().catch(() => {});
@@ -419,12 +523,13 @@ export class ViewerController {
     // Keep an owned copy for history and later rollback bookkeeping.
     const candidateBytes = new Uint8Array(bytes);
     const historyBytes = new Uint8Array(candidateBytes);
-    const previousBytes = !options?.resetHistory
-      ? (options?.preMutationBytes ??
-        (this.pdf && typeof this.pdf.saveDocument === "function"
-          ? await this.pdf.saveDocument()
-          : null))
-      : null;
+    let previousBytes: Uint8Array | null = null;
+    if (!options?.resetHistory) {
+      previousBytes = options?.preMutationBytes ?? null;
+      if (!previousBytes && this.pdf && typeof this.pdf.saveDocument === "function") {
+        previousBytes = await this.pdf.saveDocument();
+      }
+    }
     ensureSource();
     if (previousBytes) {
       this.history.adopt({
@@ -814,83 +919,10 @@ export class ViewerController {
       let bytes = await this.pdf.saveDocument();
       let added = 0;
       for (const comment of pending) {
-        if (!comment.rect) continue;
-        if (comment.type === "Text") {
-          bytes = (await addStickyNoteToPdf(bytes, {
-            page: comment.page,
-            x: comment.rect[0],
-            y: comment.rect[3],
-            size: Math.max(
-              12,
-              Math.min(
-                64,
-                Math.min(
-                  Math.abs(comment.rect[2] - comment.rect[0]),
-                  Math.abs(comment.rect[3] - comment.rect[1]),
-                ),
-              ),
-            ),
-            contents: comment.text,
-            color: comment.color,
-            id: comment.id,
-          })) as Uint8Array<ArrayBuffer>;
-          added++;
-        } else if (
-          comment.type === "Highlight" ||
-          comment.type === "Underline" ||
-          comment.type === "StrikeOut"
-        ) {
-          const quads =
-            comment.quads && comment.quads.length > 0
-              ? comment.quads.map((q) => ({
-                  x1: q.length === 4 ? q[0] : Math.min(q[0], q[2], q[4], q[6]),
-                  y1: q.length === 4 ? q[1] : Math.min(q[1], q[3], q[5], q[7]),
-                  x2: q.length === 4 ? q[2] : Math.max(q[0], q[2], q[4], q[6]),
-                  y2: q.length === 4 ? q[3] : Math.max(q[1], q[3], q[5], q[7]),
-                }))
-              : [
-                  {
-                    x1: Math.min(comment.rect[0], comment.rect[2]),
-                    y1: Math.min(comment.rect[1], comment.rect[3]),
-                    x2: Math.max(comment.rect[0], comment.rect[2]),
-                    y2: Math.max(comment.rect[1], comment.rect[3]),
-                  },
-                ];
-          bytes = (await addTextMarkupAnnotations(bytes, comment.type, [
-            {
-              page: comment.page,
-              quads,
-              contents: comment.text,
-              color: comment.color,
-              opacity: comment.opacity,
-              id: comment.id,
-            },
-          ])) as Uint8Array<ArrayBuffer>;
-          added++;
-        } else if (
-          comment.type === "Square" ||
-          comment.type === "Circle" ||
-          comment.type === "Line" ||
-          comment.type === "Arrow"
-        ) {
-          const start: [number, number] = comment.line
-            ? [comment.line[0], comment.line[1]]
-            : [comment.rect[0], comment.rect[1]];
-          const end: [number, number] = comment.line
-            ? [comment.line[2], comment.line[3]]
-            : [comment.rect[2], comment.rect[3]];
-          bytes = (await addShapeAnnotation(bytes, {
-            page: comment.page,
-            kind: comment.type,
-            start,
-            end,
-            color: comment.color,
-            width: comment.width,
-            opacity: comment.opacity,
-            id: comment.id,
-          })) as Uint8Array<ArrayBuffer>;
-          added++;
-        }
+        const updated = await importCommentGeometry(bytes, comment);
+        if (!updated) continue;
+        bytes = updated as Uint8Array<ArrayBuffer>;
+        added++;
       }
       if (added === 0) throw new Error("The comment file has no importable geometry.");
       await this.replaceWithBytes(bytes, `${added} comment${added === 1 ? "" : "s"} imported`, {
@@ -1121,32 +1153,47 @@ export class ViewerController {
     for (let p = 0; p < (matches?.length ?? 0) && results.length < 250; p++) {
       const pageMatches = matches?.[p];
       if (!pageMatches?.length) continue;
-      let text = this.contexts.get(p);
-      if (text === undefined) {
-        const page = await pdf.getPage(p + 1);
-        const content = await page.getTextContent({
-          disableNormalization: true,
-        });
-        text = content.items
-          .map((item) => ("str" in item ? item.str + (item.hasEOL ? "\n" : "") : ""))
-          .join("");
-        this.contexts.set(p, text);
-        if (this.contexts.size > 40) this.contexts.delete(this.contexts.keys().next().value!);
-      }
-      if (generation !== this.generation || search !== this.searchGeneration) return;
-      for (let i = 0; i < pageMatches.length && results.length < 250; i++) {
-        const start = pageMatches[i],
-          len = lengths?.[p]?.[i] ?? 0;
-        results.push({
-          page: p + 1,
-          index: i,
-          context: snippet(text, start, len),
-          match: text.slice(start, start + len),
-        });
-      }
+      const pageResults = await this.buildPageResults(
+        pdf,
+        p,
+        pageMatches,
+        lengths?.[p],
+        generation,
+        search,
+      );
+      if (!pageResults) return;
+      results.push(...pageResults.slice(0, 250 - results.length));
     }
     if (generation === this.generation && search === this.searchGeneration)
       useWorkspace.getState().set({ results });
+  }
+
+  private async buildPageResults(
+    pdf: PDFDocumentProxy,
+    pageIndex: number,
+    pageMatches: number[],
+    matchLengths: number[] | undefined,
+    generation: number,
+    searchGeneration: number,
+  ): Promise<SearchResult[] | null> {
+    let text = this.contexts.get(pageIndex);
+    if (text === undefined) {
+      const page = await pdf.getPage(pageIndex + 1);
+      const content = await page.getTextContent({ disableNormalization: true });
+      text = content.items.map(searchTextItem).join("");
+      this.contexts.set(pageIndex, text);
+      if (this.contexts.size > 40) this.contexts.delete(this.contexts.keys().next().value!);
+    }
+    if (generation !== this.generation || searchGeneration !== this.searchGeneration) return null;
+    return pageMatches.map((start, index) => {
+      const length = matchLengths?.[index] ?? 0;
+      return {
+        page: pageIndex + 1,
+        index,
+        context: snippet(text, start, length),
+        match: text.slice(start, start + length),
+      };
+    });
   }
   async readComments() {
     if (!this.pdf) return;
@@ -1162,18 +1209,15 @@ export class ViewerController {
     }
 
     for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const annotations: unknown[] = await page.getAnnotations();
-      if (generation !== this.generation) return;
-
-      const pagePdfLib =
-        pdfLibDoc && p - 1 < pdfLibDoc.getPageCount() ? pdfLibDoc.getPage(p - 1) : null;
-      const annotsPdfLib = pagePdfLib?.node.Annots();
-
-      for (const raw of annotations) {
-        const comment = readComment(raw, p, annotsPdfLib);
-        if (comment) comments.push(comment);
-      }
+      const pageComments = await readPageComments(
+        pdf,
+        pdfLibDoc,
+        p,
+        generation,
+        () => this.generation,
+      );
+      if (!pageComments) return;
+      comments.push(...pageComments);
       if (p % 20 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (generation !== this.generation) return;

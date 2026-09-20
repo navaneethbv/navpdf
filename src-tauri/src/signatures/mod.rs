@@ -395,27 +395,30 @@ fn decrypt_payload(key: &[u8; 32], payload: &[u8]) -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
+    fn test_key() -> [u8; 32] {
+        let mut key = [0_u8; 32];
+        getrandom::fill(&mut key).expect("test key generation succeeds");
+        key
+    }
+
     #[test]
     fn protected_assets_require_secret_key_and_authenticate_ciphertext() {
-        let payload = seal_payload(&[42; 32], b"synthetic asset").unwrap();
-        assert_eq!(
-            open_payload(&[42; 32], &payload).unwrap(),
-            b"synthetic asset"
-        );
-        assert!(open_payload(&[41; 32], &payload).is_err());
+        let key = test_key();
+        let mut wrong_key = key;
+        wrong_key[0] ^= 1;
+        let payload = seal_payload(&key, b"synthetic asset").unwrap();
+        assert_eq!(open_payload(&key, &payload).unwrap(), b"synthetic asset");
+        assert!(open_payload(&wrong_key, &payload).is_err());
         let mut tampered = payload.clone();
         tampered[21] ^= 1;
-        assert!(open_payload(&[42; 32], &tampered).is_err());
-        assert_ne!(
-            seal_payload(&[42; 32], b"synthetic asset").unwrap(),
-            payload
-        );
+        assert!(open_payload(&key, &tampered).is_err());
+        assert_ne!(seal_payload(&key, b"synthetic asset").unwrap(), payload);
     }
 
     #[test]
     fn legacy_assets_upgrade_to_authenticated_encryption_without_losing_content() {
         let root = tempfile::tempdir().unwrap();
-        let store = SignatureStore::with_key(root.path(), [17; 32]).unwrap();
+        let store = SignatureStore::with_key(root.path(), test_key()).unwrap();
         let asset = SignatureAsset {
             id: "old".into(),
             name: "Synthetic".into(),
@@ -439,7 +442,7 @@ mod tests {
     #[test]
     fn migration_rejects_path_escape_before_writing() {
         let temp = tempfile::tempdir().unwrap();
-        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+        let store = SignatureStore::with_key(temp.path(), test_key()).unwrap();
         let result = store.migrate(vec![SignatureAsset {
             id: "../escaped".into(),
             name: "Synthetic".into(),
@@ -453,7 +456,7 @@ mod tests {
 
     #[test]
     fn encryption_roundtrip_and_tamper_detection() {
-        let key = [42_u8; 32];
+        let key = test_key();
         let original = b"Sample signature PNG data and metadata payload";
         let encrypted = encrypt_payload(&key, original);
         assert_ne!(encrypted.as_slice(), original);
@@ -471,7 +474,7 @@ mod tests {
     #[test]
     fn signature_store_crud_and_permissions() {
         let temp = tempfile::tempdir().unwrap();
-        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+        let store = SignatureStore::with_key(temp.path(), test_key()).unwrap();
 
         assert_eq!(store.list().unwrap().assets.len(), 0);
 
@@ -515,7 +518,7 @@ mod tests {
     #[test]
     fn signature_migration_verifies_saved_copy() {
         let temp = tempfile::tempdir().unwrap();
-        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+        let store = SignatureStore::with_key(temp.path(), test_key()).unwrap();
 
         let legacy = vec![
             SignatureAsset {
@@ -539,7 +542,7 @@ mod tests {
     #[test]
     fn corrupt_signature_file_does_not_block_valid_signatures() {
         let temp = tempfile::tempdir().unwrap();
-        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+        let store = SignatureStore::with_key(temp.path(), test_key()).unwrap();
 
         let valid = store
             .save(
@@ -566,7 +569,7 @@ mod tests {
     fn legacy_assets_stay_listed_when_the_upgrade_cannot_be_written() {
         use std::os::unix::fs::PermissionsExt;
         let root = tempfile::tempdir().unwrap();
-        let store = SignatureStore::with_key(root.path(), [17; 32]).unwrap();
+        let store = SignatureStore::with_key(root.path(), test_key()).unwrap();
         let asset = SignatureAsset {
             id: "old".into(),
             name: "Synthetic".into(),
@@ -591,7 +594,7 @@ mod tests {
     #[test]
     fn unknown_asset_types_are_rejected() {
         let temp = tempfile::tempdir().unwrap();
-        let store = SignatureStore::with_key(temp.path(), [42; 32]).unwrap();
+        let store = SignatureStore::with_key(temp.path(), test_key()).unwrap();
         let image = "data:image/png;base64,AA==";
         assert!(store
             .save("Name".into(), "bogus".into(), image.into())

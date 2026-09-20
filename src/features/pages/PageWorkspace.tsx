@@ -38,6 +38,38 @@ import type { ViewerController } from "../viewer/controller";
 import { parsePageRange } from "./page-range";
 import { ThumbCanvas } from "../viewer/Thumbnails";
 
+function isPageWorkspaceInput(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement
+  );
+}
+
+function handlePageArrowKey(
+  event: React.KeyboardEvent,
+  focusedIndex: number,
+  totalPages: number,
+  selected: number[],
+  setFocusedIndex: (index: number) => void,
+  setSelected: (indices: number[]) => void,
+): boolean {
+  const delta = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+  if (!["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(event.key)) return false;
+  event.preventDefault();
+  const next = Math.max(0, Math.min(totalPages - 1, focusedIndex + delta));
+  setFocusedIndex(next);
+  if (!event.shiftKey) {
+    setSelected([next]);
+    return true;
+  }
+  const start = Math.min(focusedIndex, next);
+  const end = Math.max(focusedIndex, next);
+  const range = Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  setSelected(Array.from(new Set([...selected, ...range])));
+  return true;
+}
+
 export function PageWorkspace({
   controller,
   onClose,
@@ -250,13 +282,10 @@ export function PageWorkspace({
     try {
       const other = new Uint8Array(await file.arrayBuffer());
       const current = await controller.pdf.saveDocument();
+      const insertAt = selected.length ? selected[0] + 1 : totalPages;
       const output =
         action === "insert"
-          ? await insertDocumentPages(
-              current,
-              other,
-              selected.length ? selected[0] + 1 : totalPages,
-            )
+          ? await insertDocumentPages(current, other, insertAt)
           : await replacePage(current, selected[0] ?? 0, other);
       await controller.replaceWithBytes(
         output,
@@ -328,45 +357,14 @@ export function PageWorkspace({
       else onClose();
       return;
     }
-    if (
-      e.target instanceof HTMLInputElement ||
-      e.target instanceof HTMLSelectElement ||
-      e.target instanceof HTMLTextAreaElement
-    )
-      return;
+    if (isPageWorkspaceInput(e.target)) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
       e.preventDefault();
       selectAll();
       return;
     }
-    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const next = Math.max(0, focusedIndex - 1);
-      setFocusedIndex(next);
-      if (e.shiftKey) {
-        const start = Math.min(focusedIndex, next);
-        const end = Math.max(focusedIndex, next);
-        const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-        setSelected(Array.from(new Set([...selected, ...range])));
-      } else {
-        setSelected([next]);
-      }
+    if (handlePageArrowKey(e, focusedIndex, totalPages, selected, setFocusedIndex, setSelected))
       return;
-    }
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-      e.preventDefault();
-      const next = Math.min(totalPages - 1, focusedIndex + 1);
-      setFocusedIndex(next);
-      if (e.shiftKey) {
-        const start = Math.min(focusedIndex, next);
-        const end = Math.max(focusedIndex, next);
-        const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-        setSelected(Array.from(new Set([...selected, ...range])));
-      } else {
-        setSelected([next]);
-      }
-      return;
-    }
     if (e.key === " " || e.key === "Spacebar") {
       e.preventDefault();
       if (selected.includes(focusedIndex)) {
@@ -401,7 +399,7 @@ export function PageWorkspace({
       className="page-workspace-modal"
       open
       aria-label="Page Workspace"
-      tabIndex={0}
+      autoFocus
       onKeyDown={handleKeyDown}
       ref={containerRef}
     >

@@ -329,6 +329,10 @@ mod tests {
         crate::engine::save(&mut doc).unwrap()
     }
 
+    fn password() -> String {
+        uuid::Uuid::new_v4().simple().to_string()
+    }
+
     fn request(user: &str, owner: &str, permissions: PermissionRequest) -> ProtectionRequest {
         ProtectionRequest {
             user_password: user.to_string().into(),
@@ -339,86 +343,95 @@ mod tests {
 
     #[test]
     fn protected_copy_requires_the_password_and_hides_plaintext() {
+        let user = password();
+        let wrong = password();
+        let invalid_page_password = password();
+        let empty = String::new();
         let output = protect(
             &fixture(),
-            &request("open-sesame", "", PermissionRequest::all()),
+            &request(&user, &empty, PermissionRequest::all()),
             1,
         )
         .unwrap();
         assert!(!output.windows(15).any(|w| w == b"Protected canar"));
         assert!(Document::load_mem(&output).unwrap().get_pages().is_empty());
-        assert!(open_with_password(&output, "nope").is_err());
+        assert!(open_with_password(&output, &wrong).is_err());
         assert_eq!(
-            open_with_password(&output, "open-sesame")
+            open_with_password(&output, &user)
                 .unwrap()
                 .get_pages()
                 .len(),
             1
         );
-        let unlocked = unlock(&output, "open-sesame").unwrap();
+        let unlocked = unlock(&output, &user).unwrap();
         let plain = crate::engine::load(&unlocked).unwrap();
         assert_eq!(plain.extract_text(&[1]).unwrap().trim(), "Protected canary");
-        assert!(protect(&fixture(), &request("a", "", PermissionRequest::all()), 2).is_err());
+        assert!(protect(
+            &fixture(),
+            &request(&invalid_page_password, &empty, PermissionRequest::all()),
+            2
+        )
+        .is_err());
     }
 
     #[test]
     fn restrictions_need_a_distinct_owner_password_to_remove() {
+        let user = password();
+        let same = user.clone();
+        let owner = password();
+        let empty = String::new();
+        let wrong = password();
         let restricted = PermissionRequest {
             print: true,
             ..PermissionRequest::default()
         };
-        assert!(protect(&fixture(), &request("user-pass", "", restricted), 1).is_err());
+        assert!(protect(&fixture(), &request(&user, &empty, restricted), 1).is_err());
+        assert!(protect(&fixture(), &request(&user, &same, restricted), 1).is_err());
         assert!(protect(
             &fixture(),
-            &request("user-pass", "user-pass", restricted),
+            &request(&empty, &owner, PermissionRequest::all()),
             1
         )
         .is_err());
-        assert!(protect(
-            &fixture(),
-            &request("", "owner", PermissionRequest::all()),
-            1
-        )
-        .is_err());
-        let output = protect(
-            &fixture(),
-            &request("user-pass", "owner-pass", restricted),
-            1,
-        )
-        .unwrap();
-        let error = unlock(&output, "user-pass").unwrap_err();
+        let output = protect(&fixture(), &request(&user, &owner, restricted), 1).unwrap();
+        let error = unlock(&output, &user).unwrap_err();
         assert!(error.contains("owner"), "{error}");
-        assert!(unlock(&output, "wrong")
+        assert!(unlock(&output, &wrong)
             .unwrap_err()
             .contains("did not unlock"));
-        assert!(unlock(&output, "owner-pass").is_ok());
-        assert!(unlock(&fixture(), "owner-pass").is_err());
+        assert!(unlock(&output, &owner).is_ok());
+        assert!(unlock(&fixture(), &owner).is_err());
     }
 
     #[test]
     fn permissions_only_protection_opens_without_a_user_password() {
+        let empty = String::new();
+        let owner = password();
         let restricted = PermissionRequest {
             print: true,
             copy: false,
             ..PermissionRequest::default()
         };
-        let output = protect(&fixture(), &request("", "owner-pass", restricted), 1).unwrap();
-        assert!(open_with_password(&output, "").is_ok());
-        assert!(open_with_password(&output, "owner-pass").is_ok());
-        assert!(validate_protected(&output, "", "owner-pass", 1).is_ok());
+        let output = protect(&fixture(), &request(&empty, &owner, restricted), 1).unwrap();
+        assert!(open_with_password(&output, &empty).is_ok());
+        assert!(open_with_password(&output, &owner).is_ok());
+        assert!(validate_protected(&output, &empty, &owner, 1).is_ok());
     }
 
     #[test]
     fn validator_rejects_unencrypted_and_wrong_page_counts() {
-        assert!(validate_protected(&fixture(), "a", "a", 1).is_err());
+        let user = password();
+        let wrong = password();
+        let empty = String::new();
+        assert!(validate_protected(&fixture(), &user, &user, 1).is_err());
         let output = protect(
             &fixture(),
-            &request("pw-123456", "", PermissionRequest::all()),
+            &request(&user, &empty, PermissionRequest::all()),
             1,
         )
         .unwrap();
-        assert!(validate_protected(&output, "pw-123456", "pw-123456", 1).is_ok());
-        assert!(validate_protected(&output, "pw-123456", "pw-123456", 3).is_err());
-        assert!(validate_protected(&output, "other", "other", 1).is_err());
+        assert!(validate_protected(&output, &user, &user, 1).is_ok());
+        assert!(validate_protected(&output, &user, &user, 3).is_err());
+        assert!(validate_protected(&output, &wrong, &wrong, 1).is_err());
     }
 }

@@ -42,30 +42,36 @@ fn run() -> Result<Value, String> {
         serde_json::from_value(value).map_err(|error| format!("Invalid request: {error}"))
     }
     let cancel = AtomicBool::new(false);
-    let (result, report) = match operation.as_str() {
+    match operation.as_str() {
         "redact" => {
             let request: redact::RedactionRequest = parse(request)?;
             let (result, report) = redact::apply(&bytes, &request, &cancel)?;
-            (Some(result), json!(report))
+            fs::write(output, result).map_err(|error| format!("Cannot write {output}: {error}"))?;
+            Ok(json!(report))
         }
         "protect" => {
             let request: protect::ProtectionRequest = parse(request)?;
             let pages = engine::load(&bytes)?.get_pages().len() as u32;
-            (
-                Some(protect::protect(&bytes, &request, pages)?),
-                json!({ "pages": pages }),
-            )
+            let result = protect::protect(&bytes, &request, pages)?;
+            fs::write(output, result).map_err(|error| format!("Cannot write {output}: {error}"))?;
+            Ok(json!({ "pages": pages }))
         }
         "unlock" => {
             let password = request["password"]
                 .as_str()
                 .ok_or("A password is required.")?;
-            (Some(protect::unlock(&bytes, password)?), json!({}))
+            let result = protect::unlock(&bytes, password)?;
+            fs::write(output, result).map_err(|error| format!("Cannot write {output}: {error}"))?;
+            Ok(json!({}))
         }
         "compress" => {
             let preset: compress::CompressionPreset = parse(request["preset"].clone())?;
             let (result, report) = compress::compress(&bytes, preset, &cancel)?;
-            (result, json!(report))
+            if let Some(result) = result {
+                fs::write(output, result)
+                    .map_err(|error| format!("Cannot write {output}: {error}"))?;
+            }
+            Ok(json!(report))
         }
         "sign" => {
             let path = request["identity"]
@@ -87,16 +93,10 @@ fn run() -> Result<Value, String> {
             let pages = engine::load(&bytes)?.get_pages().len() as u32;
             let signed = sign::sign(&bytes, &identity, &options, SystemTime::now())?;
             sign::validate_signed(&signed, pages)?;
-            (
-                Some(signed),
-                json!({ "certificate": identity.summary, "pages": pages }),
-            )
+            fs::write(output, signed).map_err(|error| format!("Cannot write {output}: {error}"))?;
+            Ok(json!({ "certificate": identity.summary, "pages": pages }))
         }
-        "verify" => (None, json!(sign::verify(&bytes)?)),
-        other => return Err(format!("Unknown operation {other}.")),
-    };
-    if let Some(result) = result {
-        fs::write(output, result).map_err(|error| format!("Cannot write {output}: {error}"))?;
+        "verify" => Ok(json!(sign::verify(&bytes)?)),
+        other => Err(format!("Unknown operation {other}.")),
     }
-    Ok(report)
 }

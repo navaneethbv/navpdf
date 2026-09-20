@@ -220,6 +220,9 @@ pub fn atomic_save_with(
             return Err("The original PDF changed while saving. Use Save As.".into());
         }
     }
+    // Hash the staged file before the replacement so a fingerprint failure cannot
+    // leave callers with an error after the destination has already been committed.
+    let saved_hash = fingerprint(temp.path())?;
     // A failed persist returns the temporary file inside the error; dropping it
     // removes the job-owned file so no partial output remains beside the destination.
     let persisted = match injected_failure(SaveStep::Persist) {
@@ -242,7 +245,7 @@ pub fn atomic_save_with(
     if let Ok(directory) = File::open(parent) {
         let _ = directory.sync_all();
     }
-    Ok(Sha256::digest(bytes).to_vec())
+    Ok(saved_hash)
 }
 
 pub fn private_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String> {
@@ -466,9 +469,10 @@ pub(crate) mod tests {
     #[test]
     fn validate_pdf_rejects_real_encrypted_output() {
         let plain = fixture();
+        let password = uuid::Uuid::new_v4().simple().to_string();
         let encrypted = crate::engine::protect::protect(
             &plain,
-            &crate::engine::protect::ProtectionRequest::user_only("pw"),
+            &crate::engine::protect::ProtectionRequest::user_only(password),
             1,
         )
         .unwrap();

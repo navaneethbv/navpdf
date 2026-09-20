@@ -141,7 +141,6 @@ export function ViewerHost({
       <div
         className={`pdf-container ${tool === "hand" ? "hand-tool" : ""}`}
         ref={container}
-        tabIndex={0}
         aria-label="PDF document"
         inert={busy}
         onContextMenu={(event) => {

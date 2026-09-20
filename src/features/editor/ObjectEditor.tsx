@@ -39,6 +39,16 @@ export async function decodeImageFile(file: File, maxEdge = MAX_IMAGE_EDGE) {
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+type PageObject = PageObjects["objects"][number];
+
+function objectLabel(object: PageObject): string | null {
+  if (object.kind === "text") return object.text;
+  const width = object.pixelWidth ?? "?";
+  const height = object.pixelHeight ?? "?";
+  const shared = object.shared ? " (shared)" : "";
+  return `Image ${width}×${height} px${shared}`;
+}
+
 export function ObjectEditor({
   controller,
   onClose,
@@ -127,7 +137,7 @@ export function ObjectEditor({
   };
 
   const transformImage = () => {
-    if (!selected || selected.kind !== "image") return;
+    if (selected?.kind !== "image") return;
     const [x0, y0, x1, y1] = selected.bbox;
     const centerX = (x0 + x1) / 2;
     const centerY = (y0 + y1) / 2;
@@ -203,11 +213,7 @@ export function ObjectEditor({
                   }}
                 >
                   {object.kind === "text" ? <Type size={14} /> : <ImageIcon size={14} />}
-                  <span>
-                    {object.kind === "text"
-                      ? object.text
-                      : `Image ${object.pixelWidth ?? "?"}×${object.pixelHeight ?? "?"} px${object.shared ? " (shared)" : ""}`}
-                  </span>
+                  <span>{objectLabel(object)}</span>
                 </button>
               ))}
             </div>
