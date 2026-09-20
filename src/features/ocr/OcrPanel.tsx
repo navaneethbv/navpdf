@@ -58,17 +58,29 @@ async function pageImage(
   }
 }
 
-async function recognizeOcrPages(
-  sourcePdf: PdfDocument,
-  targetIndices: number[],
-  totalPages: number,
-  language: string,
-  cancelled: () => boolean,
-  ensureCurrent: () => void,
-  onProgress: (value: number) => void,
-  onStatus: (value: string) => void,
-  onCancel: () => void,
-): Promise<{ results: OcrPageResult[]; text: string[] }> {
+interface RecognizeOcrPagesOptions {
+  sourcePdf: PdfDocument;
+  targetIndices: number[];
+  totalPages: number;
+  language: string;
+  cancelled: () => boolean;
+  ensureCurrent: () => void;
+  onProgress: (value: number) => void;
+  onStatus: (value: string) => void;
+  onCancel: () => void;
+}
+
+async function recognizeOcrPages({
+  sourcePdf,
+  targetIndices,
+  totalPages,
+  language,
+  cancelled,
+  ensureCurrent,
+  onProgress,
+  onStatus,
+  onCancel,
+}: RecognizeOcrPagesOptions): Promise<{ results: OcrPageResult[]; text: string[] }> {
   const results: OcrPageResult[] = [];
   const text: string[] = [];
   for (let index = 0; index < targetIndices.length; index++) {
@@ -189,17 +201,17 @@ export function OcrPanel({
         }
       }
 
-      const recognized = await recognizeOcrPages(
+      const recognized = await recognizeOcrPages({
         sourcePdf,
         targetIndices,
         totalPages,
-        selectedLang,
-        () => cancelledRef.current,
+        language: selectedLang,
+        cancelled: () => cancelledRef.current,
         ensureCurrent,
-        setProgress,
-        setStatusText,
-        () => s.set({ status: "OCR processing cancelled by user." }),
-      );
+        onProgress: setProgress,
+        onStatus: setStatusText,
+        onCancel: () => s.set({ status: "OCR processing cancelled by user." }),
+      });
       if (cancelledRef.current) return;
       const { results, text: textAccumulator } = recognized;
 

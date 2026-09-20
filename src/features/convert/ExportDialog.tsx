@@ -8,16 +8,27 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 
 const MAX_EXPORT_PIXELS = 32 * 1024 * 1024;
 
-async function exportImagePages(
-  source: NonNullable<ViewerController["pdf"]>,
-  targetIndices: number[],
-  cancelled: () => boolean,
-  setProgress: (value: number) => void,
-  dpi: number,
-  format: "txt" | "png" | "jpg",
-  quality: number,
-  baseName: string,
-): Promise<boolean> {
+interface ExportImagePagesOptions {
+  source: NonNullable<ViewerController["pdf"]>;
+  targetIndices: number[];
+  cancelled: () => boolean;
+  setProgress: (value: number) => void;
+  dpi: number;
+  format: "txt" | "png" | "jpg";
+  quality: number;
+  baseName: string;
+}
+
+async function exportImagePages({
+  source,
+  targetIndices,
+  cancelled,
+  setProgress,
+  dpi,
+  format,
+  quality,
+  baseName,
+}: ExportImagePagesOptions): Promise<boolean> {
   const scale = dpi / 72;
   const imageFormat = format === "jpg" ? "jpg" : "png";
   for (let i = 0; i < targetIndices.length; i++) {
@@ -143,7 +154,7 @@ export function ExportDialog({
         throw new Error("No valid pages selected for export.");
       }
 
-      const exported = await exportImagePages(
+      const exported = await exportImagePages({
         source,
         targetIndices,
         cancelled,
@@ -152,7 +163,7 @@ export function ExportDialog({
         format,
         quality,
         baseName,
-      );
+      });
       if (!exported) return;
       s.set({
         status: `Exported ${targetIndices.length} page(s) as ${format.toUpperCase()} (${dpi} DPI).`,

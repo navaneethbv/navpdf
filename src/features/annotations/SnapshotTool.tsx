@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Copy, Download, X, Check } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import { safeFileName } from "../../utils/download";
@@ -105,6 +105,22 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
     }
   };
 
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const mouseDown = (event: MouseEvent) => handlePointerDown(event);
+    const mouseMove = (event: MouseEvent) => handlePointerMove(event);
+    const mouseUp = () => handlePointerUp();
+    overlay.addEventListener("mousedown", mouseDown);
+    overlay.addEventListener("mousemove", mouseMove);
+    overlay.addEventListener("mouseup", mouseUp);
+    return () => {
+      overlay.removeEventListener("mousedown", mouseDown);
+      overlay.removeEventListener("mousemove", mouseMove);
+      overlay.removeEventListener("mouseup", mouseUp);
+    };
+  }, [captured, current, start]);
+
   const handleCopy = async () => {
     if (!captured) return;
     try {
@@ -145,16 +161,6 @@ export function SnapshotTool({ onClose }: Readonly<{ onClose: () => void }>) {
       className="snapshot-overlay"
       role="application"
       aria-label="Snapshot selection area"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onMouseDown={handlePointerDown}
-      onMouseMove={handlePointerMove}
-      onMouseUp={handlePointerUp}
     >
       <div className="snapshot-hint">
         {captured ? (

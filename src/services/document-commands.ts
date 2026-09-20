@@ -649,37 +649,41 @@ export async function updateAnnotation(
 }
 
 /** Remove one annotation while leaving page content and other annotations intact. */
+function addRelatedRef(refsToDelete: Set<string>, value: PDFObject | undefined): boolean {
+  if (!(value instanceof PDFRef)) return false;
+  const key = value.toString();
+  if (refsToDelete.has(key)) return false;
+  refsToDelete.add(key);
+  return true;
+}
+
+function collectReplyRefs(annots: PDFArray, refsToDelete: Set<string>): boolean {
+  let changed = false;
+  for (let i = 0; i < annots.size(); i++) {
+    const entry = annots.get(i);
+    const entryKey = entry instanceof PDFRef ? entry.toString() : null;
+    if (!entryKey || refsToDelete.has(entryKey)) continue;
+    const annotDict = annots.lookup(i, PDFDict);
+    const replyTo = annotDict.get(PDFName.of("IRT"));
+    if (!(replyTo instanceof PDFRef) || !refsToDelete.has(replyTo.toString())) continue;
+    refsToDelete.add(entryKey);
+    changed = true;
+    if (addRelatedRef(refsToDelete, annotDict.get(PDFName.of("Popup")))) changed = true;
+  }
+  return changed;
+}
+
 function collectRelatedAnnotationRefs(
   annots: PDFArray,
   targetEntry: PDFObject,
   annotation: PDFDict,
 ): Set<string> {
   const refsToDelete = new Set<string>();
-  if (targetEntry instanceof PDFRef) refsToDelete.add(targetEntry.toString());
-  const popup = annotation.get(PDFName.of("Popup"));
-  if (popup instanceof PDFRef) refsToDelete.add(popup.toString());
-  const parent = annotation.get(PDFName.of("Parent"));
-  if (parent instanceof PDFRef) refsToDelete.add(parent.toString());
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let i = 0; i < annots.size(); i++) {
-      const entry = annots.get(i);
-      const entryKey = entry instanceof PDFRef ? entry.toString() : null;
-      if (entryKey && refsToDelete.has(entryKey)) continue;
-      const annotDict = annots.lookup(i, PDFDict);
-      const replyTo = annotDict.get(PDFName.of("IRT"));
-      if (!(replyTo instanceof PDFRef) || !refsToDelete.has(replyTo.toString())) continue;
-      if (entryKey) {
-        refsToDelete.add(entryKey);
-        changed = true;
-      }
-      const childPopup = annotDict.get(PDFName.of("Popup"));
-      if (childPopup instanceof PDFRef && !refsToDelete.has(childPopup.toString())) {
-        refsToDelete.add(childPopup.toString());
-        changed = true;
-      }
-    }
+  addRelatedRef(refsToDelete, targetEntry);
+  addRelatedRef(refsToDelete, annotation.get(PDFName.of("Popup")));
+  addRelatedRef(refsToDelete, annotation.get(PDFName.of("Parent")));
+  while (collectReplyRefs(annots, refsToDelete)) {
+    // Continue until no new related references are found.
   }
   return refsToDelete;
 }
@@ -1200,18 +1204,18 @@ function addRadioField(
   geometry: FieldGeometry,
 ) {
   const groupName = (definition.group || definition.name).trim();
-  const existing = form.getFieldMaybe(groupName);
-  const radioGroup = existing
-    ? existing instanceof PDFRadioGroup
-      ? existing
-      : (() => {
-          throw new TypeError(`Field "${groupName}" already exists and is not a radio group.`);
-        })()
-    : form.createRadioGroup(groupName);
+  const radioGroup = getOrCreateRadioGroup(form, groupName);
   const optionName = definition.defaultValue || `Option ${radioGroup.getOptions().length + 1}`;
   radioGroup.addOptionToPage(optionName, page, geometry);
   if (definition.required) radioGroup.enableRequired();
   if (definition.readOnly) radioGroup.enableReadOnly();
+}
+
+function getOrCreateRadioGroup(form: PDFForm, groupName: string): PDFRadioGroup {
+  const existing = form.getFieldMaybe(groupName);
+  if (!existing) return form.createRadioGroup(groupName);
+  if (existing instanceof PDFRadioGroup) return existing;
+  throw new TypeError(`Field "${groupName}" already exists and is not a radio group.`);
 }
 
 function addDropdownField(
@@ -1353,6 +1357,19 @@ function updateFieldFlags(field: ReturnType<PDFForm["getField"]>, update: FormFi
   }
 }
 
+type ChoiceField = PDFRadioGroup | PDFDropdown;
+
+function applyChoiceFieldValue(field: ChoiceField, value: string) {
+  if (!value) {
+    field.clear();
+    return;
+  }
+  if (!field.getOptions().includes(value)) {
+    throw new Error(`The form option "${value}" is not available.`);
+  }
+  field.select(value);
+}
+
 function applyFieldValue(field: ReturnType<PDFForm["getField"]>, value: string | undefined) {
   if (value === undefined) return;
   if (field instanceof PDFTextField) {
@@ -1364,26 +1381,8 @@ function applyFieldValue(field: ReturnType<PDFForm["getField"]>, value: string |
     else field.uncheck();
     return;
   }
-  if (field instanceof PDFRadioGroup) {
-    if (!value) {
-      field.clear();
-      return;
-    }
-    if (!field.getOptions().includes(value)) {
-      throw new Error(`The radio option "${value}" is not available.`);
-    }
-    field.select(value);
-    return;
-  }
-  if (field instanceof PDFDropdown) {
-    if (!value) {
-      field.clear();
-      return;
-    }
-    if (!field.getOptions().includes(value)) {
-      throw new Error(`The dropdown option "${value}" is not available.`);
-    }
-    field.select(value);
+  if (field instanceof PDFRadioGroup || field instanceof PDFDropdown) {
+    applyChoiceFieldValue(field, value);
     return;
   }
   throw new Error(`Form field "${field.getName()}" does not accept text values.`);
@@ -1515,6 +1514,16 @@ function standardFont(family: StandardFontFamily | undefined): StandardFonts {
   }
 }
 
+function textOffset(
+  alignment: InsertTextOptions["alignment"],
+  containerWidth: number,
+  lineWidth: number,
+): number {
+  if (alignment === "center") return (containerWidth - lineWidth) / 2;
+  if (alignment === "right") return containerWidth - lineWidth;
+  return 0;
+}
+
 function drawTextContent(
   page: PDFPage,
   font: PDFFont,
@@ -1533,12 +1542,7 @@ function drawTextContent(
     if (!line) continue;
     const lineWidth = font.widthOfTextAtSize(line, fontSize);
     const containerWidth = options.maxWidth && options.maxWidth > 0 ? options.maxWidth : lineWidth;
-    const offset =
-      options.alignment === "center"
-        ? (containerWidth - lineWidth) / 2
-        : options.alignment === "right"
-          ? containerWidth - lineWidth
-          : 0;
+    const offset = textOffset(options.alignment, containerWidth, lineWidth);
     page.drawText(line, {
       x: x + offset,
       y: y - index * lineHeight,
@@ -1780,18 +1784,29 @@ function drawDecorationBackground(
   );
 }
 
-function drawWatermark(
-  doc: PDFDocument,
-  page: PDFPage,
-  ops: PDFOperator[],
-  watermark: DocumentDecorationsOptions["watermark"],
-  font: PDFFont,
-  fontKey: PDFName,
-  fontBold: PDFFont,
-  fontBoldKey: PDFName,
-  width: number,
-  height: number,
-) {
+interface WatermarkDrawOptions {
+  doc: PDFDocument;
+  page: PDFPage;
+  ops: PDFOperator[];
+  watermark: DocumentDecorationsOptions["watermark"];
+  font: PDFFont;
+  fontBold: PDFFont;
+  fontBoldKey: PDFName;
+  width: number;
+  height: number;
+}
+
+function drawWatermark({
+  doc,
+  page,
+  ops,
+  watermark,
+  font,
+  fontBold,
+  fontBoldKey,
+  width,
+  height,
+}: WatermarkDrawOptions) {
   const settings = watermark;
   if (!settings) return;
   const text = settings.text?.trim();
@@ -1822,16 +1837,33 @@ function drawWatermark(
   );
 }
 
-function drawHeaderFooter(
-  ops: PDFOperator[],
-  font: PDFFont,
-  fontKey: PDFName,
-  slot: DecorationHeaderFooterSlot | undefined,
-  y: number,
-  width: number,
-  pageNumber: number,
-  formatTokens: DecorationTokenFormatter,
-) {
+interface HeaderFooterDrawOptions {
+  ops: PDFOperator[];
+  font: PDFFont;
+  fontKey: PDFName;
+  slot: DecorationHeaderFooterSlot | undefined;
+  y: number;
+  width: number;
+  pageNumber: number;
+  formatTokens: DecorationTokenFormatter;
+}
+
+function headerFooterX(alignment: "left" | "center" | "right", width: number, textWidth: number) {
+  if (alignment === "center") return (width - textWidth) / 2;
+  if (alignment === "right") return width - textWidth - 40;
+  return 40;
+}
+
+function drawHeaderFooter({
+  ops,
+  font,
+  fontKey,
+  slot,
+  y,
+  width,
+  pageNumber,
+  formatTokens,
+}: HeaderFooterDrawOptions) {
   if (!slot) return;
   const textColor = rgb(0.4, 0.4, 0.4);
   const positions: [string | undefined, "left" | "center" | "right"][] = [
@@ -1843,12 +1875,7 @@ function drawHeaderFooter(
     if (!template) continue;
     const text = formatTokens(template, pageNumber);
     const textWidth = font.widthOfTextAtSize(text, 10);
-    const x =
-      alignment === "center"
-        ? (width - textWidth) / 2
-        : alignment === "right"
-          ? width - textWidth - 40
-          : 40;
+    const x = headerFooterX(alignment, width, textWidth);
     ops.push(
       ...drawLinesOfText([font.encodeText(text)], {
         x,
@@ -1879,29 +1906,37 @@ function renderDecorationPage(
   const fontBoldKey = page.node.newFontDictionary("NavPDF_DecFontBold", fontBold.ref);
   const ops: PDFOperator[] = [pushGraphicsState()];
   drawDecorationBackground(doc, page, ops, options.background, width, height);
-  drawWatermark(
+  drawWatermark({
     doc,
     page,
     ops,
-    options.watermark,
+    watermark: options.watermark,
     font,
-    fontKey,
     fontBold,
     fontBoldKey,
     width,
     height,
-  );
-  drawHeaderFooter(
+  });
+  drawHeaderFooter({
     ops,
     font,
     fontKey,
-    options.header,
-    height - 30,
+    slot: options.header,
+    y: height - 30,
     width,
     pageNumber,
     formatTokens,
-  );
-  drawHeaderFooter(ops, font, fontKey, options.footer, 25, width, pageNumber, formatTokens);
+  });
+  drawHeaderFooter({
+    ops,
+    font,
+    fontKey,
+    slot: options.footer,
+    y: 25,
+    width,
+    pageNumber,
+    formatTokens,
+  });
   ops.push(popGraphicsState());
   if (ops.length > 2) appendTaggedStream(doc, page, "NavPDF_Decoration", ops);
 }

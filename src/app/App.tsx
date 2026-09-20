@@ -150,8 +150,8 @@ function handleShortcut(
   return true;
 }
 
-const creationMenuActions = ["create-pdf", "import-pdf", "combine-pdf", "open-recent"];
-const documentMenuActions = [
+const creationMenuActions = new Set(["create-pdf", "import-pdf", "combine-pdf", "open-recent"]);
+const documentMenuActions = new Set([
   "edit-objects",
   "page-workspace",
   "office-export",
@@ -165,7 +165,7 @@ const documentMenuActions = [
   "ocr",
   "forms",
   "fill-sign",
-];
+]);
 
 function handleLayoutMenuAction(
   payload: string,
@@ -305,10 +305,7 @@ function handleMenuAction(
   if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;
-  if (
-    creationMenuActions.includes(payload) ||
-    (state.document && documentMenuActions.includes(payload))
-  ) {
+  if (creationMenuActions.has(payload) || (state.document && documentMenuActions.has(payload))) {
     state.set({ activeModal: payload });
     return;
   }

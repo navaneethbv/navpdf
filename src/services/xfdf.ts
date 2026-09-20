@@ -39,11 +39,11 @@ function annotationTag(subtype: string) {
   return subtype === "StrikeOut" ? "strikeout" : subtype.toLowerCase();
 }
 
-const EXPORTABLE_SUBTYPES = ["Text", "Highlight", "Underline", "StrikeOut", "Stamp"];
+const EXPORTABLE_SUBTYPES = new Set(["Text", "Highlight", "Underline", "StrikeOut", "Stamp"]);
 
 function annotationIdentity(annotation: PDFDict, index: number) {
   const subtype = annotation.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText();
-  if (!subtype || !EXPORTABLE_SUBTYPES.includes(subtype)) return null;
+  if (!subtype || !EXPORTABLE_SUBTYPES.has(subtype)) return null;
   const rect = annotation.lookupMaybe(PDFName.of("Rect"), PDFArray)?.asRectangle();
   if (!rect) return null;
   const name =

@@ -112,7 +112,7 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
 
   const handleMove = (event: PointerEvent) => {
     const current = active.current;
-    if (!current || current.pointerId !== event.pointerId || !draft) return;
+    if (current?.pointerId !== event.pointerId || !draft) return;
     setDraft({
       ...draft,
       currentClient: { x: event.clientX, y: event.clientY },
@@ -121,7 +121,7 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
 
   const handleUp = async (event: PointerEvent) => {
     const current = active.current;
-    if (!current || current.pointerId !== event.pointerId) return;
+    if (current?.pointerId !== event.pointerId) return;
     const startPdf = draft?.startPdf ?? (await current.startPdf);
     const endPdf = await pointFor(current.page, event);
     active.current = null;
