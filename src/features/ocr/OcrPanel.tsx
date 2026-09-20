@@ -110,6 +110,323 @@ function languageName(code: string): string {
   }
 }
 
+type OcrTargetScope = "current" | "all" | "range";
+type OcrMode = "searchable" | "extract";
+
+function OcrErrorMessage({ error }: Readonly<{ error: string | null }>) {
+  return error ? <p role="alert">{error}</p> : null;
+}
+
+function OcrEngineStatus({ info }: Readonly<{ info: OcrEngineInfo | null }>) {
+  if (!info) return null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        padding: "8px 12px",
+        background: "var(--bg-secondary, #f4f5f7)",
+        borderRadius: "6px",
+        fontSize: "12px",
+        marginBottom: "12px",
+      }}
+    >
+      <ShieldCheck size={16} color="#16a34a" />
+      <span>
+        <strong>{info.engineName}</strong> &bull; {info.isOffline ? "100% Offline" : "Local"} &amp;
+        Private
+      </span>
+    </div>
+  );
+}
+
+function EncryptedDocumentNotice({ encrypted }: Readonly<{ encrypted: boolean }>) {
+  if (!encrypted) return null;
+  return (
+    <div
+      role="alert"
+      style={{
+        background: "#fef3c7",
+        border: "1px solid #f59e0b",
+        color: "#92400e",
+        padding: "10px",
+        borderRadius: "6px",
+        fontSize: "12px",
+        marginBottom: "12px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+        <AlertTriangle size={16} />
+        <span>Encrypted Document</span>
+      </div>
+      <p style={{ marginTop: "4px" }}>
+        OCR is disabled for password-protected and encrypted documents.
+      </p>
+    </div>
+  );
+}
+
+function ExistingTextWarning({
+  visible,
+  replaceExisting,
+  onReplaceExistingChange,
+}: Readonly<{
+  visible: boolean;
+  replaceExisting: boolean;
+  onReplaceExistingChange: (value: boolean) => void;
+}>) {
+  if (!visible) return null;
+  return (
+    <div
+      role="alert"
+      style={{
+        background: "#fef3c7",
+        border: "1px solid #f59e0b",
+        color: "#92400e",
+        padding: "10px",
+        borderRadius: "6px",
+        fontSize: "12px",
+        marginBottom: "12px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
+        <AlertTriangle size={16} />
+        <span>Existing digital text detected</span>
+      </div>
+      <p style={{ marginTop: "4px" }}>
+        Target pages already contain digital text. Original text stays in the PDF and may appear
+        twice in search results. Only a previous NavPDF OCR layer is replaced.
+      </p>
+      <label style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px" }}>
+        <input
+          type="checkbox"
+          checked={replaceExisting}
+          onChange={(event) => onReplaceExistingChange(event.target.checked)}
+        />
+        <span>Add OCR alongside original text</span>
+      </label>
+    </div>
+  );
+}
+
+function TargetPageSettings({
+  targetScope,
+  customRange,
+  currentPage,
+  totalPages,
+  running,
+  onScopeChange,
+  onCustomRangeChange,
+}: Readonly<{
+  targetScope: OcrTargetScope;
+  customRange: string;
+  currentPage: number;
+  totalPages: number;
+  running: boolean;
+  onScopeChange: (scope: OcrTargetScope) => void;
+  onCustomRangeChange: (value: string) => void;
+}>) {
+  return (
+    <fieldset className="setting-group">
+      <legend className="setting-title">Target Pages</legend>
+      <div className="tab-buttons-bar">
+        <button
+          type="button"
+          className={targetScope === "current" ? "active" : ""}
+          aria-pressed={targetScope === "current"}
+          onClick={() => onScopeChange("current")}
+          disabled={running}
+        >
+          Current Page ({currentPage})
+        </button>
+        <button
+          type="button"
+          className={targetScope === "all" ? "active" : ""}
+          aria-pressed={targetScope === "all"}
+          onClick={() => onScopeChange("all")}
+          disabled={running}
+        >
+          All Pages ({totalPages})
+        </button>
+        <button
+          type="button"
+          className={targetScope === "range" ? "active" : ""}
+          aria-pressed={targetScope === "range"}
+          onClick={() => onScopeChange("range")}
+          disabled={running}
+        >
+          Custom Range
+        </button>
+      </div>
+      {targetScope === "range" && (
+        <input
+          type="text"
+          placeholder="e.g. 1-3, 5"
+          value={customRange}
+          onChange={(event) => onCustomRangeChange(event.target.value)}
+          style={{ marginTop: "8px" }}
+          disabled={running}
+        />
+      )}
+    </fieldset>
+  );
+}
+
+function OcrActionSettings({
+  mode,
+  running,
+  onModeChange,
+}: Readonly<{
+  mode: OcrMode;
+  running: boolean;
+  onModeChange: (mode: OcrMode) => void;
+}>) {
+  return (
+    <fieldset className="setting-group">
+      <legend className="setting-title">OCR Action</legend>
+      <div className="tab-buttons-bar">
+        <button
+          type="button"
+          className={mode === "searchable" ? "active" : ""}
+          aria-pressed={mode === "searchable"}
+          onClick={() => onModeChange("searchable")}
+          disabled={running}
+        >
+          <Layers size={14} /> Searchable PDF Layer
+        </button>
+        <button
+          type="button"
+          className={mode === "extract" ? "active" : ""}
+          aria-pressed={mode === "extract"}
+          onClick={() => onModeChange("extract")}
+          disabled={running}
+        >
+          <FileText size={14} /> Extract Text Only
+        </button>
+      </div>
+      <p className="field-hint" style={{ marginTop: "6px" }}>
+        {mode === "searchable"
+          ? "Aligns invisible text over scanned images so words can be selected, copied, and searched without changing appearance."
+          : "Extracts recognized text directly into plain text without modifying the PDF document."}
+      </p>
+    </fieldset>
+  );
+}
+
+function OcrProgress({
+  running,
+  statusText,
+  progress,
+}: Readonly<{ running: boolean; statusText: string; progress: number }>) {
+  if (!running) return null;
+  return (
+    <div className="ocr-progress-box" style={{ marginTop: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <Loader2 size={18} className="spin" />
+        <span>
+          {statusText} ({progress}%)
+        </span>
+      </div>
+      <div
+        style={{
+          height: "4px",
+          background: "var(--border-color, #e5e7eb)",
+          borderRadius: "2px",
+          marginTop: "8px",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${progress}%`,
+            background: "var(--primary, #2563eb)",
+            transition: "width 0.2s ease",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function OcrResult({
+  recognizedText,
+  copied,
+  onCopy,
+}: Readonly<{
+  recognizedText: string | null;
+  copied: boolean;
+  onCopy: () => void;
+}>) {
+  if (!recognizedText) return null;
+  return (
+    <div className="ocr-result-box" style={{ marginTop: "12px" }}>
+      <div className="result-header" style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Check size={16} /> <span>Recognized Text</span>
+        </div>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="button-secondary"
+          style={{ padding: "4px 8px", fontSize: "12px" }}
+        >
+          <Copy size={13} /> {copied ? "Copied!" : "Copy Text"}
+        </button>
+      </div>
+      <textarea
+        readOnly
+        value={recognizedText}
+        rows={6}
+        style={{ width: "100%", marginTop: "8px", fontSize: "12px", fontFamily: "monospace" }}
+      />
+    </div>
+  );
+}
+
+function OcrFooter({
+  running,
+  recognizedText,
+  replaceExisting,
+  hasExistingWarning,
+  actionLabel,
+  canStart,
+  onCancel,
+  onClose,
+  onStart,
+}: Readonly<{
+  running: boolean;
+  recognizedText: string | null;
+  replaceExisting: boolean;
+  hasExistingWarning: boolean;
+  actionLabel: string;
+  canStart: boolean;
+  onCancel: () => void;
+  onClose: () => void;
+  onStart: () => void;
+}>) {
+  if (running) {
+    return (
+      <button type="button" onClick={onCancel} className="button-secondary">
+        Cancel OCR
+      </button>
+    );
+  }
+  return (
+    <>
+      <button type="button" onClick={onClose} className="button-secondary">
+        {recognizedText ? "Done" : "Cancel"}
+      </button>
+      {!recognizedText && (
+        <button type="button" onClick={onStart} disabled={!canStart} className="button-primary">
+          {hasExistingWarning && replaceExisting ? "Continue & Start OCR" : actionLabel}
+        </button>
+      )}
+    </>
+  );
+}
+
 export function OcrPanel({
   controller,
   onClose,
@@ -272,127 +589,24 @@ export function OcrPanel({
         </div>
 
         <div className="modal-body">
-          {engineError && <p role="alert">{engineError}</p>}
-          {engineInfo && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 12px",
-                background: "var(--bg-secondary, #f4f5f7)",
-                borderRadius: "6px",
-                fontSize: "12px",
-                marginBottom: "12px",
-              }}
-            >
-              <ShieldCheck size={16} color="#16a34a" />
-              <span>
-                <strong>{engineInfo.engineName}</strong> &bull;{" "}
-                {engineInfo.isOffline ? "100% Offline" : "Local"} &amp; Private
-              </span>
-            </div>
-          )}
+          <OcrErrorMessage error={engineError} />
+          <OcrEngineStatus info={engineInfo} />
+          <EncryptedDocumentNotice encrypted={!!s.info?.encrypted} />
+          <ExistingTextWarning
+            visible={hasExistingWarning}
+            replaceExisting={replaceExisting}
+            onReplaceExistingChange={setReplaceExisting}
+          />
 
-          {s.info?.encrypted && (
-            <div
-              role="alert"
-              style={{
-                background: "#fef3c7",
-                border: "1px solid #f59e0b",
-                color: "#92400e",
-                padding: "10px",
-                borderRadius: "6px",
-                fontSize: "12px",
-                marginBottom: "12px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
-                <AlertTriangle size={16} />
-                <span>Encrypted Document</span>
-              </div>
-              <p style={{ marginTop: "4px" }}>
-                OCR is disabled for password-protected and encrypted documents.
-              </p>
-            </div>
-          )}
-
-          {hasExistingWarning && (
-            <div
-              role="alert"
-              style={{
-                background: "#fef3c7",
-                border: "1px solid #f59e0b",
-                color: "#92400e",
-                padding: "10px",
-                borderRadius: "6px",
-                fontSize: "12px",
-                marginBottom: "12px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 600 }}>
-                <AlertTriangle size={16} />
-                <span>Existing digital text detected</span>
-              </div>
-              <p style={{ marginTop: "4px" }}>
-                Target pages already contain digital text. Original text stays in the PDF and may
-                appear twice in search results. Only a previous NavPDF OCR layer is replaced.
-              </p>
-              <label
-                style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={replaceExisting}
-                  onChange={(e) => setReplaceExisting(e.target.checked)}
-                />
-                <span>Add OCR alongside original text</span>
-              </label>
-            </div>
-          )}
-
-          <fieldset className="setting-group">
-            <legend className="setting-title">Target Pages</legend>
-            <div className="tab-buttons-bar">
-              <button
-                type="button"
-                className={targetScope === "current" ? "active" : ""}
-                aria-pressed={targetScope === "current"}
-                onClick={() => setTargetScope("current")}
-                disabled={running}
-              >
-                Current Page ({s.page})
-              </button>
-              <button
-                type="button"
-                className={targetScope === "all" ? "active" : ""}
-                aria-pressed={targetScope === "all"}
-                onClick={() => setTargetScope("all")}
-                disabled={running}
-              >
-                All Pages ({totalPages})
-              </button>
-              <button
-                type="button"
-                className={targetScope === "range" ? "active" : ""}
-                aria-pressed={targetScope === "range"}
-                onClick={() => setTargetScope("range")}
-                disabled={running}
-              >
-                Custom Range
-              </button>
-            </div>
-            {targetScope === "range" && (
-              <input
-                type="text"
-                placeholder="e.g. 1-3, 5"
-                value={customRange}
-                onChange={(e) => setCustomRange(e.target.value)}
-                style={{ marginTop: "8px" }}
-                disabled={running}
-              />
-            )}
-          </fieldset>
+          <TargetPageSettings
+            targetScope={targetScope}
+            customRange={customRange}
+            currentPage={s.page}
+            totalPages={totalPages}
+            running={running}
+            onScopeChange={setTargetScope}
+            onCustomRangeChange={setCustomRange}
+          />
 
           <div className="setting-group">
             <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
@@ -412,135 +626,36 @@ export function OcrPanel({
             </select>
           </div>
 
-          <fieldset className="setting-group">
-            <legend className="setting-title">OCR Action</legend>
-            <div className="tab-buttons-bar">
-              <button
-                type="button"
-                className={mode === "searchable" ? "active" : ""}
-                aria-pressed={mode === "searchable"}
-                onClick={() => setMode("searchable")}
-                disabled={running}
-              >
-                <Layers size={14} /> Searchable PDF Layer
-              </button>
-              <button
-                type="button"
-                className={mode === "extract" ? "active" : ""}
-                aria-pressed={mode === "extract"}
-                onClick={() => setMode("extract")}
-                disabled={running}
-              >
-                <FileText size={14} /> Extract Text Only
-              </button>
-            </div>
-            <p className="field-hint" style={{ marginTop: "6px" }}>
-              {mode === "searchable"
-                ? "Aligns invisible text over scanned images so words can be selected, copied, and searched without changing appearance."
-                : "Extracts recognized text directly into plain text without modifying the PDF document."}
-            </p>
-          </fieldset>
-
-          {running && (
-            <div className="ocr-progress-box" style={{ marginTop: "12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Loader2 size={18} className="spin" />
-                <span>
-                  {statusText} ({progress}%)
-                </span>
-              </div>
-              <div
-                style={{
-                  height: "4px",
-                  background: "var(--border-color, #e5e7eb)",
-                  borderRadius: "2px",
-                  marginTop: "8px",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${progress}%`,
-                    background: "var(--primary, #2563eb)",
-                    transition: "width 0.2s ease",
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {recognizedText && (
-            <div className="ocr-result-box" style={{ marginTop: "12px" }}>
-              <div
-                className="result-header"
-                style={{ display: "flex", justifyContent: "space-between" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Check size={16} /> <span>Recognized Text</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleCopyText();
-                  }}
-                  className="button-secondary"
-                  style={{ padding: "4px 8px", fontSize: "12px" }}
-                >
-                  <Copy size={13} /> {copied ? "Copied!" : "Copy Text"}
-                </button>
-              </div>
-              <textarea
-                readOnly
-                value={recognizedText}
-                rows={6}
-                style={{
-                  width: "100%",
-                  marginTop: "8px",
-                  fontSize: "12px",
-                  fontFamily: "monospace",
-                }}
-              />
-            </div>
-          )}
+          <OcrActionSettings mode={mode} running={running} onModeChange={setMode} />
+          <OcrProgress running={running} statusText={statusText} progress={progress} />
+          <OcrResult
+            recognizedText={recognizedText}
+            copied={copied}
+            onCopy={() => {
+              void handleCopyText();
+            }}
+          />
         </div>
 
         <div className="modal-footer">
-          {running ? (
-            <button
-              type="button"
-              onClick={() => {
-                cancelledRef.current = true;
-                setStatusText("Cancelling...");
-              }}
-              className="button-secondary"
-            >
-              Cancel OCR
-            </button>
-          ) : (
-            <>
-              <button type="button" onClick={onClose} className="button-secondary">
-                {recognizedText ? "Done" : "Cancel"}
-              </button>
-              {!recognizedText && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleStartOcr();
-                  }}
-                  disabled={
-                    running ||
-                    !engineInfo ||
-                    (hasExistingWarning && !replaceExisting) ||
-                    !!s.info?.encrypted
-                  }
-                  className="button-primary"
-                >
-                  {hasExistingWarning && replaceExisting ? "Continue & Start OCR" : ocrActionLabel}
-                </button>
-              )}
-            </>
-          )}
+          <OcrFooter
+            running={running}
+            recognizedText={recognizedText}
+            replaceExisting={replaceExisting}
+            hasExistingWarning={hasExistingWarning}
+            actionLabel={ocrActionLabel}
+            canStart={
+              !!engineInfo && !(hasExistingWarning && !replaceExisting) && !s.info?.encrypted
+            }
+            onCancel={() => {
+              cancelledRef.current = true;
+              setStatusText("Cancelling...");
+            }}
+            onClose={onClose}
+            onStart={() => {
+              void handleStartOcr();
+            }}
+          />
         </div>
       </div>
     </FeatureDialog>

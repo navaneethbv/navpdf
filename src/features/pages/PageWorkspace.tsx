@@ -70,6 +70,81 @@ function handlePageArrowKey(
   return true;
 }
 
+function handleEscapeKey(
+  event: React.KeyboardEvent,
+  showCrop: boolean,
+  showSplit: boolean,
+  setShowCrop: (value: boolean) => void,
+  setShowSplit: (value: boolean) => void,
+  onClose: () => void,
+): boolean {
+  if (event.key !== "Escape") return false;
+  if (showCrop) setShowCrop(false);
+  else if (showSplit) setShowSplit(false);
+  else onClose();
+  return true;
+}
+
+function handleSelectAllKey(event: React.KeyboardEvent, selectAll: () => void): boolean {
+  if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "a") return false;
+  event.preventDefault();
+  selectAll();
+  return true;
+}
+
+function handleSpaceKey(
+  event: React.KeyboardEvent,
+  focusedIndex: number,
+  selected: number[],
+  setSelected: (indices: number[]) => void,
+): boolean {
+  if (event.key !== " " && event.key !== "Spacebar") return false;
+  event.preventDefault();
+  setSelected(
+    selected.includes(focusedIndex)
+      ? selected.filter((index) => index !== focusedIndex)
+      : [...selected, focusedIndex],
+  );
+  return true;
+}
+
+function handleEnterKey(
+  event: React.KeyboardEvent,
+  focusedIndex: number,
+  setPage: (page: number) => void,
+  onClose: () => void,
+): boolean {
+  if (event.key !== "Enter") return false;
+  event.preventDefault();
+  setPage(focusedIndex + 1);
+  onClose();
+  return true;
+}
+
+function handleDeleteKey(
+  event: React.KeyboardEvent,
+  selected: number[],
+  totalPages: number,
+  handleDelete: () => void,
+): boolean {
+  if (event.key !== "Delete" && event.key !== "Backspace") return false;
+  if (selected.length > 0 && selected.length < totalPages) {
+    event.preventDefault();
+    handleDelete();
+  }
+  return true;
+}
+
+function handleRotateKey(
+  event: React.KeyboardEvent,
+  handleRotate: (degrees: number) => void,
+): boolean {
+  if (event.key.toLowerCase() !== "r") return false;
+  event.preventDefault();
+  handleRotate(event.shiftKey ? -90 : 90);
+  return true;
+}
+
 export function PageWorkspace({
   controller,
   onClose,
@@ -351,47 +426,15 @@ export function PageWorkspace({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (busy) return;
-    if (e.key === "Escape") {
-      if (showCrop) setShowCrop(false);
-      else if (showSplit) setShowSplit(false);
-      else onClose();
-      return;
-    }
+    if (handleEscapeKey(e, showCrop, showSplit, setShowCrop, setShowSplit, onClose)) return;
     if (isPageWorkspaceInput(e.target)) return;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
-      e.preventDefault();
-      selectAll();
-      return;
-    }
+    if (handleSelectAllKey(e, selectAll)) return;
     if (handlePageArrowKey(e, focusedIndex, totalPages, selected, setFocusedIndex, setSelected))
       return;
-    if (e.key === " " || e.key === "Spacebar") {
-      e.preventDefault();
-      if (selected.includes(focusedIndex)) {
-        setSelected(selected.filter((i) => i !== focusedIndex));
-      } else {
-        setSelected([...selected, focusedIndex]);
-      }
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      s.set({ page: focusedIndex + 1 });
-      onClose();
-      return;
-    }
-    if (e.key === "Delete" || e.key === "Backspace") {
-      if (selected.length > 0 && selected.length < totalPages) {
-        e.preventDefault();
-        void handleDelete();
-      }
-      return;
-    }
-    if (e.key.toLowerCase() === "r") {
-      e.preventDefault();
-      if (e.shiftKey) void handleRotate(-90);
-      else void handleRotate(90);
-    }
+    if (handleSpaceKey(e, focusedIndex, selected, setSelected)) return;
+    if (handleEnterKey(e, focusedIndex, (page) => s.set({ page }), onClose)) return;
+    if (handleDeleteKey(e, selected, totalPages, handleDelete)) return;
+    handleRotateKey(e, handleRotate);
   };
 
   return (
