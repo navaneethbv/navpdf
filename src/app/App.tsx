@@ -120,24 +120,30 @@ function handleShortcut(
   open: () => void,
 ): boolean {
   if (!(event.ctrlKey || event.metaKey)) return false;
-  const actions: Record<string, () => void> = {
-    o: () => open(),
-    s: () => void session.save(event.shiftKey),
-    f: () => {
-      if (state.document) state.set({ sidebar: "search" });
-    },
-    p: () => {
-      if (state.document) state.set({ activeModal: "print" });
-    },
-    w: () => session.home(),
-    z: () => (event.shiftKey ? controller?.redo() : controller?.undo()),
-    ",": () => state.set({ settingsOpen: true }),
-    "0": () => controller?.zoom("page-fit"),
-    "+": () => controller?.zoom((state.zoom / 100) * 1.15),
-    "=": () => controller?.zoom((state.zoom / 100) * 1.15),
-    "-": () => controller?.zoom(state.zoom / 100 / 1.15),
-  };
-  const action = actions[event.key.toLowerCase()];
+  const actions = new Map<string, () => void>([
+    ["o", () => open()],
+    ["s", () => void session.save(event.shiftKey)],
+    [
+      "f",
+      () => {
+        if (state.document) state.set({ sidebar: "search" });
+      },
+    ],
+    [
+      "p",
+      () => {
+        if (state.document) state.set({ activeModal: "print" });
+      },
+    ],
+    ["w", () => session.home()],
+    ["z", () => (event.shiftKey ? controller?.redo() : controller?.undo())],
+    [",", () => state.set({ settingsOpen: true })],
+    ["0", () => controller?.zoom("page-fit")],
+    ["+", () => controller?.zoom((state.zoom / 100) * 1.15)],
+    ["=", () => controller?.zoom((state.zoom / 100) * 1.15)],
+    ["-", () => controller?.zoom(state.zoom / 100 / 1.15)],
+  ]);
+  const action = actions.get(event.key.toLowerCase());
   if (!action) return false;
   event.preventDefault();
   action();
@@ -185,63 +191,99 @@ function menuActions(
   controller: ViewerController | null,
   session: SessionActions,
   open: () => void,
-): Record<string, () => void> {
-  return {
-    "first-page": () => controller?.goToFirst(),
-    "last-page": () => controller?.goToLast(),
-    "next-page": () => {
-      if (state.document) controller?.goTo(Math.min(state.page + 1, state.info?.pages ?? 1));
-    },
-    "previous-page": () => {
-      if (state.document) controller?.goTo(Math.max(state.page - 1, 1));
-    },
-    "rotate-view": () => {
-      if (state.document) controller?.rotateView(90);
-    },
-    "actual-size": () => controller?.zoom(1),
-    "read-mode": () => {
-      if (state.document) state.set({ readMode: !state.readMode });
-    },
-    "night-mode": () => {
-      if (state.document) state.set({ nightMode: !state.nightMode });
-    },
-    "all-tools": () => state.set({ toolMode: state.toolMode ? null : "all" }),
-    "quick-tools": () => state.set({ quickRailVisible: !state.quickRailVisible }),
-    open,
-    save: () => void session.save(),
-    "save-as": () => void session.save(true),
-    print: () => {
-      if (state.document) state.set({ activeModal: "print" });
-    },
-    home: () => session.home(),
-    organize: () => {
-      if (state.document) state.set({ activeModal: "page-workspace" });
-    },
-    undo: () => controller?.undo(),
-    redo: () => controller?.redo(),
-    find: () => state.set({ sidebar: "search" }),
-    settings: () => state.set({ settingsOpen: true }),
-    highlight: () => {
-      if (!state.info?.encrypted) controller?.setTool("highlight");
-    },
-    select: () => controller?.setTool("select"),
-    "tools:add-text": () => {
-      if (state.document) state.set({ activeModal: "add-text" });
-    },
-    "tools:add-image": () => {
-      if (state.document) state.set({ activeModal: "add-image" });
-    },
-    "tools:annotations": () => {
-      if (state.document) state.set({ activeModal: "annotations" });
-    },
-    "tools:redact": () => {
-      if (state.document) state.set({ activeModal: "redact" });
-    },
-    "fit-page": () => controller?.zoom("page-fit"),
-    "fit-width": () => controller?.zoom("page-width"),
-    "zoom-in": () => controller?.zoom((state.zoom / 100) * 1.15),
-    "zoom-out": () => controller?.zoom(state.zoom / 100 / 1.15),
-  };
+): Map<string, () => void> {
+  return new Map([
+    ["first-page", () => controller?.goToFirst()],
+    ["last-page", () => controller?.goToLast()],
+    [
+      "next-page",
+      () => {
+        if (state.document) controller?.goTo(Math.min(state.page + 1, state.info?.pages ?? 1));
+      },
+    ],
+    [
+      "previous-page",
+      () => {
+        if (state.document) controller?.goTo(Math.max(state.page - 1, 1));
+      },
+    ],
+    [
+      "rotate-view",
+      () => {
+        if (state.document) controller?.rotateView(90);
+      },
+    ],
+    ["actual-size", () => controller?.zoom(1)],
+    [
+      "read-mode",
+      () => {
+        if (state.document) state.set({ readMode: !state.readMode });
+      },
+    ],
+    [
+      "night-mode",
+      () => {
+        if (state.document) state.set({ nightMode: !state.nightMode });
+      },
+    ],
+    ["all-tools", () => state.set({ toolMode: state.toolMode ? null : "all" })],
+    ["quick-tools", () => state.set({ quickRailVisible: !state.quickRailVisible })],
+    ["open", open],
+    ["save", () => void session.save()],
+    ["save-as", () => void session.save(true)],
+    [
+      "print",
+      () => {
+        if (state.document) state.set({ activeModal: "print" });
+      },
+    ],
+    ["home", () => session.home()],
+    [
+      "organize",
+      () => {
+        if (state.document) state.set({ activeModal: "page-workspace" });
+      },
+    ],
+    ["undo", () => controller?.undo()],
+    ["redo", () => controller?.redo()],
+    ["find", () => state.set({ sidebar: "search" })],
+    ["settings", () => state.set({ settingsOpen: true })],
+    [
+      "highlight",
+      () => {
+        if (!state.info?.encrypted) controller?.setTool("highlight");
+      },
+    ],
+    ["select", () => controller?.setTool("select")],
+    [
+      "tools:add-text",
+      () => {
+        if (state.document) state.set({ activeModal: "add-text" });
+      },
+    ],
+    [
+      "tools:add-image",
+      () => {
+        if (state.document) state.set({ activeModal: "add-image" });
+      },
+    ],
+    [
+      "tools:annotations",
+      () => {
+        if (state.document) state.set({ activeModal: "annotations" });
+      },
+    ],
+    [
+      "tools:redact",
+      () => {
+        if (state.document) state.set({ activeModal: "redact" });
+      },
+    ],
+    ["fit-page", () => controller?.zoom("page-fit")],
+    ["fit-width", () => controller?.zoom("page-width")],
+    ["zoom-in", () => controller?.zoom((state.zoom / 100) * 1.15)],
+    ["zoom-out", () => controller?.zoom(state.zoom / 100 / 1.15)],
+  ]);
 }
 
 function handleMenuAction(
@@ -266,7 +308,7 @@ function handleMenuAction(
     state.set({ activeModal: payload });
     return;
   }
-  menuActions(state, controller, session, open)[payload]?.();
+  menuActions(state, controller, session, open).get(payload)?.();
 }
 
 export default function App() {
