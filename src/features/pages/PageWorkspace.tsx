@@ -130,7 +130,7 @@ function handleDeleteKey(
   if (event.key !== "Delete" && event.key !== "Backspace") return false;
   if (selected.length > 0 && selected.length < totalPages) {
     event.preventDefault();
-    void handleDelete();
+    handleDelete();
   }
   return true;
 }
@@ -141,7 +141,7 @@ function handleRotateKey(
 ): boolean {
   if (event.key.toLowerCase() !== "r") return false;
   event.preventDefault();
-  void handleRotate(event.shiftKey ? -90 : 90);
+  handleRotate(event.shiftKey ? -90 : 90);
   return true;
 }
 
