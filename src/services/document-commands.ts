@@ -668,7 +668,7 @@ function collectReplyRefs(annots: PDFArray, refsToDelete: Set<string>): boolean 
     if (!(replyTo instanceof PDFRef) || !refsToDelete.has(replyTo.toString())) continue;
     refsToDelete.add(entryKey);
     changed = true;
-    if (addRelatedRef(refsToDelete, annotDict.get(PDFName.of("Popup")))) changed = true;
+    addRelatedRef(refsToDelete, annotDict.get(PDFName.of("Popup")));
   }
   return changed;
 }
@@ -1451,6 +1451,7 @@ export function validateStandardFontCoverage(text: string): {
 }
 
 export type StandardFontFamily = "Helvetica" | "Helvetica-Bold" | "Times-Roman" | "Courier";
+type TextAlignment = "left" | "center" | "right";
 
 export interface InsertTextOptions {
   page: number; // 1-based page number
@@ -1460,7 +1461,7 @@ export interface InsertTextOptions {
   fontSize?: number;
   fontFamily?: StandardFontFamily;
   color?: [number, number, number];
-  alignment?: "left" | "center" | "right";
+  alignment?: TextAlignment;
   maxWidth?: number;
   lineHeight?: number;
   opacity?: number;
@@ -1848,7 +1849,7 @@ interface HeaderFooterDrawOptions {
   formatTokens: DecorationTokenFormatter;
 }
 
-function headerFooterX(alignment: "left" | "center" | "right", width: number, textWidth: number) {
+function headerFooterX(alignment: TextAlignment, width: number, textWidth: number) {
   if (alignment === "center") return (width - textWidth) / 2;
   if (alignment === "right") return width - textWidth - 40;
   return 40;
@@ -1866,7 +1867,7 @@ function drawHeaderFooter({
 }: HeaderFooterDrawOptions) {
   if (!slot) return;
   const textColor = rgb(0.4, 0.4, 0.4);
-  const positions: [string | undefined, "left" | "center" | "right"][] = [
+  const positions: [string | undefined, TextAlignment][] = [
     [slot.left, "left"],
     [slot.center, "center"],
     [slot.right, "right"],

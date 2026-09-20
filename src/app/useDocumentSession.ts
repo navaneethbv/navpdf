@@ -28,6 +28,54 @@ interface CommitLoadedCandidateOptions {
   report: (error: unknown) => void;
 }
 
+interface LoadFailureOptions {
+  candidate: PDFDocumentLoadingTask | null;
+  activeTask: PDFDocumentLoadingTask | null;
+  descriptor: DocumentDescriptor;
+  controller: ViewerController;
+  previousPdf: NonNullable<ViewerController["pdf"]> | null;
+  previousState: ReturnType<typeof useWorkspace.getState>;
+  openingCancelled: boolean;
+  failedDuringLoad: boolean;
+  error: unknown;
+  setPassword: (value: PasswordPrompt | null) => void;
+  report: (error: unknown) => void;
+}
+
+async function restoreAfterLoadFailure(options: LoadFailureOptions): Promise<void> {
+  const {
+    candidate,
+    activeTask,
+    descriptor,
+    controller,
+    previousPdf,
+    previousState,
+    openingCancelled,
+    failedDuringLoad,
+    error,
+    setPassword,
+    report,
+  } = options;
+  if (candidate !== activeTask) {
+    await candidate?.destroy().catch(report);
+    await desktop.releaseDocument(descriptor.id).catch(report);
+  }
+  if (previousPdf && controller.pdf !== previousPdf) {
+    try {
+      await controller.attach(previousPdf);
+    } catch {
+      // Ignore rollback failure and preserve the original load error.
+    }
+  }
+  useWorkspace.getState().set(previousState);
+  if (previousPdf) controller.goTo(previousState.page);
+  setPassword(null);
+  if (!openingCancelled && !failedDuringLoad) report(error);
+  useWorkspace.getState().set({
+    status: openingCancelled ? "Opening cancelled" : "Unable to open PDF",
+  });
+}
+
 async function commitLoadedCandidate(options: CommitLoadedCandidateOptions): Promise<void> {
   const {
     controller,
@@ -210,24 +258,18 @@ export function useDocumentSession(controller: ViewerController | null) {
         });
         return true;
       } catch (error) {
-        if (candidate !== task.current) {
-          await candidate?.destroy().catch(report);
-          await desktop.releaseDocument(descriptor.id).catch(report);
-        }
-        // Rollback viewer to previous PDF if available
-        if (previousPdf && controller.pdf !== previousPdf) {
-          try {
-            await controller.attach(previousPdf);
-          } catch {
-            // ignore rollback failure
-          }
-        }
-        useWorkspace.getState().set(previousState);
-        if (previousPdf) controller.goTo(previousState.page);
-        setPassword(null);
-        if (!openingCancelled.current && !failedDuringLoad) report(error);
-        useWorkspace.getState().set({
-          status: openingCancelled.current ? "Opening cancelled" : "Unable to open PDF",
+        await restoreAfterLoadFailure({
+          candidate,
+          activeTask: task.current,
+          descriptor,
+          controller,
+          previousPdf,
+          previousState,
+          openingCancelled: openingCancelled.current,
+          failedDuringLoad,
+          error,
+          setPassword,
+          report,
         });
         return false;
       } finally {
