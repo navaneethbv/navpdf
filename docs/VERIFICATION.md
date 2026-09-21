@@ -37,6 +37,18 @@ The vendored dependency emits upstream lifetime-style warnings under the current
 Sonar's initial green check still reported one new `typescript:S7786` finding, corrected by using `TypeError` for the unsafe-integer rejection.
 The final PR revision must have zero unresolved Sonar issues and passing hosted gates before merge; results are tracked on PR 28.
 
+At `977c068`, Sonar confirmed zero unresolved issues and all CI jobs and individual CodeQL language analyses passed.
+The aggregate CodeQL gate reported 13 findings in unchanged vendored GLib code; SARIF analysis `1808385631` was reviewed against the concrete source types and ownership rules.
+Alerts 56 through 68 were dismissed as false positives with individual evidence comments.
+Alert 56 models a UUID-validation boolean as secret text and routes it into an unrelated log-level conversion.
+Alerts 57 through 61 conflate generic string/error conversions with GObject, GValue or test boxed types and omit FFI output writes or explicit non-null guards.
+Alerts 62 through 67 conflate string arrays with GSList, GList, GPtrArray or Checksum conversions; concrete outputs are `Vec<GString>` or `Vec<OsString>`.
+Alert 68 treats dropping a pointer-wrapper element as freeing its backing slot, which the slice still owns when writing the null terminator.
+These are scoped triage decisions, not additional code fixes or evidence that every upstream unsafe function is defect-free.
+CodeQL configuration and vendored-source analysis remain enabled; no query or path exclusion was added to CodeQL.
+The actual GLib advisory is fixed by the separately reviewed mutable-output-pointer backport and optimized regression.
+GitHub reports zero open CodeQL alerts for PR 28 after triage, but the aggregate gate must refresh on the final revision before merge.
+
 ## September 19 single-document workspace
 
 Application source: `6b7fd37`, including the callback cleanup after `9a7fca2`.
