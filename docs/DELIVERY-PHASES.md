@@ -7,6 +7,15 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 20 repository safety review
+
+The shared page-range parser clips work to existing document pages and rejects unsafe integer endpoints, correcting excessive loops and a non-terminating numeric input.
+Valid print retries clear the previous range error.
+The GLib Linux runtime dependency uses the upstream string-iterator pointer fix backported to the compatible 0.18.5 source under [ADR 0012](adr/0012-glib-security-backport.md).
+The advisory exception is removed; optimized Linux regression and hosted quality results gate merge.
+This maintenance does not close the outstanding feature-parity or distribution phases.
+Verification and native acceptance evidence are recorded in `docs/VERIFICATION.md`.
+
 ## September 19 security and quality review in progress
 
 The [security review](SECURITY-REVIEW-2026-09-19.md) tracks annotation serialization, bounded stream decoding, redaction resource removal and document lifecycle corrections.

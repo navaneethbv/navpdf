@@ -13,3 +13,4 @@
 | [0009: Local certificate signatures from a PKCS #12 identity](0009-local-certificate-signatures.md) | Accepted for Phase 10 |
 | [0010: Hosted and specialist integrations declined for this release](0010-optional-services-declined.md) | Accepted for Phase 10 (scope decision) |
 | [0011: pdf-lib maintenance boundary and exit path](0011-pdf-lib-maintenance-and-exit.md) | Accepted for the September 14 correction plan |
+| [0012: GLib string iterator security backport](0012-glib-security-backport.md) | Accepted for September 20 security remediation |

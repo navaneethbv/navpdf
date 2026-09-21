@@ -69,6 +69,7 @@ export function PrintDialog({
       const bytes = await controller.pdf.saveDocument();
       const totalPages = controller.pdf.numPages;
       const pages = parsePageRange(rangeMode, customRange, s.page, totalPages);
+      s.set({ error: "" });
       // Only rebuild the document when a subset was actually requested, so a
       // full-document print keeps the original structure intact.
       const payload = pages.length === totalPages ? bytes : await extractPages(bytes, pages);

@@ -16,6 +16,30 @@ beforeEach(() => {
   useWorkspace.getState().reset();
 });
 
+it("clears a rejected range error when retrying with a valid range", async () => {
+  const pdf = await PDFDocument.create();
+  pdf.addPage();
+  const bytes = await pdf.save();
+  const onClose = vi.fn();
+  render(
+    <PrintDialog
+      controller={{ pdf: { numPages: 1, saveDocument: async () => bytes } } as never}
+      onClose={onClose}
+    />,
+  );
+  fireEvent.click(screen.getByLabelText("Pages:"));
+  const input = screen.getByLabelText("Custom page range");
+  fireEvent.change(input, { target: { value: "99" } });
+  fireEvent.click(screen.getByText("Print", { exact: true }));
+  await vi.waitFor(() => expect(useWorkspace.getState().error).toContain("No pages match"));
+  expect(printDocument).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: "1" } });
+  fireEvent.click(screen.getByText("Print", { exact: true }));
+  await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  expect(useWorkspace.getState().error).toBe("");
+  expect(useWorkspace.getState().status).toBe("Print cancelled");
+});
+
 it("prints only the selected edited page through native IPC and reports cancellation", async () => {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);

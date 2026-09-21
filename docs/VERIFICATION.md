@@ -1,5 +1,30 @@
 # Verification ledger
 
+## September 20 repository safety review
+
+Review baseline: `2726e03`, with a clean working tree.
+Source review covered shared page selection and its print/export/OCR/split consumers, PDF helper boundaries, mutation queue/history, and the Linux GLib dependency chain.
+This is a focused safety review, not a claim that every feature or remaining phase has been accepted.
+
+The original native print dialog traversed `1000000000-2000000000` on a five-page document before reporting no matching pages.
+A separate real-parser worker running `9007199254740992` did not terminate within a 1000 ms deadline and was terminated without blocking the native app.
+The correction clips the iteration bounds to document pages and rejects unsafe integer endpoints before iteration.
+The rebuilt native app rejected the unsafe singleton, rejected the wholly out-of-range span, and opened the macOS system print preview with all five pages for `1-9007199254740991`.
+The system print operation was cancelled; no physical print or saved PDF mutation is claimed.
+Native retry testing also exposed a stale range error after valid input; the print path now clears it after successful range validation.
+
+The GLib source archive hash matches the registry lockfile checksum.
+Only the two upstream pointer-mutability lines differ in the vendored crate; license and generated manifest are retained.
+`cargo tree --locked --target x86_64-unknown-linux-gnu -i glib` resolves the full GTK/Tauri consumer chain to the patched local copy.
+The local macOS run cannot execute the Linux-only regression; optimized Linux execution, Cargo Deny, Sonar and all hosted checks must pass before merge.
+The prior advisory ignore was removed rather than expanded.
+Local checks pass ESLint, TypeScript, Prettier, production build and 610 frontend tests across 88 files.
+Coverage is 85.51% statements, 77.01% branches, 83.10% functions and 88.75% lines.
+The native suite passes 92 tests with the existing constrained-volume test ignored, and Clippy passes with warnings denied.
+Rustfmt, instruction-file parity and diff whitespace checks pass.
+The Linux-only regression has zero applicable cases on macOS and is not claimed as locally executed.
+Native package identity is recorded below after final packaging and retry verification.
+
 ## September 19 single-document workspace
 
 Application source: `6b7fd37`, including the callback cleanup after `9a7fca2`.
