@@ -23,7 +23,19 @@ Coverage is 85.51% statements, 77.01% branches, 83.10% functions and 88.75% line
 The native suite passes 92 tests with the existing constrained-volume test ignored, and Clippy passes with warnings denied.
 Rustfmt, instruction-file parity and diff whitespace checks pass.
 The Linux-only regression has zero applicable cases on macOS and is not claimed as locally executed.
-Native package identity is recorded below after final packaging and retry verification.
+The final package includes source `4f62766` plus the `TypeError` correction in this PR.
+After relaunching that exact bundle, the unsafe singleton produced the expected validation message, the huge valid range opened all five pages in system print preview, and cancelling returned with no stale error banner.
+`npm run package` produced the app and DMG; `hdiutil verify` passed with CRC32 `$8FA067B9`.
+Executable SHA-256: `eedd8f0e88a703b849f02e769fd1211fa8ed791204965ce0afef4d65f1e3d9b9`.
+DMG SHA-256: `9c8f3f8e12a1f7e82df2e669e8c84e9c274ea02b2290493fdb25f13f31cc8fd5`.
+Final fixture `tests/pdf-fixtures/reader-5.pdf` SHA-256: `6c973cd5e55fec849c5ea8e3cff26526be2daf4e28abdd4e0c8d9514284dc84a`.
+The app and DMG remain unsigned local distribution artifacts; no signing, notarization, clean-account installation or physical-printer acceptance is claimed.
+
+CI run `35550010967` at `4f62766` passed Linux/macOS Rust, MSRV, Cargo Deny, frontend and native acceptance checks.
+The Linux log confirms `variant_string_iteration_preserves_values_in_both_directions` ran and passed with GLib configured at optimization level 3.
+The vendored dependency emits upstream lifetime-style warnings under the current Linux compiler; application Clippy passes with warnings denied.
+Sonar's initial green check still reported one new `typescript:S7786` finding, corrected by using `TypeError` for the unsafe-integer rejection.
+The final PR revision must have zero unresolved Sonar issues and passing hosted gates before merge; results are tracked on PR 28.
 
 ## September 19 single-document workspace
 

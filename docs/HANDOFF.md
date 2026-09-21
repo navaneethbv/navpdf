@@ -1,5 +1,14 @@
 # NavPDF handoff
 
+## September 20 repository safety maintenance
+
+PR 28 fixes oversized and non-terminating custom page ranges and stale print errors after a valid retry.
+It also backports the upstream GLib iterator fix into the GTK-compatible 0.18.5 dependency, with provenance, license and removal criteria in ADR 0012.
+Local frontend and Rust gates pass, and the first hosted run confirms optimized Linux iterator execution and Cargo Deny without the previous GLib advisory exception.
+The verification ledger records package identity, native print-range evidence and the final Sonar correction.
+All checks and zero unresolved Sonar issues gate the final revision's merge.
+Previously recorded feature-parity and signed-distribution gaps remain open.
+
 ## September 19 workspace delivery
 
 Source `6b7fd37` implements the approved single-PDF reference layout, PNG/JPEG import, discoverable conversion/compression and native export saving.

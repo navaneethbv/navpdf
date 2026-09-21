@@ -23,7 +23,7 @@ function parseCustomPageRange(custom: string, totalPages: number): number[] {
     }
 
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) {
-      throw new Error("Invalid page range: page numbers must be safe integers");
+      throw new TypeError("Invalid page range: page numbers must be safe integers");
     }
     const from = Math.max(1, Math.min(start, end));
     const to = Math.min(totalPages, Math.max(start, end));
