@@ -1,0 +1,2 @@
+# Preserve the upstream license byte-for-byte, including its final blank line.
+src-tauri/vendor/glib-0.18.5/LICENSE whitespace=-blank-at-eof

@@ -7,10 +7,6 @@ ignore = [
     # These advisories are transitive dependencies of Tauri's platform and
     # parser stack. The advisory database reports no safe upgrade for them.
     "RUSTSEC-2024-0370",
-    # Tauri 2's Linux runtime currently pins gtk 0.18, which requires glib
-    # 0.18.5. The fixed glib 0.20 line requires an incompatible gtk stack.
-    # Revisit when Tauri publishes a compatible Linux runtime dependency.
-    "RUSTSEC-2024-0429",
     "RUSTSEC-2025-0075",
     "RUSTSEC-2025-0080",
     "RUSTSEC-2025-0081",

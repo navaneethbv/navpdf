@@ -1,5 +1,54 @@
 # Verification ledger
 
+## September 20 repository safety review
+
+Review baseline: `2726e03`, with a clean working tree.
+Source review covered shared page selection and its print/export/OCR/split consumers, PDF helper boundaries, mutation queue/history, and the Linux GLib dependency chain.
+This is a focused safety review, not a claim that every feature or remaining phase has been accepted.
+
+The original native print dialog traversed `1000000000-2000000000` on a five-page document before reporting no matching pages.
+A separate real-parser worker running `9007199254740992` did not terminate within a 1000 ms deadline and was terminated without blocking the native app.
+The correction clips the iteration bounds to document pages and rejects unsafe integer endpoints before iteration.
+The rebuilt native app rejected the unsafe singleton, rejected the wholly out-of-range span, and opened the macOS system print preview with all five pages for `1-9007199254740991`.
+The system print operation was cancelled; no physical print or saved PDF mutation is claimed.
+Native retry testing also exposed a stale range error after valid input; the print path now clears it after successful range validation.
+
+The GLib source archive hash matches the registry lockfile checksum.
+Only the two upstream pointer-mutability lines differ in the vendored crate; license and generated manifest are retained.
+`cargo tree --locked --target x86_64-unknown-linux-gnu -i glib` resolves the full GTK/Tauri consumer chain to the patched local copy.
+The local macOS run cannot execute the Linux-only regression; optimized Linux execution, Cargo Deny, Sonar and all hosted checks must pass before merge.
+The prior advisory ignore was removed rather than expanded.
+Local checks pass ESLint, TypeScript, Prettier, production build and 610 frontend tests across 88 files.
+Coverage is 85.51% statements, 77.01% branches, 83.10% functions and 88.75% lines.
+The native suite passes 92 tests with the existing constrained-volume test ignored, and Clippy passes with warnings denied.
+Rustfmt, instruction-file parity and diff whitespace checks pass.
+The Linux-only regression has zero applicable cases on macOS and is not claimed as locally executed.
+The final package includes source `4f62766` plus the `TypeError` correction in this PR.
+After relaunching that exact bundle, the unsafe singleton produced the expected validation message, the huge valid range opened all five pages in system print preview, and cancelling returned with no stale error banner.
+`npm run package` produced the app and DMG; `hdiutil verify` passed with CRC32 `$8FA067B9`.
+Executable SHA-256: `eedd8f0e88a703b849f02e769fd1211fa8ed791204965ce0afef4d65f1e3d9b9`.
+DMG SHA-256: `9c8f3f8e12a1f7e82df2e669e8c84e9c274ea02b2290493fdb25f13f31cc8fd5`.
+Final fixture `tests/pdf-fixtures/reader-5.pdf` SHA-256: `6c973cd5e55fec849c5ea8e3cff26526be2daf4e28abdd4e0c8d9514284dc84a`.
+The app and DMG remain unsigned local distribution artifacts; no signing, notarization, clean-account installation or physical-printer acceptance is claimed.
+
+CI run `35550010967` at `4f62766` passed Linux/macOS Rust, MSRV, Cargo Deny, frontend and native acceptance checks.
+The Linux log confirms `variant_string_iteration_preserves_values_in_both_directions` ran and passed with GLib configured at optimization level 3.
+The vendored dependency emits upstream lifetime-style warnings under the current Linux compiler; application Clippy passes with warnings denied.
+Sonar's initial green check still reported one new `typescript:S7786` finding, corrected by using `TypeError` for the unsafe-integer rejection.
+The final PR revision must have zero unresolved Sonar issues and passing hosted gates before merge; results are tracked on PR 28.
+
+At `977c068`, Sonar confirmed zero unresolved issues and all CI jobs and individual CodeQL language analyses passed.
+The aggregate CodeQL gate reported 13 findings in unchanged vendored GLib code; SARIF analysis `1808385631` was reviewed against the concrete source types and ownership rules.
+Alerts 56 through 68 were dismissed as false positives with individual evidence comments.
+Alert 56 models a UUID-validation boolean as secret text and routes it into an unrelated log-level conversion.
+Alerts 57 through 61 conflate generic string/error conversions with GObject, GValue or test boxed types and omit FFI output writes or explicit non-null guards.
+Alerts 62 through 67 conflate string arrays with GSList, GList, GPtrArray or Checksum conversions; concrete outputs are `Vec<GString>` or `Vec<OsString>`.
+Alert 68 treats dropping a pointer-wrapper element as freeing its backing slot, which the slice still owns when writing the null terminator.
+These are scoped triage decisions, not additional code fixes or evidence that every upstream unsafe function is defect-free.
+CodeQL configuration and vendored-source analysis remain enabled; no query or path exclusion was added to CodeQL.
+The actual GLib advisory is fixed by the separately reviewed mutable-output-pointer backport and optimized regression.
+GitHub reports zero open CodeQL alerts for PR 28 after triage, but the aggregate gate must refresh on the final revision before merge.
+
 ## September 19 single-document workspace
 
 Application source: `6b7fd37`, including the callback cleanup after `9a7fca2`.

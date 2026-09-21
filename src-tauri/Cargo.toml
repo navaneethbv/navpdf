@@ -41,11 +41,22 @@ x509-cert = "0.2.5"
 [dev-dependencies]
 x509-cert = { version = "0.2.5", features = ["builder"] }
 
+[patch.crates-io]
+# Upstream RUSTSEC-2024-0429 fix backported without changing GTK 0.18's API.
+glib = { path = "vendor/glib-0.18.5" }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+glib = "0.18.5"
+
 # Key generation in the signing tests is impractically slow without optimized big integers.
 [profile.dev.package.num-bigint-dig]
 opt-level = 3
 
 [profile.dev.package.rsa]
+opt-level = 3
+
+# The GLib advisory manifests when its iterator implementation is optimized.
+[profile.test.package.glib]
 opt-level = 3
 
 [target.'cfg(target_os = "macos")'.dependencies]
