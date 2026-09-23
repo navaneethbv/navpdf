@@ -125,6 +125,7 @@ function GuideDialog({ mode }: Readonly<{ mode: GuideMode }>) {
   return (
     <Dialog
       title={getGuideTitle(mode)}
+      icon={<Lightbulb size={18} />}
       onClose={() => void close()}
       busy={saving}
       className="guide-dialog"

@@ -763,3 +763,5 @@ Several dialogs referenced undefined color tokens and hardcoded colors, which ig
 The corrected captures show each surface on the shared modal layout and palette tokens in both schemes.
 `npm run lint`, `npm run typecheck`, `npm run test:coverage` (632 tests) and `npm run build` passed.
 The browser preview does not establish native WebKit rendering; native macOS visual acceptance of these surfaces remains open.
+Native modal dialogs (Settings, Export a PDF, Add Sticky Note, Open Recent, Unlock PDF, unsaved-changes and Help) now share the tool dialog shell: width, radius, elevation, icon header, label style and footer bar.
+Their light and dark captures were compared with the Print dialog; `npm run lint`, `npm run test:coverage` (632 tests) and `npm run build` passed.

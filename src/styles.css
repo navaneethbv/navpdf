@@ -1460,57 +1460,74 @@ p {
 .color-swatches button[aria-pressed="true"] {
   box-shadow: 0 0 0 2px var(--accent);
 }
+/* Native modal dialogs share the tool dialog shell: size, radius, elevation, header and footer. */
 .app-dialog {
   margin: auto;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--ink);
-  width: 460px;
+  width: 520px;
   max-width: calc(100vw - 40px);
-  max-height: calc(100dvh - 40px);
+  max-height: 88vh;
   overflow: auto;
   box-shadow: var(--elevation-3);
   z-index: 500;
+  animation: modalScale 0.18s ease-out;
 }
 .app-dialog.priority-dialog {
   z-index: 2000;
 }
 .app-dialog::backdrop {
   background: var(--dialog-backdrop);
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(2px);
 }
 .app-dialog.priority-dialog::backdrop {
   z-index: 1999;
 }
 .app-dialog > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .app-dialog h2 {
   font-size: 15px;
   font-weight: 600;
 }
+/* Action rows end the dialog as the same footer bar that tool dialogs use. */
+.dialog-body .dialog-actions,
+.dialog-body .guide-actions {
+  position: sticky;
+  bottom: 0;
+  margin: 8px -20px -20px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
 .dialog-body {
   padding: 20px;
-  font-size: 12px;
-  line-height: 1.8;
+  font-size: 13px;
+  line-height: 1.5;
 }
 .dialog-body form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
+/* Field labels match the tool dialogs' setting titles. */
 .dialog-body label:not(.check-label) {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  font-size: 11px;
-  font-weight: 550;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
 }
 .dialog-body input:not([type="checkbox"], [type="radio"], [type="color"], [type="range"]),
 .dialog-body textarea,
@@ -1967,7 +1984,7 @@ p {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  box-shadow: 0 16px 40px var(--shadow-color);
+  box-shadow: var(--elevation-3);
   width: 100%;
   max-width: 520px;
   max-height: 88vh;

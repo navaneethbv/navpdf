@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { AlertCircle, Info, LoaderCircle, X } from "lucide-react";
+import { AlertCircle, History, Info, LoaderCircle, LockKeyhole, Save, X } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import { ViewerController } from "../features/viewer/controller";
 import { ViewerHost } from "../features/viewer/ViewerHost";
@@ -574,7 +574,11 @@ export default function App() {
       />
       {s.settingsOpen && <Settings />}
       {s.activeModal === "open-recent" && (
-        <Dialog title="Open Recent Files" onClose={() => s.set({ activeModal: null })}>
+        <Dialog
+          title="Open Recent Files"
+          icon={<History size={18} />}
+          onClose={() => s.set({ activeModal: null })}
+        >
           <div className="export-options">
             {s.local.recents.length ? (
               s.local.recents.map((item) => (
@@ -597,7 +601,12 @@ export default function App() {
         </Dialog>
       )}
       {session.password && (
-        <Dialog title="Unlock PDF" onClose={session.cancelPassword} priority>
+        <Dialog
+          title="Unlock PDF"
+          icon={<LockKeyhole size={18} />}
+          onClose={session.cancelPassword}
+          priority
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -633,7 +642,12 @@ export default function App() {
         </Dialog>
       )}
       {session.confirm && (
-        <Dialog title="Save your changes?" onClose={session.cancelConfirm} priority>
+        <Dialog
+          title="Save your changes?"
+          icon={<Save size={18} />}
+          onClose={session.cancelConfirm}
+          priority
+        >
           <p>
             This document has unsaved edits. Save them before continuing, or discard this session's
             changes.
