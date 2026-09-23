@@ -41,8 +41,7 @@ export class ViewHistory {
   }
 
   private step(from: number[], to: number[], current: number, pageCount: number): number | null {
-    while (from.length > 0) {
-      const page = from.pop()!;
+    for (let page = from.pop(); page !== undefined; page = from.pop()) {
       // Pages removed by an edit, and the page already shown, are skipped.
       if (page > pageCount || page === current) continue;
       to.push(current);

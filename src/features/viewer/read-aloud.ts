@@ -70,7 +70,8 @@ export class ReadAloud {
   async read(first: number, last: number) {
     if (!this.engine) throw new Error("Read Out Loud is not available on this system.");
     this.stop();
-    const session = ++this.session;
+    this.session++;
+    const session = this.session;
     const engine = this.engine;
     let spoke = false;
     for (let page = first; page <= last; page++) {
@@ -84,8 +85,8 @@ export class ReadAloud {
       for (const chunk of chunks) {
         await new Promise<void>((resolve) => {
           const utterance = new SpeechSynthesisUtterance(chunk);
-          utterance.onend = () => resolve();
-          utterance.onerror = () => resolve();
+          utterance.addEventListener("end", () => resolve());
+          utterance.addEventListener("error", () => resolve());
           engine.speak(utterance);
         });
         if (session !== this.session) return;

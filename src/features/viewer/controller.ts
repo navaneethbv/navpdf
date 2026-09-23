@@ -1241,13 +1241,13 @@ export class ViewerController {
         const groups = new Map<string, { name: string | null; visible: boolean }>(config);
         const order = orderedLayerIds(config.getOrder() as OptionalContentOrder | null);
         const ids = order.length > 0 ? order : [...groups.keys()];
-        layers = [...new Set(ids)]
-          .filter((id) => groups.has(id))
-          .map((id) => ({
-            id,
-            name: groups.get(id)!.name || "Unnamed layer",
-            visible: groups.get(id)!.visible,
-          }));
+        layers = [...new Set(ids)].flatMap((id) => {
+          const group = groups.get(id);
+          if (!group) return [];
+          // Groups with a missing or blank name still need a visible label.
+          const name = group.name?.trim() ? group.name : "Unnamed layer";
+          return [{ id, name, visible: group.visible }];
+        });
       }
     } catch {
       // Malformed optional content leaves every layer at its default visibility.

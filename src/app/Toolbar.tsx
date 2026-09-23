@@ -506,7 +506,7 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
             >
               <Eye size={18} /> Read mode
             </button>
-            {controller?.readAloud?.supported && (
+            {controller?.readAloud.supported && (
               <>
                 <button
                   aria-label="Read this page aloud"

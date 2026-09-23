@@ -377,12 +377,10 @@ function handleMenuAction(
   session: SessionActions,
   open: () => void,
 ) {
-  if ((payload === "undo" || payload === "redo") && isEditableTarget(document.activeElement)) {
-    // Menu Undo and Redo apply to a focused text field, including one inside a dialog, rather
-    // than reverting a document change. WebKit exposes text-field history only through execCommand.
-    document.execCommand(payload);
+  // Menu Undo and Redo never revert a document change while a text field, including one inside
+  // a dialog, has focus.
+  if ((payload === "undo" || payload === "redo") && isEditableTarget(document.activeElement))
     return;
-  }
   if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;

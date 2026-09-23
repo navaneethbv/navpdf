@@ -13,7 +13,8 @@ The two new session regressions fail on the baseline and pass after the correcti
 Autosave now tracks its own write; those requests wait for it and discard recovery only after it finishes.
 
 Menu Undo and Redo reverted document changes while a text field such as the search box had focus.
-They now apply to the focused text field, including fields inside dialogs.
+They now leave the document unchanged while any text field, including one inside a dialog, has focus.
+An earlier revision of this branch routed them to the field through the deprecated `execCommand` API; that was removed to keep static analysis clean, so menu-driven text-field undo is not provided.
 This menu-routing hypothesis follows from the custom native menu items and is not yet observed in native WebKit.
 
 Browser-preview saves appended a second `-edited` suffix on each repeated save and dropped the extension for names without `.pdf`.
@@ -51,6 +52,8 @@ Coverage is 85.57% statements, 77.18% branches, 82.73% functions and 88.74% line
 The only Rust change adds native menu items.
 Clippy with warnings denied and rustfmt pass on Linux.
 The Rust suite passes 90 tests with one ignored; two permission-denial tests fail because the container runs as root, which bypasses the read-only permissions they set, and are not claimed as passing.
+SonarCloud could not be queried from the review environment, so its rule families were reproduced locally on the lines this branch adds: `eslint-plugin-sonarjs` recommended rules, the typescript-eslint and unicorn rules SonarCloud imports, and stylelint's CSS correctness rules.
+Those runs report no findings on added lines after the corrections; hosted SonarCloud remains the authoritative gate.
 Native macOS acceptance of save during autosave, close during autosave, menu Undo in a focused field, the Reader parity additions and the interface corrections remains open.
 
 ## September 20 repository safety review

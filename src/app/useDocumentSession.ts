@@ -523,19 +523,22 @@ export function useDocumentSession(controller: ViewerController | null) {
     }, 10000);
     return () => clearInterval(interval);
   }, [controller]);
+  const closeWindow = useCallback(async () => {
+    await afterAutosave();
+    const id = useWorkspace.getState().document?.id;
+    try {
+      if (id) await desktop.discardRecovery(id);
+    } catch {
+      // Closing proceeds even when the recovery copy cannot be removed.
+    }
+    await invoke("close_window").catch(report);
+  }, [afterAutosave, report]);
   useEffect(() => {
     if (!desktop.native) return;
     let unlisten: (() => void) | undefined;
     let disposed = false;
     void listen("close-requested", () => {
-      if (!useWorkspace.getState().busy)
-        guard(() => {
-          void afterAutosave().then(() => {
-            const id = useWorkspace.getState().document?.id;
-            if (id) void desktop.discardRecovery(id).catch(() => {});
-            void invoke("close_window").catch(report);
-          });
-        });
+      if (!useWorkspace.getState().busy) guard(() => void closeWindow());
     }).then((fn) => {
       if (disposed) fn();
       else unlisten = fn;
@@ -544,7 +547,7 @@ export function useDocumentSession(controller: ViewerController | null) {
       disposed = true;
       unlisten?.();
     };
-  }, [afterAutosave, guard, report]);
+  }, [closeWindow, guard]);
   const cancelPassword = useCallback(() => {
     openingCancelled.current = true;
     setPassword(null);

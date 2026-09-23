@@ -11,7 +11,7 @@ Existing controls or passing unit tests do not establish completed native workfl
 
 Save, close, home and open requests made during an autosave recovery write now wait for it instead of being silently dropped.
 Closing after an in-flight recovery write no longer leaves a recovery copy for a discarded document.
-Menu Undo and Redo apply to a focused text field instead of reverting document changes.
+Menu Undo and Redo no longer revert document changes while a text field has focus.
 Ctrl+Y redo, Cmd/Ctrl+G find next and previous, and search-field refocus on Find were added.
 Browser-preview save names no longer accumulate suffixes.
 Reader parity additions: Previous View and Next View after link, bookmark, thumbnail, search and page jumps; a Layers panel for optional content; Read Out Loud through the system voice; automatic scrolling; single-page Page Up/Down and arrow page turns; and a Go to Page shortcut.

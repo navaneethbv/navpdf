@@ -95,10 +95,10 @@ describe("AutoScroll", () => {
 });
 
 describe("Read Out Loud", () => {
-  class Utterance {
-    onend: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    constructor(readonly text: string) {}
+  class Utterance extends EventTarget {
+    constructor(readonly text: string) {
+      super();
+    }
   }
   beforeEach(() => {
     vi.stubGlobal("SpeechSynthesisUtterance", Utterance);
@@ -113,10 +113,10 @@ describe("Read Out Loud", () => {
         pending = utterance as unknown as Utterance;
         spoken.push(pending.text);
       }),
-      cancel: vi.fn(() => pending?.onerror?.()),
+      cancel: vi.fn(() => pending?.dispatchEvent(new Event("error"))),
       pause: vi.fn(),
       resume: vi.fn(),
-      finish: () => pending?.onend?.(),
+      finish: () => pending?.dispatchEvent(new Event("end")),
     };
     return speech;
   }

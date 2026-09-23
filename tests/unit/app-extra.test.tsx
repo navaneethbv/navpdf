@@ -396,10 +396,8 @@ describe("App keyboard and menus", () => {
     search.mockRestore();
   });
 
-  it("applies menu Undo to a focused text field instead of the document", async () => {
+  it("never reverts the document from menu Undo while a text field has focus", async () => {
     const undo = vi.spyOn(ViewerController.prototype, "undo").mockImplementation(() => {});
-    const execCommand = vi.fn(() => true);
-    Object.defineProperty(document, "execCommand", { value: execCommand, configurable: true });
     seedDocument();
     render(<App />);
     const field = document.createElement("input");
@@ -412,7 +410,6 @@ describe("App keyboard and menus", () => {
       .mock.calls.filter(([event]) => event === "menu-action")
       .at(-1)?.[1] as (payload: { payload: string }) => void;
     await act(async () => menu({ payload: "undo" }));
-    expect(execCommand).toHaveBeenCalledWith("undo");
     expect(undo).not.toHaveBeenCalled();
     field.remove();
     await act(async () => menu({ payload: "undo" }));
