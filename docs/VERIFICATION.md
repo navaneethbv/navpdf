@@ -753,3 +753,13 @@ SonarCloud's workflow skips analysis because `SONAR_TOKEN` is absent, so its gre
 The separate hosted review scan reports an unsupported service model; this is distinct from CodeQL and Codacy analysis.
 GitHub also reports an existing moderate advisory against transitive `glib` 0.18.5; this change does not alter that dependency or advisory policy.
 Signing, notarization, clean-account launch, physical printing, non-macOS native UI and broader PDF interoperability gates remain open.
+
+### September 23, 2026 dialog and theme styling verification
+
+Every tool panel, dialog, the settings sheet, the viewer and home were captured in the browser preview at 1440x900 in light and dark schemes.
+The captures found a Document Properties dialog with no dialog surface, native checkboxes, radios, sliders and color inputs outside the palette, group legends without spacing, doubled field spacing and unstyled engine warnings.
+They also found a Redact panel covering the command bar, a right rail whose last control fell below 900 px, and a properties file size that read 0.00 MB for a 2.5 KB file.
+Several dialogs referenced undefined color tokens and hardcoded colors, which ignored the palette and dark mode.
+The corrected captures show each surface on the shared modal layout and palette tokens in both schemes.
+`npm run lint`, `npm run typecheck`, `npm run test:coverage` (632 tests) and `npm run build` passed.
+The browser preview does not establish native WebKit rendering; native macOS visual acceptance of these surfaces remains open.

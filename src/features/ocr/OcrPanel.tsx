@@ -126,13 +126,13 @@ function OcrEngineStatus({ info }: Readonly<{ info: OcrEngineInfo | null }>) {
         alignItems: "center",
         gap: "8px",
         padding: "8px 12px",
-        background: "var(--bg-secondary, #f4f5f7)",
+        background: "var(--surface-2)",
         borderRadius: "6px",
         fontSize: "12px",
         marginBottom: "12px",
       }}
     >
-      <ShieldCheck size={16} color="#16a34a" />
+      <ShieldCheck size={16} color="var(--status-ok)" />
       <span>
         <strong>{info.engineName}</strong> &bull; {info.isOffline ? "100% Offline" : "Local"} &amp;
         Private
@@ -147,9 +147,9 @@ function EncryptedDocumentNotice({ encrypted }: Readonly<{ encrypted: boolean }>
     <div
       role="alert"
       style={{
-        background: "#fef3c7",
-        border: "1px solid #f59e0b",
-        color: "#92400e",
+        background: "color-mix(in srgb, var(--status-working) 14%, var(--surface))",
+        border: "1px solid var(--status-working)",
+        color: "var(--ink)",
         padding: "10px",
         borderRadius: "6px",
         fontSize: "12px",
@@ -181,9 +181,9 @@ function ExistingTextWarning({
     <div
       role="alert"
       style={{
-        background: "#fef3c7",
-        border: "1px solid #f59e0b",
-        color: "#92400e",
+        background: "color-mix(in srgb, var(--status-working) 14%, var(--surface))",
+        border: "1px solid var(--status-working)",
+        color: "var(--ink)",
         padding: "10px",
         borderRadius: "6px",
         fontSize: "12px",
@@ -331,7 +331,7 @@ function OcrProgress({
       <div
         style={{
           height: "4px",
-          background: "var(--border-color, #e5e7eb)",
+          background: "var(--line)",
           borderRadius: "2px",
           marginTop: "8px",
           overflow: "hidden",
@@ -341,7 +341,7 @@ function OcrProgress({
           style={{
             height: "100%",
             width: `${progress}%`,
-            background: "var(--primary, #2563eb)",
+            background: "var(--accent)",
             transition: "width 0.2s ease",
           }}
         />

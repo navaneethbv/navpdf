@@ -365,7 +365,7 @@ export function ExportDialog({
               <div
                 style={{
                   height: "4px",
-                  background: "var(--border-color, #e5e7eb)",
+                  background: "var(--line)",
                   borderRadius: "2px",
                   overflow: "hidden",
                 }}
@@ -374,7 +374,7 @@ export function ExportDialog({
                   style={{
                     height: "100%",
                     width: `${progress}%`,
-                    background: "var(--primary, #2563eb)",
+                    background: "var(--accent)",
                     transition: "width 0.2s ease",
                   }}
                 />

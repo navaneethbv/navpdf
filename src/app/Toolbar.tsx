@@ -45,6 +45,7 @@ import {
 import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
 import type { Layout, ToolMode } from "../types/document";
+import { formatBytes } from "../features/compress/CompressDialog";
 
 type ControllerProps = { controller: ViewerController | null };
 export function Toolbar({
@@ -595,7 +596,7 @@ export function Statusbar({ controller }: Readonly<ControllerProps>) {
         <span>
           {s.info?.encrypted ? "Protected · " : ""}
           {s.hasDigitalSignature ? "Signed · " : ""}
-          {(s.document.size / 1024).toFixed(1)} KB
+          {formatBytes(s.document.size)}
         </span>
       )}
       <span>On your device</span>

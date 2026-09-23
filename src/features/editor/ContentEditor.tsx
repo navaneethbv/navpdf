@@ -171,14 +171,14 @@ export function ContentEditor({
                 <div
                   className="setting-group"
                   style={{
-                    backgroundColor: "var(--accent-red-subtle, #ffebee)",
-                    border: "1px solid var(--accent-red, #d32f2f)",
+                    backgroundColor: "var(--danger-surface)",
+                    border: "1px solid var(--danger-ink)",
                     borderRadius: "6px",
                     padding: "8px 12px",
                     display: "flex",
                     alignItems: "center",
                     gap: "8px",
-                    color: "var(--accent-red, #d32f2f)",
+                    color: "var(--danger-ink)",
                     fontSize: "0.85rem",
                   }}
                   role="alert"
