@@ -765,3 +765,13 @@ The corrected captures show each surface on the shared modal layout and palette 
 The browser preview does not establish native WebKit rendering; native macOS visual acceptance of these surfaces remains open.
 Native modal dialogs (Settings, Export a PDF, Add Sticky Note, Open Recent, Unlock PDF, unsaved-changes and Help) now share the tool dialog shell: width, radius, elevation, icon header, label style and footer bar.
 Their light and dark captures were compared with the Print dialog; `npm run lint`, `npm run test:coverage` (632 tests) and `npm run build` passed.
+
+### September 23, 2026 Add Text styling and style matching verification
+
+`tests/unit/text-formatting.test.tsx` reads saved output back through PDF.js and confirms the font name, size and fill color for regular, bold, italic and bold italic variants, including the legacy `fontFamily` values.
+The same file confirms justified lines reach the wrap width while each paragraph's last line stays ragged, underline strokes one line per text line, and line spacing sets the baseline distance.
+Its dialog tests pick an existing run's style, insert new text and confirm the new run is written in the matched font, size and color.
+`tests/unit/text-styles.test.ts` confirms the reader reports real font names, sizes after graphics-state scaling and fill colors, and ignores invisible OCR text.
+Browser preview captures of the dialog in light and dark schemes, and an insertion into `mixed-forms-annotations.pdf`, showed the matched Helvetica 15 pt text rendered like the page heading.
+`npm run lint`, `npm run typecheck`, `npm run test:coverage` (653 tests) and `npm run build` passed.
+Native WebKit rendering and Preview or Acrobat reopening of styled text were not exercised; those interoperability checks remain open.

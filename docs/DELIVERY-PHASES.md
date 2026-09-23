@@ -355,6 +355,9 @@ Phase 5 (Content decoration: watermark, headers, footers, bates numbering, margi
 Phase 5 is complete.
 P5.1 implemented shared placement geometry controls in `src/features/editor/placement-geometry.ts` with PDF-to-DOM and DOM-to-PDF point mapping across rotations (0, 90, 180, 270 degrees) and crop boxes, keyboard nudging, and aspect-preserving resizing.
 P5.2 added multiline text wrapping, font family selection, alignment, and live glyph coverage verification via `validateStandardFontCoverage` in `src/features/editor/ContentEditor.tsx` and `src/services/document-commands.ts`, preventing silent font corruption on unsupported characters.
+On September 23, 2026, Add Text gained all 12 standard text fonts (sans, serif and monospace with bold and italic), underline, justified alignment and line spacing.
+It also gained a "Match existing text" picker that reads each visible run's font name, rendered size and fill color through PDF.js, skips invisible OCR text, and preselects the nearest standard font.
+Matching copies size and color exactly but not the typeface; reusing embedded or system fonts needs an embedding and licensing decision recorded in `docs/adr/` first.
 P5.3 added document decoration management via `DecorationsDialog.tsx` with 6-slot headers/footers, token replacement ({page}, {total}, {date}, {title}, {author}), watermarks with rotation and opacity, backgrounds, page scoping, and safe decoration stream tagging and removal.
 P5.4 completed Bates numbering with live prefix/suffix/padding/start-number previews, positioning across 6 anchor locations, identifier collision detection, and per-output manifest generation.
 P5.5 completed safe link authoring and attachment handling via `LinkDialog.tsx` and `AttachmentsDialog.tsx`, enforcing a strict safe URL scheme whitelist (https, http, mailto) while blocking unsafe protocols, with 50MB file size bounding and path traversal sanitization.
