@@ -17,6 +17,7 @@ Browser-preview save names no longer accumulate suffixes.
 Reader parity additions: Previous View and Next View after link, bookmark, thumbnail, search and page jumps; a Layers panel for optional content; Read Out Loud through the system voice; automatic scrolling; single-page Page Up/Down and arrow page turns; and a Go to Page shortcut.
 Layer visibility changes the view only and is not saved into the PDF.
 Read Out Loud uses the text layer only, so scanned pages need OCR first.
+An interface review kept the palette system and layout, corrected Fit page overflow and broken print, Fill & Sign, Create PDF, OCR, form and Organize Pages layouts, and introduced shared radius, elevation and minimum text-size tokens.
 Native macOS acceptance of these corrections remains open; see `docs/VERIFICATION.md`.
 This review does not close any delivery phase or feature-parity gate.
 

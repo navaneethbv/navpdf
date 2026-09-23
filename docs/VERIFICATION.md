@@ -31,12 +31,27 @@ Automatic scrolling advances single-page layouts at the page end and stops at th
 Controller, module and application-shell tests cover these behaviors with PDF.js and speech mocked.
 No native WebKit speech, optional-content rendering, or Preview/Acrobat comparison is claimed for these additions.
 
+The interface review rendered the browser preview in headless Chromium at 1440 by 900 in light and dark appearance, before and after each correction.
+Screenshots are kept under the ignored `output/ui-review-20260923/` directory and are browser evidence only, not native WebKit acceptance.
+The existing 15-palette light and dark system, its contrast checks and the document-first layout were retained; no palette colors changed.
+Fit page overflowed the viewport by about 9 pixels because the first page's top offset exceeded the 5 pixels PDF.js reserves; the page now fits without a scrollbar.
+The print range radio group had no styles, so its three options ran together on one line.
+Fill & Sign and Create PDF tab bars sat flush against the dialog edge, and the Fill & Sign tabs were unstyled.
+The Create PDF page size and OCR language selects rendered without borders.
+Organize Pages covered only its content size because an open dialog defaults to fit-content, leaving the workspace visible beside and below it, and the selected page card stretched to the full window height.
+The page workspace grid also referenced an undefined background token.
+Form field X and Y position labels sat inline with their inputs.
+Shared radius and elevation tokens replace nine ad hoc corner radii and single-layer shadows; the two button styles now share height, radius, weight and hover color.
+Text below 11 pixels was raised to 11 pixels, dialog form values are 13 pixels and regular weight, and hint text no longer inherits label weight.
+Pages gain a hairline edge so white pages stay distinct on light canvases, and checkboxes and radios use the palette accent.
+Theme colors still change without transitions, preserving the earlier native WebKit correction.
+
 Local checks pass ESLint, TypeScript, Prettier on changed files, production build and 632 frontend tests across 90 files.
 Coverage is 85.57% statements, 77.18% branches, 82.73% functions and 88.74% lines.
 The only Rust change adds native menu items.
 Clippy with warnings denied and rustfmt pass on Linux.
 The Rust suite passes 90 tests with one ignored; two permission-denial tests fail because the container runs as root, which bypasses the read-only permissions they set, and are not claimed as passing.
-Native macOS acceptance of save during autosave, close during autosave, menu Undo in a focused field and the Reader parity additions remains open.
+Native macOS acceptance of save during autosave, close during autosave, menu Undo in a focused field, the Reader parity additions and the interface corrections remains open.
 
 ## September 20 repository safety review
 
