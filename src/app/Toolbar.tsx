@@ -548,7 +548,7 @@ export function Statusbar({ controller }: Readonly<ControllerProps>) {
       <span className={`status-light ${s.busy ? "working" : ""}`} />
       <output>{s.status}</output>
       {s.readAloud !== "idle" && (
-        <div className="playback-controls" role="group" aria-label="Read Out Loud">
+        <fieldset className="playback-controls" aria-label="Read Out Loud">
           <button
             title={s.readAloud === "paused" ? "Resume reading" : "Pause reading"}
             aria-label={s.readAloud === "paused" ? "Resume reading" : "Pause reading"}
@@ -563,10 +563,10 @@ export function Statusbar({ controller }: Readonly<ControllerProps>) {
           >
             <Square size={14} />
           </button>
-        </div>
+        </fieldset>
       )}
       {s.autoScroll && (
-        <div className="playback-controls" role="group" aria-label="Automatic scrolling">
+        <fieldset className="playback-controls" aria-label="Automatic scrolling">
           <button
             title="Scroll slower"
             aria-label="Scroll slower"
@@ -588,7 +588,7 @@ export function Statusbar({ controller }: Readonly<ControllerProps>) {
           >
             <Square size={14} />
           </button>
-        </div>
+        </fieldset>
       )}
       <div className="statusbar-space" />
       {s.document && (

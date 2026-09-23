@@ -61,41 +61,53 @@ const singlePageKeys = new Map<string, -1 | 1>([
   ["ArrowRight", 1],
 ]);
 
-function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
+/** Only the page or document, so arrow keys still work in toolbars and dialogs. */
+function targetsPage(target: EventTarget | null): boolean {
+  return (
+    target === document.body || (target instanceof Element && !!target.closest(".viewer-frame"))
+  );
+}
+
+/** Home/End, Previous/Next View and single-page turns; returns true when the key was used. */
+function handlePageKey(event: KeyboardEvent, controller: ViewerController): boolean {
   const state = useWorkspace.getState();
-  if (controller?.pdf && ["Home", "End"].includes(event.key)) {
+  if (event.key === "Home" || event.key === "End") {
     event.preventDefault();
     if (event.key === "Home") controller.goToFirst();
     else controller.goToLast();
+    return true;
   }
-  if (controller?.pdf && event.altKey && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+  if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
     event.preventDefault();
     if (event.key === "ArrowLeft") controller.goBack();
     else controller.goForward();
-    return;
+    return true;
   }
   const turn = singlePageKeys.get(event.key);
-  // Only when the page or document has focus, so arrow keys still work in toolbars and dialogs.
-  const target = event.target;
-  const onPage =
-    target === document.body || (target instanceof Element && !!target.closest(".viewer-frame"));
-  if (controller?.pdf && turn && onPage && state.layout === "single" && !event.altKey) {
-    event.preventDefault();
-    controller.goTo(state.page + turn);
-    return;
-  }
-  if (event.key === "Escape" && state.autoScroll) {
+  if (!turn || event.altKey || state.layout !== "single" || !targetsPage(event.target))
+    return false;
+  event.preventDefault();
+  controller.goTo(state.page + turn);
+  return true;
+}
+
+function handleEscape(controller: ViewerController | null) {
+  const state = useWorkspace.getState();
+  if (state.autoScroll) {
     controller?.autoScroll.stop();
     return;
   }
-  if (event.key === "Escape") {
-    if (state.readMode) {
-      state.set({ readMode: false });
-      return;
-    }
-    state.set({ selectedAnnotationId: null, hasSelection: false });
-    controller?.setTool("select");
+  if (state.readMode) {
+    state.set({ readMode: false });
+    return;
   }
+  state.set({ selectedAnnotationId: null, hasSelection: false });
+  controller?.setTool("select");
+}
+
+function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
+  if (controller?.pdf && handlePageKey(event, controller)) return;
+  if (event.key === "Escape") handleEscape(controller);
 }
 
 function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController | null): boolean {
