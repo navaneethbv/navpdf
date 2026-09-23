@@ -96,6 +96,7 @@ vi.mock("../../src/services/pdf", () => ({
 import { openDocument, saveDocument } from "../../src/services/native";
 import App from "../../src/app/App";
 import { useWorkspace } from "../../src/stores/workspace";
+import { ViewerController } from "../../src/features/viewer/controller";
 
 Object.defineProperty(window, "matchMedia", {
   value: vi.fn(() => ({
@@ -372,5 +373,50 @@ describe("App keyboard and menus", () => {
     render(<App />);
     fireEvent.click(screen.getByLabelText("Save PDF"));
     expect(saveDocument).not.toHaveBeenCalled();
+  });
+
+  it("redoes with Ctrl+Y and repeats the current search with Ctrl+G", () => {
+    const redo = vi.spyOn(ViewerController.prototype, "redo").mockImplementation(() => {});
+    const search = vi.spyOn(ViewerController.prototype, "search").mockImplementation(() => {});
+    seedDocument();
+    render(<App />);
+    const key = (keyName: string, extra: object = {}) =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: keyName, bubbles: true, cancelable: true, ...extra }),
+      );
+    key("y", { ctrlKey: true });
+    expect(redo).toHaveBeenCalledOnce();
+    key("g", { ctrlKey: true });
+    expect(search).not.toHaveBeenCalled();
+    act(() => useWorkspace.getState().set({ searchQuery: "invoice", sidebar: "pages" }));
+    key("G", { metaKey: true, shiftKey: true });
+    expect(search).toHaveBeenLastCalledWith(true, true);
+    expect(useWorkspace.getState().sidebar).toBe("search");
+    redo.mockRestore();
+    search.mockRestore();
+  });
+
+  it("applies menu Undo to a focused text field instead of the document", async () => {
+    const undo = vi.spyOn(ViewerController.prototype, "undo").mockImplementation(() => {});
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(document, "execCommand", { value: execCommand, configurable: true });
+    seedDocument();
+    render(<App />);
+    const field = document.createElement("input");
+    document.body.append(field);
+    field.focus();
+    await act(async () => {});
+    // The latest registration holds the attached viewer controller.
+    const menu = vi
+      .mocked(listen)
+      .mock.calls.filter(([event]) => event === "menu-action")
+      .at(-1)?.[1] as (payload: { payload: string }) => void;
+    await act(async () => menu({ payload: "undo" }));
+    expect(execCommand).toHaveBeenCalledWith("undo");
+    expect(undo).not.toHaveBeenCalled();
+    field.remove();
+    await act(async () => menu({ payload: "undo" }));
+    expect(undo).toHaveBeenCalledOnce();
+    undo.mockRestore();
   });
 });

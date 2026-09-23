@@ -7,6 +7,16 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 23 session and shortcut review
+
+Save, close, home and open requests made during an autosave recovery write now wait for it instead of being silently dropped.
+Closing after an in-flight recovery write no longer leaves a recovery copy for a discarded document.
+Menu Undo and Redo apply to a focused text field instead of reverting document changes.
+Ctrl+Y redo, Cmd/Ctrl+G find next and previous, and search-field refocus on Find were added.
+Browser-preview save names no longer accumulate suffixes.
+Native macOS acceptance of these corrections remains open; see `docs/VERIFICATION.md`.
+This review does not close any delivery phase or feature-parity gate.
+
 ## September 20 repository safety review
 
 The shared page-range parser clips work to existing document pages and rejects unsafe integer endpoints, correcting excessive loops and a non-terminating numeric input.

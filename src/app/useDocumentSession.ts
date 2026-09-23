@@ -165,7 +165,13 @@ export function useDocumentSession(controller: ViewerController | null) {
     loading = useRef<PDFDocumentLoadingTask | null>(null),
     lock = useRef(false),
     pendingOpen = useRef(false),
-    openingCancelled = useRef(false);
+    openingCancelled = useRef(false),
+    autosave = useRef<Promise<void> | null>(null);
+  // Save, open, close and home wait for an in-flight recovery write instead of being dropped,
+  // and a closed document's recovery copy is never rewritten after it was discarded.
+  const afterAutosave = useCallback(async () => {
+    while (autosave.current) await autosave.current;
+  }, []);
   const report = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     useWorkspace.getState().set({
@@ -209,6 +215,7 @@ export function useDocumentSession(controller: ViewerController | null) {
   const load = useCallback(
     async (descriptor: DocumentDescriptor, initialPage = 1, recovering = false) => {
       if (!controller) return false;
+      await afterAutosave();
       if (lock.current) {
         await desktop.releaseDocument(descriptor.id);
         useWorkspace.getState().set({
@@ -278,10 +285,11 @@ export function useDocumentSession(controller: ViewerController | null) {
         useWorkspace.getState().set({ busy: false });
       }
     },
-    [controller, refreshLocal, report],
+    [afterAutosave, controller, refreshLocal, report],
   );
   const save = useCallback(
     async (saveAs = false, unprotected = false) => {
+      await afterAutosave();
       const state = useWorkspace.getState();
       const pdf = controller?.pdf ?? null;
       if (!controller || !pdf || !state.document || lock.current) return false;
@@ -346,7 +354,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         useWorkspace.getState().set({ busy: false });
       }
     },
-    [controller, report, refreshLocal],
+    [afterAutosave, controller, report, refreshLocal],
   );
   const guard = useCallback((action: () => void) => {
     if (useWorkspace.getState().busy || lock.current || confirmationPending.current) return;
@@ -434,6 +442,7 @@ export function useDocumentSession(controller: ViewerController | null) {
     () =>
       guard(() => {
         void (async () => {
+          await afterAutosave();
           const doc = useWorkspace.getState().document;
           await controller?.detach();
           await task.current?.destroy().catch(() => {});
@@ -445,7 +454,7 @@ export function useDocumentSession(controller: ViewerController | null) {
           await refreshLocal();
         })().catch(report);
       }),
-    [controller, guard, report, refreshLocal],
+    [afterAutosave, controller, guard, report, refreshLocal],
   );
   const recover = useCallback(
     (id: string) =>
@@ -478,24 +487,24 @@ export function useDocumentSession(controller: ViewerController | null) {
         !state.document ||
         state.busy ||
         !controller?.pdf ||
-        lock.current
+        lock.current ||
+        autosave.current
       )
         return;
-      lock.current = true;
       const descriptor = state.document;
       const active = controller.pdf;
       // Autosave never sets busy, so typing and open dialogs keep focus while it runs.
       const previousStatus = state.status;
       const autosaveStatus = "Saving recovery copy...";
       state.set({ status: autosaveStatus });
-      void active
+      autosave.current = active
         .saveDocument()
         .then((bytes) => desktop.writeRecovery(descriptor, bytes, active.numPages))
         .catch((err) => {
           console.warn("Autosave recovery write failed:", err);
         })
         .finally(() => {
-          lock.current = false;
+          autosave.current = null;
           if (useWorkspace.getState().status === autosaveStatus)
             useWorkspace.getState().set({ status: previousStatus });
         });
@@ -509,9 +518,11 @@ export function useDocumentSession(controller: ViewerController | null) {
     void listen("close-requested", () => {
       if (!useWorkspace.getState().busy)
         guard(() => {
-          const id = useWorkspace.getState().document?.id;
-          if (id) void desktop.discardRecovery(id).catch(() => {});
-          void invoke("close_window").catch(report);
+          void afterAutosave().then(() => {
+            const id = useWorkspace.getState().document?.id;
+            if (id) void desktop.discardRecovery(id).catch(() => {});
+            void invoke("close_window").catch(report);
+          });
         });
     }).then((fn) => {
       if (disposed) fn();
@@ -521,7 +532,7 @@ export function useDocumentSession(controller: ViewerController | null) {
       disposed = true;
       unlisten?.();
     };
-  }, [guard, report]);
+  }, [afterAutosave, guard, report]);
   const cancelPassword = useCallback(() => {
     openingCancelled.current = true;
     setPassword(null);

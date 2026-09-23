@@ -1,5 +1,31 @@
 # Verification ledger
 
+## September 23 session and shortcut review
+
+Review baseline: `397f04d`, with a clean working tree.
+Source review covered the document session lifecycle, native IPC adapters, recovery storage, atomic persistence, keyboard shortcuts, native menu routing and search.
+The environment was a Linux container without a native macOS build, so no native WebKit or packaged-app reproduction is claimed.
+Each defect below was reproduced through the session hook or the rendered application shell with only the native IPC boundary mocked.
+
+Autosave held the session lock, so Save, Save As, Close Window, Home, Open and Recent requests made during a recovery write were silently dropped.
+A close request that won the race could also discard the recovery copy before the in-flight write recreated it.
+The two new session regressions fail on the baseline and pass after the correction.
+Autosave now tracks its own write; those requests wait for it and discard recovery only after it finishes.
+
+Menu Undo and Redo reverted document changes while a text field such as the search box had focus.
+They now apply to the focused text field, including fields inside dialogs.
+This menu-routing hypothesis follows from the custom native menu items and is not yet observed in native WebKit.
+
+Browser-preview saves appended a second `-edited` suffix on each repeated save and dropped the extension for names without `.pdf`.
+Handled shortcuts no longer fall through to annotation nudging or page navigation.
+
+Added Ctrl+Y redo, Cmd/Ctrl+G and Shift+Cmd/Ctrl+G to repeat the current search, and a repeated Find that refocuses and selects the search field.
+
+Local checks pass ESLint, TypeScript, Prettier on changed files, production build and 615 frontend tests across 88 files.
+Coverage is 85.56% statements, 77.09% branches, 83.20% functions and 88.79% lines.
+No Rust source changed; the Rust suite and Clippy were not rerun in this environment.
+Native macOS acceptance of save during autosave, close during autosave and menu Undo in a focused field remains open.
+
 ## September 20 repository safety review
 
 Review baseline: `2726e03`, with a clean working tree.

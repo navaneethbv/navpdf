@@ -38,6 +38,8 @@ interface Workspace {
   local: LocalState;
   settingsOpen: boolean;
   searchQuery: string;
+  /** Incremented to move keyboard focus to the search field, even when it is already shown. */
+  searchFocus: number;
   matchCase: boolean;
   wholeWord: boolean;
   searchCount: number;
@@ -109,6 +111,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   error: "",
   local: { preferences: defaultPreferences, recents: [], recoveries: [] },
   settingsOpen: false,
+  searchFocus: 0,
   matchCase: false,
   wholeWord: false,
   highlightColor: "#f5cf58",

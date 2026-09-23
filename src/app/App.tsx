@@ -126,7 +126,16 @@ function handleShortcut(
     [
       "f",
       () => {
-        if (state.document) state.set({ sidebar: "search" });
+        if (state.document) state.set({ sidebar: "search", searchFocus: state.searchFocus + 1 });
+      },
+    ],
+    [
+      "g",
+      () => {
+        if (state.document && state.searchQuery) {
+          state.set({ sidebar: "search" });
+          controller?.search(true, event.shiftKey);
+        }
       },
     ],
     [
@@ -137,6 +146,7 @@ function handleShortcut(
     ],
     ["w", () => session.home()],
     ["z", () => (event.shiftKey ? controller?.redo() : controller?.undo())],
+    ["y", () => controller?.redo()],
     [",", () => state.set({ settingsOpen: true })],
     ["0", () => controller?.zoom("page-fit")],
     ["+", () => controller?.zoom((state.zoom / 100) * 1.15)],
@@ -255,7 +265,7 @@ function menuActions(
     ],
     ["undo", () => controller?.undo()],
     ["redo", () => controller?.redo()],
-    ["find", () => state.set({ sidebar: "search" })],
+    ["find", () => state.set({ sidebar: "search", searchFocus: state.searchFocus + 1 })],
     ["settings", () => state.set({ settingsOpen: true })],
     [
       "highlight",
@@ -302,6 +312,12 @@ function handleMenuAction(
   session: SessionActions,
   open: () => void,
 ) {
+  if ((payload === "undo" || payload === "redo") && isEditableTarget(document.activeElement)) {
+    // Menu Undo and Redo apply to a focused text field, including one inside a dialog, rather
+    // than reverting a document change. WebKit exposes text-field history only through execCommand.
+    document.execCommand(payload);
+    return;
+  }
   if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;
@@ -362,7 +378,7 @@ export default function App() {
         return;
       }
       if (isEditableTarget(event.target)) return;
-      handleShortcut(event, state, controller, session, open);
+      if (handleShortcut(event, state, controller, session, open)) return;
       if (state.selectedAnnotationId && handleAnnotationKey(event, controller)) return;
       handleWorkspaceNavigation(event, controller);
     }
