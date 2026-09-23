@@ -53,12 +53,40 @@ function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "doc
   }
 }
 
+/** Page turns for keys that do not scroll a single-page view. */
+const singlePageKeys = new Map<string, -1 | 1>([
+  ["PageUp", -1],
+  ["ArrowLeft", -1],
+  ["PageDown", 1],
+  ["ArrowRight", 1],
+]);
+
 function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
   const state = useWorkspace.getState();
   if (controller?.pdf && ["Home", "End"].includes(event.key)) {
     event.preventDefault();
     if (event.key === "Home") controller.goToFirst();
     else controller.goToLast();
+  }
+  if (controller?.pdf && event.altKey && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+    event.preventDefault();
+    if (event.key === "ArrowLeft") controller.goBack();
+    else controller.goForward();
+    return;
+  }
+  const turn = singlePageKeys.get(event.key);
+  // Only when the page or document has focus, so arrow keys still work in toolbars and dialogs.
+  const target = event.target;
+  const onPage =
+    target === document.body || (target instanceof Element && !!target.closest(".viewer-frame"));
+  if (controller?.pdf && turn && onPage && state.layout === "single" && !event.altKey) {
+    event.preventDefault();
+    controller.goTo(state.page + turn);
+    return;
+  }
+  if (event.key === "Escape" && state.autoScroll) {
+    controller?.autoScroll.stop();
+    return;
   }
   if (event.key === "Escape") {
     if (state.readMode) {
@@ -120,6 +148,23 @@ function handleShortcut(
   open: () => void,
 ): boolean {
   if (!(event.ctrlKey || event.metaKey)) return false;
+  // Reader commands that need Shift are matched first so plain Cmd/Ctrl keys such as Copy
+  // keep their normal behavior.
+  const readerActions = new Map<string, () => void>([
+    ["n", () => state.set({ pageFocus: state.pageFocus + 1 })],
+    ["h", () => controller?.autoScroll.toggle()],
+    ["v", () => void controller?.readOutLoud(false)],
+    ["b", () => void controller?.readOutLoud(true)],
+    ["c", () => controller?.toggleReadAloudPause()],
+    ["e", () => controller?.readAloud.stop()],
+  ]);
+  const readerAction =
+    event.shiftKey && state.document ? readerActions.get(event.key.toLowerCase()) : undefined;
+  if (readerAction) {
+    event.preventDefault();
+    readerAction();
+    return true;
+  }
   const actions = new Map<string, () => void>([
     ["o", () => open()],
     ["s", () => void session.save(event.shiftKey)],
@@ -147,6 +192,8 @@ function handleShortcut(
     ["w", () => session.home()],
     ["z", () => (event.shiftKey ? controller?.redo() : controller?.undo())],
     ["y", () => controller?.redo()],
+    ["[", () => controller?.goBack()],
+    ["]", () => controller?.goForward()],
     [",", () => state.set({ settingsOpen: true })],
     ["0", () => controller?.zoom("page-fit")],
     ["+", () => controller?.zoom((state.zoom / 100) * 1.15)],
@@ -213,6 +260,24 @@ function menuActions(
 ): Map<string, () => void> {
   return new Map([
     ["first-page", () => controller?.goToFirst()],
+    ["previous-view", () => controller?.goBack()],
+    ["next-view", () => controller?.goForward()],
+    [
+      "go-to-page",
+      () => {
+        if (state.document) state.set({ pageFocus: state.pageFocus + 1 });
+      },
+    ],
+    [
+      "auto-scroll",
+      () => {
+        if (state.document) controller?.autoScroll.toggle();
+      },
+    ],
+    ["read-page", () => void controller?.readOutLoud(false)],
+    ["read-to-end", () => void controller?.readOutLoud(true)],
+    ["read-pause", () => controller?.toggleReadAloudPause()],
+    ["read-stop", () => controller?.readAloud.stop()],
     ["last-page", () => controller?.goToLast()],
     [
       "next-page",
@@ -476,7 +541,7 @@ export default function App() {
           onError={session.report}
         />
       )}
-      <Statusbar />
+      <Statusbar controller={controller} />
       {s.busy && (
         <div className="busy-indicator" aria-hidden="true">
           <LoaderCircle size={16} className="spinner" />

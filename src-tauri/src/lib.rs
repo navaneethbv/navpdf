@@ -115,11 +115,17 @@ pub fn run() {
                 .text("previous-page", "Previous Page")
                 .text("next-page", "Next Page")
                 .text("last-page", "Last Page")
+                .separator()
+                .text("go-to-page", "Go to Page...")
+                .text("previous-view", "Previous View")
+                .text("next-view", "Next View")
                 .build()?;
             let display = SubmenuBuilder::new(app, "Page Display")
                 .text("layout-single", "Single Page")
                 .text("layout-continuous", "Continuous")
                 .text("layout-spread", "Two Pages")
+                .separator()
+                .text("auto-scroll", "Automatically Scroll")
                 .build()?;
             let zoom = SubmenuBuilder::new(app, "Zoom")
                 .text("zoom-in", "Zoom In")
@@ -135,6 +141,12 @@ pub fn run() {
                 .text("panel-bookmarks", "Bookmarks")
                 .text("panel-comments", "Comments")
                 .build()?;
+            let read_aloud = SubmenuBuilder::new(app, "Read Out Loud")
+                .text("read-page", "Read This Page Only")
+                .text("read-to-end", "Read to End of Document")
+                .text("read-pause", "Pause or Resume")
+                .text("read-stop", "Stop")
+                .build()?;
             let view = SubmenuBuilder::new(app, "View")
                 .text("rotate-view", "Rotate View Clockwise")
                 .item(&navigation)
@@ -142,6 +154,7 @@ pub fn run() {
                 .item(&zoom)
                 .separator()
                 .text("read-mode", "Read Mode")
+                .item(&read_aloud)
                 .fullscreen()
                 .separator()
                 .item(&panels)

@@ -21,10 +21,22 @@ Handled shortcuts no longer fall through to annotation nudging or page navigatio
 
 Added Ctrl+Y redo, Cmd/Ctrl+G and Shift+Cmd/Ctrl+G to repeat the current search, and a repeated Find that refocuses and selects the search field.
 
-Local checks pass ESLint, TypeScript, Prettier on changed files, production build and 615 frontend tests across 88 files.
-Coverage is 85.56% statements, 77.09% branches, 83.20% functions and 88.79% lines.
-No Rust source changed; the Rust suite and Clippy were not rerun in this environment.
-Native macOS acceptance of save during autosave, close during autosave and menu Undo in a focused field remains open.
+Reader parity additions follow Acrobat Reader's View menu.
+Previous View and Next View record page jumps from links, bookmarks, thumbnails, search results and page commands, but not ordinary scrolling.
+Pages removed by an edit are skipped, and each opened document starts with empty view history.
+The Layers panel lists optional content groups in the document's order and changes their visibility in the view only; it never marks the document dirty.
+Read Out Loud passes text-layer content to the WebKit speech synthesizer in sentence-aligned chunks, advancing and showing each page as it reads.
+Whether a system voice synthesizes locally is determined by the operating system; no text is sent by NavPDF itself.
+Automatic scrolling advances single-page layouts at the page end and stops at the document end or on Escape.
+Controller, module and application-shell tests cover these behaviors with PDF.js and speech mocked.
+No native WebKit speech, optional-content rendering, or Preview/Acrobat comparison is claimed for these additions.
+
+Local checks pass ESLint, TypeScript, Prettier on changed files, production build and 632 frontend tests across 90 files.
+Coverage is 85.57% statements, 77.18% branches, 82.73% functions and 88.74% lines.
+The only Rust change adds native menu items.
+Clippy with warnings denied and rustfmt pass on Linux.
+The Rust suite passes 90 tests with one ignored; two permission-denial tests fail because the container runs as root, which bypasses the read-only permissions they set, and are not claimed as passing.
+Native macOS acceptance of save during autosave, close during autosave, menu Undo in a focused field and the Reader parity additions remains open.
 
 ## September 20 repository safety review
 

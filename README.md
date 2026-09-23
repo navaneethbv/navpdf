@@ -17,10 +17,12 @@ Available features:
 - A single-document tab, left tool panel, floating markup tools, right navigation rail, and organized native menus.
 - Native Open, Save, Save As, and export dialogs, plus queued Finder Open With and single-file drag-and-drop.
 - Import and combine PDFs, PNGs, and JPEGs, with ordered pages and bounded image validation.
-- A first-launch tour, seven startup tips, a saved tip opt-out, and Help access to both.
+- A first-launch tour, nine startup tips, a saved tip opt-out, and Help access to both.
 - Continuous, single-page, and two-page viewing.
 - Fit page, fit width, 25% to 500% zoom, trackpad zoom, and a hand tool.
-- Page navigation and virtualized thumbnails.
+- Page navigation and virtualized thumbnails, with Previous View and Next View after link, bookmark and page jumps.
+- A Layers panel that shows or hides optional content in the view without changing the PDF.
+- Read Out Loud with the system voice, and automatic scrolling with adjustable speed.
 - Text selection and copying.
 - Whole-document search with case and whole-word options, context, match counts, and occurrence navigation.
 - Bookmarks and inspection of saved notes/highlights.
@@ -109,11 +111,19 @@ Network access is disabled by the production content security policy and native 
 | Cmd/Ctrl + S | Save |
 | Cmd/Ctrl + Shift + S | Save As |
 | Cmd/Ctrl + F | Search |
+| Cmd/Ctrl + G, Cmd/Ctrl + Shift + G | Next or previous search match |
 | Cmd/Ctrl + Z | Undo annotation edit |
-| Cmd/Ctrl + Shift + Z | Redo annotation edit |
+| Cmd/Ctrl + Shift + Z, Ctrl + Y | Redo annotation edit |
+| Cmd/Ctrl + [ or Alt + Left | Previous view |
+| Cmd/Ctrl + ] or Alt + Right | Next view |
+| Cmd/Ctrl + Shift + N | Go to page |
+| Page Up/Down, Left/Right | Previous or next page in single-page layout |
+| Cmd/Ctrl + Shift + H | Automatically scroll |
+| Cmd/Ctrl + Shift + V / B | Read this page / read to end aloud |
+| Cmd/Ctrl + Shift + C / E | Pause or resume / stop reading |
 | Cmd/Ctrl + plus / minus | Zoom |
 | Cmd/Ctrl + 0 | Fit page |
-| Escape | Return to text selection |
+| Escape | Stop automatic scrolling, or return to text selection |
 
 ## Validation
 

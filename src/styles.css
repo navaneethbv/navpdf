@@ -979,6 +979,32 @@ p {
   place-items: center;
   padding: 3px;
 }
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.playback-controls button {
+  color: var(--ink);
+  border-radius: 4px;
+}
+.playback-controls button:hover,
+.playback-controls button:focus-visible {
+  background: var(--line);
+}
+.layer-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.layer-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 3px;
+  font-size: 11px;
+  color: var(--ink);
+}
 .statusbar label {
   display: flex;
   align-items: center;

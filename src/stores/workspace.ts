@@ -11,7 +11,9 @@ import type {
   SearchResult,
   Bookmark,
   Comment,
+  DocumentLayer,
 } from "../types/document";
+import type { ReadAloudState } from "../features/viewer/read-aloud";
 import { defaultPreferences } from "../types/document";
 interface Workspace {
   document: DocumentDescriptor | null;
@@ -40,6 +42,13 @@ interface Workspace {
   searchQuery: string;
   /** Incremented to move keyboard focus to the search field, even when it is already shown. */
   searchFocus: number;
+  /** Incremented to move keyboard focus to the page number field. */
+  pageFocus: number;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  layers: DocumentLayer[];
+  readAloud: ReadAloudState;
+  autoScroll: boolean;
   matchCase: boolean;
   wholeWord: boolean;
   searchCount: number;
@@ -87,6 +96,9 @@ const cleanDocument = {
   hasSelection: false,
   bookmarks: [],
   comments: [],
+  layers: [],
+  canGoBack: false,
+  canGoForward: false,
   redactionSelection: [],
   selectedAnnotationId: null,
   results: [],
@@ -112,6 +124,9 @@ export const useWorkspace = create<Workspace>((set) => ({
   local: { preferences: defaultPreferences, recents: [], recoveries: [] },
   settingsOpen: false,
   searchFocus: 0,
+  pageFocus: 0,
+  readAloud: "idle",
+  autoScroll: false,
   matchCase: false,
   wholeWord: false,
   highlightColor: "#f5cf58",

@@ -118,8 +118,17 @@ async function commitLoadedCandidate(options: CommitLoadedCandidateOptions): Pro
   }
   if (recovering || descriptor.unsaved) controller.markUnsavedRevision?.();
 
-  const { bookmarks, comments, formNotice, hasDigitalSignature, pageLabels, editingAllowed } =
-    useWorkspace.getState();
+  const {
+    bookmarks,
+    comments,
+    formNotice,
+    hasDigitalSignature,
+    pageLabels,
+    editingAllowed,
+    layers,
+    canGoBack,
+    canGoForward,
+  } = useWorkspace.getState();
   commitTask();
   useWorkspace.getState().reset();
   useWorkspace.getState().set({
@@ -133,6 +142,9 @@ async function commitLoadedCandidate(options: CommitLoadedCandidateOptions): Pro
     hasDigitalSignature,
     pageLabels,
     editingAllowed,
+    layers,
+    canGoBack,
+    canGoForward,
     dirty: recovering || !!descriptor.unsaved,
     info: {
       pages: loaded.numPages,

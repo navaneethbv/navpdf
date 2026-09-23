@@ -14,6 +14,9 @@ Closing after an in-flight recovery write no longer leaves a recovery copy for a
 Menu Undo and Redo apply to a focused text field instead of reverting document changes.
 Ctrl+Y redo, Cmd/Ctrl+G find next and previous, and search-field refocus on Find were added.
 Browser-preview save names no longer accumulate suffixes.
+Reader parity additions: Previous View and Next View after link, bookmark, thumbnail, search and page jumps; a Layers panel for optional content; Read Out Loud through the system voice; automatic scrolling; single-page Page Up/Down and arrow page turns; and a Go to Page shortcut.
+Layer visibility changes the view only and is not saved into the PDF.
+Read Out Loud uses the text layer only, so scanned pages need OCR first.
 Native macOS acceptance of these corrections remains open; see `docs/VERIFICATION.md`.
 This review does not close any delivery phase or feature-parity gate.
 
