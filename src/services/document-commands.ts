@@ -1479,35 +1479,43 @@ interface TextLine {
   paragraphEnd: boolean;
 }
 
+/** Breaks one paragraph into lines no wider than `maxWidth`; overlong words get their own line. */
+function wrapParagraph(
+  para: string,
+  font: { widthOfTextAtSize: (text: string, size: number) => number },
+  fontSize: number,
+  maxWidth: number,
+): TextLine[] {
+  const lines: TextLine[] = [];
+  let currentLine = "";
+  for (const word of para.split(/\s+/).filter(Boolean)) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (font.widthOfTextAtSize(testLine, fontSize) <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) lines.push({ text: currentLine, paragraphEnd: false });
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push({ text: currentLine, paragraphEnd: false });
+  const last = lines.at(-1);
+  if (last) last.paragraphEnd = true;
+  return lines;
+}
+
 function wrapText(
   text: string,
   font: { widthOfTextAtSize: (text: string, size: number) => number },
   fontSize: number,
   maxWidth: number | undefined,
 ): TextLine[] {
-  const lines: TextLine[] = [];
-  for (const para of text.split("\n")) {
-    if (!maxWidth || !para.trim()) {
-      lines.push({ text: para.trim() ? para : "", paragraphEnd: true });
-      continue;
-    }
-    const words = para.split(/\s+/).filter(Boolean);
-    let currentLine = "";
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      if (font.widthOfTextAtSize(testLine, fontSize) <= maxWidth) {
-        currentLine = testLine;
-      } else if (currentLine) {
-        lines.push({ text: currentLine, paragraphEnd: false });
-        currentLine = word;
-      } else {
-        lines.push({ text: word, paragraphEnd: false });
-      }
-    }
-    if (currentLine) lines.push({ text: currentLine, paragraphEnd: true });
-    else if (lines.length) lines[lines.length - 1].paragraphEnd = true;
-  }
-  return lines;
+  return text
+    .split("\n")
+    .flatMap((para) =>
+      maxWidth && para.trim()
+        ? wrapParagraph(para, font, fontSize, maxWidth)
+        : [{ text: para.trim() ? para : "", paragraphEnd: true }],
+    );
 }
 
 const STANDARD_TEXT_FONTS: Record<
