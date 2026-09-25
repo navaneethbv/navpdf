@@ -34,8 +34,8 @@ This is an in-progress delivery record; hosted analysis and packaged acceptance 
 
 ## Quality and delivery gates
 
-SonarCloud organization: `navaneethbv`.
-SonarCloud project key: `navaneethbv_navpdf`.
+SonarCloud organization: the repository owner's organization.
+SonarCloud project key: `<owner>_navpdf`.
 The project uses automatic analysis; the optional CI scanner requires `SONAR_CI_ANALYSIS=true`, automatic analysis disabled and a configured `SONAR_TOKEN`.
 A skipped optional CI job does not establish a passing Sonar scan.
 The initial main-branch analysis reported 462 unresolved issues.
