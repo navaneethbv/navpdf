@@ -254,7 +254,10 @@ fn protected_key(root: &Path) -> Result<[u8; 32], String> {
     let _guard = KEY_LOCK
         .lock()
         .map_err(|_| "Secure signature storage is busy.")?;
-    let account = format!("{:x}", Sha256::digest(root.to_string_lossy().as_bytes()));
+    let account = Sha256::digest(root.to_string_lossy().as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     let service = "local.navpdf.reader.signature-key-v2";
     match get_generic_password(service, &account) {
         Ok(bytes) => bytes
