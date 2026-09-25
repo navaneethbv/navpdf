@@ -148,7 +148,7 @@ These fixture measurements are not a general compression-ratio claim.
 The user's preserved edited PDF remains unchanged at `output/reader-5-preserved-20260919.pdf`.
 The three pre-existing untracked root planning documents remain untouched.
 Signing, notarization, clean-account installation, physical printing, non-macOS UI and the separately tracked advanced capabilities remain open.
-Hosted checks and merge status are recorded in [PR 22](https://github.com/navaneethbv/navpdf/pull/22); Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
+Hosted checks and merge status are recorded in PR 22; Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
 
 ## September 19 native opening, tour and tips
 
@@ -169,7 +169,7 @@ The user authorized preserving their active edits before relaunch; the copy is o
 The preserved copy SHA-256 is `7d164a8e8e61a75e025e0911468c2134c2627c81f7107727fdd08c486416e65d`.
 The rebuilt executable SHA-256 is `4d2cc1c80b0ecaf24236721349a27a42d70b3aa7bbf9719ca3d2ad08da38f7ea`.
 The DMG SHA-256 is `c1f921403258e67ace0046fb8bdb8e213a14417b6c0c3f8e489b3e9d90e81414`; hdiutil verified CRC32 `$934E5A4C`.
-[PR 21](https://github.com/navaneethbv/navpdf/pull/21) records hosted checks and merge status.
+PR 21 records hosted checks and merge status.
 Codacy, CodeQL, frontend, Rust and native acceptance passed on the application commit.
 NPM Audit passed after registry maintenance cleared, and PR 21 merged as `13109e3`; Sonar analysis remains skipped without SONAR_TOKEN.
 Signing, notarization, clean-account installation, physical printing and non-macOS UI acceptance remain separate gates.
@@ -747,7 +747,7 @@ Executable SHA-256: `6ae5f2d6fc74166e36d611055cb464e50e63784c488345f004c69d3193d
 DMG SHA-256: `d78724998a68770ba596828a0e857d9e04fc8ebf12435589a959d63cb092b1cb`.
 The installer is `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
 
-Hosted validation and merge status are recorded on [PR 20](https://github.com/navaneethbv/navpdf/pull/20).
+Hosted validation and merge status are recorded on PR 20.
 The required Rust check name now aggregates successful Linux and macOS jobs without changing branch protection.
 SonarCloud's workflow skips analysis because `SONAR_TOKEN` is absent, so its green workflow result is not a passing analysis.
 The separate hosted review scan reports an unsupported service model; this is distinct from CodeQL and Codacy analysis.
