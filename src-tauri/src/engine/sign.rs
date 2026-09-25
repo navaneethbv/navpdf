@@ -24,7 +24,8 @@ use rsa::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePublicKey, PrivateKeyI
 use rsa::signature::Verifier;
 use rsa::traits::PublicKeyParts;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256, Sha384, Sha512};
+// The signing path hashes with the sha2 release that rsa, cms and p256 are built against.
+use rsa::sha2::{Digest, Sha256, Sha384, Sha512};
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use x509_cert::attr::Attribute;
