@@ -57,36 +57,40 @@ export function PropertiesDialog({
   const update = (field: keyof DocumentMetadata, value: string) =>
     setMetadata((current) => ({ ...current, [field]: value }));
 
+  const save = async () => {
+    if (!controller?.pdf) return;
+    setSaving(true);
+    setError("");
+    try {
+      const next = {
+        ...metadata,
+        keywords: keywords
+          .split(",")
+          .map((keyword) => keyword.trim())
+          .filter(Boolean),
+      };
+      const bytes = await controller.pdf.saveDocument();
+      const changed = await writeMetadata(bytes, next);
+      await controller.replaceWithBytes(changed, "Document properties updated", {
+        expectedSource: sourcePdf,
+        preMutationBytes: bytes,
+      });
+      set({ status: "Document properties updated" });
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <FeatureDialog title="Document properties" onClose={onClose} busy={loading || saving}>
       <form
         className="modal-dialog"
-        onSubmit={async (event) => {
+        onSubmit={(event) => {
           event.preventDefault();
-          if (!controller?.pdf) return;
-          setSaving(true);
-          setError("");
-          try {
-            const next = {
-              ...metadata,
-              keywords: keywords
-                .split(",")
-                .map((keyword) => keyword.trim())
-                .filter(Boolean),
-            };
-            const bytes = await controller.pdf.saveDocument();
-            const changed = await writeMetadata(bytes, next);
-            await controller.replaceWithBytes(changed, "Document properties updated", {
-              expectedSource: sourcePdf,
-              preMutationBytes: bytes,
-            });
-            set({ status: "Document properties updated" });
-            onClose();
-          } catch (cause) {
-            setError(cause instanceof Error ? cause.message : String(cause));
-          } finally {
-            setSaving(false);
-          }
+          void save();
         }}
       >
         <div className="modal-header">
@@ -111,7 +115,9 @@ export function PropertiesDialog({
                   id={`${ids}-title`}
                   className="text-input"
                   value={metadata.title}
-                  onChange={(event) => update("title", event.target.value)}
+                  onChange={(event) => {
+                    update("title", event.target.value);
+                  }}
                 />
               </div>
               <div className="setting-group">
@@ -122,7 +128,9 @@ export function PropertiesDialog({
                   id={`${ids}-author`}
                   className="text-input"
                   value={metadata.author}
-                  onChange={(event) => update("author", event.target.value)}
+                  onChange={(event) => {
+                    update("author", event.target.value);
+                  }}
                 />
               </div>
               <div className="setting-group">
@@ -133,7 +141,9 @@ export function PropertiesDialog({
                   id={`${ids}-subject`}
                   className="text-input"
                   value={metadata.subject}
-                  onChange={(event) => update("subject", event.target.value)}
+                  onChange={(event) => {
+                    update("subject", event.target.value);
+                  }}
                 />
               </div>
               <div className="setting-group">
@@ -144,7 +154,9 @@ export function PropertiesDialog({
                   id={`${ids}-keywords`}
                   className="text-input"
                   value={keywords}
-                  onChange={(event) => setKeywords(event.target.value)}
+                  onChange={(event) => {
+                    setKeywords(event.target.value);
+                  }}
                   placeholder="Separate keywords with commas"
                 />
               </div>
@@ -156,7 +168,9 @@ export function PropertiesDialog({
                   id={`${ids}-creator`}
                   className="text-input"
                   value={metadata.creator}
-                  onChange={(event) => update("creator", event.target.value)}
+                  onChange={(event) => {
+                    update("creator", event.target.value);
+                  }}
                 />
               </div>
               <div className="setting-group">
@@ -167,7 +181,9 @@ export function PropertiesDialog({
                   id={`${ids}-producer`}
                   className="text-input"
                   value={metadata.producer}
-                  onChange={(event) => update("producer", event.target.value)}
+                  onChange={(event) => {
+                    update("producer", event.target.value);
+                  }}
                 />
               </div>
               {error && (

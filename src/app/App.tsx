@@ -163,7 +163,12 @@ function handleShortcut(
   // Reader commands that need Shift are matched first so plain Cmd/Ctrl keys such as Copy
   // keep their normal behavior.
   const readerActions = new Map<string, () => void>([
-    ["n", () => state.set({ pageFocus: state.pageFocus + 1 })],
+    [
+      "n",
+      () => {
+        state.set({ pageFocus: state.pageFocus + 1 });
+      },
+    ],
     ["h", () => controller?.autoScroll.toggle()],
     ["v", () => void controller?.readOutLoud(false)],
     ["b", () => void controller?.readOutLoud(true)],
@@ -342,7 +347,12 @@ function menuActions(
     ],
     ["undo", () => controller?.undo()],
     ["redo", () => controller?.redo()],
-    ["find", () => state.set({ sidebar: "search", searchFocus: state.searchFocus + 1 })],
+    [
+      "find",
+      () => {
+        state.set({ sidebar: "search", searchFocus: state.searchFocus + 1 });
+      },
+    ],
     ["settings", () => state.set({ settingsOpen: true })],
     [
       "highlight",
@@ -577,7 +587,9 @@ export default function App() {
         <Dialog
           title="Open Recent Files"
           icon={<History size={18} />}
-          onClose={() => s.set({ activeModal: null })}
+          onClose={() => {
+            s.set({ activeModal: null });
+          }}
         >
           <div className="export-options">
             {s.local.recents.length ? (

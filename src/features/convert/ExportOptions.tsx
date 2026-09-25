@@ -7,7 +7,9 @@ export function ExportOptions() {
     <Dialog
       title="Export a PDF"
       icon={<Download size={18} />}
-      onClose={() => set({ activeModal: null })}
+      onClose={() => {
+        set({ activeModal: null });
+      }}
     >
       <p>
         Choose an editable Office document, page images, or plain text. Save As keeps a PDF copy.

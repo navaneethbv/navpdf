@@ -275,10 +275,11 @@ export class ViewerController {
     showPage: (page) => {
       if (this.pdf && this.viewer.currentPageNumber !== page) this.viewer.currentPageNumber = page;
     },
-    onState: (readAloud, page) =>
+    onState: (readAloud, page) => {
       useWorkspace
         .getState()
-        .set({ readAloud, ...(page === null ? {} : { status: `Reading page ${page} aloud` }) }),
+        .set({ readAloud, ...(page === null ? {} : { status: `Reading page ${page} aloud` }) });
+    },
   });
   readonly autoScroll: AutoScroll;
 
@@ -326,7 +327,9 @@ export class ViewerController {
       supportsPinchToZoom: true,
     });
     this.links.setViewer(this.viewer);
-    this.links.onJump = (from) => this.recordView(from);
+    this.links.onJump = (from) => {
+      this.recordView(from);
+    };
     this.autoScroll = new AutoScroll({
       container,
       nextPage: () => {
@@ -335,7 +338,9 @@ export class ViewerController {
         this.viewer.currentPageNumber++;
         return true;
       },
-      onChange: (autoScroll) => useWorkspace.getState().set({ autoScroll }),
+      onChange: (autoScroll) => {
+        useWorkspace.getState().set({ autoScroll });
+      },
     });
     const on = (name: string, handler: (event: never) => void) =>
       this.bus.on(name, handler, { signal: this.abort.signal });

@@ -107,7 +107,9 @@ function glyphText(glyphs: unknown): string {
 
 function resolveFont(page: PageLike, id: string): Promise<FontDescription | null> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), 2000);
+    const timer = setTimeout(() => {
+      resolve(null);
+    }, 2000);
     try {
       page.commonObjs.get(id, (data) => {
         clearTimeout(timer);

@@ -353,13 +353,13 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
               aria-label={`Show ${item.label.toLowerCase()}`}
               aria-pressed={s.navigationVisible && s.sidebar === item.id}
               disabled={disabled}
-              onClick={() =>
+              onClick={() => {
                 s.set({
                   sidebar: item.id,
                   navigationVisible: !(s.navigationVisible && s.sidebar === item.id),
                   propertiesVisible: false,
-                })
-              }
+                });
+              }}
             >
               <item.icon size={23} />
             </button>

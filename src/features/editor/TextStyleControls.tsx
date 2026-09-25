@@ -115,7 +115,9 @@ export function TextStyleControls({
   const ids = useId();
   const pageStyles = usePageTextStyles(pdf, page);
   const [matched, setMatched] = useState<PageTextStyle | null>(null);
-  useEffect(() => setMatched(null), [pdf, page]);
+  useEffect(() => {
+    setMatched(null);
+  }, [pdf, page]);
 
   /** Font, size and color changes mean the text no longer mirrors the matched style. */
   const update = (patch: Partial<TextStyle>) => {
@@ -139,7 +141,9 @@ export function TextStyleControls({
           className="select-input"
           disabled={!pageStyles?.length}
           value={matched && pageStyles ? String(pageStyles.indexOf(matched)) : ""}
-          onChange={(e) => applyMatch(pageStyles?.[Number(e.target.value)])}
+          onChange={(e) => {
+            applyMatch(pageStyles?.[Number(e.target.value)]);
+          }}
         >
           <option value="">{pickerPrompt(pageStyles, page)}</option>
           {pageStyles?.map((style, index) => (
@@ -163,7 +167,9 @@ export function TextStyleControls({
           <select
             id={`${ids}-font`}
             value={value.face}
-            onChange={(e) => update({ face: e.target.value as TextFontFace })}
+            onChange={(e) => {
+              update({ face: e.target.value as TextFontFace });
+            }}
             className="select-input"
           >
             <option value="sans">Sans serif (Helvetica)</option>
@@ -182,7 +188,9 @@ export function TextStyleControls({
             max={144}
             step={0.5}
             value={value.size}
-            onChange={(e) => update({ size: Number(e.target.value) })}
+            onChange={(e) => {
+              update({ size: Number(e.target.value) });
+            }}
             className="text-input"
           />
         </div>
@@ -200,7 +208,9 @@ export function TextStyleControls({
                 aria-pressed={value[key]}
                 aria-label={label}
                 title={label}
-                onClick={() => update({ [key]: !value[key] })}
+                onClick={() => {
+                  update({ [key]: !value[key] });
+                }}
               >
                 <Icon size={16} />
               </button>
@@ -218,7 +228,9 @@ export function TextStyleControls({
                 aria-pressed={value.alignment === alignment}
                 aria-label={`Align ${label.toLowerCase()}`}
                 title={label}
-                onClick={() => update({ alignment })}
+                onClick={() => {
+                  update({ alignment });
+                }}
               >
                 <Icon size={16} />
               </button>
@@ -235,7 +247,9 @@ export function TextStyleControls({
           <select
             id={`${ids}-spacing`}
             value={value.lineSpacing}
-            onChange={(e) => update({ lineSpacing: Number(e.target.value) })}
+            onChange={(e) => {
+              update({ lineSpacing: Number(e.target.value) });
+            }}
             className="select-input"
           >
             <option value={1}>Single</option>
@@ -252,7 +266,9 @@ export function TextStyleControls({
             id={`${ids}-color`}
             type="color"
             value={value.color}
-            onChange={(e) => update({ color: e.target.value })}
+            onChange={(e) => {
+              update({ color: e.target.value });
+            }}
             className="color-input"
           />
         </div>

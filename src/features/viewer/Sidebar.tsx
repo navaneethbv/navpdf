@@ -67,7 +67,9 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
                       onChange={(event) => {
                         void controller
                           .setLayerVisibility(layer.id, event.target.checked)
-                          .catch(() => set({ error: "This layer could not be changed." }));
+                          .catch(() => {
+                            set({ error: "This layer could not be changed." });
+                          });
                       }}
                     />{" "}
                     {layer.name}
@@ -175,7 +177,9 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
               aria-label={t.label}
               title={t.label}
               className={tab === t.id ? "active" : ""}
-              onClick={() => set({ sidebar: t.id })}
+              onClick={() => {
+                set({ sidebar: t.id });
+              }}
             >
               <t.icon size={18} />
             </button>

@@ -21,7 +21,9 @@ export class AutoScroll {
   constructor(
     private readonly host: AutoScrollHost,
     private readonly frame: Frame = (callback) => requestAnimationFrame(callback),
-    private readonly cancelFrame: CancelFrame = (handle) => cancelAnimationFrame(handle),
+    private readonly cancelFrame: CancelFrame = (handle) => {
+      cancelAnimationFrame(handle);
+    },
   ) {}
 
   get active() {

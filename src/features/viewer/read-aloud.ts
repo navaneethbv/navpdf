@@ -85,8 +85,12 @@ export class ReadAloud {
       for (const chunk of chunks) {
         await new Promise<void>((resolve) => {
           const utterance = new SpeechSynthesisUtterance(chunk);
-          utterance.addEventListener("end", () => resolve());
-          utterance.addEventListener("error", () => resolve());
+          utterance.addEventListener("end", () => {
+            resolve();
+          });
+          utterance.addEventListener("error", () => {
+            resolve();
+          });
           engine.speak(utterance);
         });
         if (session !== this.session) return;
