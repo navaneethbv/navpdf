@@ -1,5 +1,61 @@
 # Verification ledger
 
+## September 23 session and shortcut review
+
+Review baseline: `397f04d`, with a clean working tree.
+Source review covered the document session lifecycle, native IPC adapters, recovery storage, atomic persistence, keyboard shortcuts, native menu routing and search.
+The environment was a Linux container without a native macOS build, so no native WebKit or packaged-app reproduction is claimed.
+Each defect below was reproduced through the session hook or the rendered application shell with only the native IPC boundary mocked.
+
+Autosave held the session lock, so Save, Save As, Close Window, Home, Open and Recent requests made during a recovery write were silently dropped.
+A close request that won the race could also discard the recovery copy before the in-flight write recreated it.
+The two new session regressions fail on the baseline and pass after the correction.
+Autosave now tracks its own write; those requests wait for it and discard recovery only after it finishes.
+
+Menu Undo and Redo reverted document changes while a text field such as the search box had focus.
+They now leave the document unchanged while any text field, including one inside a dialog, has focus.
+An earlier revision of this branch routed them to the field through the deprecated `execCommand` API; that was removed to keep static analysis clean, so menu-driven text-field undo is not provided.
+This menu-routing hypothesis follows from the custom native menu items and is not yet observed in native WebKit.
+
+Browser-preview saves appended a second `-edited` suffix on each repeated save and dropped the extension for names without `.pdf`.
+Handled shortcuts no longer fall through to annotation nudging or page navigation.
+
+Added Ctrl+Y redo, Cmd/Ctrl+G and Shift+Cmd/Ctrl+G to repeat the current search, and a repeated Find that refocuses and selects the search field.
+
+Reader parity additions follow Acrobat Reader's View menu.
+Previous View and Next View record page jumps from links, bookmarks, thumbnails, search results and page commands, but not ordinary scrolling.
+Pages removed by an edit are skipped, and each opened document starts with empty view history.
+The Layers panel lists optional content groups in the document's order and changes their visibility in the view only; it never marks the document dirty.
+Read Out Loud passes text-layer content to the WebKit speech synthesizer in sentence-aligned chunks, advancing and showing each page as it reads.
+Whether a system voice synthesizes locally is determined by the operating system; no text is sent by NavPDF itself.
+Automatic scrolling advances single-page layouts at the page end and stops at the document end or on Escape.
+Controller, module and application-shell tests cover these behaviors with PDF.js and speech mocked.
+No native WebKit speech, optional-content rendering, or Preview/Acrobat comparison is claimed for these additions.
+
+The interface review rendered the browser preview in headless Chromium at 1440 by 900 in light and dark appearance, before and after each correction.
+Screenshots are kept under the ignored `output/ui-review-20260923/` directory and are browser evidence only, not native WebKit acceptance.
+The existing 15-palette light and dark system, its contrast checks and the document-first layout were retained; no palette colors changed.
+Fit page overflowed the viewport by about 9 pixels because the first page's top offset exceeded the 5 pixels PDF.js reserves; the page now fits without a scrollbar.
+The print range radio group had no styles, so its three options ran together on one line.
+Fill & Sign and Create PDF tab bars sat flush against the dialog edge, and the Fill & Sign tabs were unstyled.
+The Create PDF page size and OCR language selects rendered without borders.
+Organize Pages covered only its content size because an open dialog defaults to fit-content, leaving the workspace visible beside and below it, and the selected page card stretched to the full window height.
+The page workspace grid also referenced an undefined background token.
+Form field X and Y position labels sat inline with their inputs.
+Shared radius and elevation tokens replace nine ad hoc corner radii and single-layer shadows; the two button styles now share height, radius, weight and hover color.
+Text below 11 pixels was raised to 11 pixels, dialog form values are 13 pixels and regular weight, and hint text no longer inherits label weight.
+Pages gain a hairline edge so white pages stay distinct on light canvases, and checkboxes and radios use the palette accent.
+Theme colors still change without transitions, preserving the earlier native WebKit correction.
+
+Local checks pass ESLint, TypeScript, Prettier on changed files, production build and 632 frontend tests across 90 files.
+Coverage is 85.57% statements, 77.18% branches, 82.73% functions and 88.74% lines.
+The only Rust change adds native menu items.
+Clippy with warnings denied and rustfmt pass on Linux.
+The Rust suite passes 90 tests with one ignored; two permission-denial tests fail because the container runs as root, which bypasses the read-only permissions they set, and are not claimed as passing.
+SonarCloud could not be queried from the review environment, so its rule families were reproduced locally on the lines this branch adds: `eslint-plugin-sonarjs` recommended rules, the typescript-eslint and unicorn rules SonarCloud imports, and stylelint's CSS correctness rules.
+Those runs report no findings on added lines after the corrections; hosted SonarCloud remains the authoritative gate.
+Native macOS acceptance of save during autosave, close during autosave, menu Undo in a focused field, the Reader parity additions and the interface corrections remains open.
+
 ## September 20 repository safety review
 
 Review baseline: `2726e03`, with a clean working tree.
@@ -697,3 +753,25 @@ SonarCloud's workflow skips analysis because `SONAR_TOKEN` is absent, so its gre
 The separate hosted review scan reports an unsupported service model; this is distinct from CodeQL and Codacy analysis.
 GitHub also reports an existing moderate advisory against transitive `glib` 0.18.5; this change does not alter that dependency or advisory policy.
 Signing, notarization, clean-account launch, physical printing, non-macOS native UI and broader PDF interoperability gates remain open.
+
+### September 23, 2026 dialog and theme styling verification
+
+Every tool panel, dialog, the settings sheet, the viewer and home were captured in the browser preview at 1440x900 in light and dark schemes.
+The captures found a Document Properties dialog with no dialog surface, native checkboxes, radios, sliders and color inputs outside the palette, group legends without spacing, doubled field spacing and unstyled engine warnings.
+They also found a Redact panel covering the command bar, a right rail whose last control fell below 900 px, and a properties file size that read 0.00 MB for a 2.5 KB file.
+Several dialogs referenced undefined color tokens and hardcoded colors, which ignored the palette and dark mode.
+The corrected captures show each surface on the shared modal layout and palette tokens in both schemes.
+`npm run lint`, `npm run typecheck`, `npm run test:coverage` (632 tests) and `npm run build` passed.
+The browser preview does not establish native WebKit rendering; native macOS visual acceptance of these surfaces remains open.
+Native modal dialogs (Settings, Export a PDF, Add Sticky Note, Open Recent, Unlock PDF, unsaved-changes and Help) now share the tool dialog shell: width, radius, elevation, icon header, label style and footer bar.
+Their light and dark captures were compared with the Print dialog; `npm run lint`, `npm run test:coverage` (632 tests) and `npm run build` passed.
+
+### September 23, 2026 Add Text styling and style matching verification
+
+`tests/unit/text-formatting.test.tsx` reads saved output back through PDF.js and confirms the font name, size and fill color for regular, bold, italic and bold italic variants, including the legacy `fontFamily` values.
+The same file confirms justified lines reach the wrap width while each paragraph's last line stays ragged, underline strokes one line per text line, and line spacing sets the baseline distance.
+Its dialog tests pick an existing run's style, insert new text and confirm the new run is written in the matched font, size and color.
+`tests/unit/text-styles.test.ts` confirms the reader reports real font names, sizes after graphics-state scaling and fill colors, and ignores invisible OCR text.
+Browser preview captures of the dialog in light and dark schemes, and an insertion into `mixed-forms-annotations.pdf`, showed the matched Helvetica 15 pt text rendered like the page heading.
+`npm run lint`, `npm run typecheck`, `npm run test:coverage` (653 tests) and `npm run build` passed.
+Native WebKit rendering and Preview or Acrobat reopening of styled text were not exercised; those interoperability checks remain open.

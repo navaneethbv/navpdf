@@ -8,8 +8,10 @@ export function Dialog({
   priority,
   busy = false,
   className = "",
+  icon,
 }: Readonly<{
   title: string;
+  icon?: ReactNode;
   children: ReactNode;
   onClose: () => void;
   priority?: boolean;
@@ -40,7 +42,10 @@ export function Dialog({
       className={`app-dialog ${priority ? "priority-dialog" : ""} ${className}`.trim()}
     >
       <header>
-        <h2 id={id}>{title}</h2>
+        <div className="modal-title">
+          {icon}
+          <h2 id={id}>{title}</h2>
+        </div>
         <button className="icon-button" onClick={onClose} aria-label="Close dialog" disabled={busy}>
           <X size={18} />
         </button>

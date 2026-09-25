@@ -205,6 +205,66 @@ it("autosaves without marking the workspace busy and restores the previous statu
   expect(useWorkspace.getState()).toMatchObject({ busy: false, status: "Highlight added" });
 });
 
+function pendingAutosave() {
+  const writes: Array<() => void> = [];
+  vi.mocked(desktop.writeRecovery).mockImplementationOnce(
+    () => new Promise<void>((resolve) => writes.push(resolve)),
+  );
+  const pdf = { saveDocument: vi.fn(async () => new Uint8Array([1])), numPages: 2 };
+  (controller as unknown as { pdf: unknown }).pdf = pdf;
+  return { pdf, finish: () => writes.shift()?.() };
+}
+
+it("saves after an in-flight autosave instead of dropping the request", async () => {
+  useWorkspace.getState().set({ document: doc, dirty: true });
+  const { finish } = pendingAutosave();
+  (controller as unknown as { editor: null; markSaved: () => void }).editor = null;
+  (controller as unknown as { markSaved: () => void }).markSaved = vi.fn();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000);
+  });
+  expect(desktop.writeRecovery).toHaveBeenCalledOnce();
+  let saved: Promise<boolean> = Promise.resolve(false);
+  await act(async () => {
+    saved = session.save();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(desktop.saveDocument).not.toHaveBeenCalled();
+  await act(async () => {
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  await expect(saved).resolves.toBe(true);
+  expect(desktop.saveDocument).toHaveBeenCalledOnce();
+  expect(useWorkspace.getState().dirty).toBe(false);
+});
+
+it("closes after an in-flight autosave and discards the recovery copy last", async () => {
+  useWorkspace.getState().set({ document: doc, dirty: false });
+  const { finish } = pendingAutosave();
+  useWorkspace.getState().set({ dirty: true });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000);
+  });
+  // The user discarded the changes elsewhere; the window close must still complete.
+  useWorkspace.getState().set({ dirty: false });
+  const calls = vi.mocked(listen).mock.calls;
+  const close = calls.find(([event]) => event === "close-requested")?.[1] as () => void;
+  await act(async () => {
+    close();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(invoke).not.toHaveBeenCalledWith("close_window");
+  await act(async () => {
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(desktop.discardRecovery).toHaveBeenCalledWith(doc.id);
+  expect(invoke).toHaveBeenCalledWith("close_window");
+  const order = (fn: unknown) => vi.mocked(fn as () => void).mock.invocationCallOrder[0];
+  expect(order(desktop.writeRecovery)).toBeLessThan(order(desktop.discardRecovery));
+});
+
 it("skips an autosave tick while another operation is busy", async () => {
   useWorkspace.getState().set({ document: doc, dirty: true, busy: true });
   const saveDocument = vi.fn(async () => new Uint8Array([1]));

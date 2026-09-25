@@ -17,7 +17,7 @@ describe("AnnotationNoteDialog", () => {
     };
     const onClose = vi.fn();
     render(<AnnotationNoteDialog controller={controller as never} onClose={onClose} />);
-    expect(screen.getByText("Page 3")).toBeTruthy();
+    expect(screen.getByLabelText("Note on page 3")).toBeTruthy();
     const submitButton = screen.getByRole("button", { name: "Add Note" });
     expect((submitButton as HTMLButtonElement).disabled).toBe(true);
 

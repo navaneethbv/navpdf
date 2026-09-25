@@ -3,7 +3,13 @@ export type ToolMode = "all" | "edit" | "convert" | "esign" | "create";
 export type Tool =
   "select" | "hand" | "highlight" | "ink" | "draw" | "text" | "shape" | "signature" | "snapshot";
 export type ShapeKind = "Square" | "Circle" | "Line" | "Arrow";
-export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "tools";
+export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "layers" | "tools";
+/** An optional content group the reader can show or hide. */
+export interface DocumentLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+}
 export interface DocumentDescriptor {
   unsaved?: boolean;
   id: string;

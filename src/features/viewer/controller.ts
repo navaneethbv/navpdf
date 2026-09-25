@@ -47,6 +47,37 @@ import { installHighlightInterop } from "./highlight-interop";
 import { readTextSelectionGeometry } from "./selection-geometry";
 import { createCommentExchange, parseCommentExchange } from "../../services/comment-exchange";
 import { contentIdentity } from "../../services/document-identity";
+import { ViewHistory } from "./view-history";
+import { ReadAloud } from "./read-aloud";
+import { AutoScroll } from "./auto-scroll";
+
+/** Reports the page left by link and bookmark jumps so Previous View can return to it. */
+class HistoryLinkService extends PDFLinkService {
+  onJump: ((from: number) => void) | null = null;
+  override async goToDestination(dest: string | unknown[]) {
+    const from = this.page;
+    await super.goToDestination(dest);
+    this.jumped(from);
+  }
+  override goToPage(value: number | string) {
+    const from = this.page;
+    super.goToPage(value);
+    this.jumped(from);
+  }
+  private jumped(from: number) {
+    if (this.page !== from) this.onJump?.(from);
+  }
+}
+
+type OptionalContentOrder = Array<string | { name: string | null; order: OptionalContentOrder }>;
+
+function orderedLayerIds(order: OptionalContentOrder | null | undefined, ids: string[] = []) {
+  for (const item of order ?? []) {
+    if (typeof item === "string") ids.push(item);
+    else orderedLayerIds(item.order, ids);
+  }
+  return ids;
+}
 
 type OutlineItem = NonNullable<Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>>[number];
 
@@ -210,7 +241,7 @@ async function readPageComments(
 
 export class ViewerController {
   readonly bus = new EventBus();
-  readonly links = new PDFLinkService({
+  readonly links = new HistoryLinkService({
     eventBus: this.bus,
     ignoreDestinationZoom: true,
   });
@@ -238,6 +269,19 @@ export class ViewerController {
   private readonly mutationQueue = new MutationQueue();
   private identity: string | null = null;
   private replacing = false;
+  readonly views = new ViewHistory();
+  readonly readAloud = new ReadAloud({
+    pageText: (page) => this.pageText(page),
+    showPage: (page) => {
+      if (this.pdf && this.viewer.currentPageNumber !== page) this.viewer.currentPageNumber = page;
+    },
+    onState: (readAloud, page) => {
+      useWorkspace
+        .getState()
+        .set({ readAloud, ...(page === null ? {} : { status: `Reading page ${page} aloud` }) });
+    },
+  });
+  readonly autoScroll: AutoScroll;
 
   async mutate<T>(label: string, fn: () => Promise<T>): Promise<T> {
     useWorkspace.getState().set({ busy: true, status: label });
@@ -283,6 +327,21 @@ export class ViewerController {
       supportsPinchToZoom: true,
     });
     this.links.setViewer(this.viewer);
+    this.links.onJump = (from) => {
+      this.recordView(from);
+    };
+    this.autoScroll = new AutoScroll({
+      container,
+      nextPage: () => {
+        if (!this.pdf || useWorkspace.getState().layout !== "single") return false;
+        if (this.viewer.currentPageNumber >= this.pdf.numPages) return false;
+        this.viewer.currentPageNumber++;
+        return true;
+      },
+      onChange: (autoScroll) => {
+        useWorkspace.getState().set({ autoScroll });
+      },
+    });
     const on = (name: string, handler: (event: never) => void) =>
       this.bus.on(name, handler, { signal: this.abort.signal });
     on("pagesinit", () => {
@@ -402,6 +461,11 @@ export class ViewerController {
     this.nativeCanRedo = false;
     this.contexts.clear();
     this.storageModified = false;
+    if (!this.replacing) {
+      this.views.clear();
+      this.readAloud.stop();
+      this.autoScroll.stop();
+    }
     this.pdf = pdf;
     const pageLabels =
       typeof pdf.getPageLabels === "function" ? await pdf.getPageLabels().catch(() => null) : null;
@@ -409,6 +473,8 @@ export class ViewerController {
     this.links.setDocument(pdf);
     this.find.setDocument(pdf);
     this.viewer.setDocument(pdf);
+    this.updateViewControls();
+    await this.refreshLayers(generation);
     (pdf.annotationStorage as unknown as { onSetModified: () => void }).onSetModified = () => {
       this.storageModified = true;
       useWorkspace.getState().set({ dirty: true, status: "Unsaved changes" });
@@ -446,6 +512,9 @@ export class ViewerController {
     this.viewer.setDocument(null as unknown as PDFDocumentProxy);
     this.links.setDocument(null);
     this.find.setDocument(null as unknown as PDFDocumentProxy);
+    this.readAloud.stop();
+    this.autoScroll.stop();
+    this.views.clear();
     this.editor = null;
     this.pdf = null;
     this.identity = null;
@@ -701,6 +770,8 @@ export class ViewerController {
   /** Release DOM listeners while the app owner retains the PDF for emergency saving. */
   suspendView() {
     this.abort.abort();
+    this.readAloud.stop();
+    this.autoScroll.stop();
     this.searchGeneration++;
     clearTimeout(this.searchTimer);
     clearTimeout(this.pageTimer);
@@ -1108,7 +1179,85 @@ export class ViewerController {
     else this.viewer.currentScale = boundedZoom(value);
   }
   goTo(page: number) {
-    if (this.pdf) this.viewer.currentPageNumber = Math.max(1, Math.min(this.pdf.numPages, page));
+    if (!this.pdf) return;
+    const from = this.viewer.currentPageNumber;
+    const target = Math.max(1, Math.min(this.pdf.numPages, page));
+    this.viewer.currentPageNumber = target;
+    if (target !== from) this.recordView(from);
+  }
+  /** Previous View: returns to the page shown before the latest jump. */
+  goBack() {
+    this.stepView(this.views.previous.bind(this.views));
+  }
+  /** Next View: repeats a jump undone by Previous View. */
+  goForward() {
+    this.stepView(this.views.next.bind(this.views));
+  }
+  private stepView(step: (current: number, pageCount: number) => number | null) {
+    if (!this.pdf) return;
+    const page = step(this.viewer.currentPageNumber, this.pdf.numPages);
+    if (page !== null) this.viewer.currentPageNumber = page;
+    this.updateViewControls();
+  }
+  private recordView(from: number) {
+    this.views.record(from);
+    this.updateViewControls();
+  }
+  private updateViewControls() {
+    useWorkspace
+      .getState()
+      .set({ canGoBack: this.views.canGoBack, canGoForward: this.views.canGoForward });
+  }
+  /** Plain text of one page, for Read Out Loud. */
+  async pageText(page: number): Promise<string> {
+    if (!this.pdf || page < 1 || page > this.pdf.numPages) return "";
+    const content = await (await this.pdf.getPage(page)).getTextContent();
+    return content.items.map(searchTextItem).join(" ");
+  }
+  /** Reads the current page, or from the current page to the end of the document. */
+  async readOutLoud(toEnd: boolean) {
+    if (!this.pdf) return;
+    const first = this.viewer.currentPageNumber;
+    try {
+      await this.readAloud.read(first, toEnd ? this.pdf.numPages : first);
+    } catch (error) {
+      useWorkspace
+        .getState()
+        .set({ error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  toggleReadAloudPause() {
+    if (this.readAloud.current === "paused") this.readAloud.resume();
+    else this.readAloud.pause();
+  }
+  /** Shows or hides one optional content group; this changes the view only, not the PDF. */
+  async setLayerVisibility(id: string, visible: boolean) {
+    const config = await this.viewer.optionalContentConfigPromise;
+    if (!config) return;
+    config.setVisibility(id, visible);
+    this.viewer.optionalContentConfigPromise = Promise.resolve(config);
+    await this.refreshLayers(this.generation);
+  }
+  private async refreshLayers(generation: number) {
+    let layers: Array<{ id: string; name: string; visible: boolean }> = [];
+    try {
+      const config = await this.viewer.optionalContentConfigPromise;
+      if (config) {
+        const groups = new Map<string, { name: string | null; visible: boolean }>(config);
+        const order = orderedLayerIds(config.getOrder() as OptionalContentOrder | null);
+        const ids = order.length > 0 ? order : [...groups.keys()];
+        layers = [...new Set(ids)].flatMap((id) => {
+          const group = groups.get(id);
+          if (!group) return [];
+          // Groups with a missing or blank name still need a visible label.
+          const name = group.name?.trim() ? group.name : "Unnamed layer";
+          return [{ id, name, visible: group.visible }];
+        });
+      }
+    } catch {
+      // Malformed optional content leaves every layer at its default visibility.
+    }
+    if (generation === this.generation) useWorkspace.getState().set({ layers });
   }
   search(again = false, backward = false) {
     const s = useWorkspace.getState();

@@ -1450,8 +1450,10 @@ export function validateStandardFontCoverage(text: string): {
   };
 }
 
+/** Legacy family names; `fontFace` with `bold` and `italic` selects any of the 12 text fonts. */
 export type StandardFontFamily = "Helvetica" | "Helvetica-Bold" | "Times-Roman" | "Courier";
-type TextAlignment = "left" | "center" | "right";
+export type TextFontFace = "sans" | "serif" | "mono";
+export type TextAlignment = "left" | "center" | "right" | "justify";
 
 export interface InsertTextOptions {
   page: number; // 1-based page number
@@ -1460,6 +1462,10 @@ export interface InsertTextOptions {
   y: number;
   fontSize?: number;
   fontFamily?: StandardFontFamily;
+  fontFace?: TextFontFace;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
   color?: [number, number, number];
   alignment?: TextAlignment;
   maxWidth?: number;
@@ -1467,52 +1473,97 @@ export interface InsertTextOptions {
   opacity?: number;
 }
 
+interface TextLine {
+  text: string;
+  /** The last line of a paragraph is never stretched when justifying. */
+  paragraphEnd: boolean;
+}
+
+/** Breaks one paragraph into lines no wider than `maxWidth`; overlong words get their own line. */
+function wrapParagraph(
+  para: string,
+  font: { widthOfTextAtSize: (text: string, size: number) => number },
+  fontSize: number,
+  maxWidth: number,
+): TextLine[] {
+  const lines: TextLine[] = [];
+  let currentLine = "";
+  for (const word of para.split(/\s+/).filter(Boolean)) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (font.widthOfTextAtSize(testLine, fontSize) <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) lines.push({ text: currentLine, paragraphEnd: false });
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push({ text: currentLine, paragraphEnd: false });
+  const last = lines.at(-1);
+  if (last) last.paragraphEnd = true;
+  return lines;
+}
+
 function wrapText(
   text: string,
   font: { widthOfTextAtSize: (text: string, size: number) => number },
   fontSize: number,
-  maxWidth: number,
-): string[] {
-  const paragraphs = text.split("\n");
-  const lines: string[] = [];
-  for (const para of paragraphs) {
-    if (!para.trim()) {
-      lines.push("");
-      continue;
-    }
-    const words = para.split(/\s+/);
-    let currentLine = "";
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const width = font.widthOfTextAtSize(testLine, fontSize);
-      if (width <= maxWidth) {
-        currentLine = testLine;
-      } else if (currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        lines.push(word);
-        currentLine = "";
-      }
-    }
-    if (currentLine) {
-      lines.push(currentLine);
-    }
-  }
-  return lines;
+  maxWidth: number | undefined,
+): TextLine[] {
+  return text
+    .split("\n")
+    .flatMap((para) =>
+      maxWidth && para.trim()
+        ? wrapParagraph(para, font, fontSize, maxWidth)
+        : [{ text: para.trim() ? para : "", paragraphEnd: true }],
+    );
 }
 
-function standardFont(family: StandardFontFamily | undefined): StandardFonts {
+const STANDARD_TEXT_FONTS: Record<
+  TextFontFace,
+  [StandardFonts, StandardFonts, StandardFonts, StandardFonts]
+> = {
+  // Regular, bold, italic, bold italic.
+  sans: [
+    StandardFonts.Helvetica,
+    StandardFonts.HelveticaBold,
+    StandardFonts.HelveticaOblique,
+    StandardFonts.HelveticaBoldOblique,
+  ],
+  serif: [
+    StandardFonts.TimesRoman,
+    StandardFonts.TimesRomanBold,
+    StandardFonts.TimesRomanItalic,
+    StandardFonts.TimesRomanBoldItalic,
+  ],
+  mono: [
+    StandardFonts.Courier,
+    StandardFonts.CourierBold,
+    StandardFonts.CourierOblique,
+    StandardFonts.CourierBoldOblique,
+  ],
+};
+
+function legacyFace(family: StandardFontFamily | undefined): { face: TextFontFace; bold: boolean } {
   switch (family) {
     case "Helvetica-Bold":
-      return StandardFonts.HelveticaBold;
+      return { face: "sans", bold: true };
     case "Times-Roman":
-      return StandardFonts.TimesRoman;
+      return { face: "serif", bold: false };
     case "Courier":
-      return StandardFonts.Courier;
+      return { face: "mono", bold: false };
     default:
-      return StandardFonts.Helvetica;
+      return { face: "sans", bold: false };
   }
+}
+
+export function standardTextFont(
+  options: Pick<InsertTextOptions, "fontFamily" | "fontFace" | "bold" | "italic">,
+): StandardFonts {
+  const legacy = legacyFace(options.fontFamily);
+  const face = options.fontFace ?? legacy.face;
+  const bold = options.bold ?? legacy.bold;
+  const variant = (bold ? 1 : 0) + (options.italic ? 2 : 0);
+  return STANDARD_TEXT_FONTS[face][variant];
 }
 
 function textOffset(
@@ -1525,10 +1576,29 @@ function textOffset(
   return 0;
 }
 
+/** Draws one line word by word so the gaps fill the container; returns the drawn width. */
+function drawJustifiedLine(
+  page: PDFPage,
+  font: PDFFont,
+  words: string[],
+  containerWidth: number,
+  draw: { x: number; y: number; size: number; color: ReturnType<typeof rgb>; opacity: number },
+): number {
+  const wordWidths = words.map((word) => font.widthOfTextAtSize(word, draw.size));
+  const gap =
+    (containerWidth - wordWidths.reduce((sum, width) => sum + width, 0)) / (words.length - 1);
+  let cursor = draw.x;
+  for (const [index, word] of words.entries()) {
+    page.drawText(word, { ...draw, x: cursor, font });
+    cursor += wordWidths[index] + gap;
+  }
+  return containerWidth;
+}
+
 function drawTextContent(
   page: PDFPage,
   font: PDFFont,
-  lines: string[],
+  lines: TextLine[],
   options: InsertTextOptions,
   box: AnnotationBox,
 ) {
@@ -1539,19 +1609,36 @@ function drawTextContent(
   const opacity = options.opacity === undefined ? 1 : clamp(options.opacity, 0, 1);
   const x = clamp(options.x, box.x, box.x + box.width - 10);
   const y = clamp(options.y, box.y + fontSize, box.y + box.height - fontSize);
+  const wrapWidth = options.maxWidth && options.maxWidth > 0 ? options.maxWidth : undefined;
   for (const [index, line] of lines.entries()) {
-    if (!line) continue;
-    const lineWidth = font.widthOfTextAtSize(line, fontSize);
-    const containerWidth = options.maxWidth && options.maxWidth > 0 ? options.maxWidth : lineWidth;
-    const offset = textOffset(options.alignment, containerWidth, lineWidth);
-    page.drawText(line, {
-      x: x + offset,
-      y: y - index * lineHeight,
-      size: fontSize,
-      font,
-      color,
-      opacity,
-    });
+    if (!line.text) continue;
+    const lineY = y - index * lineHeight;
+    const words = line.text.trim().split(/\s+/);
+    let lineX = x;
+    let drawnWidth: number;
+    if (options.alignment === "justify" && wrapWidth && !line.paragraphEnd && words.length > 1) {
+      drawnWidth = drawJustifiedLine(page, font, words, wrapWidth, {
+        x,
+        y: lineY,
+        size: fontSize,
+        color,
+        opacity,
+      });
+    } else {
+      drawnWidth = font.widthOfTextAtSize(line.text, fontSize);
+      lineX = x + textOffset(options.alignment, wrapWidth ?? drawnWidth, drawnWidth);
+      page.drawText(line.text, { x: lineX, y: lineY, size: fontSize, font, color, opacity });
+    }
+    if (options.underline) {
+      const underlineY = lineY - fontSize * 0.12;
+      page.drawLine({
+        start: { x: lineX, y: underlineY },
+        end: { x: lineX + drawnWidth, y: underlineY },
+        thickness: Math.max(0.5, fontSize * 0.06),
+        color,
+        opacity,
+      });
+    }
   }
 }
 
@@ -1577,12 +1664,10 @@ export async function insertTextContent(
   const page = doc.getPage(pageIndex);
   const box = visibleBox(page);
 
-  const font = await doc.embedFont(standardFont(options.fontFamily));
+  const font = await doc.embedFont(standardTextFont(options));
   const fontSize = clamp(options.fontSize ?? 14, 4, 144);
-  const lines =
-    options.maxWidth && options.maxWidth > 0
-      ? wrapText(options.text, font, fontSize, options.maxWidth)
-      : options.text.split("\n");
+  const wrapWidth = options.maxWidth && options.maxWidth > 0 ? options.maxWidth : undefined;
+  const lines = wrapText(options.text, font, fontSize, wrapWidth);
   drawTextContent(page, font, lines, options, box);
   return doc.save();
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   Bookmark as BookmarkIcon,
   Files,
+  Layers,
   MessageSquare,
   Search,
   Download,
@@ -19,12 +20,14 @@ const tabs = [
   { id: "bookmarks", label: "Bookmarks", icon: BookmarkIcon },
   { id: "search", label: "Search", icon: Search },
   { id: "comments", label: "Comments", icon: MessageSquare },
+  { id: "layers", label: "Layers", icon: Layers },
 ] as const;
 export function Sidebar({ controller }: Readonly<{ controller: ViewerController }>) {
   const tab = useWorkspace((s) => s.sidebar),
     bookmarks = useWorkspace((s) => s.bookmarks),
     comments = useWorkspace((s) => s.comments),
     selectedId = useWorkspace((s) => s.selectedAnnotationId),
+    layers = useWorkspace((s) => s.layers),
     set = useWorkspace((s) => s.set);
   const importInput = useRef<HTMLInputElement>(null);
   const exportComments = async () => {
@@ -50,6 +53,38 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
   const renderPanel = () => {
     if (tab === "pages") return <Thumbnails controller={controller} />;
     if (tab === "search") return <SearchPanel controller={controller} />;
+    if (tab === "layers")
+      return (
+        <div className="sidebar-scroll">
+          {layers.length ? (
+            <ul className="layer-list">
+              {layers.map((layer) => (
+                <li key={layer.id}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={layer.visible}
+                      onChange={(event) => {
+                        void controller
+                          .setLayerVisibility(layer.id, event.target.checked)
+                          .catch(() => {
+                            set({ error: "This layer could not be changed." });
+                          });
+                      }}
+                    />{" "}
+                    {layer.name}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="empty-message">This PDF has no layers.</p>
+          )}
+          <p className="empty-message">
+            Layer visibility changes this view only, not the saved PDF.
+          </p>
+        </div>
+      );
     if (tab === "bookmarks")
       return (
         <div className="sidebar-scroll">
@@ -132,19 +167,23 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
         <X size={18} />
       </button>
       <div className="sidebar-tabs" role="tablist" aria-label="Document navigation">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            aria-label={t.label}
-            title={t.label}
-            className={tab === t.id ? "active" : ""}
-            onClick={() => set({ sidebar: t.id })}
-          >
-            <t.icon size={18} />
-          </button>
-        ))}
+        {tabs
+          .filter((t) => t.id !== "layers" || layers.length > 0 || tab === "layers")
+          .map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={tab === t.id}
+              aria-label={t.label}
+              title={t.label}
+              className={tab === t.id ? "active" : ""}
+              onClick={() => {
+                set({ sidebar: t.id });
+              }}
+            >
+              <t.icon size={18} />
+            </button>
+          ))}
       </div>
       <h2 className="sidebar-heading">
         {tabs.find((t) => t.id === tab)?.label}

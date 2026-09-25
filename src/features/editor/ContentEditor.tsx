@@ -7,9 +7,9 @@ import {
   insertTextContent,
   insertImageContent,
   validateStandardFontCoverage,
-  type StandardFontFamily,
 } from "../../services/document-commands";
 import { fromTopLeftVisual } from "../../services/pdf/page-box";
+import { DEFAULT_TEXT_STYLE, TextStyleControls, type TextStyle } from "./TextStyleControls";
 import { PageNumberInput } from "../../components/PageNumberInput";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
@@ -26,10 +26,7 @@ export function ContentEditor({
   const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [text, setText] = useState("");
-  const [fontSize, setFontSize] = useState(14);
-  const [fontFamily, setFontFamily] = useState<StandardFontFamily>("Helvetica");
-  const [fontColor, setFontColor] = useState("#24332d");
-  const [alignment, setAlignment] = useState<"left" | "center" | "right">("left");
+  const [style, setStyle] = useState<TextStyle>(DEFAULT_TEXT_STYLE);
   const [maxWidth, setMaxWidth] = useState<number>(400);
   const [targetPage, setTargetPage] = useState(s.page);
   const [posX, setPosX] = useState(50);
@@ -51,16 +48,22 @@ export function ContentEditor({
     setSaving(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
-      const r = Number.parseInt(fontColor.slice(1, 3), 16) / 255;
-      const g = Number.parseInt(fontColor.slice(3, 5), 16) / 255;
-      const b = Number.parseInt(fontColor.slice(5, 7), 16) / 255;
+      const r = Number.parseInt(style.color.slice(1, 3), 16) / 255;
+      const g = Number.parseInt(style.color.slice(3, 5), 16) / 255;
+      const b = Number.parseInt(style.color.slice(5, 7), 16) / 255;
       let textX = posX;
       let textY = posY;
       try {
         const doc = await PDFDocument.load(currentBytes);
         const pageIndex = Math.max(0, Math.min(targetPage - 1, doc.getPageCount() - 1));
         const page = doc.getPage(pageIndex);
-        const mapped = fromTopLeftVisual(page, posX, posY, maxWidth > 0 ? maxWidth : 200, fontSize);
+        const mapped = fromTopLeftVisual(
+          page,
+          posX,
+          posY,
+          maxWidth > 0 ? maxWidth : 200,
+          style.size,
+        );
         textX = mapped.x;
         textY = mapped.y;
       } catch {
@@ -72,10 +75,14 @@ export function ContentEditor({
         text,
         x: textX,
         y: textY,
-        fontSize,
-        fontFamily,
+        fontSize: style.size,
+        fontFace: style.face,
+        bold: style.bold,
+        italic: style.italic,
+        underline: style.underline,
         color: [r, g, b],
-        alignment,
+        alignment: style.alignment,
+        lineHeight: style.size * 1.25 * style.lineSpacing,
         maxWidth: maxWidth > 0 ? maxWidth : undefined,
       });
 
@@ -171,14 +178,14 @@ export function ContentEditor({
                 <div
                   className="setting-group"
                   style={{
-                    backgroundColor: "var(--accent-red-subtle, #ffebee)",
-                    border: "1px solid var(--accent-red, #d32f2f)",
+                    backgroundColor: "var(--danger-surface)",
+                    border: "1px solid var(--danger-ink)",
                     borderRadius: "6px",
                     padding: "8px 12px",
                     display: "flex",
                     alignItems: "center",
                     gap: "8px",
-                    color: "var(--accent-red, #d32f2f)",
+                    color: "var(--danger-ink)",
                     fontSize: "0.85rem",
                   }}
                   role="alert"
@@ -191,69 +198,13 @@ export function ContentEditor({
                 </div>
               )}
 
-              <div className="settings-row">
-                <div className="setting-group">
-                  <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
-                    Font Family
-                  </label>
-                  <select
-                    id={`${fieldIds}-field-3`}
-                    value={fontFamily}
-                    onChange={(e) => setFontFamily(e.target.value as StandardFontFamily)}
-                    className="select-input"
-                  >
-                    <option value="Helvetica">Helvetica</option>
-                    <option value="Helvetica-Bold">Helvetica Bold</option>
-                    <option value="Times-Roman">Times Roman</option>
-                    <option value="Courier">Courier</option>
-                  </select>
-                </div>
-
-                <div className="setting-group">
-                  <label htmlFor={`${fieldIds}-field-4`} className="setting-title">
-                    Alignment
-                  </label>
-                  <select
-                    id={`${fieldIds}-field-4`}
-                    value={alignment}
-                    onChange={(e) => setAlignment(e.target.value as "left" | "center" | "right")}
-                    className="select-input"
-                  >
-                    <option value="left">Left</option>
-                    <option value="center">Center</option>
-                    <option value="right">Right</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="settings-row">
-                <div className="setting-group">
-                  <label htmlFor={`${fieldIds}-field-5`} className="setting-title">
-                    Font Size (pt)
-                  </label>
-                  <input
-                    id={`${fieldIds}-field-5`}
-                    type="number"
-                    min={8}
-                    max={72}
-                    value={fontSize}
-                    onChange={(e) => setFontSize(Number(e.target.value))}
-                    className="text-input"
-                  />
-                </div>
-                <div className="setting-group">
-                  <label htmlFor={`${fieldIds}-field-6`} className="setting-title">
-                    Color
-                  </label>
-                  <input
-                    id={`${fieldIds}-field-6`}
-                    type="color"
-                    value={fontColor}
-                    onChange={(e) => setFontColor(e.target.value)}
-                    className="color-input"
-                  />
-                </div>
-              </div>
+              <TextStyleControls
+                pdf={controller?.pdf}
+                page={targetPage}
+                text={text}
+                value={style}
+                onChange={setStyle}
+              />
 
               <div className="setting-group">
                 <label htmlFor={`${fieldIds}-field-7`} className="setting-title">

@@ -67,8 +67,9 @@ export async function saveDocument(
         "x-save-as": String(saveAs),
       },
     });
+  // Repeated saves keep one suffix, and names without an extension still download as PDFs.
   const name = safeFileName(
-    descriptor.name.replace(/\.pdf$/i, "-edited.pdf"),
+    `${descriptor.name.replace(/(?:-edited)?(?:\.pdf)?$/i, "")}-edited.pdf`,
     "document-edited.pdf",
   );
   await downloadBytes(bytes, name);

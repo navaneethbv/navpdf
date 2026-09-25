@@ -18,6 +18,14 @@ import {
   MoveHorizontal,
   ChevronUp,
   ChevronDown,
+  ArrowLeft,
+  ArrowRight,
+  Layers,
+  Volume2,
+  Pause,
+  Play,
+  Square,
+  ArrowDownToLine,
   Search,
   Home,
   Settings,
@@ -37,6 +45,7 @@ import {
 import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
 import type { Layout, ToolMode } from "../types/document";
+import { formatBytes } from "../features/compress/CompressDialog";
 
 type ControllerProps = { controller: ViewerController | null };
 export function Toolbar({
@@ -310,6 +319,12 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
     if (document.activeElement !== pageInput.current)
       setPage(s.pageLabels?.[s.page - 1] ?? String(s.page));
   }, [s.page, s.pageLabels]);
+  useEffect(() => {
+    if (s.pageFocus > 0) {
+      pageInput.current?.focus();
+      pageInput.current?.select();
+    }
+  }, [s.pageFocus]);
   const commit = () => {
     if (!page.trim()) {
       setPage(String(s.page));
@@ -327,25 +342,28 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
             { id: "bookmarks", label: "Bookmarks", icon: Bookmark },
             { id: "pages", label: "Pages", icon: Files },
             { id: "search", label: "Search", icon: Search },
+            { id: "layers", label: "Layers", icon: Layers },
           ] as const
-        ).map((item) => (
-          <button
-            key={item.id}
-            title={item.label}
-            aria-label={`Show ${item.label.toLowerCase()}`}
-            aria-pressed={s.navigationVisible && s.sidebar === item.id}
-            disabled={disabled}
-            onClick={() =>
-              s.set({
-                sidebar: item.id,
-                navigationVisible: !(s.navigationVisible && s.sidebar === item.id),
-                propertiesVisible: false,
-              })
-            }
-          >
-            <item.icon size={23} />
-          </button>
-        ))}
+        )
+          .filter((item) => item.id !== "layers" || s.layers.length > 0)
+          .map((item) => (
+            <button
+              key={item.id}
+              title={item.label}
+              aria-label={`Show ${item.label.toLowerCase()}`}
+              aria-pressed={s.navigationVisible && s.sidebar === item.id}
+              disabled={disabled}
+              onClick={() => {
+                s.set({
+                  sidebar: item.id,
+                  navigationVisible: !(s.navigationVisible && s.sidebar === item.id),
+                  propertiesVisible: false,
+                });
+              }}
+            >
+              <item.icon size={23} />
+            </button>
+          ))}
         <button
           title="Document properties"
           aria-label="Show document properties"
@@ -391,6 +409,22 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
           onClick={() => controller?.goTo(s.page + 1)}
         >
           <ChevronDown size={23} />
+        </button>
+        <button
+          title="Previous view (⌘[)"
+          aria-label="Previous view"
+          disabled={disabled || !s.canGoBack}
+          onClick={() => controller?.goBack()}
+        >
+          <ArrowLeft size={23} />
+        </button>
+        <button
+          title="Next view (⌘])"
+          aria-label="Next view"
+          disabled={disabled || !s.canGoForward}
+          onClick={() => controller?.goForward()}
+        >
+          <ArrowRight size={23} />
         </button>
         <hr />
         <button
@@ -473,6 +507,28 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
             >
               <Eye size={18} /> Read mode
             </button>
+            {controller?.readAloud.supported && (
+              <>
+                <button
+                  aria-label="Read this page aloud"
+                  onClick={() => void controller.readOutLoud(false)}
+                >
+                  <Volume2 size={18} /> Read this page aloud
+                </button>
+                <button
+                  aria-label="Read to the end aloud"
+                  onClick={() => void controller.readOutLoud(true)}
+                >
+                  <Volume2 size={18} /> Read to the end
+                </button>
+              </>
+            )}
+            <button
+              aria-label={s.autoScroll ? "Stop automatic scrolling" : "Scroll automatically"}
+              onClick={() => controller?.autoScroll.toggle()}
+            >
+              <ArrowDownToLine size={18} /> {s.autoScroll ? "Stop scrolling" : "Auto-scroll"}
+            </button>
             <button
               aria-label="Toggle Quick Tool Rail"
               onClick={() => s.set({ quickRailVisible: !s.quickRailVisible })}
@@ -486,18 +542,61 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
   );
 }
 
-export function Statusbar() {
+export function Statusbar({ controller }: Readonly<ControllerProps>) {
   const s = useWorkspace();
   return (
     <footer className="statusbar">
       <span className={`status-light ${s.busy ? "working" : ""}`} />
       <output>{s.status}</output>
+      {s.readAloud !== "idle" && (
+        <fieldset className="playback-controls" aria-label="Read Out Loud">
+          <button
+            title={s.readAloud === "paused" ? "Resume reading" : "Pause reading"}
+            aria-label={s.readAloud === "paused" ? "Resume reading" : "Pause reading"}
+            onClick={() => controller?.toggleReadAloudPause()}
+          >
+            {s.readAloud === "paused" ? <Play size={14} /> : <Pause size={14} />}
+          </button>
+          <button
+            title="Stop reading"
+            aria-label="Stop reading"
+            onClick={() => controller?.readAloud.stop()}
+          >
+            <Square size={14} />
+          </button>
+        </fieldset>
+      )}
+      {s.autoScroll && (
+        <fieldset className="playback-controls" aria-label="Automatic scrolling">
+          <button
+            title="Scroll slower"
+            aria-label="Scroll slower"
+            onClick={() => controller?.autoScroll.slower()}
+          >
+            <Minus size={14} />
+          </button>
+          <button
+            title="Scroll faster"
+            aria-label="Scroll faster"
+            onClick={() => controller?.autoScroll.faster()}
+          >
+            <Plus size={14} />
+          </button>
+          <button
+            title="Stop scrolling"
+            aria-label="Stop scrolling"
+            onClick={() => controller?.autoScroll.stop()}
+          >
+            <Square size={14} />
+          </button>
+        </fieldset>
+      )}
       <div className="statusbar-space" />
       {s.document && (
         <span>
           {s.info?.encrypted ? "Protected · " : ""}
           {s.hasDigitalSignature ? "Signed · " : ""}
-          {(s.document.size / 1024).toFixed(1)} KB
+          {formatBytes(s.document.size)}
         </span>
       )}
       <span>On your device</span>

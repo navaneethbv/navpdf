@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { AlertCircle, Info, LoaderCircle, X } from "lucide-react";
+import { AlertCircle, History, Info, LoaderCircle, LockKeyhole, Save, X } from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import { ViewerController } from "../features/viewer/controller";
 import { ViewerHost } from "../features/viewer/ViewerHost";
@@ -53,21 +53,61 @@ function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "doc
   }
 }
 
-function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
+/** Page turns for keys that do not scroll a single-page view. */
+const singlePageKeys = new Map<string, -1 | 1>([
+  ["PageUp", -1],
+  ["ArrowLeft", -1],
+  ["PageDown", 1],
+  ["ArrowRight", 1],
+]);
+
+/** Only the page or document, so arrow keys still work in toolbars and dialogs. */
+function targetsPage(target: EventTarget | null): boolean {
+  return (
+    target === document.body || (target instanceof Element && !!target.closest(".viewer-frame"))
+  );
+}
+
+/** Home/End, Previous/Next View and single-page turns; returns true when the key was used. */
+function handlePageKey(event: KeyboardEvent, controller: ViewerController): boolean {
   const state = useWorkspace.getState();
-  if (controller?.pdf && ["Home", "End"].includes(event.key)) {
+  if (event.key === "Home" || event.key === "End") {
     event.preventDefault();
     if (event.key === "Home") controller.goToFirst();
     else controller.goToLast();
+    return true;
   }
-  if (event.key === "Escape") {
-    if (state.readMode) {
-      state.set({ readMode: false });
-      return;
-    }
-    state.set({ selectedAnnotationId: null, hasSelection: false });
-    controller?.setTool("select");
+  if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+    event.preventDefault();
+    if (event.key === "ArrowLeft") controller.goBack();
+    else controller.goForward();
+    return true;
   }
+  const turn = singlePageKeys.get(event.key);
+  if (!turn || event.altKey || state.layout !== "single" || !targetsPage(event.target))
+    return false;
+  event.preventDefault();
+  controller.goTo(state.page + turn);
+  return true;
+}
+
+function handleEscape(controller: ViewerController | null) {
+  const state = useWorkspace.getState();
+  if (state.autoScroll) {
+    controller?.autoScroll.stop();
+    return;
+  }
+  if (state.readMode) {
+    state.set({ readMode: false });
+    return;
+  }
+  state.set({ selectedAnnotationId: null, hasSelection: false });
+  controller?.setTool("select");
+}
+
+function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerController | null) {
+  if (controller?.pdf && handlePageKey(event, controller)) return;
+  if (event.key === "Escape") handleEscape(controller);
 }
 
 function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController | null): boolean {
@@ -120,13 +160,44 @@ function handleShortcut(
   open: () => void,
 ): boolean {
   if (!(event.ctrlKey || event.metaKey)) return false;
+  // Reader commands that need Shift are matched first so plain Cmd/Ctrl keys such as Copy
+  // keep their normal behavior.
+  const readerActions = new Map<string, () => void>([
+    [
+      "n",
+      () => {
+        state.set({ pageFocus: state.pageFocus + 1 });
+      },
+    ],
+    ["h", () => controller?.autoScroll.toggle()],
+    ["v", () => void controller?.readOutLoud(false)],
+    ["b", () => void controller?.readOutLoud(true)],
+    ["c", () => controller?.toggleReadAloudPause()],
+    ["e", () => controller?.readAloud.stop()],
+  ]);
+  const readerAction =
+    event.shiftKey && state.document ? readerActions.get(event.key.toLowerCase()) : undefined;
+  if (readerAction) {
+    event.preventDefault();
+    readerAction();
+    return true;
+  }
   const actions = new Map<string, () => void>([
     ["o", () => open()],
     ["s", () => void session.save(event.shiftKey)],
     [
       "f",
       () => {
-        if (state.document) state.set({ sidebar: "search" });
+        if (state.document) state.set({ sidebar: "search", searchFocus: state.searchFocus + 1 });
+      },
+    ],
+    [
+      "g",
+      () => {
+        if (state.document && state.searchQuery) {
+          state.set({ sidebar: "search" });
+          controller?.search(true, event.shiftKey);
+        }
       },
     ],
     [
@@ -137,6 +208,9 @@ function handleShortcut(
     ],
     ["w", () => session.home()],
     ["z", () => (event.shiftKey ? controller?.redo() : controller?.undo())],
+    ["y", () => controller?.redo()],
+    ["[", () => controller?.goBack()],
+    ["]", () => controller?.goForward()],
     [",", () => state.set({ settingsOpen: true })],
     ["0", () => controller?.zoom("page-fit")],
     ["+", () => controller?.zoom((state.zoom / 100) * 1.15)],
@@ -203,6 +277,24 @@ function menuActions(
 ): Map<string, () => void> {
   return new Map([
     ["first-page", () => controller?.goToFirst()],
+    ["previous-view", () => controller?.goBack()],
+    ["next-view", () => controller?.goForward()],
+    [
+      "go-to-page",
+      () => {
+        if (state.document) state.set({ pageFocus: state.pageFocus + 1 });
+      },
+    ],
+    [
+      "auto-scroll",
+      () => {
+        if (state.document) controller?.autoScroll.toggle();
+      },
+    ],
+    ["read-page", () => void controller?.readOutLoud(false)],
+    ["read-to-end", () => void controller?.readOutLoud(true)],
+    ["read-pause", () => controller?.toggleReadAloudPause()],
+    ["read-stop", () => controller?.readAloud.stop()],
     ["last-page", () => controller?.goToLast()],
     [
       "next-page",
@@ -255,7 +347,12 @@ function menuActions(
     ],
     ["undo", () => controller?.undo()],
     ["redo", () => controller?.redo()],
-    ["find", () => state.set({ sidebar: "search" })],
+    [
+      "find",
+      () => {
+        state.set({ sidebar: "search", searchFocus: state.searchFocus + 1 });
+      },
+    ],
     ["settings", () => state.set({ settingsOpen: true })],
     [
       "highlight",
@@ -302,6 +399,10 @@ function handleMenuAction(
   session: SessionActions,
   open: () => void,
 ) {
+  // Menu Undo and Redo never revert a document change while a text field, including one inside
+  // a dialog, has focus.
+  if ((payload === "undo" || payload === "redo") && isEditableTarget(document.activeElement))
+    return;
   if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;
@@ -362,7 +463,7 @@ export default function App() {
         return;
       }
       if (isEditableTarget(event.target)) return;
-      handleShortcut(event, state, controller, session, open);
+      if (handleShortcut(event, state, controller, session, open)) return;
       if (state.selectedAnnotationId && handleAnnotationKey(event, controller)) return;
       handleWorkspaceNavigation(event, controller);
     }
@@ -460,7 +561,7 @@ export default function App() {
           onError={session.report}
         />
       )}
-      <Statusbar />
+      <Statusbar controller={controller} />
       {s.busy && (
         <div className="busy-indicator" aria-hidden="true">
           <LoaderCircle size={16} className="spinner" />
@@ -483,7 +584,13 @@ export default function App() {
       />
       {s.settingsOpen && <Settings />}
       {s.activeModal === "open-recent" && (
-        <Dialog title="Open Recent Files" onClose={() => s.set({ activeModal: null })}>
+        <Dialog
+          title="Open Recent Files"
+          icon={<History size={18} />}
+          onClose={() => {
+            s.set({ activeModal: null });
+          }}
+        >
           <div className="export-options">
             {s.local.recents.length ? (
               s.local.recents.map((item) => (
@@ -506,7 +613,12 @@ export default function App() {
         </Dialog>
       )}
       {session.password && (
-        <Dialog title="Unlock PDF" onClose={session.cancelPassword} priority>
+        <Dialog
+          title="Unlock PDF"
+          icon={<LockKeyhole size={18} />}
+          onClose={session.cancelPassword}
+          priority
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -542,7 +654,12 @@ export default function App() {
         </Dialog>
       )}
       {session.confirm && (
-        <Dialog title="Save your changes?" onClose={session.cancelConfirm} priority>
+        <Dialog
+          title="Save your changes?"
+          icon={<Save size={18} />}
+          onClose={session.cancelConfirm}
+          priority
+        >
           <p>
             This document has unsaved edits. Save them before continuing, or discard this session's
             changes.
