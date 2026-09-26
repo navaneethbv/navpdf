@@ -1,3 +1,5 @@
+import { CompareDialog } from "../features/compare/CompareDialog";
+import { BookmarkEditor } from "../features/bookmarks/BookmarkEditor";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { AlertCircle, History, Info, LoaderCircle, LockKeyhole, Save, X } from "lucide-react";
@@ -788,6 +790,12 @@ export default function App() {
         )}
         {s.activeModal === "edit-objects" && (
           <ObjectEditor controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "bookmarks-edit" && (
+          <BookmarkEditor controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
+        {s.activeModal === "compare" && (
+          <CompareDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
         {s.activeModal === "compress" && (
           <CompressDialog controller={controller} onClose={() => s.set({ activeModal: null })} />

@@ -1,3 +1,4 @@
+import { OCR_REVIEW_KEY, validateOcrReview } from "./pdf/ocr-review.ts";
 import { decodeBoundedStream } from "./pdf/bounded-stream.ts";
 import {
   PDFDocument,
@@ -31,6 +32,7 @@ import { pdfText } from "./pdf/text-string.ts";
 import { appendTaggedStream, removeTaggedStreams } from "./pdf/content-streams.ts";
 import { stripExternalPageLinks } from "./pdf/link-targets.ts";
 import { walkEmbeddedFiles } from "./pdf/name-tree.ts";
+import { mergePreservingStructure } from "./pdf/merge.ts";
 import { visibleBox, clampRectToBox } from "./pdf/page-box.ts";
 import type { ShapeKind } from "../types/document";
 import type { MergeInputItem, OperationManifestItem, OcrPageResult } from "../types/operations";
@@ -947,36 +949,7 @@ function cropPage(
 }
 
 export async function mergeDocuments(inputs: (Uint8Array | MergeInputItem)[]): Promise<Uint8Array> {
-  if (inputs.length === 0) {
-    throw new Error("At least one document is required to merge.");
-  }
-  const mergedDoc = await PDFDocument.create();
-  for (const input of inputs) {
-    await appendMergeInput(mergedDoc, input);
-  }
-  if (mergedDoc.getPageCount() === 0) {
-    throw new Error("No valid pages were selected to merge.");
-  }
-  return mergedDoc.save();
-}
-
-async function appendMergeInput(
-  mergedDoc: PDFDocument,
-  input: Uint8Array | MergeInputItem,
-): Promise<void> {
-  const isItem = !(input instanceof Uint8Array) && typeof input === "object" && "bytes" in input;
-  const bytes = isItem ? input.bytes : input;
-  const ranges = isItem ? input.ranges : undefined;
-  const doc = await PDFDocument.load(bytes);
-  const allIndices = doc.getPageIndices();
-  const pageIndices =
-    ranges && ranges.length > 0
-      ? ranges.filter((index) => index >= 0 && index < allIndices.length)
-      : allIndices;
-  if (pageIndices.length === 0) return;
-  if (pageIndices.length < allIndices.length) stripExternalPageLinks(doc, new Set(pageIndices));
-  const copied = await mergedDoc.copyPages(doc, pageIndices);
-  for (const page of copied) mergedDoc.addPage(page);
+  return mergePreservingStructure(inputs);
 }
 
 export interface SplitResult {
@@ -2695,7 +2668,12 @@ async function appendOcrPageLayer(
     }
   }
   ops.push({ toString: () => "0 Tr\nET\nQ" } as PDFOperator);
-  appendTaggedStream(doc, page, "NavPDF_OCR", ops);
+  const ref = appendTaggedStream(doc, page, "NavPDF_OCR", ops);
+  const review = JSON.stringify(validateOcrReview(pageResult, pageResult.pageIndex));
+  if (review.length > 500_000) throw new Error("OCR review data exceeds the page limit.");
+  const stream = doc.context.lookup(ref);
+  if (stream instanceof PDFRawStream)
+    stream.dict.set(OCR_REVIEW_KEY, PDFHexString.fromText(review));
 }
 
 /**
