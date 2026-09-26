@@ -20,7 +20,7 @@ Compression targets use measured presets with previews and clear target-miss fee
 PDF comparison aligns page additions/removals and shows changed text and rendered regions locally.
 
 The initial implementation passed 705 frontend tests, coverage gates, 95 Rust tests, Clippy, packaging and DMG verification.
-The PR 42 quality follow-up passes 711 frontend tests and preserves the coverage gates while addressing scanner findings, native decoder ownership, accessible previews and stable OCR review identity.
+The PR 42 quality follow-up passes 712 frontend tests and preserves the coverage gates while addressing scanner findings, native decoder ownership, accessible previews and stable OCR review identity.
 Fresh hosted checks and direct Sonar zero-new-issue and zero-duplication verification gate the authorized merge.
 Follow-up native testing reproduced an excessive bookmark nesting move that closed the tool unexpectedly.
 Parent changes now validate the whole moved subtree before updating the draft, preserving earlier edits and allowing a valid retry.

@@ -104,6 +104,14 @@ describe("local image preview URLs", () => {
     revoke.mockRestore();
   });
 
+  it("encodes markup characters before a local URL reaches an image attribute", () => {
+    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue('blob:test/<preview>"');
+    const { result, unmount } = renderHook(() => useImageUrl(file));
+    expect(result.current).toBe("blob:test/%3Cpreview%3E%22");
+    unmount();
+    create.mockRestore();
+  });
+
   it.each([
     "javascript:alert(1)",
     "data:text/html,<script>alert(1)</script>",

@@ -19,8 +19,8 @@ export function useImageUrl(file?: File): string {
     setUrl(value);
     return () => URL.revokeObjectURL(value);
   }, [file]);
-  // Preview sources must remain browser-owned local blobs.
-  return url.startsWith("blob:") ? url : "";
+  // Only browser-owned blob references may reach image attributes. Encode URI metacharacters.
+  return url.startsWith("blob:") ? encodeURI(url) : "";
 }
 
 const handles: CropHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w", "move"];

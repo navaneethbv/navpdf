@@ -7,19 +7,30 @@ The follow-up simplifies bounded bookmark, merge, OCR, comparison and image-proc
 It also removes duplicate CSS selectors, gives OCR review items stable session IDs, corrects label spacing and uses native image/output semantics for previews and status.
 Image previews accept only browser-owned blob URLs and release them when replaced or closed.
 CodeQL's reported path runs from a selected File through URL.createObjectURL into an image source; no executable HTML interpretation was reproduced.
-The explicit blob scheme boundary is covered by malicious-scheme rejection tests.
+The explicit blob scheme boundary and URI encoding are covered by malicious-scheme rejection and markup-character encoding tests.
 
 The native ImageIO bridge now owns its returned allocation through a drop guard, including invalid-length and early-return paths.
 Each unavoidable unsafe block documents the input lifetime, initialized output bounds and matching Swift allocator/deallocator contract.
 The informational Semgrep unsafe-usage audit rule is acknowledged only at these three reviewed blocks; no project-wide scanner exclusion or security policy was changed.
 
-Node 24 lint, typecheck, production build and all 711 frontend tests pass.
+Node 24 lint, typecheck, production build and all 712 frontend tests pass.
 Coverage remains above the unchanged gates: 84.74% statements, 76.98% branches, 83.18% functions and 87.91% lines.
 The independent PDF round-trip tests cover bookmarks, form/link-preserving merge and OCR review data.
 New preview tests cover labelled rendering, stale-page clearing, cancellation, URL cleanup and rejected nonlocal schemes.
 Rust passes 95 tests with the existing constrained-volume test ignored; Clippy passes with warnings denied.
 Local logs are under ignored `output/pr42-remediation/`.
 Hosted checks, direct Sonar issue and duplication queries, and merge eligibility must be verified again on the new published head.
+
+
+Packaging and DMG checksum verification pass for the final URI-encoding follow-up on `5d6665a`.
+The executable SHA-256 is `c77ea169f719214567947a1c573519b9c74cf285aaaa2e23a906b800b9438bb7` and the DMG SHA-256 is `08d9084ae21da6155218aadd6cb2a38f0cf327a81a34959a2f45eeaf0894617f`.
+The bundle was relaunched and `bordered.png` displayed legible Before crop and After crop previews, preserving CROP TEST 123 and all colored borders at the expected 240 by 160 crop size.
+
+Before the final URL-only adjustment, the rebuilt `5d6665a` bundle rendered Original and Compressed previews of `compression-source.pdf`, then replaced both with the correct COMPRESS-PAGE-3 images when the preview page changed.
+Native TIFF import decoded both pages; page 1 accepted 2 pixels of padding and 2 degrees of straightening with before, after and unmodified-original views available.
+The saved `output/image-crop-20260926/pr42-native-tiff.pdf` reopened in NavPDF and Preview with two blue pages, the first retaining its accepted rotation and padding.
+Its SHA-256 is `8f83a2a1f953a2af627cc9b7b5803b3adf772f1858c6a28f29ea29caebe7bc88`.
+The other persisted tool workflows retain the earlier native/Preview evidence and current independent automated round-trip coverage; they were not all repeated manually for this refactor.
 
 
 ## September 26 Preview acceptance and delivery follow-up
