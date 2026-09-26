@@ -1,21 +1,23 @@
+import { expandImageInput } from "./extended-image-import";
 import { useId, useState, useRef, useEffect } from "react";
 import { FilePlus, Combine, Check, X, ArrowUp, ArrowDown } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
-import {
-  createBlankDocument,
-  describeStructureLoss,
-  mergeDocuments,
-} from "../../services/document-commands";
+import { createBlankDocument, mergeDocuments } from "../../services/document-commands";
 import { parsePageRange } from "./page-range";
 import type { MergeInputItem } from "../../types/operations";
 import { imageFileToPdf, isImageFile } from "./image-import";
 import { FeatureDialog } from "../../components/FeatureDialog";
+import { ImageMarginCrop } from "./ImageMarginCrop";
+import { trimImageMargins } from "./image-crop";
 
 export interface CombineEntry {
   id: string;
   file: File;
   range: string;
+  croppedFile?: File;
+  cropSelected?: boolean;
+  cropStatus?: string;
 }
 
 export function CreatePdfDialog({
@@ -33,35 +35,70 @@ export function CreatePdfDialog({
   const [pageCount, setPageCount] = useState(1);
   const [pageSize, setPageSize] = useState<"a4" | "letter">("a4");
   const [creating, setCreating] = useState(false);
+  const [cropping, setCropping] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchStatus, setBatchStatus] = useState("");
+  const batchCancelled = useRef(false);
+  const busy = creating || cropping || batchRunning;
   const [items, setItems] = useState<CombineEntry[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [structureLoss, setStructureLoss] = useState("");
+  useEffect(
+    () => () => {
+      batchCancelled.current = true;
+    },
+    [],
+  );
 
-  // Combining composes a new document, so the inputs' bookmarks and form
-  // fields cannot carry over. Report that before the user commits.
-  useEffect(() => {
-    let cancelled = false;
-    if (items.length === 0) {
-      setStructureLoss("");
-      return;
-    }
-    void (async () => {
+  const trimSelected = async () => {
+    const selected = items.filter((item) => isImageFile(item.file) && item.cropSelected !== false);
+    if (!selected.length || busy) return;
+    batchCancelled.current = false;
+    setBatchRunning(true);
+    let completed = 0,
+      failed = 0;
+    for (const item of selected) {
+      if (batchCancelled.current) break;
+      setBatchStatus(`Trimming ${completed + 1} of ${selected.length} images...`);
       try {
-        const buffers = await Promise.all(
-          items
-            .filter((item) => !isImageFile(item.file))
-            .map(async (item) => new Uint8Array(await item.file.arrayBuffer())),
+        const result = await trimImageMargins(item.file);
+        if (batchCancelled.current) break;
+        setItems((previous) =>
+          previous.map((entry) =>
+            entry.id === item.id
+              ? {
+                  ...entry,
+                  croppedFile: result?.file ?? entry.croppedFile,
+                  cropStatus: result
+                    ? `Trimmed to ${result.bounds.width} × ${result.bounds.height} pixels.`
+                    : "No consistent margin found; current image retained.",
+                }
+              : entry,
+          ),
         );
-        const warning = await describeStructureLoss(buffers);
-        if (!cancelled) setStructureLoss(warning);
-      } catch {
-        if (!cancelled) setStructureLoss("");
+      } catch (error) {
+        if (batchCancelled.current) break;
+        failed++;
+        setItems((previous) =>
+          previous.map((entry) =>
+            entry.id === item.id
+              ? {
+                  ...entry,
+                  cropStatus:
+                    error instanceof Error
+                      ? error.message
+                      : "Cropping failed; current image retained.",
+                }
+              : entry,
+          ),
+        );
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [items]);
+      completed++;
+    }
+    setBatchStatus(
+      `${batchCancelled.current ? "Cancelled. " : ""}${completed} of ${selected.length} images processed; ${failed} failed. Completed previews retained.`,
+    );
+    setBatchRunning(false);
+  };
 
   const handleCreateBlank = async () => {
     if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50) return;
@@ -92,7 +129,7 @@ export function CreatePdfDialog({
 
       for (const item of items) {
         const buffer = isImageFile(item.file)
-          ? await imageFileToPdf(item.file)
+          ? await imageFileToPdf(item.croppedFile ?? item.file)
           : new Uint8Array(await item.file.arrayBuffer());
         const rawRange = isImageFile(item.file) ? "" : item.range.trim();
         if (rawRange) {
@@ -121,15 +158,26 @@ export function CreatePdfDialog({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newItems: CombineEntry[] = Array.from(e.target.files).map((f) => ({
-        id: crypto.randomUUID(),
-        file: f,
-        range: "",
-      }));
-      setItems((prev) => [...prev, ...newItems]);
-      e.target.value = "";
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    setCreating(true);
+    const failures: string[] = [];
+    try {
+      for (const file of files) {
+        try {
+          const expanded = await expandImageInput(file);
+          setItems((previous) => [
+            ...previous,
+            ...expanded.map((image) => ({ id: crypto.randomUUID(), file: image, range: "" })),
+          ]);
+        } catch (error) {
+          failures.push(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (failures.length) s.set({ error: failures.join("\n") });
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -158,14 +206,14 @@ export function CreatePdfDialog({
 
   const createLabel = tab === "blank" ? "Create PDF" : "Combine & Open";
   return (
-    <FeatureDialog title="Create PDF" onClose={onClose} busy={creating}>
+    <FeatureDialog title="Create PDF" onClose={onClose} busy={busy}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
             <FilePlus size={18} />
             <h3>Create PDF</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button className="icon-button" onClick={onClose} aria-label="Close" disabled={busy}>
             <X size={18} />
           </button>
         </div>
@@ -174,6 +222,7 @@ export function CreatePdfDialog({
           <button
             className={`tab-button ${tab === "blank" ? "active" : ""}`}
             aria-pressed={tab === "blank"}
+            disabled={busy}
             onClick={() => setTab("blank")}
           >
             <FilePlus size={15} /> Blank Document
@@ -181,6 +230,7 @@ export function CreatePdfDialog({
           <button
             className={`tab-button ${tab === "combine" ? "active" : ""}`}
             aria-pressed={tab === "combine"}
+            disabled={busy}
             onClick={() => setTab("combine")}
           >
             <Combine size={15} /> Import / Combine Files
@@ -224,10 +274,14 @@ export function CreatePdfDialog({
           ) : (
             <div key="combine-section" className="combine-files-section">
               <p>
-                Import PDFs, PNG or JPEG images in the order shown. Each image becomes one page.
-                Office documents must first be saved as PDF in their original app.
+                Import PDFs, PNG, JPEG, HEIC or TIFF images in the order shown. Each image becomes
+                one page. Office documents must first be saved as PDF in their original app.
               </p>
-              <button className="button-secondary" onClick={() => fileInputRef.current?.click()}>
+              <button
+                className="button-secondary"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+              >
                 Select PDFs or Images...
               </button>
               <input
@@ -235,76 +289,155 @@ export function CreatePdfDialog({
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="application/pdf,.pdf,image/png,.png,image/jpeg,.jpg,.jpeg"
+                accept="application/pdf,.pdf,image/png,.png,image/jpeg,.jpg,.jpeg,.heic,.heif,.tif,.tiff"
                 style={{ display: "none" }}
                 onChange={handleFileChange}
               />
 
               {items.length > 0 && (
-                <div className="combine-file-list">
-                  {items.map((item, i) => (
-                    <div key={item.id} className="combine-file-item">
-                      <div className="combine-file-info">
-                        <span className="combine-file-name">
-                          {i + 1}. {item.file.name}
-                        </span>
-                        <input
-                          type="text"
-                          disabled={isImageFile(item.file)}
-                          placeholder={
-                            isImageFile(item.file)
-                              ? "One image per page"
-                              : "All pages, or e.g. 1-3, 5"
-                          }
-                          value={item.range ?? ""}
-                          onChange={(e) => updateRange(i, e.target.value)}
-                          className="combine-range-input"
-                          aria-label={`Page range for ${item.file.name}`}
-                        />
-                      </div>
-                      <div className="combine-file-actions">
-                        <button
-                          type="button"
-                          className="icon-button"
-                          onClick={() => moveItem(i, -1)}
-                          disabled={i === 0}
-                          title="Move file up"
-                          aria-label="Move file up"
-                        >
-                          <ArrowUp size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-button"
-                          onClick={() => moveItem(i, 1)}
-                          disabled={i === items.length - 1}
-                          title="Move file down"
-                          aria-label="Move file down"
-                        >
-                          <ArrowDown size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-button danger"
-                          onClick={() => removeItem(i)}
-                          title="Remove file"
-                          aria-label="Remove file"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
+                <>
+                  {items.some((item) => isImageFile(item.file)) && (
+                    <div className="batch-image-controls">
+                      <button
+                        type="button"
+                        className="button-secondary"
+                        disabled={
+                          busy ||
+                          !items.some(
+                            (item) => isImageFile(item.file) && item.cropSelected !== false,
+                          )
+                        }
+                        onClick={() => void trimSelected()}
+                      >
+                        Trim selected images
+                      </button>
+                      <small>
+                        Uses default sensitivity and zero padding, replacing selected image
+                        adjustments. Review every result.
+                      </small>
+                      <output aria-live="polite">{batchStatus}</output>
                     </div>
-                  ))}
-                </div>
+                  )}
+                  <div className="combine-file-list">
+                    {items.map((item, i) => (
+                      <div key={item.id} className="combine-file-item">
+                        <div className="combine-file-info">
+                          {isImageFile(item.file) && (
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={item.cropSelected !== false}
+                                disabled={busy}
+                                onChange={(event) =>
+                                  setItems((previous) =>
+                                    previous.map((entry) =>
+                                      entry.id === item.id
+                                        ? { ...entry, cropSelected: event.target.checked }
+                                        : entry,
+                                    ),
+                                  )
+                                }
+                              />{" "}
+                              Select {item.file.name} for batch trim
+                            </label>
+                          )}
+                          <span className="combine-file-name">
+                            {i + 1}. {item.file.name}
+                          </span>
+                          <input
+                            type="text"
+                            disabled={busy || isImageFile(item.file)}
+                            placeholder={
+                              isImageFile(item.file)
+                                ? "One image per page"
+                                : "All pages, or e.g. 1-3, 5"
+                            }
+                            value={item.range ?? ""}
+                            onChange={(e) => updateRange(i, e.target.value)}
+                            className="combine-range-input"
+                            aria-label={`Page range for ${item.file.name}`}
+                          />
+                          {isImageFile(item.file) && (
+                            <ImageMarginCrop
+                              file={item.file}
+                              croppedFile={item.croppedFile}
+                              disabled={busy}
+                              onBusy={setCropping}
+                              onChange={(croppedFile) =>
+                                setItems((previous) =>
+                                  previous.map((entry) =>
+                                    entry.id === item.id
+                                      ? { ...entry, croppedFile, cropStatus: undefined }
+                                      : entry,
+                                  ),
+                                )
+                              }
+                            />
+                          )}
+                          {item.cropStatus && <output>{item.cropStatus}</output>}
+                        </div>
+                        <div className="combine-file-actions">
+                          <button
+                            type="button"
+                            className="icon-button"
+                            onClick={() => moveItem(i, -1)}
+                            disabled={busy || i === 0}
+                            title="Move file up"
+                            aria-label="Move file up"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            onClick={() => moveItem(i, 1)}
+                            disabled={busy || i === items.length - 1}
+                            title="Move file down"
+                            aria-label="Move file down"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button danger"
+                            onClick={() => removeItem(i)}
+                            title="Remove file"
+                            aria-label="Remove file"
+                            disabled={busy}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
 
-              {structureLoss && <output className="structure-warning">{structureLoss}</output>}
+              {items.some((item) => !isImageFile(item.file)) && (
+                <output className="structure-warning">
+                  Supported form fields and bookmarks are preserved. Conflicting field names are
+                  renamed. Signed, XFA and scripted forms require an unsigned, static copy.
+                </output>
+              )}
             </div>
           )}
         </div>
 
         <div className="modal-footer">
-          <button type="button" onClick={onClose} className="button-secondary">
+          {batchRunning && (
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => {
+                batchCancelled.current = true;
+                setBatchStatus("Cancelling after the current image...");
+              }}
+            >
+              Cancel batch
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="button-secondary" disabled={busy}>
             Cancel
           </button>
           <button
@@ -313,7 +446,7 @@ export function CreatePdfDialog({
               void (tab === "blank" ? handleCreateBlank() : handleCombineFiles());
             }}
             disabled={
-              creating ||
+              busy ||
               (tab === "blank" &&
                 (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50)) ||
               (tab === "combine" && items.length === 0)

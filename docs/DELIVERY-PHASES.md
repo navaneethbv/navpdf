@@ -7,6 +7,37 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## September 26 prioritized tool implementation
+
+All twelve additions in [the approved implementation plan](IMPLEMENTATION-PLAN-2026-09-26.md) now have local implementations.
+Native rendering uses CPU-backed canvases to fix the reproduced repaint stall.
+Combine preserves supported forms, bookmarks and local links, with explicit rejection of unsupported structures.
+Image preparation provides manual crop handles, keyboard/numeric adjustment, before/after views, sensitivity, padding, batch trimming, manual straightening and background cleanup.
+HEIC/HEIF and multipage TIFF import use local macOS ImageIO under [ADR 0013](adr/0013-imageio-import-and-document-tools.md).
+OCR supports review before applying and reopening saved NavPDF OCR words for correction while retaining scan pixels.
+Bookmarks can be created, renamed, nested, reordered and deleted.
+Compression targets use measured presets with previews and clear target-miss feedback.
+PDF comparison aligns page additions/removals and shows changed text and rendered regions locally.
+
+Local checks pass with 705 frontend tests, coverage gates, 95 Rust tests, Clippy, packaging and DMG verification.
+Follow-up native testing reproduced an excessive bookmark nesting move that closed the tool unexpectedly.
+Parent changes now validate the whole moved subtree before updating the draft, preserving earlier edits and allowing a valid retry.
+Native synthetic save/close/reopen acceptance covers OCR correction, bookmark creation, TIFF adjustment, HEIC import, preserved merging and target compression.
+Native comparison displays changed text, visual differences and removed pages.
+The verification ledger records exact artifacts and remaining limits.
+Preview, signing/notarization, clean-account installation, physical printing and other platforms remain separate gates; no historical phase or full product-parity claim is closed here.
+Pull request delivery is authorized after Preview verification; hosted checks and review remain separate gates.
+
+## September 26 image margin trimming
+
+Create PDF > Import / Combine Files now offers Trim image margins separately for each PNG or JPEG.
+Detection trims approximately uniform outer borders, displays cropped pixel dimensions and a preview, and supports Reset crop before import.
+The original file remains unchanged; the imported PDF embeds the cropped raster pixels rather than hiding the margins with a PDF CropBox.
+Blank images, inconsistent corner colors and images whose content reaches every edge remain unchanged.
+This is margin trimming, not photographed-document edge detection or perspective correction.
+Local checks and pixel-exact saved-output verification pass; see `docs/VERIFICATION.md` for native rendering and Preview limitations.
+No existing phase or distribution gate is closed by this addition.
+
 ## September 23 session and shortcut review
 
 Save, close, home and open requests made during an autosave recovery write now wait for it instead of being silently dropped.

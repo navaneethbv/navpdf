@@ -1,6 +1,7 @@
 mod commands;
 pub mod engine;
 mod filesystem;
+mod image_import;
 mod logging;
 pub mod ocr;
 mod security;
@@ -259,6 +260,7 @@ pub fn run() {
             migrate_signatures,
             ocr_recognize_page,
             ocr_get_engine_info,
+            import_image_frames,
             commands::engine::engine_stage,
             commands::engine::engine_take,
             commands::engine::engine_discard,

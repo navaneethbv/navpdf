@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
+import { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from "pdf-lib";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { OcrPanel } from "../../src/features/ocr/OcrPanel";
-import { createBlankDocument, insertTextContent } from "../../src/services/document-commands";
+import {
+  applyOcrSearchableLayer,
+  createBlankDocument,
+  insertTextContent,
+} from "../../src/services/document-commands";
 import type { ViewerController } from "../../src/features/viewer/controller";
 import { ocrGetEngineInfo, ocrRecognizePage } from "../../src/services/native";
 import { useWorkspace } from "../../src/stores/workspace";
@@ -44,7 +49,7 @@ describe("OcrPanel UI Component (P6.4)", () => {
         saveDocument: vi.fn().mockResolvedValue(pdfBytes),
         getPage: vi.fn().mockResolvedValue({
           getViewport: vi.fn().mockReturnValue({ width: 600, height: 800 }),
-          render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
+          render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
           getTextContent: vi.fn().mockResolvedValue({ items: [] }),
         }),
       },
@@ -158,7 +163,21 @@ describe("OcrPanel UI Component (P6.4)", () => {
     expect(replaceBtn).toBeDefined();
   });
 
-  it("executes OCR and applies searchable layer to document", async () => {
+  it("reviews OCR before applying a searchable layer", async () => {
+    vi.mocked(ocrRecognizePage).mockResolvedValueOnce({
+      pageIndex: 0,
+      language: "en-US",
+      fullText: "Invoice 123",
+      meanConfidence: 0.8,
+      lines: [
+        {
+          text: "Invoice 123",
+          confidence: 0.8,
+          bbox: [0.1, 0.4, 0.6, 0.1],
+          words: [{ text: "Invoice 123", confidence: 0.8, bbox: [0.1, 0.4, 0.6, 0.1] }],
+        },
+      ],
+    });
     const onClose = vi.fn();
     const mockController = createMockController(samplePdf);
     render(<OcrPanel controller={mockController} onClose={onClose} />);
@@ -167,14 +186,70 @@ describe("OcrPanel UI Component (P6.4)", () => {
     await waitFor(() => expect(applyBtn.hasAttribute("disabled")).toBe(false));
     fireEvent.click(applyBtn);
 
+    await screen.findByRole("button", { name: "Apply reviewed text" });
+    expect(mockController.replaceWithBytes).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Page 1 line 1 word 1" }), {
+      target: { value: "Invoice 456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply reviewed text" }));
     await waitFor(() => {
       expect(mockController.replaceWithBytes).toHaveBeenCalledWith(
         expect.any(Uint8Array),
-        expect.stringContaining("OCR Searchable Layer"),
+        expect.stringContaining("Reviewed OCR searchable layer"),
         { expectedSource: mockController.pdf },
       );
       expect(onClose).toHaveBeenCalled();
     });
+    const saved = await PDFDocument.load(
+      vi.mocked(mockController.replaceWithBytes).mock.calls[0][0],
+    );
+    const streams = saved.getPage(0).node.Contents();
+    const text = streams?.toString() ?? "";
+    expect(text).not.toBe("");
+    const decoded = saved.context
+      .enumerateIndirectObjects()
+      .map(([, object]) =>
+        object instanceof PDFRawStream && object.dict.has(PDFName.of("NavPDF_OCR"))
+          ? new TextDecoder().decode(decodePDFRawStream(object).decode())
+          : "",
+      )
+      .join("\n");
+    expect(decoded).toContain("496E766F69636520343536");
+    expect(decoded).not.toContain("496E766F69636520313233");
+  });
+
+  it("can retry saved OCR review after cancellation", async () => {
+    const word = {
+      text: "Saved text",
+      confidence: 1,
+      bbox: [0.1, 0.4, 0.6, 0.1] as [number, number, number, number],
+    };
+    const saved = await applyOcrSearchableLayer(samplePdf, [
+      {
+        pageIndex: 0,
+        language: "en-US",
+        lines: [{ ...word, words: [word] }],
+        fullText: word.text,
+        meanConfidence: 1,
+      },
+    ]);
+    const controller = createMockController(saved);
+    let finish!: (bytes: Uint8Array) => void;
+    vi.mocked(controller.pdf!.saveDocument).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<OcrPanel controller={controller} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Review saved OCR text" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel OCR" }));
+    finish(saved);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel OCR" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Apply reviewed text" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review saved OCR text" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Apply reviewed text" }));
+    await waitFor(() => expect(controller.replaceWithBytes).toHaveBeenCalledOnce());
   });
 
   it("switches to text extraction mode and displays recognized text", async () => {

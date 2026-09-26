@@ -1,3 +1,5 @@
+import { readOcrReview } from "../../services/pdf/ocr-review";
+import { PdfPagePreview } from "../viewer/PdfPagePreview";
 import { useId, useState, useEffect, useRef } from "react";
 import {
   Scan,
@@ -450,6 +452,10 @@ export function OcrPanel({
   const [statusText, setStatusText] = useState("");
   const [recognizedText, setRecognizedText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [review, setReview] = useState<OcrPageResult[] | null>(null);
+  const reviewSource = useRef<{ pdf: PdfDocument; bytes: Uint8Array } | null>(null);
+  const [reviewPage, setReviewPage] = useState(0);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
 
   const totalPages = s.info?.pages || 1;
@@ -496,6 +502,8 @@ export function OcrPanel({
     setProgress(5);
     setStatusText("Preparing document pages...");
     setRecognizedText(null);
+    setReview(null);
+    setReviewError(null);
     setHasExistingWarning(false);
 
     try {
@@ -537,17 +545,11 @@ export function OcrPanel({
       setStatusText("Applying searchable text layer...");
 
       if (mode === "searchable") {
-        const updatedBytes = await applyOcrSearchableLayer(pdfBytes, results);
-        ensureCurrent();
-        await controller.replaceWithBytes(
-          updatedBytes,
-          `OCR Searchable Layer (${results.length} pages)`,
-          { expectedSource: sourcePdf },
-        );
-        s.set({
-          status: `OCR searchable layer successfully applied to ${results.length} page(s).`,
-        });
-        onClose();
+        reviewSource.current = { pdf: sourcePdf, bytes: pdfBytes };
+        setReview(results);
+        setReviewPage(0);
+        setProgress(100);
+        setStatusText("Review recognized words before applying. The scan stays unchanged.");
       } else {
         const fullExtracted = textAccumulator.join("\n\n");
         setRecognizedText(fullExtracted);
@@ -556,6 +558,51 @@ export function OcrPanel({
       }
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const applyReviewed = async () => {
+    const source = reviewSource.current;
+    if (!source || !review || !controller) return;
+    cancelledRef.current = false;
+    setRunning(true);
+    setReviewError(null);
+    try {
+      const bytes = await applyOcrSearchableLayer(source.bytes, review);
+      if (cancelledRef.current) return;
+      await controller.replaceWithBytes(bytes, "Reviewed OCR searchable layer", {
+        expectedSource: source.pdf,
+      });
+      onClose();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const reviewSaved = async () => {
+    const pdf = controller?.pdf;
+    if (!pdf || s.info?.encrypted) return;
+    cancelledRef.current = false;
+    setRunning(true);
+    setReviewError(null);
+    try {
+      const bytes = await pdf.saveDocument();
+      const pages = await readOcrReview(bytes, getTargetPages());
+      if (cancelledRef.current) return;
+      if (controller?.pdf !== pdf) throw new Error("Document changed. Open OCR again.");
+      if (!pages.length)
+        throw new Error(
+          "No editable NavPDF OCR layer was found on these pages. Recognize them to create one.",
+        );
+      reviewSource.current = { pdf, bytes };
+      setReview(pages);
+      setReviewPage(0);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : String(error));
     } finally {
       setRunning(false);
     }
@@ -589,7 +636,86 @@ export function OcrPanel({
         </div>
 
         <div className="modal-body">
-          <OcrErrorMessage error={engineError} />
+          <OcrErrorMessage error={engineError ?? reviewError} />
+          {review && (
+            <section aria-label="Review OCR text">
+              <h4>Review and correct recognized words</h4>
+              <p>
+                The original scan remains unchanged. Corrections update the searchable text at each
+                word's position. Empty words are omitted.
+              </p>
+              {review.length > 0 && (
+                <label>
+                  Review page
+                  <select
+                    value={reviewPage}
+                    onChange={(event) => setReviewPage(Number(event.target.value))}
+                  >
+                    {review.map((page, index) => (
+                      <option value={index} key={page.pageIndex}>
+                        {page.pageIndex + 1}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {reviewSource.current && review[reviewPage] && (
+                <PdfPagePreview
+                  pdf={reviewSource.current.pdf}
+                  page={review[reviewPage].pageIndex + 1}
+                  label="Original scan"
+                />
+              )}
+              <div className="ocr-review-words">
+                {review.map(
+                  (page, pi) =>
+                    pi === reviewPage && (
+                      <fieldset key={page.pageIndex} disabled={running}>
+                        <legend>Page {page.pageIndex + 1}</legend>
+                        {page.lines.map((line, li) => (
+                          <div className="ocr-review-line" key={li}>
+                            {line.words.map((word, wi) => (
+                              <label key={wi}>
+                                <span className="field-hint">
+                                  Word {li + 1}.{wi + 1}, confidence{" "}
+                                  {Math.round(word.confidence * 100)}%
+                                </span>
+                                <input
+                                  aria-label={`Page ${page.pageIndex + 1} line ${li + 1} word ${wi + 1}`}
+                                  value={word.text}
+                                  maxLength={500}
+                                  onChange={(event) => {
+                                    const next = structuredClone(review);
+                                    next[pi].lines[li].words[wi].text = event.target.value;
+                                    setReview(next);
+                                  }}
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        ))}
+                      </fieldset>
+                    ),
+                )}
+              </div>
+              <button
+                type="button"
+                className="button-primary"
+                disabled={running}
+                onClick={() => void applyReviewed()}
+              >
+                Apply reviewed text
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={running}
+                onClick={() => setReview(null)}
+              >
+                Recognize again
+              </button>
+            </section>
+          )}
           <OcrEngineStatus info={engineInfo} />
           <EncryptedDocumentNotice encrypted={!!s.info?.encrypted} />
           <ExistingTextWarning
@@ -626,6 +752,14 @@ export function OcrPanel({
             </select>
           </div>
 
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={running || !!s.info?.encrypted}
+            onClick={() => void reviewSaved()}
+          >
+            Review saved OCR text
+          </button>
           <OcrActionSettings mode={mode} running={running} onModeChange={setMode} />
           <OcrProgress running={running} statusText={statusText} progress={progress} />
           <OcrResult
@@ -645,7 +779,10 @@ export function OcrPanel({
             hasExistingWarning={hasExistingWarning}
             actionLabel={ocrActionLabel}
             canStart={
-              !!engineInfo && !(hasExistingWarning && !replaceExisting) && !s.info?.encrypted
+              !!engineInfo &&
+              !review &&
+              !(hasExistingWarning && !replaceExisting) &&
+              !s.info?.encrypted
             }
             onCancel={() => {
               cancelledRef.current = true;

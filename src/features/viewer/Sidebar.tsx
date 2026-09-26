@@ -88,6 +88,13 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
     if (tab === "bookmarks")
       return (
         <div className="sidebar-scroll">
+          <button
+            className="button-secondary"
+            disabled={useWorkspace.getState().info?.encrypted}
+            onClick={() => set({ activeModal: "bookmarks-edit" })}
+          >
+            Edit bookmarks
+          </button>
           {bookmarks.length ? (
             <BookmarkTree nodes={bookmarks} controller={controller} />
           ) : (

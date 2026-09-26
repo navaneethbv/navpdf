@@ -1,4 +1,8 @@
-import { useRef, useState } from "react";
+import { compressToTarget } from "./target-size";
+import { loadPdfFromBytes } from "../../services/pdf";
+import { PdfPagePreview } from "../viewer/PdfPagePreview";
+import type { PDFDocumentProxy } from "pdfjs-dist";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, Minimize2, X, XCircle } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -49,6 +53,12 @@ export function CompressDialog({
 }>) {
   const s = useWorkspace();
   const [preset, setPreset] = useState<CompressionPreset>("balanced");
+  const [targetMode, setTargetMode] = useState(false);
+  const [targetMb, setTargetMb] = useState(2);
+  const [measuredTarget, setMeasuredTarget] = useState<number | null>(null);
+  const [preview, setPreview] = useState<PDFDocumentProxy | null>(null);
+  const [previewError, setPreviewError] = useState("");
+  const [previewPage, setPreviewPage] = useState(1);
   const [running, setRunning] = useState(false);
   const [applying, setApplying] = useState(false);
   const applyingRef = useRef(false);
@@ -56,6 +66,37 @@ export function CompressDialog({
   const job = useRef<string | null>(null);
   const resultSource = useRef(controller?.pdf);
   const report = result?.report;
+  const retainedSize = result?.bytes?.length ?? report?.beforeBytes ?? 0;
+
+  useEffect(() => {
+    if (!result?.bytes) {
+      setPreview(null);
+      return;
+    }
+    let alive = true;
+    const task = loadPdfFromBytes(new Uint8Array(result.bytes));
+    void task.promise
+      .then((pdf) => {
+        if (alive) {
+          setPreview(pdf);
+          setPreviewError("");
+        }
+      })
+      .catch((error) => {
+        if (alive) setPreviewError(String(error));
+      });
+    return () => {
+      alive = false;
+      void task.destroy();
+    };
+  }, [result]);
+  useEffect(
+    () => () => {
+      if (job.current) void cancelEngineJob(job.current);
+      job.current = null;
+    },
+    [],
+  );
 
   const analyze = async () => {
     const pdf = controller?.pdf;
@@ -67,9 +108,21 @@ export function CompressDialog({
     try {
       controller.editor?.commitOrRemove();
       const bytes = await pdf.saveDocument();
-      const outcome = await compressDocument(bytes, preset, jobId);
+      const target = Math.round(targetMb * 1_000_000);
+      if (targetMode && (!Number.isFinite(targetMb) || targetMb < 0.001024 || targetMb > 1000))
+        throw new Error("Enter a target between 0.001024 and 1,000 MB.");
+      const outcome = targetMode
+        ? await compressToTarget(
+            bytes,
+            target,
+            (original, candidate) => compressDocument(original, candidate, jobId),
+            () => job.current !== jobId,
+          )
+        : await compressDocument(bytes, preset, jobId);
       if (job.current === jobId) {
         resultSource.current = pdf;
+        setMeasuredTarget(targetMode ? target : null);
+        setPreviewPage(1);
         setResult(outcome);
       }
     } catch (error) {
@@ -144,13 +197,18 @@ export function CompressDialog({
   };
   return (
     <FeatureDialog title="Compress PDF" onClose={onClose} busy={running || applying}>
-      <div className="modal-dialog">
+      <div className="modal-dialog wide-tool-dialog">
         <div className="modal-header">
           <div className="modal-title">
             <Minimize2 size={18} />
             <h3>Compress PDF</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button
+            className="icon-button"
+            disabled={running || applying}
+            onClick={onClose}
+            aria-label="Close"
+          >
             <X size={18} />
           </button>
         </div>
@@ -162,26 +220,77 @@ export function CompressDialog({
               <span>{ENGINE_UNAVAILABLE}</span>
             </div>
           )}
-          <fieldset className="preset-list" disabled={running}>
-            <legend className="setting-title">Compression preset</legend>
-            {PRESETS.map((item) => (
-              <label key={item.id} className="preset-option">
-                <input
-                  type="radio"
-                  name="compression-preset"
-                  checked={preset === item.id}
-                  onChange={() => {
-                    setPreset(item.id);
-                    setResult(null);
-                  }}
-                />
-                <span>
-                  {item.label}
-                  <span className="field-hint">{item.description}</span>
+          <fieldset disabled={running || applying}>
+            <label>
+              <input
+                type="checkbox"
+                checked={targetMode}
+                onChange={(event) => {
+                  setTargetMode(event.target.checked);
+                  setResult(null);
+                }}
+              />{" "}
+              Compress to a target size
+            </label>
+            {targetMode && (
+              <div className="target-compression-options">
+                <label>
+                  Under (MB, 1 MB = 1,000,000 bytes)
+                  <input
+                    className="text-input"
+                    type="number"
+                    min={0.001024}
+                    max={1000}
+                    step={0.1}
+                    value={targetMb}
+                    onChange={(event) => {
+                      setTargetMb(Number(event.target.value));
+                      setResult(null);
+                    }}
+                  />
+                </label>
+                <span className="field-hint">
+                  Tries lossless, balanced, then smallest. Uses the clearest measured result under
+                  the limit.
                 </span>
-              </label>
-            ))}
+                {[2, 5, 10].map((size) => (
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    key={size}
+                    onClick={() => {
+                      setTargetMb(size);
+                      setResult(null);
+                    }}
+                  >
+                    Under {size} MB
+                  </button>
+                ))}
+              </div>
+            )}
           </fieldset>
+          {!targetMode && (
+            <fieldset className="preset-list" disabled={running || applying}>
+              <legend className="setting-title">Compression preset</legend>
+              {PRESETS.map((item) => (
+                <label key={item.id} className="preset-option">
+                  <input
+                    type="radio"
+                    name="compression-preset"
+                    checked={preset === item.id}
+                    onChange={() => {
+                      setPreset(item.id);
+                      setResult(null);
+                    }}
+                  />
+                  <span>
+                    {item.label}
+                    <span className="field-hint">{item.description}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
 
           {running && (
             <p className="field-hint" aria-live="polite">
@@ -189,8 +298,46 @@ export function CompressDialog({
             </p>
           )}
 
+          {report && measuredTarget !== null && (
+            <p
+              role="status"
+              className={retainedSize < measuredTarget ? "field-hint" : "warning-banner"}
+            >
+              {retainedSize < measuredTarget
+                ? "Target met."
+                : result?.bytes
+                  ? "Target could not be met with the available presets. The smallest safe result is shown."
+                  : "Target could not be met. No smaller safe copy is available; the original is retained."}{" "}
+              Limit: {measuredTarget.toLocaleString()} bytes.
+            </p>
+          )}
+          {previewError && <p role="alert">Preview unavailable: {previewError}</p>}
+          {preview && resultSource.current && (
+            <section aria-label="Compression quality preview">
+              <label>
+                Preview page
+                <input
+                  className="text-input"
+                  type="number"
+                  min={1}
+                  max={preview.numPages}
+                  value={previewPage}
+                  onChange={(event) =>
+                    setPreviewPage(
+                      Math.min(preview.numPages, Math.max(1, Number(event.target.value))),
+                    )
+                  }
+                />
+              </label>
+              <div className="pdf-comparison">
+                <PdfPagePreview pdf={resultSource.current} page={previewPage} label="Original" />
+                <PdfPagePreview pdf={preview} page={previewPage} label="Compressed" />
+              </div>
+            </section>
+          )}
           {report && (
             <div className="compress-results-card" aria-live="polite">
+              <p>Measured preset: {PRESETS.find((item) => item.id === report.preset)?.label}</p>
               <div className="result-row">
                 <span>Current size</span>
                 <strong>
