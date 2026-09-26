@@ -25,8 +25,11 @@ Parent changes now validate the whole moved subtree before updating the draft, p
 Native synthetic save/close/reopen acceptance covers OCR correction, bookmark creation, TIFF adjustment, HEIC import, preserved merging and target compression.
 Native comparison displays changed text, visual differences and removed pages.
 The verification ledger records exact artifacts and remaining limits.
-Preview, signing/notarization, clean-account installation, physical printing and other platforms remain separate gates; no historical phase or full product-parity claim is closed here.
-Pull request delivery is authorized after Preview verification; hosted checks and review remain separate gates.
+Preview inspection now covers all six saved acceptance PDFs, including form edits saved and reopened on a disposable copy, crop/TIFF/HEIC rendering and compressed-text search.
+Preview replaces sole top-level outline labels with the filename and shows an inconsistent OCR search-result status; Apple PDFKit confirms the saved outline hierarchy and corrected-text matches.
+Separately labeled Reviewed scan navigation remains unverified in Preview; the verification ledger records these reader UI limits without claiming full Preview acceptance.
+Signing/notarization, clean-account installation, physical printing and other platforms remain separate gates; no historical phase or full product-parity claim is closed here.
+The authorized branch and PR delivery includes these results and limits; hosted checks and review remain separate gates.
 
 ## September 26 image margin trimming
 

@@ -1,5 +1,38 @@
 # Verification ledger
 
+## September 26 Preview acceptance and delivery follow-up
+
+Implementation source: `1b0f1713a08241a46bf98295e458397e335e3830`, rebased onto `d21db38`.
+The working tree was clean before this documentation-only follow-up.
+Preview access was available in the desktop session; the earlier denied session was not bypassed.
+All six handoff PDFs were opened as disposable copies under ignored `output/preview-20260926/`.
+Original evidence files under `output/image-crop-20260926/` retain the hashes recorded below.
+The packaged executable and DMG still match `b28e85443f47299178944be9ea830251caff84f1159737844a52415067b649c6` and `b67ef312c37893e522c493a4a33ce5588de25d9ba615dca0533d62b348184954` respectively.
+
+| Saved PDF                      | Expected and observed Preview result                                                                                                                                                                                                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `native-manual-crop.pdf`       | The full CROP TEST 123 label and colored border render without clipping intended content. The retained left margin is visible.                                                                                                                                                                                                   |
+| `native-roadmap-reviewed.pdf`  | The visible scan still reads CROP TEST 123. Select All exposes CROP TEST 456. Searches for the full corrected phrase and 456 return the page, but the result row also says Not found; this inconsistent Preview status is retained as a UI limitation. PDFKit independently returns one match for each query.                    |
+| `native-adjusted-tiff.pdf`     | Both blue TIFF-derived pages render in order. Page 1 visibly retains the slight accepted rotation and white padding; page 2 remains rectangular.                                                                                                                                                                                 |
+| `native-preserved-merge.pdf`   | Three pages render, including the HEIC-derived image on page 3. Alice and Bob remain editable. Alice section and Bob section navigate to pages 1 and 2. On the disposable copy, Alice Preview and Bob Preview survive Save, Close and Reopen in Preview, and independent PDF.js widget readback confirms both saved text values. |
+| `native-target-compressed.pdf` | All three pages render their legible COMPRESS-PAGE-1 through COMPRESS-PAGE-3 markers and image content. Searching COMPRESS-PAGE reports one match on each of three pages. The original saved output remains 46,665 bytes.                                                                                                        |
+| `native-bookmark-depth.pdf`    | Preserved draft selects page 1. Expanding the outline exposes the original chain through Level 32. The single-root label limitation below applies to Level 1.                                                                                                                                                                    |
+
+Preview displays the filename instead of a sole top-level outline title in these fixtures.
+Consequently, Reviewed scan is not exposed as a separately labeled row, and Level 1 is represented by the document row above Preserved draft and Level 2.
+This is an observed reader UI limitation, not evidence of a missing saved outline.
+Independent Apple PDFKit inspection confirms Reviewed scan targets page 1, Preserved draft is a child of Level 1 targeting page 1, and every original level through Level 32 survives.
+The exact requested separately labeled Reviewed scan navigation check therefore remains unverified in Preview.
+No application defect was established by these checks and no application source was changed.
+
+Evidence: `output/preview-20260926/evidence.json` records original hashes and independent PDF.js text-field readback; `pdfkit-outlines.txt` records Apple PDFKit outline and search results.
+The edited disposable merged copy has SHA-256 `813620390f4807b53557a946396d0f6a94e6ef4e4855f33f73082ff858b0bf14`.
+Earlier local logs were inspected and confirm 705 frontend tests, unchanged coverage gates, 95 Rust tests with one existing constrained-volume test ignored, Clippy and packaging success.
+Those suites were not rerun for this documentation-only follow-up; formatting, diff checking and instruction-file parity were checked again.
+Hosted checks and quality analysis remain separate from these local and reader results and must be assessed on the published PR head.
+Signing, notarization, clean-account installation, physical printing, Acrobat-specific compatibility and Windows/Linux UI acceptance remain open.
+No merge or release publication is authorized by this follow-up.
+
 ## September 26 bookmark follow-up: current local verification
 
 Baseline remains `0dcb810` plus the preserved uncommitted twelve-feature implementation and this follow-up.
@@ -20,10 +53,10 @@ The rebuilt bundle was relaunched before repeating the native workflow.
 Native save, close and reopen of `native-bookmark-depth.pdf` retain Preserved draft beneath Level 1.
 Independent PDF.js readback confirms that title, its destination at page 1, its parent and every original level through Level 32.
 
-| Artifact | SHA-256 |
-| --- | --- |
-| NavPDF.app/Contents/MacOS/navpdf | b28e85443f47299178944be9ea830251caff84f1159737844a52415067b649c6 |
-| NavPDF_0.2.0_aarch64.dmg | b67ef312c37893e522c493a4a33ce5588de25d9ba615dca0533d62b348184954 |
+| Artifact                                             | SHA-256                                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| NavPDF.app/Contents/MacOS/navpdf                     | b28e85443f47299178944be9ea830251caff84f1159737844a52415067b649c6 |
+| NavPDF_0.2.0_aarch64.dmg                             | b67ef312c37893e522c493a4a33ce5588de25d9ba615dca0533d62b348184954 |
 | output/image-crop-20260926/native-bookmark-depth.pdf | ee5710c3ce241ecfc5b5e450e8e49c269a2ee1fceae715cac4e357cd4e9f5c39 |
 
 Earlier feature acceptance below remains evidence for those workflows; only the bookmark follow-up was repeated in this latest bundle.
@@ -57,26 +90,26 @@ The final cancellation regression verifies that a cancelled saved-review load ca
 Its executable SHA-256 is `4f0e17c5266e9f295c4d54037ce81f22ef0c534d22e611d4cde10925efdaee63`.
 The DMG SHA-256 is `6b14e1e579974b37e5aa4d7dbc49383c27a579420c06213714e9069108fe2291`.
 
-| Workflow | Expected and observed result |
-| --- | --- |
-| Rendering | The original crop PDF stalled until resize in the earlier native build. CPU-backed canvases render it on fresh launch and repeated open without resizing. Experimental native redraw code was removed before acceptance. |
-| Manual crop | The 320 × 240 fixture detected bounds x=33, y=21, width=240, height=160. Dragging the left handle set x=22, width=251; Right Arrow then set x=23, width=250. Before/after previews and bounded inputs updated. Save, close and reopen succeeded. Poppler's extracted 250 × 160 raster is pixel-identical to the corresponding source rectangle. |
+| Workflow                        | Expected and observed result                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rendering                       | The original crop PDF stalled until resize in the earlier native build. CPU-backed canvases render it on fresh launch and repeated open without resizing. Experimental native redraw code was removed before acceptance.                                                                                                                                                                                  |
+| Manual crop                     | The 320 × 240 fixture detected bounds x=33, y=21, width=240, height=160. Dragging the left handle set x=22, width=251; Right Arrow then set x=23, width=250. Before/after previews and bounded inputs updated. Save, close and reopen succeeded. Poppler's extracted 250 × 160 raster is pixel-identical to the corresponding source rectangle.                                                           |
 | Batch trim and scan preparation | Native TIFF import expanded two pages in order. Batch trim reported 2/2 completed and no failures, producing 60 × 96 crops. The first page accepted 2 degrees of straightening and 2 pixels of padding, producing 67 × 103. Saved and reopened page sizes are 50.25 × 77.25 and 45 × 72 points, independently confirmed by Poppler. Cleanup behavior is additionally covered by pixel and UI regressions. |
-| OCR correction | Apple Vision recognized CROP TEST 123. The native review field was changed to CROP TEST 456, then applied and saved. After close/reopen, Review saved OCR text showed 456. Poppler extracts 456, while independently extracted scan pixels still exactly match the original image containing 123. |
-| Bookmark editing | Created Reviewed scan through the native editor, saved with the OCR result, and reopened it. Separate independent PDF.js round trips verify Unicode titles, nested destinations, rename, reorder and deletion. |
-| Preserved merge and HEIC | Combined merge-a.pdf, merge-b.pdf and the HEIC fixture. Saved/reopened Alice and Bob fields remain editable, four form field roots have unique names, and both bookmarks survive. Bob section navigates to page 2. Independent PDF.js validates destinations 0 and 1; Poppler reports the HEIC image on page 3 as 80 × 120 pixels. |
-| Compression target | The 7,489,069-byte synthetic source was reduced to 46,665 bytes under a 2,000,000-byte target using Balanced. Both previews rendered, apply/save/close/reopen succeeded, and Poppler extracts all three original page markers. A 1,500-byte target on the small TIFF PDF reported failure and retained the original. |
-| Comparison | Native comparison of the two-page TIFF output against the one-page OCR result reported one changed page and one removed page, showed both page previews, displayed the added text and highlighted visual changes. The active document was not modified. |
+| OCR correction                  | Apple Vision recognized CROP TEST 123. The native review field was changed to CROP TEST 456, then applied and saved. After close/reopen, Review saved OCR text showed 456. Poppler extracts 456, while independently extracted scan pixels still exactly match the original image containing 123.                                                                                                         |
+| Bookmark editing                | Created Reviewed scan through the native editor, saved with the OCR result, and reopened it. Separate independent PDF.js round trips verify Unicode titles, nested destinations, rename, reorder and deletion.                                                                                                                                                                                            |
+| Preserved merge and HEIC        | Combined merge-a.pdf, merge-b.pdf and the HEIC fixture. Saved/reopened Alice and Bob fields remain editable, four form field roots have unique names, and both bookmarks survive. Bob section navigates to page 2. Independent PDF.js validates destinations 0 and 1; Poppler reports the HEIC image on page 3 as 80 × 120 pixels.                                                                        |
+| Compression target              | The 7,489,069-byte synthetic source was reduced to 46,665 bytes under a 2,000,000-byte target using Balanced. Both previews rendered, apply/save/close/reopen succeeded, and Poppler extracts all three original page markers. A 1,500-byte target on the small TIFF PDF reported failure and retained the original.                                                                                      |
+| Comparison                      | Native comparison of the two-page TIFF output against the one-page OCR result reported one changed page and one removed page, showed both page previews, displayed the added text and highlighted visual changes. The active document was not modified.                                                                                                                                                   |
 
 Saved output SHA-256 values:
 
-| File in output/image-crop-20260926 | SHA-256 |
-| --- | --- |
-| native-manual-crop.pdf | 3b03389bebcc40720ddc3de2816e02fd7dd2f9e1aff8d707974672d5483cebe7 |
-| native-roadmap-reviewed.pdf | dab25c9b24410c7b51dfe417bd8bc493fd89ff3e36196159699a7f642b2d59a5 |
-| native-adjusted-tiff.pdf | 6ffc62767cc0f6c69519b9c5f06a562e6b4318fdad8beb8a2e6939ebccf309f8 |
-| native-target-compressed.pdf | 086b090df4dfe6fcd4b5aa876e66fc27c9e4ccfdf09b4a271a916bc474ea5642 |
-| native-preserved-merge.pdf | d9fe50f85a15a478a2b936b91fe0b77d52572fd891449ead5e65639920228eb3 |
+| File in output/image-crop-20260926 | SHA-256                                                          |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| native-manual-crop.pdf             | 3b03389bebcc40720ddc3de2816e02fd7dd2f9e1aff8d707974672d5483cebe7 |
+| native-roadmap-reviewed.pdf        | dab25c9b24410c7b51dfe417bd8bc493fd89ff3e36196159699a7f642b2d59a5 |
+| native-adjusted-tiff.pdf           | 6ffc62767cc0f6c69519b9c5f06a562e6b4318fdad8beb8a2e6939ebccf309f8 |
+| native-target-compressed.pdf       | 086b090df4dfe6fcd4b5aa876e66fc27c9e4ccfdf09b4a271a916bc474ea5642 |
+| native-preserved-merge.pdf         | d9fe50f85a15a478a2b936b91fe0b77d52572fd891449ead5e65639920228eb3 |
 
 ### Remaining limits
 
