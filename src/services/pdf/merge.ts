@@ -16,6 +16,17 @@ import { resolveDestination, stripExternalPageLinks } from "./link-targets.ts";
 
 const name = PDFName.of;
 
+function checkedFieldType(field: PDFDict, inheritedType?: string): string | undefined {
+  if (field.has(name("AA")) || field.has(name("A")))
+    throw new Error("Forms with automatic actions are not supported when combining.");
+  const fieldType = field.lookupMaybe(name("FT"), PDFName)?.asString() ?? inheritedType;
+  if (fieldType === "/Sig" && field.has(name("V")))
+    throw new Error(
+      "Combining signed PDFs would invalidate their signatures. Use unsigned copies.",
+    );
+  return fieldType;
+}
+
 function prepareFields(source: PDFDocument, kept: Set<number>): PDFDict | undefined {
   const form = source.catalog.lookupMaybe(name("AcroForm"), PDFDict);
   if (!form) return;
@@ -45,13 +56,7 @@ function prepareFields(source: PDFDocument, kept: Set<number>): PDFDict | undefi
       if (!(field instanceof PDFDict) || seen.has(field) || seen.size >= 10000)
         throw new Error("Invalid or oversized form field tree.");
       seen.add(field);
-      if (field.has(name("AA")) || field.has(name("A")))
-        throw new Error("Forms with automatic actions are not supported when combining.");
-      const fieldType = field.lookupMaybe(name("FT"), PDFName)?.asString() ?? inheritedType;
-      if (fieldType === "/Sig" && field.has(name("V")))
-        throw new Error(
-          "Combining signed PDFs would invalidate their signatures. Use unsigned copies.",
-        );
+      const fieldType = checkedFieldType(field, inheritedType);
       const kids = field.lookupMaybe(name("Kids"), PDFArray);
       if (kids) {
         prune(kids, depth + 1, fieldType);
@@ -64,21 +69,14 @@ function prepareFields(source: PDFDocument, kept: Set<number>): PDFDict | undefi
   return form;
 }
 
-function copyForm(
+function copyFormResources(
   source: PDFDocument,
   target: PDFDocument,
   form: PDFDict,
+  targetForm: PDFDict,
   copier: PDFObjectCopier,
   sourceIndex: number,
-) {
-  const targetForm = target.catalog.getOrCreateAcroForm().dict;
-  if (form.lookup(name("NeedAppearances"))?.toString() === "true")
-    targetForm.set(name("NeedAppearances"), target.context.obj(true));
-  let fields = targetForm.lookupMaybe(name("Fields"), PDFArray);
-  if (!fields) {
-    fields = target.context.obj([]);
-    targetForm.set(name("Fields"), fields);
-  }
+): Map<string, string> {
   const resourceNames = new Map<string, string>();
   const sourceResources = form.lookupMaybe(name("DR"), PDFDict);
   let targetResources = targetForm.lookupMaybe(name("DR"), PDFDict);
@@ -100,6 +98,25 @@ function copyForm(
       destination.set(renamed, copier.copy(resource));
     }
   }
+  return resourceNames;
+}
+
+function copyForm(
+  source: PDFDocument,
+  target: PDFDocument,
+  form: PDFDict,
+  copier: PDFObjectCopier,
+  sourceIndex: number,
+) {
+  const targetForm = target.catalog.getOrCreateAcroForm().dict;
+  if (form.lookup(name("NeedAppearances"))?.toString() === "true")
+    targetForm.set(name("NeedAppearances"), target.context.obj(true));
+  let fields = targetForm.lookupMaybe(name("Fields"), PDFArray);
+  if (!fields) {
+    fields = target.context.obj([]);
+    targetForm.set(name("Fields"), fields);
+  }
+  const resourceNames = copyFormResources(source, target, form, targetForm, copier, sourceIndex);
   const rewriteAppearance = (value: unknown) => {
     if (!(value instanceof PDFString || value instanceof PDFHexString)) return undefined;
     return PDFString.of(
@@ -152,28 +169,52 @@ function copyForm(
   }
 }
 
+function normalizeLink(source: PDFDocument, pages: PDFPage[], dict: PDFDict): void {
+  const action = dict.lookupMaybe(name("A"), PDFDict);
+  let owner: PDFDict | undefined;
+  if (dict.has(name("Dest"))) owner = dict;
+  else if (action?.lookupMaybe(name("S"), PDFName)?.asString() === "/GoTo") owner = action;
+  if (!owner) return;
+  const key = owner === dict ? name("Dest") : name("D");
+  const dest = resolveDestination(source, owner.lookup(key));
+  if (!dest) return;
+  const explicit = dest.clone();
+  const page = explicit.get(0);
+  if (page instanceof PDFNumber) explicit.set(0, pages[page.asNumber()].ref);
+  owner.set(key, explicit);
+}
+
 function normalizeLinks(source: PDFDocument, kept: Set<number>) {
   stripExternalPageLinks(source, kept);
   const pages = source.getPages();
   for (const index of kept) {
     for (const annotation of pages[index].node.Annots()?.asArray() ?? []) {
       const dict = source.context.lookup(annotation, PDFDict);
-      const action = dict.lookupMaybe(name("A"), PDFDict);
-      const owner = dict.has(name("Dest"))
-        ? dict
-        : action?.lookupMaybe(name("S"), PDFName)?.asString() === "/GoTo"
-          ? action
-          : undefined;
-      if (!owner) continue;
-      const key = owner === dict ? name("Dest") : name("D");
-      const dest = resolveDestination(source, owner.lookup(key));
-      if (!dest) continue;
-      const explicit = dest.clone();
-      const page = explicit.get(0);
-      if (page instanceof PDFNumber) explicit.set(0, pages[page.asNumber()].ref);
-      owner.set(key, explicit);
+      normalizeLink(source, pages, dict);
     }
   }
+}
+
+function remapBookmarks(
+  nodes: EditableBookmark[],
+  mapping: Map<number, number>,
+  sourceIndex: number,
+): EditableBookmark[] {
+  return nodes.flatMap((node) => {
+    const children = remapBookmarks(node.children, mapping, sourceIndex);
+    const page = node.page === null ? null : mapping.get(node.page);
+    if (page === undefined && !children.length) return [];
+    return [{ ...node, id: `source-${sourceIndex}-${node.id}`, page: page ?? null, children }];
+  });
+}
+
+function selectedPages(source: PDFDocument, ranges?: number[]): number[] {
+  const selected = ranges?.length
+    ? ranges.filter((i) => Number.isInteger(i) && i >= 0 && i < source.getPageCount())
+    : source.getPageIndices();
+  if (new Set(selected).size !== selected.length)
+    throw new Error("Select each source page only once when preserving forms and bookmarks.");
+  return selected;
 }
 
 export async function mergePreservingStructure(
@@ -185,23 +226,12 @@ export async function mergePreservingStructure(
   for (const [sourceIndex, input] of inputs.entries()) {
     const item = input instanceof Uint8Array ? { bytes: input } : input;
     const source = await PDFDocument.load(item.bytes);
-    const selected = item.ranges?.length
-      ? item.ranges.filter((i) => Number.isInteger(i) && i >= 0 && i < source.getPageCount())
-      : source.getPageIndices();
+    const selected = selectedPages(source, item.ranges);
     if (!selected.length) continue;
-    if (new Set(selected).size !== selected.length)
-      throw new Error("Select each source page only once when preserving forms and bookmarks.");
     const kept = new Set(selected);
     const offset = target.getPageCount();
     const mapping = new Map(selected.map((index, position) => [index, offset + position]));
-    const remap = (nodes: EditableBookmark[]): EditableBookmark[] =>
-      nodes.flatMap((node) => {
-        const children = remap(node.children);
-        const page = node.page === null ? null : mapping.get(node.page);
-        if (page === undefined && !children.length) return [];
-        return [{ ...node, id: `source-${sourceIndex}-${node.id}`, page: page ?? null, children }];
-      });
-    bookmarks.push(...remap(readBookmarkTree(source)));
+    bookmarks.push(...remapBookmarks(readBookmarkTree(source), mapping, sourceIndex));
     const form = prepareFields(source, kept);
     normalizeLinks(source, kept);
     const copier = PDFObjectCopier.for(source.context, target.context);

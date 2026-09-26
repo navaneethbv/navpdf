@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { ImageCropEditor } from "../../src/features/pages/ImageCropEditor";
+import { render, renderHook, screen, fireEvent, waitFor } from "@testing-library/react";
+import { ImageCropEditor, useImageUrl } from "../../src/features/pages/ImageCropEditor";
 import { processImageCrop } from "../../src/features/pages/image-crop";
 vi.mock("../../src/features/pages/image-crop", () => ({ processImageCrop: vi.fn() }));
 const file = new File(["source"], "source.png", { type: "image/png" });
@@ -20,7 +20,7 @@ describe("crop editor", () => {
   it("previews controls and allows keyboard rectangle adjustment before applying", async () => {
     const onApply = vi.fn();
     render(<ImageCropEditor file={file} onApply={onApply} onClose={vi.fn()} />);
-    await screen.findByRole("img", { name: "Image after crop" });
+    await screen.findByRole("img", { name: "After crop" });
     fireEvent.keyDown(screen.getByRole("button", { name: "Crop left" }), {
       key: "ArrowRight",
       shiftKey: true,
@@ -38,7 +38,7 @@ describe("crop editor", () => {
   });
   it("recalculates detection for sensitivity, padding and scan options and supports reset", async () => {
     render(<ImageCropEditor file={file} onApply={vi.fn()} onClose={vi.fn()} />);
-    await screen.findByRole("img", { name: "Image after crop" });
+    await screen.findByRole("img", { name: "After crop" });
     fireEvent.change(screen.getByRole("slider", { name: /Sensitivity/ }), {
       target: { value: "12" },
     });
@@ -60,7 +60,7 @@ describe("crop editor", () => {
         true,
       ),
     );
-    expect(screen.getByAltText("Unmodified original image")).toBeTruthy();
+    expect(screen.getByAltText("Unmodified original")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Reset adjustments" }));
     await waitFor(() =>
       expect(processImageCrop).toHaveBeenLastCalledWith(
@@ -80,5 +80,39 @@ describe("crop editor", () => {
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("local image preview URLs", () => {
+  it("releases each browser-owned URL when replacing or closing the preview", () => {
+    const create = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValueOnce("blob:first")
+      .mockReturnValueOnce("blob:second");
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const { result, rerender, unmount } = renderHook(
+      ({ source }: { source?: File }) => useImageUrl(source),
+      { initialProps: { source: file } },
+    );
+    expect(result.current).toBe("blob:first");
+    rerender({ source: new File(["next"], "next.png") });
+    expect(result.current).toBe("blob:second");
+    expect(revoke).toHaveBeenCalledWith("blob:first");
+    unmount();
+    expect(revoke).toHaveBeenCalledWith("blob:second");
+    create.mockRestore();
+    revoke.mockRestore();
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "https://example.com/image.png",
+  ])("rejects a nonlocal preview source: %s", (url) => {
+    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue(url);
+    const { result, unmount } = renderHook(() => useImageUrl(file));
+    expect(result.current).toBe("");
+    unmount();
+    create.mockRestore();
   });
 });

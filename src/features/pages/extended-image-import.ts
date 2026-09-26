@@ -22,12 +22,9 @@ export function decodeImageFrames(buffer: ArrayBuffer, name: string): File[] {
     const bytes = new Uint8Array(buffer, offset, size);
     if (bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71)
       throw new Error("Converted image is not PNG.");
+    const pageSuffix = count > 1 ? `-page-${index + 1}` : "";
     files.push(
-      new File(
-        [bytes],
-        `${name.replace(/\.[^.]+$/, "")}${count > 1 ? `-page-${index + 1}` : ""}.png`,
-        { type: "image/png" },
-      ),
+      new File([bytes], `${name.replace(/\.[^.]+$/, "")}${pageSuffix}.png`, { type: "image/png" }),
     );
     offset += size;
   }

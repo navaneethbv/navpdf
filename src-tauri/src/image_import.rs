@@ -9,22 +9,31 @@ pub fn decode(bytes: &[u8]) -> Result<Vec<u8>, String> {
             fn navpdf_decode_images(bytes: *const u8, count: usize, length: *mut usize) -> *mut u8;
             fn navpdf_free_images(bytes: *mut u8);
         }
-        let mut length = 0usize;
-        // Swift allocates the result and reports its exact size. Always release through Swift.
-        let pointer = unsafe { navpdf_decode_images(bytes.as_ptr(), bytes.len(), &mut length) };
-        if pointer.is_null() {
-            return Err("Image decoder returned no data.".into());
-        }
-        if !(4..=100 * 1024 * 1024).contains(&length) {
-            unsafe {
-                navpdf_free_images(pointer);
+        struct DecodedBuffer(std::ptr::NonNull<u8>);
+        impl Drop for DecodedBuffer {
+            fn drop(&mut self) {
+                // SAFETY: This pointer is the unique allocation returned by our Swift decoder.
+                // Its matching Swift deallocator runs exactly once, including on early returns.
+                // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+                unsafe { navpdf_free_images(self.0.as_ptr()) };
             }
+        }
+        let mut length = 0usize;
+        // SAFETY: The input slice and writable length live throughout the synchronous call.
+        // Swift copies the input, retains neither pointer, and returns its allocation size.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let pointer = unsafe { navpdf_decode_images(bytes.as_ptr(), bytes.len(), &mut length) };
+        let buffer = DecodedBuffer(
+            std::ptr::NonNull::new(pointer)
+                .ok_or_else(|| "Image decoder returned no data.".to_string())?,
+        );
+        if !(4..=100 * 1024 * 1024).contains(&length) {
             return Err("Image decoder returned an invalid size.".into());
         }
-        let result = unsafe { std::slice::from_raw_parts(pointer, length).to_vec() };
-        unsafe {
-            navpdf_free_images(pointer);
-        }
+        // SAFETY: Our Swift implementation initializes exactly length bytes, with no aliases.
+        // The validated length fits isize; buffer owns the allocation until copying completes.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        let result = unsafe { std::slice::from_raw_parts(buffer.0.as_ptr(), length).to_vec() };
         if result[..4] == [0, 0, 0, 0] {
             return Err(String::from_utf8_lossy(&result[4..]).into_owned());
         }

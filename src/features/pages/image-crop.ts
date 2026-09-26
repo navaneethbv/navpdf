@@ -23,6 +23,20 @@ function colorAt(data: Pixels["data"], index: number): number[] {
   return [0, 1, 2].map((channel) => data[index + channel] * alpha + 255 * (1 - alpha));
 }
 
+function isContentPixel(
+  data: Pixels["data"],
+  index: number,
+  background: number[],
+  tolerance: number,
+): boolean {
+  const alpha = data[index + 3] / 255;
+  for (let channel = 0; channel < 3; channel++) {
+    const value = data[index + channel] * alpha + 255 * (1 - alpha);
+    if (Math.abs(value - background[channel]) > tolerance) return true;
+  }
+  return false;
+}
+
 /** Conservative rectangular trim: every pixel unlike the border is retained. */
 export function detectImageBounds(
   { width, height, data }: Pixels,
@@ -61,12 +75,7 @@ export function detectImageBounds(
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const index = (y * width + x) * 4;
-      const alpha = data[index + 3] / 255;
-      let content = false;
-      for (let channel = 0; channel < 3; channel++) {
-        const value = data[index + channel] * alpha + 255 * (1 - alpha);
-        if (Math.abs(value - background[channel]) > tolerance) content = true;
-      }
+      const content = isContentPixel(data, index, background, tolerance);
       if (content) {
         left = Math.min(left, x);
         top = Math.min(top, y);
@@ -135,11 +144,7 @@ async function encodeCanvas(canvas: HTMLCanvasElement, filename: string): Promis
   });
 }
 
-export async function processImageCrop(
-  file: File,
-  options: CropOptions = {},
-  keepFullImage = false,
-): Promise<ImageCropResult | null> {
+function validateCropOptions(options: CropOptions): void {
   for (const [label, value, maximum] of [
     ["Sensitivity", options.tolerance ?? 24, 100],
     ["Cleanup", options.cleanup ?? 0, 100],
@@ -153,6 +158,14 @@ export async function processImageCrop(
     )
       throw new Error(`${label} is outside its supported range.`);
   }
+}
+
+export async function processImageCrop(
+  file: File,
+  options: CropOptions = {},
+  keepFullImage = false,
+): Promise<ImageCropResult | null> {
+  validateCropOptions(options);
   if (file.size > 25 * 1024 * 1024) throw new Error("Each image must be 25 MB or smaller.");
   imageHeader(new Uint8Array(await file.arrayBuffer()));
   const url = URL.createObjectURL(file);

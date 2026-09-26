@@ -101,7 +101,8 @@ export function CompareDialog({
       const canvases: HTMLCanvasElement[] = [];
       try {
         canvases.push(await renderComparisonPage(documents[0], row.before!));
-        canvases.push(await renderComparisonPage(documents[1], row.after!));
+        const revised = await renderComparisonPage(documents[1], row.after!);
+        canvases.push(revised);
         if (alive) setDifference(visualDifference(canvases[0], canvases[1]));
       } catch (cause) {
         if (alive) setError(String(cause));
@@ -116,12 +117,9 @@ export function CompareDialog({
       alive = false;
     };
   }, [documents, row]);
-  const text = row
-    ? changedText(
-        row.before ? signatures[0][row.before - 1].text : "",
-        row.after ? signatures[1][row.after - 1].text : "",
-      )
-    : null;
+  const beforeText = row?.before ? signatures[0][row.before - 1].text : "";
+  const afterText = row?.after ? signatures[1][row.after - 1].text : "";
+  const text = row ? changedText(beforeText, afterText) : null;
   return (
     <FeatureDialog title="Compare PDF versions" onClose={onClose} busy={busy}>
       <div className="modal-dialog wide-tool-dialog">
@@ -136,7 +134,7 @@ export function CompareDialog({
             identical.
           </p>
           <label>
-            Choose revised PDF
+            Choose revised PDF{" "}
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -149,7 +147,7 @@ export function CompareDialog({
             />
           </label>
           {error && <p role="alert">{error}</p>}
-          <p role="status">{status}</p>
+          <output>{status}</output>
           {!!rows.length && (
             <>
               <p>
@@ -166,11 +164,11 @@ export function CompareDialog({
                     setOnlyChanges(event.target.checked);
                     setSelected(0);
                   }}
-                />
+                />{" "}
                 Only changes
               </label>
               <label>
-                Page pair
+                Page pair{" "}
                 <select
                   value={selected}
                   onChange={(event) => setSelected(Number(event.target.value))}

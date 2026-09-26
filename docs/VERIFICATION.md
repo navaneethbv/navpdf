@@ -1,5 +1,27 @@
 # Verification ledger
 
+## September 26 PR 42 quality remediation
+
+The published head `5a3e1815ab4838e3e8cf2c825d6ec9d883b92582` had 51 unresolved Sonar findings despite a green quality gate, with zero new duplicated lines or blocks.
+The follow-up simplifies bounded bookmark, merge, OCR, comparison and image-processing routines without changing their persisted formats.
+It also removes duplicate CSS selectors, gives OCR review items stable session IDs, corrects label spacing and uses native image/output semantics for previews and status.
+Image previews accept only browser-owned blob URLs and release them when replaced or closed.
+CodeQL's reported path runs from a selected File through URL.createObjectURL into an image source; no executable HTML interpretation was reproduced.
+The explicit blob scheme boundary is covered by malicious-scheme rejection tests.
+
+The native ImageIO bridge now owns its returned allocation through a drop guard, including invalid-length and early-return paths.
+Each unavoidable unsafe block documents the input lifetime, initialized output bounds and matching Swift allocator/deallocator contract.
+The informational Semgrep unsafe-usage audit rule is acknowledged only at these three reviewed blocks; no project-wide scanner exclusion or security policy was changed.
+
+Node 24 lint, typecheck, production build and all 711 frontend tests pass.
+Coverage remains above the unchanged gates: 84.74% statements, 76.98% branches, 83.18% functions and 87.91% lines.
+The independent PDF round-trip tests cover bookmarks, form/link-preserving merge and OCR review data.
+New preview tests cover labelled rendering, stale-page clearing, cancellation, URL cleanup and rejected nonlocal schemes.
+Rust passes 95 tests with the existing constrained-volume test ignored; Clippy passes with warnings denied.
+Local logs are under ignored `output/pr42-remediation/`.
+Hosted checks, direct Sonar issue and duplication queries, and merge eligibility must be verified again on the new published head.
+
+
 ## September 26 Preview acceptance and delivery follow-up
 
 Implementation source: `1b0f1713a08241a46bf98295e458397e335e3830`, rebased onto `d21db38`.
@@ -31,7 +53,7 @@ Earlier local logs were inspected and confirm 705 frontend tests, unchanged cove
 Those suites were not rerun for this documentation-only follow-up; formatting, diff checking and instruction-file parity were checked again.
 Hosted checks and quality analysis remain separate from these local and reader results and must be assessed on the published PR head.
 Signing, notarization, clean-account installation, physical printing, Acrobat-specific compatibility and Windows/Linux UI acceptance remain open.
-No merge or release publication is authorized by this follow-up.
+That documentation-only follow-up did not authorize a merge or release; the subsequent user request authorizes merging after the hosted checks and zero-new-issue gates pass.
 
 ## September 26 bookmark follow-up: current local verification
 

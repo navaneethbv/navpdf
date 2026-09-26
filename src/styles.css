@@ -3627,6 +3627,8 @@ p {
   max-width: 100%;
   height: auto;
   border: 1px solid var(--line);
+  max-height: 40vh;
+  width: auto;
 }
 .pdf-page-preview figcaption {
   font-weight: 600;
@@ -3663,9 +3665,6 @@ p {
   flex: 1;
   min-width: 180px;
 }
-.ocr-review-line input {
-  width: 100%;
-}
 .batch-image-controls {
   display: flex;
   flex-wrap: wrap;
@@ -3701,6 +3700,7 @@ p {
   max-height: 38vh;
 }
 .ocr-review-line input {
+  width: 100%;
   min-height: 34px;
   padding: 7px 10px;
   background: var(--input);
@@ -3722,9 +3722,4 @@ p {
 .target-compression-options input {
   margin-left: 8px;
   max-width: 130px;
-}
-.pdf-page-preview canvas,
-.pdf-page-preview img {
-  max-height: 40vh;
-  width: auto;
 }

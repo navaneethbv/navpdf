@@ -195,6 +195,12 @@ export function CompressDialog({
       </button>
     );
   };
+  let targetStatus = "Target met.";
+  if (measuredTarget !== null && retainedSize >= measuredTarget) {
+    targetStatus = result?.bytes
+      ? "Target could not be met with the available presets. The smallest safe result is shown."
+      : "Target could not be met. No smaller safe copy is available; the original is retained.";
+  }
   return (
     <FeatureDialog title="Compress PDF" onClose={onClose} busy={running || applying}>
       <div className="modal-dialog wide-tool-dialog">
@@ -235,7 +241,7 @@ export function CompressDialog({
             {targetMode && (
               <div className="target-compression-options">
                 <label>
-                  Under (MB, 1 MB = 1,000,000 bytes)
+                  Under (MB, 1 MB = 1,000,000 bytes){" "}
                   <input
                     className="text-input"
                     type="number"
@@ -299,23 +305,15 @@ export function CompressDialog({
           )}
 
           {report && measuredTarget !== null && (
-            <p
-              role="status"
-              className={retainedSize < measuredTarget ? "field-hint" : "warning-banner"}
-            >
-              {retainedSize < measuredTarget
-                ? "Target met."
-                : result?.bytes
-                  ? "Target could not be met with the available presets. The smallest safe result is shown."
-                  : "Target could not be met. No smaller safe copy is available; the original is retained."}{" "}
-              Limit: {measuredTarget.toLocaleString()} bytes.
-            </p>
+            <output className={retainedSize < measuredTarget ? "field-hint" : "warning-banner"}>
+              {targetStatus} Limit: {measuredTarget.toLocaleString()} bytes.
+            </output>
           )}
           {previewError && <p role="alert">Preview unavailable: {previewError}</p>}
           {preview && resultSource.current && (
             <section aria-label="Compression quality preview">
               <label>
-                Preview page
+                Preview page{" "}
                 <input
                   className="text-input"
                   type="number"

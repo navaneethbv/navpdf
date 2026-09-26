@@ -7,6 +7,7 @@ import {
   PDFNumber,
   PDFRef,
   PDFString,
+  type PDFObject,
 } from "pdf-lib";
 import { resolveDestination } from "./link-targets.ts";
 
@@ -19,6 +20,34 @@ export interface EditableBookmark {
   flags?: number;
   color?: number[];
   collapsed?: boolean;
+}
+
+function destinationPage(
+  target: PDFObject | undefined,
+  pages: Map<string, number>,
+): number | undefined {
+  if (target instanceof PDFRef) return pages.get(target.toString());
+  if (target instanceof PDFNumber) return target.asNumber();
+  return undefined;
+}
+
+function bookmarkDestination(doc: PDFDocument, node: PDFDict, pages: Map<string, number>) {
+  const action = node.lookupMaybe(PDFName.of("A"), PDFDict);
+  if (action && action.lookupMaybe(PDFName.of("S"), PDFName)?.asString() !== "/GoTo")
+    throw new Error(
+      "Bookmarks with external or executable actions are not supported by this operation.",
+    );
+  const raw = node.lookup(PDFName.of("Dest")) ?? action?.lookup(PDFName.of("D"));
+  const destination = resolveDestination(doc, raw);
+  if (raw && !destination) throw new Error("A bookmark destination could not be resolved.");
+  const target = destination?.get(0);
+  const page = destinationPage(target, pages);
+  if (
+    destination &&
+    (page === undefined || !Number.isInteger(page) || page < 0 || page >= doc.getPageCount())
+  )
+    throw new Error("A bookmark targets a missing page.");
+  return { destination, page };
 }
 
 export function readBookmarkTree(doc: PDFDocument): EditableBookmark[] {
@@ -35,30 +64,11 @@ export function readBookmarkTree(doc: PDFDocument): EditableBookmark[] {
         throw new Error("Invalid or oversized bookmark tree.");
       visited.add(node);
       const title = node.lookup(PDFName.of("Title"));
-      const action = node.lookupMaybe(PDFName.of("A"), PDFDict);
-      if (action && action.lookupMaybe(PDFName.of("S"), PDFName)?.asString() !== "/GoTo")
-        throw new Error(
-          "Bookmarks with external or executable actions are not supported by this operation.",
-        );
-      const raw = node.lookup(PDFName.of("Dest")) ?? action?.lookup(PDFName.of("D"));
-      const destination = resolveDestination(doc, raw);
-      if (raw && !destination) throw new Error("A bookmark destination could not be resolved.");
-      const target = destination?.get(0);
-      const page =
-        target instanceof PDFRef
-          ? pages.get(target.toString())
-          : target instanceof PDFNumber
-            ? target.asNumber()
-            : undefined;
-      if (
-        destination &&
-        (page === undefined || !Number.isInteger(page) || page < 0 || page >= doc.getPageCount())
-      )
-        throw new Error("A bookmark targets a missing page.");
+      const { destination, page } = bookmarkDestination(doc, node, pages);
       const color = node
         .lookupMaybe(PDFName.of("C"), PDFArray)
         ?.asArray()
-        .map((value) => (value instanceof PDFNumber ? value.asNumber() : NaN));
+        .map((value) => (value instanceof PDFNumber ? value.asNumber() : Number.NaN));
       const view = destination
         ?.asArray()
         .slice(1)
@@ -88,6 +98,37 @@ export function readBookmarkTree(doc: PDFDocument): EditableBookmark[] {
   return walk(root.lookup(PDFName.of("First")), 0);
 }
 
+function bookmarkDictionary(doc: PDFDocument, node: EditableBookmark, parent: PDFRef): PDFDict {
+  if (!node.title.trim() || node.title.length > 1000)
+    throw new Error("Bookmark titles must contain 1 to 1,000 characters.");
+  const dict = doc.context.obj({ Title: PDFHexString.fromText(node.title), Parent: parent });
+  if (node.page !== null) {
+    if (!Number.isInteger(node.page) || node.page < 0 || node.page >= doc.getPageCount())
+      throw new Error("Bookmark page is outside the document.");
+    const view = node.view?.length ? node.view : ["Fit"];
+    if (
+      typeof view[0] !== "string" ||
+      !["XYZ", "Fit", "FitH", "FitV", "FitR", "FitB", "FitBH", "FitBV"].includes(view[0]) ||
+      view
+        .slice(1)
+        .some((value) => value !== null && (typeof value !== "number" || !Number.isFinite(value)))
+    )
+      throw new Error("Invalid bookmark view destination.");
+    const destination = doc.context.obj([doc.getPage(node.page).ref, ...view]);
+    dict.set(PDFName.of("Dest"), destination);
+  }
+  if (node.color) {
+    if (
+      node.color.length !== 3 ||
+      !node.color.every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
+    )
+      throw new Error("Invalid bookmark color.");
+    dict.set(PDFName.of("C"), doc.context.obj(node.color));
+  }
+  if (node.flags !== undefined) dict.set(PDFName.of("F"), PDFNumber.of(node.flags));
+  return dict;
+}
+
 export function writeBookmarkTree(doc: PDFDocument, entries: EditableBookmark[]): void {
   if (!entries.length) {
     doc.catalog.delete(PDFName.of("Outlines"));
@@ -109,40 +150,12 @@ export function writeBookmarkTree(doc: PDFDocument, entries: EditableBookmark[])
     for (const node of nodes) {
       if (++count > 10000 || seen.has(node)) throw new Error("Invalid or oversized bookmark tree.");
       seen.add(node);
-      if (!node.title.trim() || node.title.length > 1000)
-        throw new Error("Bookmark titles must contain 1 to 1,000 characters.");
-      const dict = doc.context.obj({ Title: PDFHexString.fromText(node.title), Parent: parent });
-      if (node.page !== null) {
-        if (!Number.isInteger(node.page) || node.page < 0 || node.page >= doc.getPageCount())
-          throw new Error("Bookmark page is outside the document.");
-        const view = node.view?.length ? node.view : ["Fit"];
-        if (
-          typeof view[0] !== "string" ||
-          !["XYZ", "Fit", "FitH", "FitV", "FitR", "FitB", "FitBH", "FitBV"].includes(view[0]) ||
-          view
-            .slice(1)
-            .some(
-              (value) => value !== null && (typeof value !== "number" || !Number.isFinite(value)),
-            )
-        )
-          throw new Error("Invalid bookmark view destination.");
-        const destination = doc.context.obj([doc.getPage(node.page).ref, ...view]);
-        dict.set(PDFName.of("Dest"), destination);
-      }
-      if (node.color) {
-        if (
-          node.color.length !== 3 ||
-          !node.color.every((value) => Number.isFinite(value) && value >= 0 && value <= 1)
-        )
-          throw new Error("Invalid bookmark color.");
-        dict.set(PDFName.of("C"), doc.context.obj(node.color));
-      }
-      if (node.flags !== undefined) dict.set(PDFName.of("F"), PDFNumber.of(node.flags));
+      const dict = bookmarkDictionary(doc, node, parent);
       const ref = doc.context.register(dict);
       const children = write(node.children, ref, depth + 1);
       if (children.refs.length) {
         dict.set(PDFName.of("First"), children.refs[0]);
-        dict.set(PDFName.of("Last"), children.refs[children.refs.length - 1]);
+        dict.set(PDFName.of("Last"), children.refs.at(-1)!);
         dict.set(
           PDFName.of("Count"),
           PDFNumber.of(node.collapsed ? -children.count : children.count),
@@ -160,7 +173,7 @@ export function writeBookmarkTree(doc: PDFDocument, entries: EditableBookmark[])
   };
   const tree = write(entries, rootRef, 0);
   root.set(PDFName.of("First"), tree.refs[0]);
-  root.set(PDFName.of("Last"), tree.refs[tree.refs.length - 1]);
+  root.set(PDFName.of("Last"), tree.refs.at(-1)!);
   root.set(PDFName.of("Count"), PDFNumber.of(tree.count));
   doc.catalog.set(PDFName.of("Outlines"), rootRef);
 }

@@ -19,13 +19,11 @@ export function nestBookmarks(
   ancestors = new Set<string>(),
 ): EditableBookmark[] {
   if (ancestors.size > 32) throw new Error("Bookmark nesting exceeds 32 levels.");
-  return rows
-    .filter((row) => row.parent === parent)
-    .map(({ parent: _parent, ...node }) => {
-      if (ancestors.has(node.id)) throw new Error("Circular bookmark nesting.");
-      void _parent;
-      return { ...node, children: nestBookmarks(rows, node.id, new Set([...ancestors, node.id])) };
-    });
+  return rows.flatMap(({ parent: rowParent, ...node }) => {
+    if (rowParent !== parent) return [];
+    if (ancestors.has(node.id)) throw new Error("Circular bookmark nesting.");
+    return [{ ...node, children: nestBookmarks(rows, node.id, new Set([...ancestors, node.id])) }];
+  });
 }
 function descendants(rows: Row[], id: string): Set<string> {
   const result = new Set([id]);
@@ -135,7 +133,7 @@ export function BookmarkEditor({
               return (
                 <div className="bookmark-editor-row" key={row.id}>
                   <label>
-                    Title
+                    Title{" "}
                     <input
                       className="text-input"
                       value={row.title}
@@ -144,7 +142,7 @@ export function BookmarkEditor({
                     />
                   </label>
                   <label>
-                    Page
+                    Page{" "}
                     <input
                       className="text-input"
                       type="number"
@@ -161,7 +159,7 @@ export function BookmarkEditor({
                     />
                   </label>
                   <label>
-                    Parent
+                    Parent{" "}
                     <select
                       value={row.parent}
                       onChange={(event) => changeParent(row.id, event.target.value)}

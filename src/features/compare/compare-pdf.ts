@@ -43,7 +43,10 @@ export async function pageSignatures(
     const page = await pdf.getPage(number);
     const content = await page.getTextContent();
     const text = content.items
-      .map((item) => ("str" in item ? `${item.str}${item.hasEOL ? "\n" : " "}` : ""))
+      .map((item) => {
+        if (!("str" in item)) return "";
+        return item.str + (item.hasEOL ? "\n" : " ");
+      })
       .join("")
       .trim();
     totalCharacters += text.length;
@@ -67,9 +70,7 @@ export async function pageSignatures(
   return signatures;
 }
 
-/** Align exact pages first so an insertion does not mark every following page changed. */
-export function alignPages(before: PageSignature[], after: PageSignature[]): ComparedPage[] {
-  if (before.length > 500 || after.length > 500) throw new Error("Comparison page limit exceeded.");
+function matchingAnchors(before: PageSignature[], after: PageSignature[]): [number, number][] {
   const lengths = Array.from(
     { length: before.length + 1 },
     () => new Uint16Array(after.length + 1),
@@ -89,6 +90,26 @@ export function alignPages(before: PageSignature[], after: PageSignature[]): Com
     } else if (lengths[i + 1][j] >= lengths[i][j + 1]) i++;
     else j++;
   }
+  return anchors;
+}
+
+function changedPageStatus(before: number | null, after: number | null): ComparedPage["status"] {
+  if (before === null) return "added";
+  return after === null ? "removed" : "changed";
+}
+
+function changedPage(before: number | null, after: number | null): ComparedPage {
+  return {
+    before: before === null ? null : before + 1,
+    after: after === null ? null : after + 1,
+    status: changedPageStatus(before, after),
+  };
+}
+
+/** Align exact pages first so an insertion does not mark every following page changed. */
+export function alignPages(before: PageSignature[], after: PageSignature[]): ComparedPage[] {
+  if (before.length > 500 || after.length > 500) throw new Error("Comparison page limit exceeded.");
+  const anchors = matchingAnchors(before, after);
   const rows: ComparedPage[] = [];
   let a = 0,
     b = 0;
@@ -96,11 +117,7 @@ export function alignPages(before: PageSignature[], after: PageSignature[]): Com
     while (a < nextA || b < nextB) {
       const left = a < nextA ? a++ : null,
         right = b < nextB ? b++ : null;
-      rows.push({
-        before: left === null ? null : left + 1,
-        after: right === null ? null : right + 1,
-        status: left === null ? "added" : right === null ? "removed" : "changed",
-      });
+      rows.push(changedPage(left, right));
     }
     if (nextA < before.length) {
       rows.push({ before: ++a, after: ++b, status: "unchanged" });
@@ -130,6 +147,23 @@ export function changedText(
   };
 }
 
+function blockChanged(
+  left: Uint8ClampedArray,
+  right: Uint8ClampedArray,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): boolean {
+  for (let yy = y; yy < Math.min(y + 8, height); yy++) {
+    for (let xx = x; xx < Math.min(x + 8, width); xx++) {
+      const p = (yy * width + xx) * 4;
+      if ([0, 1, 2].some((c) => Math.abs(left[p + c] - right[p + c]) > 24)) return true;
+    }
+  }
+  return false;
+}
+
 export function visualDifference(before: HTMLCanvasElement, after: HTMLCanvasElement): string {
   const width = Math.max(before.width, after.width),
     height = Math.max(before.height, after.height);
@@ -149,19 +183,7 @@ export function visualDifference(before: HTMLCanvasElement, after: HTMLCanvasEle
     right.context.fillStyle = "rgba(220, 45, 75, 0.4)";
     for (let y = 0; y < height; y += 8)
       for (let x = 0; x < width; x += 8) {
-        let changed = false;
-        for (let yy = y; yy < Math.min(y + 8, height) && !changed; yy++)
-          for (let xx = x; xx < Math.min(x + 8, width); xx++) {
-            const p = (yy * width + xx) * 4;
-            if (
-              Math.max(
-                ...[0, 1, 2].map((c) => Math.abs(left.pixels[p + c] - right.pixels[p + c])),
-              ) > 24
-            ) {
-              changed = true;
-              break;
-            }
-          }
+        const changed = blockChanged(left.pixels, right.pixels, x, y, width, height);
         if (changed) right.context.fillRect(x, y, 8, 8);
       }
     return right.canvas.toDataURL("image/png");

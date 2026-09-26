@@ -19,7 +19,8 @@ export function useImageUrl(file?: File): string {
     setUrl(value);
     return () => URL.revokeObjectURL(value);
   }, [file]);
-  return url;
+  // Preview sources must remain browser-owned local blobs.
+  return url.startsWith("blob:") ? url : "";
 }
 
 const handles: CropHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w", "move"];
@@ -70,9 +71,9 @@ export function ImageCropEditor({
         try {
           const next = await processImageCrop(file, options, true);
           if (!cancelled) setResult(next);
-        } catch (failure) {
+        } catch (error_) {
           if (!cancelled)
-            setError(failure instanceof Error ? failure.message : "Image preview failed.");
+            setError(error_ instanceof Error ? error_.message : "Image preview failed.");
         } finally {
           if (!cancelled) setRunning(false);
         }
@@ -105,7 +106,7 @@ export function ImageCropEditor({
           </p>
           <div className="crop-adjustments">
             <label>
-              Sensitivity
+              Sensitivity{" "}
               <input
                 type="range"
                 min="0"
@@ -116,7 +117,7 @@ export function ImageCropEditor({
               <output>{options.tolerance ?? 24}</output>
             </label>
             <label>
-              Padding (pixels)
+              Padding (pixels){" "}
               <input
                 className="text-input"
                 type="number"
@@ -127,7 +128,7 @@ export function ImageCropEditor({
               />
             </label>
             <label>
-              Straighten (degrees)
+              Straighten (degrees){" "}
               <input
                 className="text-input"
                 type="number"
@@ -139,7 +140,7 @@ export function ImageCropEditor({
               />
             </label>
             <label>
-              Background cleanup
+              Background cleanup{" "}
               <input
                 type="range"
                 min="0"
@@ -205,7 +206,7 @@ export function ImageCropEditor({
                       drag.current = null;
                     }}
                   >
-                    <img src={before} alt="Image before crop" draggable={false} />
+                    <img src={before} alt="Before crop" draggable={false} />
                     <div
                       className="crop-outline"
                       style={{
@@ -258,17 +259,13 @@ export function ImageCropEditor({
                 </figure>
                 <figure>
                   <figcaption>After crop</figcaption>
-                  {after && <img src={after} alt="Image after crop" />}
+                  {after && <img src={after} alt="After crop" />}
                 </figure>
               </div>
               {(!!options.angle || !!options.cleanup) && (
                 <details>
                   <summary>Unmodified original</summary>
-                  <img
-                    className="image-crop-preview"
-                    src={original}
-                    alt="Unmodified original image"
-                  />
+                  <img className="image-crop-preview" src={original} alt="Unmodified original" />
                 </details>
               )}
               <output aria-live="polite">
@@ -278,7 +275,7 @@ export function ImageCropEditor({
               </output>
             </>
           )}
-          {!result && running && <p role="status">Preparing image preview...</p>}
+          {!result && running && <output>Preparing image preview...</output>}
           {error && (
             <p role="alert" className="error-text">
               {error}

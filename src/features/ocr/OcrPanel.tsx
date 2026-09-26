@@ -20,6 +20,17 @@ import type { OcrEngineInfo, OcrPageResult } from "../../types/operations";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
+function identifyReview(pages: OcrPageResult[]) {
+  return pages.map((page) => ({
+    ...page,
+    lines: page.lines.map((line) => ({
+      ...line,
+      id: crypto.randomUUID(),
+      words: line.words.map((word) => ({ ...word, id: crypto.randomUUID() })),
+    })),
+  }));
+}
+
 type PdfDocument = NonNullable<ViewerController["pdf"]>;
 
 function pageWithinOcrLimit(width: number, height: number): boolean {
@@ -452,7 +463,7 @@ export function OcrPanel({
   const [statusText, setStatusText] = useState("");
   const [recognizedText, setRecognizedText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [review, setReview] = useState<OcrPageResult[] | null>(null);
+  const [review, setReview] = useState<ReturnType<typeof identifyReview> | null>(null);
   const reviewSource = useRef<{ pdf: PdfDocument; bytes: Uint8Array } | null>(null);
   const [reviewPage, setReviewPage] = useState(0);
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -546,7 +557,7 @@ export function OcrPanel({
 
       if (mode === "searchable") {
         reviewSource.current = { pdf: sourcePdf, bytes: pdfBytes };
-        setReview(results);
+        setReview(identifyReview(results));
         setReviewPage(0);
         setProgress(100);
         setStatusText("Review recognized words before applying. The scan stays unchanged.");
@@ -599,7 +610,7 @@ export function OcrPanel({
           "No editable NavPDF OCR layer was found on these pages. Recognize them to create one.",
         );
       reviewSource.current = { pdf, bytes };
-      setReview(pages);
+      setReview(identifyReview(pages));
       setReviewPage(0);
     } catch (error) {
       setReviewError(error instanceof Error ? error.message : String(error));
@@ -646,7 +657,7 @@ export function OcrPanel({
               </p>
               {review.length > 0 && (
                 <label>
-                  Review page
+                  Review page{" "}
                   <select
                     value={reviewPage}
                     onChange={(event) => setReviewPage(Number(event.target.value))}
@@ -673,9 +684,9 @@ export function OcrPanel({
                       <fieldset key={page.pageIndex} disabled={running}>
                         <legend>Page {page.pageIndex + 1}</legend>
                         {page.lines.map((line, li) => (
-                          <div className="ocr-review-line" key={li}>
+                          <div className="ocr-review-line" key={line.id}>
                             {line.words.map((word, wi) => (
-                              <label key={wi}>
+                              <label key={word.id}>
                                 <span className="field-hint">
                                   Word {li + 1}.{wi + 1}, confidence{" "}
                                   {Math.round(word.confidence * 100)}%

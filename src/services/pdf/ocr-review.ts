@@ -1,4 +1,11 @@
-import { PDFArray, PDFDocument, PDFHexString, PDFName, PDFRawStream } from "pdf-lib";
+import {
+  PDFArray,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFRawStream,
+  type PDFObject,
+} from "pdf-lib";
 import type { OcrPageResult } from "../../types/operations";
 
 export const OCR_REVIEW_KEY = PDFName.of("NavPDF_OCRReview");
@@ -60,23 +67,30 @@ export function validateOcrReview(value: unknown, pageIndex: number): OcrPageRes
   };
 }
 
+function contentStreams(contents: PDFObject | undefined): PDFObject[] {
+  if (contents instanceof PDFArray) return contents.asArray();
+  return contents ? [contents] : [];
+}
+
+function readPageReview(doc: PDFDocument, index: number): OcrPageResult["lines"] {
+  const lines: OcrPageResult["lines"] = [];
+  for (const ref of contentStreams(doc.getPage(index).node.Contents())) {
+    const stream = doc.context.lookup(ref);
+    if (!(stream instanceof PDFRawStream) || !stream.dict.has(PDFName.of("NavPDF_OCR"))) continue;
+    const data = stream.dict.lookup(OCR_REVIEW_KEY);
+    if (!(data instanceof PDFHexString)) continue;
+    if (data.asBytes().length > 2_000_000)
+      throw new Error("Saved OCR review data exceeds the limit.");
+    lines.push(...validateOcrReview(JSON.parse(data.decodeText()), index).lines);
+  }
+  return lines;
+}
+
 export async function readOcrReview(bytes: Uint8Array, pages: number[]): Promise<OcrPageResult[]> {
   const doc = await PDFDocument.load(bytes);
   const results: OcrPageResult[] = [];
   for (const index of pages) {
-    const contents = doc.getPage(index).node.Contents();
-    const streams = contents instanceof PDFArray ? contents.asArray() : contents ? [contents] : [];
-    const lines: OcrPageResult["lines"] = [];
-    for (const ref of streams) {
-      const stream = doc.context.lookup(ref);
-      if (!(stream instanceof PDFRawStream) || !stream.dict.has(PDFName.of("NavPDF_OCR"))) continue;
-      const data = stream.dict.lookup(OCR_REVIEW_KEY);
-      if (!(data instanceof PDFHexString)) continue;
-      if (data.asBytes().length > 2_000_000)
-        throw new Error("Saved OCR review data exceeds the limit.");
-      const result = validateOcrReview(JSON.parse(data.decodeText()), index);
-      lines.push(...result.lines);
-    }
+    const lines = readPageReview(doc, index);
     if (lines.length)
       results.push({
         pageIndex: index,

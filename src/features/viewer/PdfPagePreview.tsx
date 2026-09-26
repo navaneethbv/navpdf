@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
 /** Independent bounded canvas. Never attaches to the active document controller. */
@@ -7,13 +7,13 @@ export function PdfPagePreview({
   page,
   label,
 }: Readonly<{ pdf: PDFDocumentProxy; page: number; label: string }>) {
-  const canvas = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
   useEffect(() => {
     let disposed = false;
     let task: ReturnType<Awaited<ReturnType<PDFDocumentProxy["getPage"]>>["render"]> | undefined;
-    const target = canvas.current;
-    if (!target) return;
+    const target = document.createElement("canvas");
+    setPreviewUrl("");
     void (async () => {
       try {
         const source = await pdf.getPage(page);
@@ -27,7 +27,10 @@ export function PdfPagePreview({
         if (!context) throw new Error("Preview canvas unavailable.");
         task = source.render({ canvas: target, canvasContext: context, viewport });
         await task.promise;
-        if (!disposed) setError("");
+        if (!disposed) {
+          setPreviewUrl(target.toDataURL("image/png"));
+          setError("");
+        }
       } catch (cause) {
         if (!disposed) setError(cause instanceof Error ? cause.message : String(cause));
       }
@@ -41,7 +44,7 @@ export function PdfPagePreview({
     <figure className="pdf-page-preview">
       <figcaption>{label}</figcaption>
       {error && <p role="alert">{error}</p>}
-      <canvas ref={canvas} aria-label={label} role="img" />
+      {previewUrl && <img src={previewUrl} alt={label} />}
     </figure>
   );
 }

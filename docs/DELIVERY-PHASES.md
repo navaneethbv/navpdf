@@ -19,7 +19,9 @@ Bookmarks can be created, renamed, nested, reordered and deleted.
 Compression targets use measured presets with previews and clear target-miss feedback.
 PDF comparison aligns page additions/removals and shows changed text and rendered regions locally.
 
-Local checks pass with 705 frontend tests, coverage gates, 95 Rust tests, Clippy, packaging and DMG verification.
+The initial implementation passed 705 frontend tests, coverage gates, 95 Rust tests, Clippy, packaging and DMG verification.
+The PR 42 quality follow-up passes 711 frontend tests and preserves the coverage gates while addressing scanner findings, native decoder ownership, accessible previews and stable OCR review identity.
+Fresh hosted checks and direct Sonar zero-new-issue and zero-duplication verification gate the authorized merge.
 Follow-up native testing reproduced an excessive bookmark nesting move that closed the tool unexpectedly.
 Parent changes now validate the whole moved subtree before updating the draft, preserving earlier edits and allowing a valid retry.
 Native synthetic save/close/reopen acceptance covers OCR correction, bookmark creation, TIFF adjustment, HEIC import, preserved merging and target compression.
