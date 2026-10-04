@@ -35,6 +35,7 @@ export function CreatePdfDialog({
   const [pageCount, setPageCount] = useState(1);
   const [pageSize, setPageSize] = useState<"a4" | "letter">("a4");
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
   const [cropping, setCropping] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchStatus, setBatchStatus] = useState("");
@@ -102,6 +103,7 @@ export function CreatePdfDialog({
 
   const handleCreateBlank = async () => {
     if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50) return;
+    setError("");
     setCreating(true);
     try {
       const width = pageSize === "a4" ? 595.28 : 612;
@@ -114,7 +116,7 @@ export function CreatePdfDialog({
       s.set({ status: "Created new blank document" });
       onClose();
     } catch (err) {
-      s.set({ error: err instanceof Error ? err.message : String(err) });
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreating(false);
     }
@@ -122,6 +124,7 @@ export function CreatePdfDialog({
 
   const handleCombineFiles = async () => {
     if (items.length === 0) return;
+    setError("");
     setCreating(true);
     try {
       const mergeInputs: MergeInputItem[] = [];
@@ -152,7 +155,7 @@ export function CreatePdfDialog({
       s.set({ status: `Combined ${items.length} file(s): ${manifestSummary.join(", ")}` });
       onClose();
     } catch (err) {
-      s.set({ error: err instanceof Error ? err.message : String(err) });
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreating(false);
     }
@@ -161,6 +164,7 @@ export function CreatePdfDialog({
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
+    setError("");
     setCreating(true);
     const failures: string[] = [];
     try {
@@ -175,7 +179,7 @@ export function CreatePdfDialog({
           failures.push(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
-      if (failures.length) s.set({ error: failures.join("\n") });
+      if (failures.length) setError(failures.join("\n"));
     } finally {
       setCreating(false);
     }
@@ -238,6 +242,11 @@ export function CreatePdfDialog({
         </div>
 
         <div className="modal-body">
+          {error && (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          )}
           {tab === "blank" ? (
             <div key="blank-section">
               <div className="setting-group">

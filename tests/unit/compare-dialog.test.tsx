@@ -68,6 +68,26 @@ describe("comparison workflow", () => {
     fireEvent.click(screen.getByLabelText("Only changes"));
     expect(screen.getByText("Original page 1")).toBeTruthy();
   });
+  it("explains an empty changes filter and restores matching page previews", async () => {
+    vi.mocked(pageSignatures)
+      .mockReset()
+      .mockResolvedValue([{ text: "Same", key: "A" }]);
+    setup();
+    select();
+    await screen.findByText(/0 changed, 0 added, 0 removed, 1 unchanged/);
+    fireEvent.click(screen.getByLabelText("Only changes"));
+    expect(
+      screen
+        .getAllByRole("status")
+        .some((status) => /No changed pages detected/.test(status.textContent ?? "")),
+    ).toBe(true);
+    expect((screen.getByLabelText("Page pair") as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.queryByText("Original page 1")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Only changes"));
+    expect(screen.queryByText(/No changed pages detected/)).toBeNull();
+    expect((screen.getByLabelText("Page pair") as HTMLSelectElement).disabled).toBe(false);
+    expect(screen.getByText("Original page 1")).toBeTruthy();
+  });
   it("cancels while reading source bytes without creating leaked PDF tasks", async () => {
     const { controller } = setup();
     let finish!: (bytes: Uint8Array) => void;

@@ -1,5 +1,63 @@
 # Verification ledger
 
+## October 4 feature-review corrections
+
+Source base: `4902cfc`, plus the source changes in this PR.
+The [review](REVIEW-2026-10-04.md) records the feature assessment and unresolved work.
+
+### Automated gates
+
+Node `24.18.1` and `npm ci` were used.
+Formatting, lint, typecheck, production build, `git diff --check` and `cmp AGENTS.md CLAUDE.md` pass.
+The frontend suite passes 716 tests across 104 files.
+Coverage is 84.80% statements, 76.98% branches, 83.37% functions and 87.94% lines, with the existing thresholds unchanged and LCOV retained.
+Rust passes 95 tests; the existing constrained-volume test remains ignored.
+Clippy passes with warnings denied.
+Both new workflow regressions failed before their respective fixes and passed afterward.
+The production build retains its existing large-chunk advisory; no performance improvement is claimed.
+
+PR 50's first hosted run failed the npm audit and Sonar maintainability gate.
+The audit identified the transitive development dependency `brace-expansion` 5.0.9; the lockfile now resolves the compatible patched version 5.0.12, and a fresh `npm ci` followed by `npm audit --audit-level=high` reports zero vulnerabilities.
+The comparison empty-state message now uses native `output` semantics, with its existing regression asserting the accessible status role.
+All automated gates above pass again after these corrections.
+Sonar also reports eight existing sequential-await warnings in import and comparison operations; ordered input processing, cumulative text limits and bounded canvas memory still require sequential work.
+Hosted results must be checked against the corrected commit.
+The native package evidence below predates this markup-only correction and development dependency update; it does not establish a rebuilt package for this follow-up.
+
+### Native and independent-reader checks
+
+The baseline executable SHA-256 was `c77ea169f719214567947a1c573519b9c74cf285aaaa2e23a906b800b9438bb7`.
+Create > Import / Combine Files with `reader-5.pdf` and range `99` reproduced an error behind the dimmed dialog.
+With the import correction, range `99` displayed a readable error inside the modal while preserving the selected input.
+Changing the range to `2` and retrying imported exactly the second source page, containing `NEEDLE-0002`.
+This retry/save journey used intermediate executable `a07b5ff063e1e883d88fb0bd8d5d71fe88015844919900cfad152cfb4ccd4040`; the later application change only adds comparison empty-state feedback.
+The output was saved as `output/review-20261004/retry-page-2.pdf`, closed with the app, and reopened in the final NavPDF package.
+Preview independently opened the saved PDF as one page and visibly displayed the expected page-2 text and marker.
+
+The final package compared `retry-page-2.pdf` with itself and reported one unchanged page.
+Only changes displayed the explicit no-changes message and disabled the empty page selector.
+Pressing Space to clear the checkbox restored both labelled previews; Tab moved focus to the enabled page selector.
+The dialog text and controls were visually inspected at the current native window size.
+No compact-window or full assistive-technology acceptance is claimed.
+
+An earlier baseline comparison stayed at Reading original page 1 of 2 for several minutes.
+It did not recur after a fresh launch or a subsequent create/save/compare journey.
+The cause remains unresolved; progress-stage wording is an observability improvement, not a claimed stall fix.
+
+### Package and artifact identity
+
+`npm run package` produced the app and DMG, and `hdiutil verify` validated the DMG checksum (`B9DAAE1F`).
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Final `src-tauri/target/release/bundle/macos/NavPDF.app/Contents/MacOS/navpdf` | `0dc0d84bd230ce3491235d782963979d7a4f6e2fc39f2c96f10e368cb0fca039` |
+| Final `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` | `3aa0ef47be6c7a5f706678ca839ea40c601c9b2f37c1d685d6486f5869e1c396` |
+| `output/review-20261004/baseline-combined.pdf` | `fe5a96e4a234fdc3efdb42f122cddc1ea07628c2a77fda89708e6144fe5650d7` |
+| `output/review-20261004/retry-page-2.pdf` | `b20015ecfea8af4951d6e46e392dc441c91e1f082a7235c1e29863af1e311462` |
+
+Hosted CI and quality analysis are separate from these local results.
+Signing, notarization, clean-account installation, physical printing, other platforms and full product parity remain open.
+
 ## September 26 PR 42 quality remediation
 
 The published head `5a3e1815ab4838e3e8cf2c825d6ec9d883b92582` had 51 unresolved Sonar findings despite a green quality gate, with zero new duplicated lines or blocks.

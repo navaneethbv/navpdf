@@ -32,14 +32,14 @@ export async function renderComparisonPage(
 export async function pageSignatures(
   pdf: PDFDocumentProxy,
   cancelled: () => boolean,
-  progress: (page: number) => void,
+  progress: (page: number, stage: "text" | "render") => void,
 ): Promise<PageSignature[]> {
   if (pdf.numPages > 500) throw new Error("Compare supports up to 500 pages per document.");
   const signatures: PageSignature[] = [];
   let totalCharacters = 0;
   for (let number = 1; number <= pdf.numPages; number++) {
     if (cancelled()) throw new Error("Comparison cancelled.");
-    progress(number);
+    progress(number, "text");
     const page = await pdf.getPage(number);
     const content = await page.getTextContent();
     const text = content.items
@@ -53,6 +53,7 @@ export async function pageSignatures(
     if (totalCharacters > 10_000_000)
       throw new Error("Document text exceeds the comparison limit.");
     if (text.length > 200_000) throw new Error("A page contains too much text to compare safely.");
+    progress(number, "render");
     const canvas = await renderComparisonPage(pdf, number, 250);
     try {
       const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;

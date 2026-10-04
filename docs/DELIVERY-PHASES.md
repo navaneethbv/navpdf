@@ -7,6 +7,16 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## October 4 feature and reliability review
+
+The [current review](REVIEW-2026-10-04.md) records implemented features, scoped limitations and prioritized follow-up.
+Native reproduction confirmed import errors hidden behind Create PDF and an unexplained empty Only changes comparison view.
+Create PDF now displays operation errors inside the dialog and retains the queued inputs for retry.
+Comparison now explains an empty changes filter, disables its empty selector and distinguishes reading from rendering progress.
+The verification ledger records automated checks, native retry/save/reopen evidence and independent Preview inspection.
+An initial comparison stall did not recur after relaunch; its cause remains unresolved and is not claimed fixed.
+No feature-parity, distribution or platform gate is closed by this review.
+
 ## September 26 prioritized tool implementation
 
 All twelve additions in [the approved implementation plan](IMPLEMENTATION-PLAN-2026-09-26.md) now have local implementations.

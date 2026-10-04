@@ -71,12 +71,18 @@ export function CompareDialog({
       const left = await pageSignatures(
         pair[0],
         () => id !== generation.current,
-        (n) => setStatus(`Reading original page ${n} of ${pair[0].numPages}`),
+        (n, stage) =>
+          setStatus(
+            `${stage === "text" ? "Reading" : "Rendering"} original page ${n} of ${pair[0].numPages}`,
+          ),
       );
       const right = await pageSignatures(
         pair[1],
         () => id !== generation.current,
-        (n) => setStatus(`Reading revision page ${n} of ${pair[1].numPages}`),
+        (n, stage) =>
+          setStatus(
+            `${stage === "text" ? "Reading" : "Rendering"} revision page ${n} of ${pair[1].numPages}`,
+          ),
       );
       if (id !== generation.current) return;
       setSignatures([left, right]);
@@ -167,10 +173,16 @@ export function CompareDialog({
                 />{" "}
                 Only changes
               </label>
+              {onlyChanges && !visible.length && (
+                <output>
+                  No changed pages detected. Turn off Only changes to view matching pages.
+                </output>
+              )}
               <label>
                 Page pair{" "}
                 <select
                   value={selected}
+                  disabled={!visible.length}
                   onChange={(event) => setSelected(Number(event.target.value))}
                 >
                   {visible.map((r, i) => (
