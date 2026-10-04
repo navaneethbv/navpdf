@@ -313,7 +313,7 @@ describe("CreatePdfDialog extras", () => {
     expect(await screen.findByText("1. x.pdf")).toBeTruthy();
     fireEvent.click(screen.getByText("Combine & Open"));
     await vi.waitFor(() => {
-      expect(useWorkspace.getState().error).not.toBe("");
+      expect(screen.getByRole("alert").textContent).toContain("Failed to parse PDF");
     });
   });
 });
