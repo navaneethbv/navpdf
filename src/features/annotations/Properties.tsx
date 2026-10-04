@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import { formatBytes } from "../compress/CompressDialog";
 export function Properties({ controller }: Readonly<{ controller: ViewerController }>) {
   const s = useWorkspace();
   const selected = s.comments.find((comment) => comment.id === s.selectedAnnotationId);
@@ -309,7 +310,7 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
           <dt>Pages</dt>
           <dd>{s.info?.pages}</dd>
           <dt>File size</dt>
-          <dd>{((s.document?.size || 0) / 1024 / 1024).toFixed(2)} MB</dd>
+          <dd>{formatBytes(s.document?.size || 0)}</dd>
           <dt>PDF version</dt>
           <dd>{s.info?.version || "Unknown"}</dd>
           <dt>Author</dt>

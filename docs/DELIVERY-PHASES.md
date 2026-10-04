@@ -7,6 +7,66 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## October 4 feature and reliability review
+
+The [current review](REVIEW-2026-10-04.md) records implemented features, scoped limitations and prioritized follow-up.
+Native reproduction confirmed import errors hidden behind Create PDF and an unexplained empty Only changes comparison view.
+Create PDF now displays operation errors inside the dialog and retains the queued inputs for retry.
+Comparison now explains an empty changes filter, disables its empty selector and distinguishes reading from rendering progress.
+The verification ledger records automated checks, native retry/save/reopen evidence and independent Preview inspection.
+An initial comparison stall did not recur after relaunch; its cause remains unresolved and is not claimed fixed.
+No feature-parity, distribution or platform gate is closed by this review.
+
+## September 26 prioritized tool implementation
+
+All twelve additions in [the approved implementation plan](IMPLEMENTATION-PLAN-2026-09-26.md) now have local implementations.
+Native rendering uses CPU-backed canvases to fix the reproduced repaint stall.
+Combine preserves supported forms, bookmarks and local links, with explicit rejection of unsupported structures.
+Image preparation provides manual crop handles, keyboard/numeric adjustment, before/after views, sensitivity, padding, batch trimming, manual straightening and background cleanup.
+HEIC/HEIF and multipage TIFF import use local macOS ImageIO under [ADR 0013](adr/0013-imageio-import-and-document-tools.md).
+OCR supports review before applying and reopening saved NavPDF OCR words for correction while retaining scan pixels.
+Bookmarks can be created, renamed, nested, reordered and deleted.
+Compression targets use measured presets with previews and clear target-miss feedback.
+PDF comparison aligns page additions/removals and shows changed text and rendered regions locally.
+
+The initial implementation passed 705 frontend tests, coverage gates, 95 Rust tests, Clippy, packaging and DMG verification.
+The PR 42 quality follow-up passes 712 frontend tests and preserves the coverage gates while addressing scanner findings, native decoder ownership, accessible previews and stable OCR review identity.
+Fresh hosted checks and direct Sonar zero-new-issue and zero-duplication verification gate the authorized merge.
+Follow-up native testing reproduced an excessive bookmark nesting move that closed the tool unexpectedly.
+Parent changes now validate the whole moved subtree before updating the draft, preserving earlier edits and allowing a valid retry.
+Native synthetic save/close/reopen acceptance covers OCR correction, bookmark creation, TIFF adjustment, HEIC import, preserved merging and target compression.
+Native comparison displays changed text, visual differences and removed pages.
+The verification ledger records exact artifacts and remaining limits.
+Preview inspection now covers all six saved acceptance PDFs, including form edits saved and reopened on a disposable copy, crop/TIFF/HEIC rendering and compressed-text search.
+Preview replaces sole top-level outline labels with the filename and shows an inconsistent OCR search-result status; Apple PDFKit confirms the saved outline hierarchy and corrected-text matches.
+Separately labeled Reviewed scan navigation remains unverified in Preview; the verification ledger records these reader UI limits without claiming full Preview acceptance.
+Signing/notarization, clean-account installation, physical printing and other platforms remain separate gates; no historical phase or full product-parity claim is closed here.
+The authorized branch and PR delivery includes these results and limits; hosted checks and review remain separate gates.
+
+## September 26 image margin trimming
+
+Create PDF > Import / Combine Files now offers Trim image margins separately for each PNG or JPEG.
+Detection trims approximately uniform outer borders, displays cropped pixel dimensions and a preview, and supports Reset crop before import.
+The original file remains unchanged; the imported PDF embeds the cropped raster pixels rather than hiding the margins with a PDF CropBox.
+Blank images, inconsistent corner colors and images whose content reaches every edge remain unchanged.
+This is margin trimming, not photographed-document edge detection or perspective correction.
+Local checks and pixel-exact saved-output verification pass; see `docs/VERIFICATION.md` for native rendering and Preview limitations.
+No existing phase or distribution gate is closed by this addition.
+
+## September 23 session and shortcut review
+
+Save, close, home and open requests made during an autosave recovery write now wait for it instead of being silently dropped.
+Closing after an in-flight recovery write no longer leaves a recovery copy for a discarded document.
+Menu Undo and Redo no longer revert document changes while a text field has focus.
+Ctrl+Y redo, Cmd/Ctrl+G find next and previous, and search-field refocus on Find were added.
+Browser-preview save names no longer accumulate suffixes.
+Reader parity additions: Previous View and Next View after link, bookmark, thumbnail, search and page jumps; a Layers panel for optional content; Read Out Loud through the system voice; automatic scrolling; single-page Page Up/Down and arrow page turns; and a Go to Page shortcut.
+Layer visibility changes the view only and is not saved into the PDF.
+Read Out Loud uses the text layer only, so scanned pages need OCR first.
+An interface review kept the palette system and layout, corrected Fit page overflow and broken print, Fill & Sign, Create PDF, OCR, form and Organize Pages layouts, and introduced shared radius, elevation and minimum text-size tokens.
+Native macOS acceptance of these corrections remains open; see `docs/VERIFICATION.md`.
+This review does not close any delivery phase or feature-parity gate.
+
 ## September 20 repository safety review
 
 The shared page-range parser clips work to existing document pages and rejects unsafe integer endpoints, correcting excessive loops and a non-terminating numeric input.
@@ -341,6 +401,9 @@ Phase 5 (Content decoration: watermark, headers, footers, bates numbering, margi
 Phase 5 is complete.
 P5.1 implemented shared placement geometry controls in `src/features/editor/placement-geometry.ts` with PDF-to-DOM and DOM-to-PDF point mapping across rotations (0, 90, 180, 270 degrees) and crop boxes, keyboard nudging, and aspect-preserving resizing.
 P5.2 added multiline text wrapping, font family selection, alignment, and live glyph coverage verification via `validateStandardFontCoverage` in `src/features/editor/ContentEditor.tsx` and `src/services/document-commands.ts`, preventing silent font corruption on unsupported characters.
+On September 23, 2026, Add Text gained all 12 standard text fonts (sans, serif and monospace with bold and italic), underline, justified alignment and line spacing.
+It also gained a "Match existing text" picker that reads each visible run's font name, rendered size and fill color through PDF.js, skips invisible OCR text, and preselects the nearest standard font.
+Matching copies size and color exactly but not the typeface; reusing embedded or system fonts needs an embedding and licensing decision recorded in `docs/adr/` first.
 P5.3 added document decoration management via `DecorationsDialog.tsx` with 6-slot headers/footers, token replacement ({page}, {total}, {date}, {title}, {author}), watermarks with rotation and opacity, backgrounds, page scoping, and safe decoration stream tagging and removal.
 P5.4 completed Bates numbering with live prefix/suffix/padding/start-number previews, positioning across 6 anchor locations, identifier collision detection, and per-output manifest generation.
 P5.5 completed safe link authoring and attachment handling via `LinkDialog.tsx` and `AttachmentsDialog.tsx`, enforcing a strict safe URL scheme whitelist (https, http, mailto) while blocking unsafe protocols, with 50MB file size bounding and path traversal sanitization.

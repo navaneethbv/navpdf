@@ -62,7 +62,7 @@ export function AnnotationToolbar({
       {!s.editingAllowed && (
         <span
           className="toolbar-restricted-notice"
-          style={{ fontSize: "12px", color: "var(--text-secondary)", padding: "0 8px" }}
+          style={{ fontSize: "12px", color: "var(--muted)", padding: "0 8px" }}
         >
           Editing is restricted for this document.
         </span>

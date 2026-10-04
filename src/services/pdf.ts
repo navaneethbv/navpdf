@@ -23,7 +23,9 @@ export const nativePdfOptions = {
   isImageDecoderSupported: false,
   useWasm: false,
   useSystemFonts: false,
-  enableHWA: true,
+  // Prefer a CPU-backed canvas in WKWebView. Accelerated backing stores can
+  // stop presenting updates until a native window resize invalidates them.
+  enableHWA: false,
 };
 export class LocalRangeTransport extends PDFDataRangeTransport {
   private cancelled = false;

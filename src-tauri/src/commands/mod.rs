@@ -1554,3 +1554,15 @@ pub async fn ocr_recognize_page(request: Request<'_>) -> Result<crate::ocr::OcrP
 pub fn ocr_get_engine_info() -> Result<crate::ocr::OcrEngineInfo, String> {
     crate::ocr::get_engine_info()
 }
+
+#[tauri::command]
+pub async fn import_image_frames(request: Request<'_>) -> Result<tauri::ipc::Response, String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) if bytes.len() <= 25 * 1024 * 1024 => bytes.clone(),
+        _ => return Err("Image import requires raw bytes up to 25 MB.".into()),
+    };
+    let result = tauri::async_runtime::spawn_blocking(move || crate::image_import::decode(&bytes))
+        .await
+        .map_err(|_| "Image decoder task failed.".to_owned())??;
+    Ok(tauri::ipc::Response::new(result))
+}

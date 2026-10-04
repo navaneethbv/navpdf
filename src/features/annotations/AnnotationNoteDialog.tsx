@@ -29,19 +29,15 @@ export function AnnotationNoteDialog({
   };
 
   return (
-    <Dialog title="Add Sticky Note" onClose={onClose}>
+    <Dialog title="Add Sticky Note" icon={<MessageSquarePlus size={18} />} onClose={onClose}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
         }}
       >
-        <div className="modal-title">
-          <MessageSquarePlus size={18} />
-          <span>Page {controller.currentPage()}</span>
-        </div>
         <label>
-          Note{" "}
+          Note on page {controller.currentPage()}{" "}
           <textarea
             data-autofocus
             rows={5}

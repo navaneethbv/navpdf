@@ -532,8 +532,8 @@ export function FormManager({
             />
           </div>
 
-          <div className="setting-group" style={{ display: "flex", gap: "12px" }}>
-            <div style={{ flex: 1 }}>
+          <div className="setting-group" style={{ flexDirection: "row", gap: "12px" }}>
+            <div className="setting-group" style={{ flex: 1 }}>
               <label htmlFor={`${fieldIds}-field-6`} className="setting-title">
                 X Position (pt)
               </label>
@@ -545,7 +545,7 @@ export function FormManager({
                 className="text-input"
               />
             </div>
-            <div style={{ flex: 1 }}>
+            <div className="setting-group" style={{ flex: 1 }}>
               <label htmlFor={`${fieldIds}-field-7`} className="setting-title">
                 Y Position from top (pt)
               </label>

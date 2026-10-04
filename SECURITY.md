@@ -6,7 +6,7 @@ Older development builds do not receive separate security backports.
 
 ## Reporting a vulnerability
 
-Use [GitHub private vulnerability reporting](https://github.com/navaneethbv/navpdf/security/advisories/new) for security issues.
+Use GitHub private vulnerability reporting (this repository's Security tab) for security issues.
 Include the affected version, operating system, reproduction steps and the expected security boundary.
 Use a synthetic PDF that demonstrates the issue without personal or confidential information.
 Do not post exploit details, passwords, signature assets or sensitive documents in public issues.

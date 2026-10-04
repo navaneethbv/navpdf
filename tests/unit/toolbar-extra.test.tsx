@@ -31,6 +31,7 @@ beforeEach(() => {
 function renderToolbar(controller?: Record<string, ReturnType<typeof vi.fn>>) {
   const callbacks = { open: vi.fn(), save: vi.fn(), home: vi.fn() };
   const mock = {
+    readAloud: { supported: false },
     undo: vi.fn(),
     redo: vi.fn(),
     setTool: vi.fn(),
@@ -106,7 +107,7 @@ describe("Toolbar remaining handlers", () => {
 
 describe("Statusbar page input", () => {
   it("navigates on Enter and on blur", () => {
-    const mock = { goTo: vi.fn() };
+    const mock = { goTo: vi.fn(), readAloud: { supported: false } };
     render(<NavigationRail controller={mock as never} />);
     const input = screen.getByLabelText("Page number") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "4" } });
