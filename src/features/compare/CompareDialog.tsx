@@ -174,9 +174,9 @@ export function CompareDialog({
                 Only changes
               </label>
               {onlyChanges && !visible.length && (
-                <p role="status">
+                <output>
                   No changed pages detected. Turn off Only changes to view matching pages.
-                </p>
+                </output>
               )}
               <label>
                 Page pair{" "}

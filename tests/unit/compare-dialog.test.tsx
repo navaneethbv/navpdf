@@ -76,7 +76,11 @@ describe("comparison workflow", () => {
     select();
     await screen.findByText(/0 changed, 0 added, 0 removed, 1 unchanged/);
     fireEvent.click(screen.getByLabelText("Only changes"));
-    expect(screen.getByText(/No changed pages detected/)).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("status")
+        .some((status) => /No changed pages detected/.test(status.textContent ?? "")),
+    ).toBe(true);
     expect((screen.getByLabelText("Page pair") as HTMLSelectElement).disabled).toBe(true);
     expect(screen.queryByText("Original page 1")).toBeNull();
     fireEvent.click(screen.getByLabelText("Only changes"));

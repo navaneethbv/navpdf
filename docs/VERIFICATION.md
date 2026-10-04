@@ -16,6 +16,14 @@ Clippy passes with warnings denied.
 Both new workflow regressions failed before their respective fixes and passed afterward.
 The production build retains its existing large-chunk advisory; no performance improvement is claimed.
 
+PR 50's first hosted run failed the npm audit and Sonar maintainability gate.
+The audit identified the transitive development dependency `brace-expansion` 5.0.9; the lockfile now resolves the compatible patched version 5.0.12, and a fresh `npm ci` followed by `npm audit --audit-level=high` reports zero vulnerabilities.
+The comparison empty-state message now uses native `output` semantics, with its existing regression asserting the accessible status role.
+All automated gates above pass again after these corrections.
+Sonar also reports eight existing sequential-await warnings in import and comparison operations; ordered input processing, cumulative text limits and bounded canvas memory still require sequential work.
+Hosted results must be checked against the corrected commit.
+The native package evidence below predates this markup-only correction and development dependency update; it does not establish a rebuilt package for this follow-up.
+
 ### Native and independent-reader checks
 
 The baseline executable SHA-256 was `c77ea169f719214567947a1c573519b9c74cf285aaaa2e23a906b800b9438bb7`.
