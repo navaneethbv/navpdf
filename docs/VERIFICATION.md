@@ -1,5 +1,312 @@
 # Verification ledger
 
+## October 4 feature-review corrections
+
+Source base: `4902cfc`, plus the source changes in this PR.
+The [review](REVIEW-2026-10-04.md) records the feature assessment and unresolved work.
+
+### Automated gates
+
+Node `24.18.1` and `npm ci` were used.
+Formatting, lint, typecheck, production build, `git diff --check` and `cmp AGENTS.md CLAUDE.md` pass.
+The frontend suite passes 716 tests across 104 files.
+Coverage is 84.80% statements, 76.98% branches, 83.37% functions and 87.94% lines, with the existing thresholds unchanged and LCOV retained.
+Rust passes 95 tests; the existing constrained-volume test remains ignored.
+Clippy passes with warnings denied.
+Both new workflow regressions failed before their respective fixes and passed afterward.
+The production build retains its existing large-chunk advisory; no performance improvement is claimed.
+
+PR 50's first hosted run failed the npm audit and Sonar maintainability gate.
+The audit identified the transitive development dependency `brace-expansion` 5.0.9; the lockfile now resolves the compatible patched version 5.0.12, and a fresh `npm ci` followed by `npm audit --audit-level=high` reports zero vulnerabilities.
+The comparison empty-state message now uses native `output` semantics, with its existing regression asserting the accessible status role.
+All automated gates above pass again after these corrections.
+Sonar also reports eight existing sequential-await warnings in import and comparison operations; ordered input processing, cumulative text limits and bounded canvas memory still require sequential work.
+Hosted results must be checked against the corrected commit.
+The native package evidence below predates this markup-only correction and development dependency update; it does not establish a rebuilt package for this follow-up.
+
+### Native and independent-reader checks
+
+The baseline executable SHA-256 was `c77ea169f719214567947a1c573519b9c74cf285aaaa2e23a906b800b9438bb7`.
+Create > Import / Combine Files with `reader-5.pdf` and range `99` reproduced an error behind the dimmed dialog.
+With the import correction, range `99` displayed a readable error inside the modal while preserving the selected input.
+Changing the range to `2` and retrying imported exactly the second source page, containing `NEEDLE-0002`.
+This retry/save journey used intermediate executable `a07b5ff063e1e883d88fb0bd8d5d71fe88015844919900cfad152cfb4ccd4040`; the later application change only adds comparison empty-state feedback.
+The output was saved as `output/review-20261004/retry-page-2.pdf`, closed with the app, and reopened in the final NavPDF package.
+Preview independently opened the saved PDF as one page and visibly displayed the expected page-2 text and marker.
+
+The final package compared `retry-page-2.pdf` with itself and reported one unchanged page.
+Only changes displayed the explicit no-changes message and disabled the empty page selector.
+Pressing Space to clear the checkbox restored both labelled previews; Tab moved focus to the enabled page selector.
+The dialog text and controls were visually inspected at the current native window size.
+No compact-window or full assistive-technology acceptance is claimed.
+
+An earlier baseline comparison stayed at Reading original page 1 of 2 for several minutes.
+It did not recur after a fresh launch or a subsequent create/save/compare journey.
+The cause remains unresolved; progress-stage wording is an observability improvement, not a claimed stall fix.
+
+### Package and artifact identity
+
+`npm run package` produced the app and DMG, and `hdiutil verify` validated the DMG checksum (`B9DAAE1F`).
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Final `src-tauri/target/release/bundle/macos/NavPDF.app/Contents/MacOS/navpdf` | `0dc0d84bd230ce3491235d782963979d7a4f6e2fc39f2c96f10e368cb0fca039` |
+| Final `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` | `3aa0ef47be6c7a5f706678ca839ea40c601c9b2f37c1d685d6486f5869e1c396` |
+| `output/review-20261004/baseline-combined.pdf` | `fe5a96e4a234fdc3efdb42f122cddc1ea07628c2a77fda89708e6144fe5650d7` |
+| `output/review-20261004/retry-page-2.pdf` | `b20015ecfea8af4951d6e46e392dc441c91e1f082a7235c1e29863af1e311462` |
+
+Hosted CI and quality analysis are separate from these local results.
+Signing, notarization, clean-account installation, physical printing, other platforms and full product parity remain open.
+
+## September 26 PR 42 quality remediation
+
+The published head `5a3e1815ab4838e3e8cf2c825d6ec9d883b92582` had 51 unresolved Sonar findings despite a green quality gate, with zero new duplicated lines or blocks.
+The follow-up simplifies bounded bookmark, merge, OCR, comparison and image-processing routines without changing their persisted formats.
+It also removes duplicate CSS selectors, gives OCR review items stable session IDs, corrects label spacing and uses native image/output semantics for previews and status.
+Image previews accept only browser-owned blob URLs and release them when replaced or closed.
+CodeQL's reported path runs from a selected File through URL.createObjectURL into an image source; no executable HTML interpretation was reproduced.
+The explicit blob scheme boundary and URI encoding are covered by malicious-scheme rejection and markup-character encoding tests.
+
+The native ImageIO bridge now owns its returned allocation through a drop guard, including invalid-length and early-return paths.
+Each unavoidable unsafe block documents the input lifetime, initialized output bounds and matching Swift allocator/deallocator contract.
+The informational Semgrep unsafe-usage audit rule is acknowledged only at these three reviewed blocks; no project-wide scanner exclusion or security policy was changed.
+
+Node 24 lint, typecheck, production build and all 712 frontend tests pass.
+Coverage remains above the unchanged gates: 84.74% statements, 76.98% branches, 83.18% functions and 87.91% lines.
+The independent PDF round-trip tests cover bookmarks, form/link-preserving merge and OCR review data.
+New preview tests cover labelled rendering, stale-page clearing, cancellation, URL cleanup and rejected nonlocal schemes.
+Rust passes 95 tests with the existing constrained-volume test ignored; Clippy passes with warnings denied.
+Local logs are under ignored `output/pr42-remediation/`.
+Hosted checks, direct Sonar issue and duplication queries, and merge eligibility must be verified again on the new published head.
+
+
+Packaging and DMG checksum verification pass for the final URI-encoding follow-up on `5d6665a`.
+The executable SHA-256 is `c77ea169f719214567947a1c573519b9c74cf285aaaa2e23a906b800b9438bb7` and the DMG SHA-256 is `08d9084ae21da6155218aadd6cb2a38f0cf327a81a34959a2f45eeaf0894617f`.
+The bundle was relaunched and `bordered.png` displayed legible Before crop and After crop previews, preserving CROP TEST 123 and all colored borders at the expected 240 by 160 crop size.
+
+Before the final URL-only adjustment, the rebuilt `5d6665a` bundle rendered Original and Compressed previews of `compression-source.pdf`, then replaced both with the correct COMPRESS-PAGE-3 images when the preview page changed.
+Native TIFF import decoded both pages; page 1 accepted 2 pixels of padding and 2 degrees of straightening with before, after and unmodified-original views available.
+The saved `output/image-crop-20260926/pr42-native-tiff.pdf` reopened in NavPDF and Preview with two blue pages, the first retaining its accepted rotation and padding.
+Its SHA-256 is `8f83a2a1f953a2af627cc9b7b5803b3adf772f1858c6a28f29ea29caebe7bc88`.
+The other persisted tool workflows retain the earlier native/Preview evidence and current independent automated round-trip coverage; they were not all repeated manually for this refactor.
+
+
+## September 26 Preview acceptance and delivery follow-up
+
+Implementation source: `1b0f1713a08241a46bf98295e458397e335e3830`, rebased onto `d21db38`.
+The working tree was clean before this documentation-only follow-up.
+Preview access was available in the desktop session; the earlier denied session was not bypassed.
+All six handoff PDFs were opened as disposable copies under ignored `output/preview-20260926/`.
+Original evidence files under `output/image-crop-20260926/` retain the hashes recorded below.
+The packaged executable and DMG still match `b28e85443f47299178944be9ea830251caff84f1159737844a52415067b649c6` and `b67ef312c37893e522c493a4a33ce5588de25d9ba615dca0533d62b348184954` respectively.
+
+| Saved PDF                      | Expected and observed Preview result                                                                                                                                                                                                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `native-manual-crop.pdf`       | The full CROP TEST 123 label and colored border render without clipping intended content. The retained left margin is visible.                                                                                                                                                                                                   |
+| `native-roadmap-reviewed.pdf`  | The visible scan still reads CROP TEST 123. Select All exposes CROP TEST 456. Searches for the full corrected phrase and 456 return the page, but the result row also says Not found; this inconsistent Preview status is retained as a UI limitation. PDFKit independently returns one match for each query.                    |
+| `native-adjusted-tiff.pdf`     | Both blue TIFF-derived pages render in order. Page 1 visibly retains the slight accepted rotation and white padding; page 2 remains rectangular.                                                                                                                                                                                 |
+| `native-preserved-merge.pdf`   | Three pages render, including the HEIC-derived image on page 3. Alice and Bob remain editable. Alice section and Bob section navigate to pages 1 and 2. On the disposable copy, Alice Preview and Bob Preview survive Save, Close and Reopen in Preview, and independent PDF.js widget readback confirms both saved text values. |
+| `native-target-compressed.pdf` | All three pages render their legible COMPRESS-PAGE-1 through COMPRESS-PAGE-3 markers and image content. Searching COMPRESS-PAGE reports one match on each of three pages. The original saved output remains 46,665 bytes.                                                                                                        |
+| `native-bookmark-depth.pdf`    | Preserved draft selects page 1. Expanding the outline exposes the original chain through Level 32. The single-root label limitation below applies to Level 1.                                                                                                                                                                    |
+
+Preview displays the filename instead of a sole top-level outline title in these fixtures.
+Consequently, Reviewed scan is not exposed as a separately labeled row, and Level 1 is represented by the document row above Preserved draft and Level 2.
+This is an observed reader UI limitation, not evidence of a missing saved outline.
+Independent Apple PDFKit inspection confirms Reviewed scan targets page 1, Preserved draft is a child of Level 1 targeting page 1, and every original level through Level 32 survives.
+The exact requested separately labeled Reviewed scan navigation check therefore remains unverified in Preview.
+No application defect was established by these checks and no application source was changed.
+
+Evidence: `output/preview-20260926/evidence.json` records original hashes and independent PDF.js text-field readback; `pdfkit-outlines.txt` records Apple PDFKit outline and search results.
+The edited disposable merged copy has SHA-256 `813620390f4807b53557a946396d0f6a94e6ef4e4855f33f73082ff858b0bf14`.
+Earlier local logs were inspected and confirm 705 frontend tests, unchanged coverage gates, 95 Rust tests with one existing constrained-volume test ignored, Clippy and packaging success.
+Those suites were not rerun for this documentation-only follow-up; formatting, diff checking and instruction-file parity were checked again.
+Hosted checks and quality analysis remain separate from these local and reader results and must be assessed on the published PR head.
+Signing, notarization, clean-account installation, physical printing, Acrobat-specific compatibility and Windows/Linux UI acceptance remain open.
+That documentation-only follow-up did not authorize a merge or release; the subsequent user request authorizes merging after the hosted checks and zero-new-issue gates pass.
+
+## September 26 bookmark follow-up: current local verification
+
+Baseline remains `0dcb810` plus the preserved uncommitted twelve-feature implementation and this follow-up.
+Native NavPDF reproduced an editor failure using `output/image-crop-20260926/bookmark-depth.pdf`: rename the top-level bookmark, then select Level 32 as its parent.
+The earlier build closed the tool unexpectedly because the proposed 33-level tree threw during rendering.
+Parent changes now validate the whole moved subtree before publishing draft state.
+The rebuilt app displays `Bookmark nesting exceeds 32 levels.`, retains the edited title and original parent, and permits a valid retry under Level 1.
+
+The regression failed before the correction and passes afterward, including a saved-outline check after retry.
+All 705 frontend tests across 102 files pass with unchanged coverage gates: 84.65% statements, 76.77% branches, 83.07% functions and 87.83% lines.
+Node 24 lint, typecheck, format checking and production build pass.
+Rust passes 95 tests with the existing constrained-volume test ignored; Clippy passes with warnings denied.
+Packaging produces the app and DMG, and `hdiutil verify` passes.
+`git diff --check` and instruction-file parity pass.
+Logs and artifact hashes are retained under ignored `output/bookmark-followup-20260926/`.
+
+The rebuilt bundle was relaunched before repeating the native workflow.
+Native save, close and reopen of `native-bookmark-depth.pdf` retain Preserved draft beneath Level 1.
+Independent PDF.js readback confirms that title, its destination at page 1, its parent and every original level through Level 32.
+
+| Artifact                                             | SHA-256                                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| NavPDF.app/Contents/MacOS/navpdf                     | b28e85443f47299178944be9ea830251caff84f1159737844a52415067b649c6 |
+| NavPDF_0.2.0_aarch64.dmg                             | b67ef312c37893e522c493a4a33ce5588de25d9ba615dca0533d62b348184954 |
+| output/image-crop-20260926/native-bookmark-depth.pdf | ee5710c3ce241ecfc5b5e450e8e49c269a2ee1fceae715cac4e357cd4e9f5c39 |
+
+Earlier feature acceptance below remains evidence for those workflows; only the bookmark follow-up was repeated in this latest bundle.
+The previously blocked Preview gate and the other distribution/platform limits below remain open.
+No commit, push, pull request or publication was performed.
+
+## September 26 prioritized tools: implementation verification
+
+Baseline source revision: `0dcb810`, plus preserved uncommitted crop work and this uncommitted implementation.
+All twelve prioritized scopes have local implementations; see `docs/IMPLEMENTATION-PLAN-2026-09-26.md` and ADR 0013 for boundaries.
+No commit, push, pull request or publication was performed.
+
+### Automated checks
+
+Node 24 format checking, lint, typecheck, production build and all 704 tests across 102 files pass.
+Coverage gates remain unchanged: 84.63% statements, 76.75% branches, 83.05% functions and 87.82% lines.
+Rust passes 95 tests, with the existing constrained-volume filesystem test ignored.
+Clippy passes with warnings denied.
+`npm run package` builds the macOS app and DMG; `hdiutil verify` reports a valid DMG checksum.
+Logs and artifact hashes are retained under ignored `output/roadmap-20260926/`.
+
+Regressions cover preserved field values, widget page references, internal links, local outline destinations and unsupported merge rejection; bookmark editing and independent PDF.js readback; saved OCR correction and redaction removal of OCR review data; crop geometry, pixel cleanup, batch failures, keyboard adjustment and preview controls; target selection, original-byte reuse, cancellation and already-under-target behavior; extended image framing and native TIFF orientation; and comparison alignment, text differences, cancellation and dialogs.
+Synthetic ImageIO acceptance additionally creates and decodes one HEIC primary image and a two-page TIFF, checking 80 × 120 oriented PNG frames.
+Run it with `swiftc -parse-as-library src-tauri/src/ocr/image_import.swift scripts/image-import-acceptance.swift -o /private/tmp/navpdf-image-import-acceptance`, then pass an ignored output directory to the executable.
+
+### Native and saved-output acceptance
+
+Native actions used the rebuilt app at `src-tauri/target/release/bundle/macos/NavPDF.app` and synthetic fixtures under `output/image-crop-20260926/`.
+The final bundle was relaunched after application changes, and saved OCR review loaded CROP TEST 456 successfully.
+The final cancellation regression verifies that a cancelled saved-review load can be retried and applied.
+Its executable SHA-256 is `4f0e17c5266e9f295c4d54037ce81f22ef0c534d22e611d4cde10925efdaee63`.
+The DMG SHA-256 is `6b14e1e579974b37e5aa4d7dbc49383c27a579420c06213714e9069108fe2291`.
+
+| Workflow                        | Expected and observed result                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rendering                       | The original crop PDF stalled until resize in the earlier native build. CPU-backed canvases render it on fresh launch and repeated open without resizing. Experimental native redraw code was removed before acceptance.                                                                                                                                                                                  |
+| Manual crop                     | The 320 × 240 fixture detected bounds x=33, y=21, width=240, height=160. Dragging the left handle set x=22, width=251; Right Arrow then set x=23, width=250. Before/after previews and bounded inputs updated. Save, close and reopen succeeded. Poppler's extracted 250 × 160 raster is pixel-identical to the corresponding source rectangle.                                                           |
+| Batch trim and scan preparation | Native TIFF import expanded two pages in order. Batch trim reported 2/2 completed and no failures, producing 60 × 96 crops. The first page accepted 2 degrees of straightening and 2 pixels of padding, producing 67 × 103. Saved and reopened page sizes are 50.25 × 77.25 and 45 × 72 points, independently confirmed by Poppler. Cleanup behavior is additionally covered by pixel and UI regressions. |
+| OCR correction                  | Apple Vision recognized CROP TEST 123. The native review field was changed to CROP TEST 456, then applied and saved. After close/reopen, Review saved OCR text showed 456. Poppler extracts 456, while independently extracted scan pixels still exactly match the original image containing 123.                                                                                                         |
+| Bookmark editing                | Created Reviewed scan through the native editor, saved with the OCR result, and reopened it. Separate independent PDF.js round trips verify Unicode titles, nested destinations, rename, reorder and deletion.                                                                                                                                                                                            |
+| Preserved merge and HEIC        | Combined merge-a.pdf, merge-b.pdf and the HEIC fixture. Saved/reopened Alice and Bob fields remain editable, four form field roots have unique names, and both bookmarks survive. Bob section navigates to page 2. Independent PDF.js validates destinations 0 and 1; Poppler reports the HEIC image on page 3 as 80 × 120 pixels.                                                                        |
+| Compression target              | The 7,489,069-byte synthetic source was reduced to 46,665 bytes under a 2,000,000-byte target using Balanced. Both previews rendered, apply/save/close/reopen succeeded, and Poppler extracts all three original page markers. A 1,500-byte target on the small TIFF PDF reported failure and retained the original.                                                                                      |
+| Comparison                      | Native comparison of the two-page TIFF output against the one-page OCR result reported one changed page and one removed page, showed both page previews, displayed the added text and highlighted visual changes. The active document was not modified.                                                                                                                                                   |
+
+Saved output SHA-256 values:
+
+| File in output/image-crop-20260926 | SHA-256                                                          |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| native-manual-crop.pdf             | 3b03389bebcc40720ddc3de2816e02fd7dd2f9e1aff8d707974672d5483cebe7 |
+| native-roadmap-reviewed.pdf        | dab25c9b24410c7b51dfe417bd8bc493fd89ff3e36196159699a7f642b2d59a5 |
+| native-adjusted-tiff.pdf           | 6ffc62767cc0f6c69519b9c5f06a562e6b4318fdad8beb8a2e6939ebccf309f8 |
+| native-target-compressed.pdf       | 086b090df4dfe6fcd4b5aa876e66fc27c9e4ccfdf09b4a271a916bc474ea5642 |
+| native-preserved-merge.pdf         | d9fe50f85a15a478a2b936b91fe0b77d52572fd891449ead5e65639920228eb3 |
+
+### Remaining limits
+
+Computer Use returned `Computer Use was not approved to use Preview` earlier in this session; that reader gate was not bypassed.
+Independent checks here use PDF.js and Poppler, not Preview or Acrobat.
+The transient native pipe closure was resolved by reconnecting; native testing resumed successfully.
+Signing, notarization, clean-account installation, physical printing, hosted checks, quality analysis and Windows/Linux acceptance were not performed.
+HEIC/TIFF decoding requires macOS.
+Straightening is a manual adjustment for imported images; automatic deskew and perspective correction are outside this implementation.
+OCR searchable export retains its existing supported-font boundary, and third-party/older OCR layers must be recognized again before using saved-review editing.
+Comparison is limited to 500 pages and 100 MiB per document, bounded text extraction and reduced-resolution visual detection; it does not certify equivalence.
+These additions do not close historical delivery phases or establish complete Acrobat parity.
+
+## September 26 image margin trimming
+
+Baseline: `0dcb810`, initially clean working tree; the feature remains an uncommitted local change.
+Create PDF > Import / Combine Files exposes a per-image trim action, cropped preview, dimensions and Reset crop.
+Detection compares displayed RGBA pixels against a consistent corner background with a 24/255 channel tolerance, retaining all pixels outside that tolerance.
+It supports uniform white, colored and transparent margins; faint content close to the border color can be indistinguishable from the margin, so the preview must be reviewed before import.
+It does not deskew photos or infer paper quadrilaterals.
+Image header, byte, dimension and pixel limits remain enforced before decoding; crop errors retain the original input and release temporary canvases and object URLs.
+Import, removal and dismissal are blocked while detection runs.
+
+Node 24 verification passes lint, typecheck, production build and 671 tests across 94 files.
+Coverage is 85.60% statements, 77.49% branches, 83.19% functions and 88.68% lines, with existing thresholds unchanged.
+The 18 added regressions cover asymmetric borders, white/black/colored/transparent margins, JPEG noise, isolated edge marks, blank/no-margin inputs, invalid pixel buffers, importing cropped dimensions, reset, busy-state dismissal and failure retention.
+Rust passes 92 tests with the existing constrained-volume test ignored; Clippy passes with warnings denied.
+Swift compiler-cache access required an approved build outside the filesystem sandbox.
+
+Native acceptance used synthetic files under `output/image-crop-20260926/`.
+The 320 × 240 PNG has margins of 33 pixels left, 47 right, 21 top and 59 bottom around a known 240 × 160 image.
+The actual WebKit trim returned 240 × 160, displayed the expected preview, reset to the original on request, and re-applied successfully.
+Native Combine & Open and Save As produced `native-cropped.pdf`, which was closed and reopened in NavPDF.
+Poppler `pdfinfo` reports one 180 × 120 point page; `pdfimages` extracts a 240 × 160 RGB image that matches `expected.png` pixel for pixel.
+Poppler also rendered the saved PDF correctly to `poppler-render.png`.
+The JPEG fixture returned 241 × 160, conservatively preserving one additional compression-noise column.
+
+Initial native repaint stalled after reopening, and screenshots subsequently disagreed with the updated accessibility tree.
+Resizing through the native window zoom action refreshed the display and showed both the reopened cropped PDF and the final JPEG preview correctly.
+The import list height was increased to show the preview and dimensions together at the tested window size.
+Reliable initial native repaint remains an open viewer acceptance limitation; the crop output itself passed independent pixel verification.
+Preview could not be tested because computer-use access to Preview was not approved.
+No Preview or Acrobat acceptance is claimed.
+
+The final app and DMG were rebuilt after the preview CSS adjustment; `hdiutil verify` passes with CRC32 `$19CEAB70`.
+Final executable SHA-256: `32ecc019e12fff56e08fc339a26f0b45cb20e16eaf1be277e76e0b0d83e298a6`.
+Saved acceptance PDF SHA-256: `ad05a191a4ee048b03f6535dafb87abff76f2db5b0a52d90b03ef7f187ab120c`.
+The PDF was saved with the first feature build (`430d2c13bb822b85fe1fa73a92a38e63bc211c8a5a4d3dcfc51e827385e1a614`); the final build changes only the preview list height and reopened that saved output.
+Hosted checks, commits, push, PR publication and distribution were not requested or performed.
+
+## September 23 session and shortcut review
+
+Review baseline: `397f04d`, with a clean working tree.
+Source review covered the document session lifecycle, native IPC adapters, recovery storage, atomic persistence, keyboard shortcuts, native menu routing and search.
+The environment was a Linux container without a native macOS build, so no native WebKit or packaged-app reproduction is claimed.
+Each defect below was reproduced through the session hook or the rendered application shell with only the native IPC boundary mocked.
+
+Autosave held the session lock, so Save, Save As, Close Window, Home, Open and Recent requests made during a recovery write were silently dropped.
+A close request that won the race could also discard the recovery copy before the in-flight write recreated it.
+The two new session regressions fail on the baseline and pass after the correction.
+Autosave now tracks its own write; those requests wait for it and discard recovery only after it finishes.
+
+Menu Undo and Redo reverted document changes while a text field such as the search box had focus.
+They now leave the document unchanged while any text field, including one inside a dialog, has focus.
+An earlier revision of this branch routed them to the field through the deprecated `execCommand` API; that was removed to keep static analysis clean, so menu-driven text-field undo is not provided.
+This menu-routing hypothesis follows from the custom native menu items and is not yet observed in native WebKit.
+
+Browser-preview saves appended a second `-edited` suffix on each repeated save and dropped the extension for names without `.pdf`.
+Handled shortcuts no longer fall through to annotation nudging or page navigation.
+
+Added Ctrl+Y redo, Cmd/Ctrl+G and Shift+Cmd/Ctrl+G to repeat the current search, and a repeated Find that refocuses and selects the search field.
+
+Reader parity additions follow Acrobat Reader's View menu.
+Previous View and Next View record page jumps from links, bookmarks, thumbnails, search results and page commands, but not ordinary scrolling.
+Pages removed by an edit are skipped, and each opened document starts with empty view history.
+The Layers panel lists optional content groups in the document's order and changes their visibility in the view only; it never marks the document dirty.
+Read Out Loud passes text-layer content to the WebKit speech synthesizer in sentence-aligned chunks, advancing and showing each page as it reads.
+Whether a system voice synthesizes locally is determined by the operating system; no text is sent by NavPDF itself.
+Automatic scrolling advances single-page layouts at the page end and stops at the document end or on Escape.
+Controller, module and application-shell tests cover these behaviors with PDF.js and speech mocked.
+No native WebKit speech, optional-content rendering, or Preview/Acrobat comparison is claimed for these additions.
+
+The interface review rendered the browser preview in headless Chromium at 1440 by 900 in light and dark appearance, before and after each correction.
+Screenshots are kept under the ignored `output/ui-review-20260923/` directory and are browser evidence only, not native WebKit acceptance.
+The existing 15-palette light and dark system, its contrast checks and the document-first layout were retained; no palette colors changed.
+Fit page overflowed the viewport by about 9 pixels because the first page's top offset exceeded the 5 pixels PDF.js reserves; the page now fits without a scrollbar.
+The print range radio group had no styles, so its three options ran together on one line.
+Fill & Sign and Create PDF tab bars sat flush against the dialog edge, and the Fill & Sign tabs were unstyled.
+The Create PDF page size and OCR language selects rendered without borders.
+Organize Pages covered only its content size because an open dialog defaults to fit-content, leaving the workspace visible beside and below it, and the selected page card stretched to the full window height.
+The page workspace grid also referenced an undefined background token.
+Form field X and Y position labels sat inline with their inputs.
+Shared radius and elevation tokens replace nine ad hoc corner radii and single-layer shadows; the two button styles now share height, radius, weight and hover color.
+Text below 11 pixels was raised to 11 pixels, dialog form values are 13 pixels and regular weight, and hint text no longer inherits label weight.
+Pages gain a hairline edge so white pages stay distinct on light canvases, and checkboxes and radios use the palette accent.
+Theme colors still change without transitions, preserving the earlier native WebKit correction.
+
+Local checks pass ESLint, TypeScript, Prettier on changed files, production build and 632 frontend tests across 90 files.
+Coverage is 85.57% statements, 77.18% branches, 82.73% functions and 88.74% lines.
+The only Rust change adds native menu items.
+Clippy with warnings denied and rustfmt pass on Linux.
+The Rust suite passes 90 tests with one ignored; two permission-denial tests fail because the container runs as root, which bypasses the read-only permissions they set, and are not claimed as passing.
+SonarCloud could not be queried from the review environment, so its rule families were reproduced locally on the lines this branch adds: `eslint-plugin-sonarjs` recommended rules, the typescript-eslint and unicorn rules SonarCloud imports, and stylelint's CSS correctness rules.
+Those runs report no findings on added lines after the corrections; hosted SonarCloud remains the authoritative gate.
+Native macOS acceptance of save during autosave, close during autosave, menu Undo in a focused field, the Reader parity additions and the interface corrections remains open.
+
 ## September 20 repository safety review
 
 Review baseline: `2726e03`, with a clean working tree.
@@ -92,7 +399,7 @@ These fixture measurements are not a general compression-ratio claim.
 The user's preserved edited PDF remains unchanged at `output/reader-5-preserved-20260919.pdf`.
 The three pre-existing untracked root planning documents remain untouched.
 Signing, notarization, clean-account installation, physical printing, non-macOS UI and the separately tracked advanced capabilities remain open.
-Hosted checks and merge status are recorded in [PR 22](https://github.com/navaneethbv/navpdf/pull/22); Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
+Hosted checks and merge status are recorded in PR 22; Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
 
 ## September 19 native opening, tour and tips
 
@@ -113,7 +420,7 @@ The user authorized preserving their active edits before relaunch; the copy is o
 The preserved copy SHA-256 is `7d164a8e8e61a75e025e0911468c2134c2627c81f7107727fdd08c486416e65d`.
 The rebuilt executable SHA-256 is `4d2cc1c80b0ecaf24236721349a27a42d70b3aa7bbf9719ca3d2ad08da38f7ea`.
 The DMG SHA-256 is `c1f921403258e67ace0046fb8bdb8e213a14417b6c0c3f8e489b3e9d90e81414`; hdiutil verified CRC32 `$934E5A4C`.
-[PR 21](https://github.com/navaneethbv/navpdf/pull/21) records hosted checks and merge status.
+PR 21 records hosted checks and merge status.
 Codacy, CodeQL, frontend, Rust and native acceptance passed on the application commit.
 NPM Audit passed after registry maintenance cleared, and PR 21 merged as `13109e3`; Sonar analysis remains skipped without SONAR_TOKEN.
 Signing, notarization, clean-account installation, physical printing and non-macOS UI acceptance remain separate gates.
@@ -691,9 +998,31 @@ Executable SHA-256: `6ae5f2d6fc74166e36d611055cb464e50e63784c488345f004c69d3193d
 DMG SHA-256: `d78724998a68770ba596828a0e857d9e04fc8ebf12435589a959d63cb092b1cb`.
 The installer is `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
 
-Hosted validation and merge status are recorded on [PR 20](https://github.com/navaneethbv/navpdf/pull/20).
+Hosted validation and merge status are recorded on PR 20.
 The required Rust check name now aggregates successful Linux and macOS jobs without changing branch protection.
 SonarCloud's workflow skips analysis because `SONAR_TOKEN` is absent, so its green workflow result is not a passing analysis.
 The separate hosted review scan reports an unsupported service model; this is distinct from CodeQL and Codacy analysis.
 GitHub also reports an existing moderate advisory against transitive `glib` 0.18.5; this change does not alter that dependency or advisory policy.
 Signing, notarization, clean-account launch, physical printing, non-macOS native UI and broader PDF interoperability gates remain open.
+
+### September 23, 2026 dialog and theme styling verification
+
+Every tool panel, dialog, the settings sheet, the viewer and home were captured in the browser preview at 1440x900 in light and dark schemes.
+The captures found a Document Properties dialog with no dialog surface, native checkboxes, radios, sliders and color inputs outside the palette, group legends without spacing, doubled field spacing and unstyled engine warnings.
+They also found a Redact panel covering the command bar, a right rail whose last control fell below 900 px, and a properties file size that read 0.00 MB for a 2.5 KB file.
+Several dialogs referenced undefined color tokens and hardcoded colors, which ignored the palette and dark mode.
+The corrected captures show each surface on the shared modal layout and palette tokens in both schemes.
+`npm run lint`, `npm run typecheck`, `npm run test:coverage` (632 tests) and `npm run build` passed.
+The browser preview does not establish native WebKit rendering; native macOS visual acceptance of these surfaces remains open.
+Native modal dialogs (Settings, Export a PDF, Add Sticky Note, Open Recent, Unlock PDF, unsaved-changes and Help) now share the tool dialog shell: width, radius, elevation, icon header, label style and footer bar.
+Their light and dark captures were compared with the Print dialog; `npm run lint`, `npm run test:coverage` (632 tests) and `npm run build` passed.
+
+### September 23, 2026 Add Text styling and style matching verification
+
+`tests/unit/text-formatting.test.tsx` reads saved output back through PDF.js and confirms the font name, size and fill color for regular, bold, italic and bold italic variants, including the legacy `fontFamily` values.
+The same file confirms justified lines reach the wrap width while each paragraph's last line stays ragged, underline strokes one line per text line, and line spacing sets the baseline distance.
+Its dialog tests pick an existing run's style, insert new text and confirm the new run is written in the matched font, size and color.
+`tests/unit/text-styles.test.ts` confirms the reader reports real font names, sizes after graphics-state scaling and fill colors, and ignores invisible OCR text.
+Browser preview captures of the dialog in light and dark schemes, and an insertion into `mixed-forms-annotations.pdf`, showed the matched Helvetica 15 pt text rendered like the page heading.
+`npm run lint`, `npm run typecheck`, `npm run test:coverage` (653 tests) and `npm run build` passed.
+Native WebKit rendering and Preview or Acrobat reopening of styled text were not exercised; those interoperability checks remain open.

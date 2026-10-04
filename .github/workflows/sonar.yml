@@ -48,4 +48,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          args: -Dsonar.qualitygate.wait=true
+          args: >-
+            -Dsonar.organization=${{ github.repository_owner }}
+            -Dsonar.projectKey=${{ github.repository_owner }}_${{ github.event.repository.name }}
+            -Dsonar.qualitygate.wait=true

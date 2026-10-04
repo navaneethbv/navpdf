@@ -85,12 +85,13 @@ describe("page-operation structure preservation", () => {
     expect(summary.formFields).toBe(0);
   });
 
-  it("warns for merge and split inputs that carry structure", async () => {
+  it("preserves merge structures while warning for destructive split composition", async () => {
     const source = await richDocument();
     expect(await describeStructureLoss([source, source])).toMatch(/bookmark/i);
 
     const merged = await mergeDocuments([source, source]);
-    expect((await inspectStructure(merged)).formFields).toBe(0);
+    expect((await inspectStructure(merged)).formFields).toBe(2);
+    expect((await inspectStructure(merged)).hasOutline).toBe(true);
 
     const parts = await splitDocument(source, [[0, 1]]);
     expect((await inspectStructure(parts[0])).hasOutline).toBe(false);

@@ -237,3 +237,41 @@ describe("Searchable PDF Layer and Integrity (P6.3)", () => {
     expect(foundOcrStream).toBe(true);
   });
 });
+
+describe("saved OCR review", () => {
+  it("reopens corrected words and geometry without changing the original scan stream", async () => {
+    const { readOcrReview } = await import("../../src/services/pdf/ocr-review");
+    const source = await createBlankDocument(1, 600, 800);
+    const word = {
+      text: "Invoice 125",
+      confidence: 0.8,
+      bbox: [0.1, 0.4, 0.5, 0.1] as [number, number, number, number],
+    };
+    const result: OcrPageResult = {
+      pageIndex: 0,
+      language: "en-US",
+      lines: [{ ...word, words: [word] }],
+      fullText: word.text,
+      meanConfidence: 0.8,
+    };
+    const first = await applyOcrSearchableLayer(source, [result]);
+    const review = await readOcrReview(first, [0]);
+    expect(review[0].lines[0].words[0]).toEqual(word);
+    review[0].lines[0].words[0].text = "Invoice 175";
+    const saved = await applyOcrSearchableLayer(first, review);
+    const reader = await getDocument({ ...pdfOptions, data: new Uint8Array(saved) }).promise;
+    try {
+      const text = await (await reader.getPage(1)).getTextContent();
+      expect(
+        text.items
+          .filter((i) => "str" in i)
+          .map((i) => ("str" in i ? i.str : ""))
+          .join(" "),
+      ).toBe("Invoice 175");
+    } finally {
+      await reader.loadingTask.destroy();
+    }
+    expect((await readOcrReview(saved, [0]))[0].lines[0].words[0].bbox).toEqual(word.bbox);
+    expect(await readOcrReview(await removeOcrSearchableLayer(saved), [0])).toEqual([]);
+  });
+});

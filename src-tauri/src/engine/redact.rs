@@ -170,6 +170,14 @@ pub fn apply(
     let options = request.options;
     let mut report = RedactionReport::default();
     clear_signatures(&mut doc, request.acknowledge_signatures, &mut report)?;
+    // Review text duplicates the searchable layer. Never retain it through redaction,
+    // including when the caller opts to retain other metadata or hidden content.
+    for object in doc.objects.values_mut() {
+        if let Object::Stream(stream) = object {
+            stream.dict.remove(b"NavPDF_OCRReview");
+        }
+    }
+
     let hidden = if options.remove_hidden_content {
         hidden_groups(&doc)
     } else {
@@ -1774,6 +1782,38 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.contains("shading") && error.contains("unchanged"));
+    }
+
+    #[test]
+    fn redaction_always_discards_saved_ocr_review_text() {
+        let (mut doc, page) =
+            page_document("BT /F1 12 Tf 72 700 Td (Public) Tj ET", dictionary! {});
+        let contents = doc
+            .get_dictionary(page)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        doc.get_object_mut(contents)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .dict
+            .set(
+                "NavPDF_OCRReview",
+                Object::string_literal("PRIVATE-OCR-REVIEW"),
+            );
+        let source = crate::engine::save(&mut doc).unwrap();
+        let mut options = request(vec![region(1, Rect::new(10.0, 10.0, 20.0, 20.0))], &[]);
+        options.options.remove_metadata = false;
+        options.options.remove_hidden_content = false;
+        let (output, _) = apply(&source, &options, &AtomicBool::new(false)).unwrap();
+        let reopened = crate::engine::load(&output).unwrap();
+        assert!(reopened.objects.values().all(|object| match object {
+            Object::Stream(stream) => !stream.dict.has(b"NavPDF_OCRReview"),
+            _ => true,
+        }));
     }
 
     #[test]

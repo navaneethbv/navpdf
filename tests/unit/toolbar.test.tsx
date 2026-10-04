@@ -92,6 +92,7 @@ describe("Toolbar", () => {
   it("drives controller zoom, layout, and sidebar actions", () => {
     withDocument();
     const controller = {
+      readAloud: { supported: false },
       undo: vi.fn(),
       setTool: vi.fn(),
       zoom: vi.fn(),
@@ -148,7 +149,7 @@ describe("Statusbar", () => {
     withDocument();
     const failure = "Save failed; changes are still in this workspace";
     useWorkspace.getState().set({ dirty: true, status: failure });
-    const controller = { goTo: vi.fn() };
+    const controller = { goTo: vi.fn(), readAloud: { supported: false } };
     render(
       <>
         <Statusbar />

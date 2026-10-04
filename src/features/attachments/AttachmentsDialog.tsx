@@ -171,7 +171,7 @@ export function AttachmentsDialog({
             }}
             disabled={saving}
             aria-label={`Delete ${att.name}`}
-            style={{ color: "var(--accent-red, #d32f2f)" }}
+            style={{ color: "var(--danger-ink)" }}
           >
             <Trash2 size={16} />
           </button>

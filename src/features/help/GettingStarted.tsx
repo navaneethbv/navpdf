@@ -70,6 +70,14 @@ const tips = [
     title: "Focus on reading",
     text: "Use Read mode to give the document more room. Press Escape to return to the full workspace.",
   },
+  {
+    title: "Retrace your steps",
+    text: "After following a link or bookmark, Previous View (⌘[ or Alt+Left) returns to where you were. Next View (⌘]) goes forward again.",
+  },
+  {
+    title: "Listen or scroll hands-free",
+    text: "View > Read Out Loud reads pages with your system voice, and Automatically Scroll (⇧⌘H) moves through long documents. Press Escape to stop scrolling.",
+  },
 ];
 
 export function GettingStarted({ ready }: Readonly<{ ready: boolean }>) {
@@ -117,6 +125,7 @@ function GuideDialog({ mode }: Readonly<{ mode: GuideMode }>) {
   return (
     <Dialog
       title={getGuideTitle(mode)}
+      icon={<Lightbulb size={18} />}
       onClose={() => void close()}
       busy={saving}
       className="guide-dialog"

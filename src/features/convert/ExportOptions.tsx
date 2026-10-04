@@ -1,9 +1,16 @@
+import { Download } from "lucide-react";
 import { Dialog } from "../../components/Dialog";
 import { useWorkspace } from "../../stores/workspace";
 export function ExportOptions() {
   const set = useWorkspace((s) => s.set);
   return (
-    <Dialog title="Export a PDF" onClose={() => set({ activeModal: null })}>
+    <Dialog
+      title="Export a PDF"
+      icon={<Download size={18} />}
+      onClose={() => {
+        set({ activeModal: null });
+      }}
+    >
       <p>
         Choose an editable Office document, page images, or plain text. Save As keeps a PDF copy.
       </p>

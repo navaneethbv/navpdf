@@ -20,6 +20,28 @@ fn main() {
         cc::Build::new()
             .object(output)
             .compile("navpdf_vision_helper");
+        println!("cargo:rerun-if-changed=src/ocr/image_import.swift");
+        let image_output =
+            std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("image_import.o");
+        let image_status = std::process::Command::new(&swiftc)
+            .args([
+                "-emit-object",
+                "-parse-as-library",
+                "src/ocr/image_import.swift",
+                "-o",
+            ])
+            .arg(&image_output)
+            .status()
+            .expect("Swift compiler is required for ImageIO import");
+        assert!(
+            image_status.success(),
+            "Swift ImageIO bridge compilation failed"
+        );
+        cc::Build::new()
+            .object(image_output)
+            .compile("navpdf_image_import");
+        println!("cargo:rustc-link-lib=framework=ImageIO");
+        println!("cargo:rustc-link-lib=framework=CoreGraphics");
         println!("cargo:rustc-link-lib=framework=Foundation");
         println!("cargo:rustc-link-lib=framework=Vision");
         for path in swift_runtime_search_paths(&swiftc) {
