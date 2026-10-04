@@ -63,6 +63,16 @@ describe("native service browser fallback", () => {
     click.mockRestore();
   });
 
+  it("keeps one edited suffix and a PDF extension across repeated preview saves", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const bytes = new Uint8Array([1]);
+    const saved = await saveDocument({ id: "a", name: "doc-edited.pdf", size: 1 }, bytes, 1, false);
+    expect(saved?.name).toBe("doc-edited.pdf");
+    const bare = await saveDocument({ id: "b", name: "scan", size: 1 }, bytes, 1, false);
+    expect(bare?.name).toBe("scan-edited.pdf");
+    click.mockRestore();
+  });
+
   it("persists preferences to localStorage with network access off", async () => {
     await savePreferences({
       ...defaultPreferences,

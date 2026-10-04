@@ -488,14 +488,7 @@ export function DecorationsDialog({
             </>
           )}
 
-          <fieldset
-            className="setting-group"
-            style={{
-              marginTop: "16px",
-              borderTop: "1px solid var(--border-subtle, #e0e0e0)",
-              paddingTop: "12px",
-            }}
-          >
+          <fieldset className="setting-group">
             <legend className="setting-title">Page Scope</legend>
             <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -546,7 +539,7 @@ export function DecorationsDialog({
             }}
             disabled={applying}
             className="button-secondary"
-            style={{ color: "var(--accent-red, #d32f2f)" }}
+            style={{ color: "var(--danger-ink)" }}
             title="Remove existing decorations from document"
           >
             <Trash2 size={15} style={{ marginRight: "4px" }} /> Remove Decorations

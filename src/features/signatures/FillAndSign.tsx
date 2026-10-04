@@ -342,16 +342,16 @@ export function FillAndSign({
           <div
             style={{
               padding: "10px 16px",
-              background: "rgba(220, 100, 30, 0.12)",
-              borderBottom: "1px solid rgba(220, 100, 30, 0.3)",
+              background: "color-mix(in srgb, var(--status-working) 12%, var(--surface))",
+              borderBottom: "1px solid var(--line)",
               display: "flex",
               alignItems: "center",
               gap: "8px",
               fontSize: "13px",
-              color: "var(--text-color)",
+              color: "var(--ink)",
             }}
           >
-            <AlertTriangle size={18} color="#dc641e" />
+            <AlertTriangle size={18} color="var(--status-working)" />
             <span>
               This document contains an existing digital signature. Placing appearances or edits
               will invalidate it.
@@ -363,13 +363,13 @@ export function FillAndSign({
           <div
             style={{
               padding: "12px 16px",
-              background: "rgba(37, 96, 75, 0.1)",
-              borderBottom: "1px solid rgba(37, 96, 75, 0.2)",
+              background: "var(--accent-soft)",
+              borderBottom: "1px solid var(--line)",
               fontSize: "13px",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <ShieldCheck size={18} color="#25604b" />
+              <ShieldCheck size={18} color="var(--accent-ink)" />
               <strong>Plaintext signatures detected</strong>
             </div>
             <p style={{ margin: "0 0 10px 0" }}>
@@ -405,8 +405,8 @@ export function FillAndSign({
           <div
             style={{
               padding: "8px 16px",
-              background: "rgba(200, 40, 40, 0.1)",
-              color: "var(--color-danger, #d32f2f)",
+              background: "var(--danger-surface)",
+              color: "var(--danger-ink)",
               fontSize: "12px",
             }}
           >
@@ -470,7 +470,7 @@ export function FillAndSign({
               {signatures.length === 0 ? (
                 <div className="empty-message-box">
                   <p>No signatures saved yet.</p>
-                  <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                  <div className="empty-message-actions">
                     <button
                       type="button"
                       className="button-secondary"
@@ -715,7 +715,7 @@ export function FillAndSign({
                 gridTemplateColumns: "1fr 1fr 1fr 1fr",
                 gap: "12px",
                 padding: "12px",
-                background: "rgba(0,0,0,0.03)",
+                background: "var(--surface-2)",
                 borderRadius: "6px",
               }}
             >
@@ -835,7 +835,7 @@ function SignatureStorageBadge({ storage }: Readonly<{ storage?: string }>) {
           fontSize: "10px",
           padding: "1px 4px",
           borderRadius: "3px",
-          background: "rgba(100, 100, 100, 0.15)",
+          background: "var(--surface-2)",
           display: "inline-flex",
           alignItems: "center",
           gap: "2px",
@@ -854,8 +854,8 @@ function SignatureStorageBadge({ storage }: Readonly<{ storage?: string }>) {
           fontSize: "10px",
           padding: "1px 4px",
           borderRadius: "3px",
-          background: "rgba(220, 38, 38, 0.15)",
-          color: "var(--color-danger, #dc2626)",
+          background: "var(--danger-surface)",
+          color: "var(--danger-ink)",
           display: "inline-flex",
           alignItems: "center",
           gap: "2px",
@@ -872,8 +872,8 @@ function SignatureStorageBadge({ storage }: Readonly<{ storage?: string }>) {
         fontSize: "10px",
         padding: "1px 4px",
         borderRadius: "3px",
-        background: "rgba(37, 96, 75, 0.15)",
-        color: "var(--color-primary, #25604b)",
+        background: "var(--accent-soft)",
+        color: "var(--accent-ink)",
         display: "inline-flex",
         alignItems: "center",
         gap: "2px",

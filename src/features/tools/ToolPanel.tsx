@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   FileText,
+  Files as FilesIcon,
   Image as ImageIcon,
   RotateCw,
   Trash2,
@@ -198,6 +199,24 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       action: () => s.set({ activeModal: "add-link" }),
       disabled: !hasDoc,
     },
+    {
+      id: "compare",
+      label: "Compare PDF Versions",
+      description: "Compare text, images and page additions locally",
+      category: "review",
+      icon: FilesIcon,
+      action: () => s.set({ activeModal: "compare" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "bookmarks-edit",
+      label: "Edit Bookmarks",
+      description: "Create, rename, nest and reorder bookmarks",
+      category: "edit",
+      icon: FileText,
+      action: () => s.set({ activeModal: "bookmarks-edit" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
     // Review
     {
       id: "highlight-text",
@@ -369,7 +388,7 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
     {
       id: "import-pdf",
       label: "Import / Convert to PDF",
-      description: "Create a PDF from PDFs, PNG or JPEG images",
+      description: "Create a PDF from PDFs, PNG, JPEG, HEIC or TIFF images",
       category: "pages",
       icon: FilePlus,
       action: () => s.set({ activeModal: "import-pdf" }),

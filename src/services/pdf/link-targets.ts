@@ -48,13 +48,19 @@ function searchNameTree(root: PDFDict, target: string): PDFArray | null {
   return null;
 }
 
-function resolveNamedDestination(doc: PDFDocument, name: string): PDFArray | null {
+export function resolveNamedDestination(doc: PDFDocument, name: string): PDFArray | null {
   const destinations = doc.catalog.lookupMaybe(PDFName.of("Dests"), PDFDict);
   const direct = destinationArray(destinations?.lookup(PDFName.of(name)));
   if (direct) return direct;
   const names = doc.catalog.lookupMaybe(PDFName.of("Names"), PDFDict);
   const tree = names?.lookupMaybe(PDFName.of("Dests"), PDFDict);
   return tree ? searchNameTree(tree, name) : null;
+}
+
+export function resolveDestination(doc: PDFDocument, value: unknown): PDFArray | null {
+  if (value instanceof PDFName || value instanceof PDFString || value instanceof PDFHexString)
+    return resolveNamedDestination(doc, value.decodeText());
+  return value instanceof PDFArray ? value : null;
 }
 
 function resolveTargetPage(

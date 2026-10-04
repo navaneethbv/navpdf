@@ -1,3 +1,4 @@
+import { Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../../components/Dialog";
 import { useWorkspace } from "../../stores/workspace";
@@ -46,7 +47,7 @@ export function Settings() {
     if (!savePending.current) set({ settingsOpen: false });
   };
   return (
-    <Dialog title="Settings" onClose={close} busy={saving}>
+    <Dialog title="Settings" icon={<SettingsIcon size={18} />} onClose={close} busy={saving}>
       <form
         className="settings-form"
         aria-busy={saving}

@@ -10,9 +10,11 @@ function resultSummary(count: number, pending: boolean): string {
 
 export function SearchPanel({ controller }: Readonly<{ controller: ViewerController }>) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusRequest = useWorkspace((s) => s.searchFocus);
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+    inputRef.current?.select();
+  }, [focusRequest]);
   const query = useWorkspace((s) => s.searchQuery),
     matchCase = useWorkspace((s) => s.matchCase),
     wholeWord = useWorkspace((s) => s.wholeWord),
