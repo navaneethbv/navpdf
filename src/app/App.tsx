@@ -53,7 +53,8 @@ const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
 ]);
 
 function officeFormat(modal: string | null): OfficeFormat {
-  return OFFICE_EXPORT_FORMATS.get(modal ?? "") ?? "docx";
+  if (!modal) return "docx";
+  return OFFICE_EXPORT_FORMATS.get(modal) ?? "docx";
 }
 
 /** Page turns for keys that do not scroll a single-page view. */
