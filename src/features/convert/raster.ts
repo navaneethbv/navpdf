@@ -158,9 +158,15 @@ function writeTiffPage(out: ByteWriter, page: TiffPage, pageIndex: number, pageC
     write();
     return at;
   };
-  const bitsAt = extra(() => [8, 8, 8].forEach((bits) => out.u16(bits)));
-  const offsetsAt = extra(() => stripOffsets.forEach((offset) => out.u32(offset)));
-  const countsAt = extra(() => strips.forEach((strip) => out.u32(strip.length)));
+  const bitsAt = extra(() => {
+    for (const bits of [8, 8, 8]) out.u16(bits);
+  });
+  const offsetsAt = extra(() => {
+    for (const offset of stripOffsets) out.u32(offset);
+  });
+  const countsAt = extra(() => {
+    for (const strip of strips) out.u32(strip.length);
+  });
   const resolutionAt = extra(() => {
     out.u32(Math.round(page.dpi));
     out.u32(1);
@@ -213,12 +219,12 @@ export function buildTiff(pages: (RgbaPage | TiffPage)[]) {
   const links: { at: number; value: number }[] = [];
   let pointer = out.length;
   out.u32(0);
-  pages.forEach((input, index) => {
+  for (const [index, input] of pages.entries()) {
     const page = "strips" in input ? input : compressTiffPage(input);
     const { directory, next } = writeTiffPage(out, page, index, pages.length);
     links.push({ at: pointer, value: directory });
     pointer = next;
-  });
+  }
   const bytes = out.result();
   const view = new DataView(bytes.buffer);
   for (const link of links) view.setUint32(link.at, link.value, true);
