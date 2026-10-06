@@ -217,50 +217,50 @@ describe("OfficeExport", () => {
   });
 });
 
+function captureDownloads() {
+  const created: Blob[] = [];
+  const names: string[] = [];
+  const original = URL.createObjectURL;
+  URL.createObjectURL = vi.fn((blob: Blob) => {
+    created.push(blob);
+    return "blob:mock";
+  });
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    names.push(this.download);
+  });
+  return {
+    created,
+    names,
+    restore: () => {
+      URL.createObjectURL = original;
+      click.mockRestore();
+    },
+  };
+}
+
+function mockRasterCanvas(dataUrl: string) {
+  const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => ({
+    data: new Uint8ClampedArray(width * height * 4).fill(255),
+  }));
+  const canvases: HTMLCanvasElement[] = [];
+  const spy = vi.spyOn(document, "createElement").mockImplementation(((
+    tag: string,
+    options?: ElementCreationOptions,
+  ) => {
+    const el = originalCreateElement.call(document, tag, options);
+    if (tag === "canvas") {
+      el.getContext = vi.fn(() => ({ fillStyle: "", fillRect: vi.fn(), getImageData }));
+      el.toDataURL = vi.fn(() => dataUrl);
+      canvases.push(el);
+    }
+    return el;
+  }) as typeof document.createElement);
+  return { canvases, getImageData, restore: () => spy.mockRestore() };
+}
+
 describe("additional export formats", () => {
-  function captureDownloads() {
-    const created: Blob[] = [];
-    const names: string[] = [];
-    const original = URL.createObjectURL;
-    URL.createObjectURL = vi.fn((blob: Blob) => {
-      created.push(blob);
-      return "blob:mock";
-    });
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      names.push(this.download);
-    });
-    return {
-      created,
-      names,
-      restore: () => {
-        URL.createObjectURL = original;
-        click.mockRestore();
-      },
-    };
-  }
-
-  function mockRasterCanvas(dataUrl: string) {
-    const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => ({
-      data: new Uint8ClampedArray(width * height * 4).fill(255),
-    }));
-    const canvases: HTMLCanvasElement[] = [];
-    const spy = vi.spyOn(document, "createElement").mockImplementation(((
-      tag: string,
-      options?: ElementCreationOptions,
-    ) => {
-      const el = originalCreateElement.call(document, tag, options);
-      if (tag === "canvas") {
-        el.getContext = vi.fn(() => ({ fillStyle: "", fillRect: vi.fn(), getImageData }));
-        el.toDataURL = vi.fn(() => dataUrl);
-        canvases.push(el);
-      }
-      return el;
-    }) as typeof document.createElement);
-    return { canvases, getImageData, restore: () => spy.mockRestore() };
-  }
-
   const JPEG_URL = "data:image/jpeg;base64,/9j/2Q==";
 
   it("exports all selected pages as one multipage TIFF and releases each canvas", async () => {

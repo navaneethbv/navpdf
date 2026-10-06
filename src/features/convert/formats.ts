@@ -19,19 +19,20 @@ function formulaLike(text: string) {
   return /^[=+\-@\t\r]/.test(text) && cellValue(text).kind !== "number";
 }
 
+function csvField(cell: string) {
+  const text = formulaLike(cell) ? `'${cell}` : cell;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
 /**
  * RFC 4180 CSV with a UTF-8 byte order mark so spreadsheet applications detect the encoding.
  * Pages follow each other separated by an empty row. Formula-like cells are prefixed with an
  * apostrophe so opening the file never evaluates text taken from the PDF.
  */
 export function buildCsv(pages: string[][][]) {
-  const quote = (cell: string) => {
-    const text = formulaLike(cell) ? `'${cell}` : cell;
-    return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-  };
   const rows = pages.flatMap((rowsOfPage, index) => [
     ...(index > 0 ? [""] : []),
-    ...rowsOfPage.map((row) => row.map((cell) => quote(cell)).join(",")),
+    ...rowsOfPage.map((row) => row.map((cell) => csvField(cell)).join(",")),
   ]);
   return `\uFEFF${rows.join("\r\n")}\r\n`;
 }
@@ -40,37 +41,40 @@ const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
 /** Excel number format escapes literal hyphens with a backslash. */
 const DATE_FORMAT = String.raw`yyyy\-mm\-dd`;
 
+function spreadsheetCell(text: string, column: number, previous: number) {
+  const index = column === previous + 1 ? "" : ` ss:Index="${column + 1}"`;
+  const value = cellValue(text);
+  if (value.kind === "number")
+    return `<Cell${index}><Data ss:Type="Number">${value.value}</Data></Cell>`;
+  if (value.kind === "date") {
+    const iso = new Date(EXCEL_EPOCH + value.value * 86_400_000).toISOString().slice(0, 19);
+    return `<Cell${index} ss:StyleID="date"><Data ss:Type="DateTime">${iso}.000</Data></Cell>`;
+  }
+  return `<Cell${index}><Data ss:Type="String">${escapeXml(value.value)}</Data></Cell>`;
+}
+
+/** Empty cells are skipped; the next cell states its column with `ss:Index`. */
+function spreadsheetRow(cells: string[]) {
+  let previous = -1;
+  const content = cells
+    .map((text, column) => {
+      if (!text) return "";
+      const xml = spreadsheetCell(text, column, previous);
+      previous = column;
+      return xml;
+    })
+    .join("");
+  return `<Row>${content}</Row>`;
+}
+
 /** Microsoft XML Spreadsheet 2003 with one worksheet per page and typed number and date cells. */
 export function buildSpreadsheetXml(sheets: { name: string; rows: string[][] }[]) {
   const safeSheets = sheets.length ? sheets : [{ name: "Sheet1", rows: [] }];
   const names = uniqueSheetNames(safeSheets.map((sheet) => sheet.name));
-  const cell = (text: string, column: number, previous: number) => {
-    const index = column === previous + 1 ? "" : ` ss:Index="${column + 1}"`;
-    const value = cellValue(text);
-    if (value.kind === "number")
-      return `<Cell${index}><Data ss:Type="Number">${value.value}</Data></Cell>`;
-    if (value.kind === "date") {
-      const iso = new Date(EXCEL_EPOCH + value.value * 86_400_000).toISOString().slice(0, 19);
-      return `<Cell${index} ss:StyleID="date"><Data ss:Type="DateTime">${iso}.000</Data></Cell>`;
-    }
-    return `<Cell${index}><Data ss:Type="String">${escapeXml(value.value)}</Data></Cell>`;
-  };
-  const row = (cells: string[]) => {
-    let previous = -1;
-    const content = cells
-      .map((text, column) => {
-        if (!text) return "";
-        const xml = cell(text, column, previous);
-        previous = column;
-        return xml;
-      })
-      .join("");
-    return `<Row>${content}</Row>`;
-  };
   const worksheets = safeSheets
     .map(
       (sheet, index) =>
-        `<Worksheet ss:Name="${escapeXml(names[index])}"><Table>${sheet.rows.map((cells) => row(cells)).join("")}</Table></Worksheet>`,
+        `<Worksheet ss:Name="${escapeXml(names[index])}"><Table>${sheet.rows.map((cells) => spreadsheetRow(cells)).join("")}</Table></Worksheet>`,
     )
     .join("");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -120,9 +124,10 @@ ${sections}
 `;
 }
 
+const hundredths = (value: number) => Math.round(value * 100) / 100;
+
 /** A structured XML 1.0 document of pages, headings and paragraphs. */
 export function buildXmlDocument(layouts: PageLayout[], title: string) {
-  const round = (value: number) => Math.round(value * 100) / 100;
   const pages = layouts
     .map((layout) => {
       const content = layout.paragraphs
@@ -133,7 +138,7 @@ export function buildXmlDocument(layouts: PageLayout[], title: string) {
         )
         .join("\n");
       const body = content ? `\n${content}\n  ` : "";
-      return `  <page number="${layout.page}" width="${round(layout.width)}" height="${round(layout.height)}">${body}</page>`;
+      return `  <page number="${layout.page}" width="${hundredths(layout.width)}" height="${hundredths(layout.height)}">${body}</page>`;
     })
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>

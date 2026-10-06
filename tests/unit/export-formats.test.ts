@@ -169,6 +169,16 @@ describe("text-layer export formats", () => {
   });
 });
 
+/** A black page whose pixels all share one alpha value. */
+function blackPage(width: number, height: number, alpha: number) {
+  return {
+    width,
+    height,
+    dpi: 300,
+    rgba: new Uint8ClampedArray(width * height * 4).map((_, i) => (i % 4 === 3 ? alpha : 0)),
+  };
+}
+
 describe("raster export formats", () => {
   it("encodes PackBits rows that decode back to the input", () => {
     const row = new Uint8Array([
@@ -190,13 +200,7 @@ describe("raster export formats", () => {
   });
 
   it("writes a little-endian multipage TIFF with one directory per page", () => {
-    const page = (width: number, height: number, alpha: number) => ({
-      width,
-      height,
-      dpi: 300,
-      rgba: new Uint8ClampedArray(width * height * 4).map((_, i) => (i % 4 === 3 ? alpha : 0)),
-    });
-    const tiff = buildTiff([page(3, 2, 255), page(2, 70, 0)]);
+    const tiff = buildTiff([blackPage(3, 2, 255), blackPage(2, 70, 0)]);
     const view = new DataView(tiff.buffer);
     expect([...tiff.subarray(0, 4)]).toEqual([0x49, 0x49, 42, 0]);
     const directories: Map<number, number[]>[] = [];
