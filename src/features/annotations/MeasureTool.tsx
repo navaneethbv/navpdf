@@ -109,16 +109,20 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
   };
 
   const onKey = (event: ReactKeyboardEvent) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      void finish(latest.current);
-    } else if (event.key === "Backspace") {
-      event.preventDefault();
-      store(latest.current.slice(0, -1));
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      if (page.current) reset();
-      else exit();
+    switch (event.key) {
+      case "Enter":
+        event.preventDefault();
+        void finish(latest.current);
+        break;
+      case "Backspace":
+        event.preventDefault();
+        store(latest.current.slice(0, -1));
+        break;
+      case "Escape":
+        event.preventDefault();
+        if (page.current) reset();
+        else exit();
+        break;
     }
   };
 

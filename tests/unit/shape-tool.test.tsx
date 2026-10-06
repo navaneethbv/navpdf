@@ -9,30 +9,30 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("ShapeTool", () => {
-  function setupDom(pageNumber = 1) {
-    const page = document.createElement("div");
-    page.className = "page";
-    page.dataset.pageNumber = String(pageNumber);
-    document.body.append(page);
-    const rect = {
-      left: 100,
-      top: 100,
-      right: 500,
-      bottom: 500,
-      width: 400,
-      height: 400,
-      x: 100,
-      y: 100,
-      toJSON: () => {},
-    };
-    vi.spyOn(page, "getBoundingClientRect").mockReturnValue(rect);
-    return {
-      page,
-      cleanup: () => page.remove(),
-    };
-  }
+function setupDom(pageNumber = 1) {
+  const page = document.createElement("div");
+  page.className = "page";
+  page.dataset.pageNumber = String(pageNumber);
+  document.body.append(page);
+  const rect = {
+    left: 100,
+    top: 100,
+    right: 500,
+    bottom: 500,
+    width: 400,
+    height: 400,
+    x: 100,
+    y: 100,
+    toJSON: () => {},
+  };
+  vi.spyOn(page, "getBoundingClientRect").mockReturnValue(rect);
+  return {
+    page,
+    cleanup: () => page.remove(),
+  };
+}
 
+describe("ShapeTool", () => {
   it("renders overlay and cancels on Escape key", () => {
     const controller = {
       setTool: vi.fn(),
