@@ -14,6 +14,7 @@ import { addStamp } from "../../src/services/pdf/stamps";
 import { flattenDocument, placementMatrix } from "../../src/services/pdf/flatten";
 import { bookletOrder, imposePages } from "../../src/services/pdf/impose";
 import { findPatternMarks } from "../../src/features/redact/redaction-marks";
+import { readWidgets, setWidgetGeometry } from "../../src/services/pdf/field-geometry";
 import {
   collectComments,
   commentSummaryCsv,
@@ -46,6 +47,18 @@ async function reopen(bytes: Uint8Array) {
     standardFontDataUrl: `${resolve("node_modules/pdfjs-dist/standard_fonts")}/`,
     useSystemFonts: false,
   }).promise;
+}
+
+/** Form widgets on every page as PDF.js reports them, keyed by field name. */
+async function widgetsOf(pdf: Awaited<ReturnType<typeof reopen>>) {
+  const result: Record<string, { rect: number[]; fieldValue?: unknown; page: number }[]> = {};
+  for (let number = 1; number <= pdf.numPages; number++) {
+    for (const item of await (await pdf.getPage(number)).getAnnotations()) {
+      if (item.subtype !== "Widget") continue;
+      (result[item.fieldName] ??= []).push({ ...item, page: number });
+    }
+  }
+  return result;
 }
 
 async function pages(...sizes: { size?: [number, number]; rotation?: number }[]) {
@@ -195,7 +208,7 @@ describe("flattening", () => {
     const first = await (await pdf.getPage(1)).getAnnotations();
     expect(first.map((item) => item.subtype)).toEqual(["Link"]);
     expect(await (await pdf.getPage(2)).getAnnotations()).toEqual([]);
-    expect(await pdf.getFieldObjects()).toBeNull();
+    expect(await widgetsOf(pdf)).toEqual({});
     expect(await pageText(pdf, 1)).toContain("Flattened Value");
     expect(await pageText(pdf, 2)).toContain("FINAL");
     expect((await PDFDocument.load(bytes)).catalog.get(PDFName.of("AcroForm"))).toBeUndefined();
@@ -211,7 +224,7 @@ describe("flattening", () => {
 
     const commentsOnly = await flattenDocument(source, { annotations: true, forms: false });
     expect(commentsOnly.report).toMatchObject({ annotations: 4, widgets: 0 });
-    expect(await (await reopen(commentsOnly.bytes)).getFieldObjects()).not.toBeNull();
+    expect(Object.keys(await widgetsOf(await reopen(commentsOnly.bytes)))).toEqual(["Reviewer"]);
   });
 
   it("places transformed appearances inside the annotation rectangle", () => {
@@ -481,5 +494,104 @@ describe("sensitive data marks", () => {
     expect(Math.abs(mark.rect[2] - (72 + before + width))).toBeLessThan(3);
     expect(mark.rect[1]).toBeLessThan(700);
     expect(mark.rect[3]).toBeGreaterThan(708);
+  });
+});
+
+describe("form field geometry", () => {
+  async function formOnPages() {
+    const doc = await PDFDocument.create();
+    const upright = doc.addPage([612, 792]);
+    const turned = doc.addPage([612, 792]);
+    turned.setRotation(degrees(90));
+    const form = doc.getForm();
+    const name = form.createTextField("Name");
+    name.addToPage(upright, { x: 72, y: 600, width: 200, height: 24 });
+    name.setText("Ada Lovelace");
+    const plan = form.createRadioGroup("Plan");
+    plan.addOptionToPage("A", upright, { x: 72, y: 500, width: 14, height: 14 });
+    plan.addOptionToPage("B", upright, { x: 120, y: 500, width: 14, height: 14 });
+    plan.select("B");
+    form.createTextField("Note").addToPage(turned, { x: 100, y: 100, width: 30, height: 200 });
+    return doc.save();
+  }
+
+  it("lists widgets in displayed coordinates and moves one without touching values", async () => {
+    const source = await formOnPages();
+    const widgets = await readWidgets(source);
+    expect(widgets.map((item) => [item.field, item.widget, item.page])).toEqual([
+      ["Name", 0, 1],
+      ["Plan", 0, 1],
+      ["Plan", 1, 1],
+      ["Note", 0, 2],
+    ]);
+    const name = widgets[0];
+    // Displayed y is measured down from the top: 792 - (600 + 24) less pdf-lib's half-point border.
+    expect(name.y).toBeCloseTo(792 - 624 - 0.5, 1);
+
+    const { bytes, scaledAppearance } = await setWidgetGeometry(source, {
+      field: "Plan",
+      widget: 1,
+      x: 300,
+      y: 100,
+      width: name.height,
+      height: name.height,
+    });
+    expect(scaledAppearance).toBe(false);
+    const pdf = await reopen(bytes);
+    const fields = await widgetsOf(pdf);
+    const [, moved] = fields.Plan;
+    expect(moved.rect.map(Math.round)).toEqual([300, 792 - 100 - 25, 325, 792 - 100]);
+    expect(fields.Name[0].fieldValue).toBe("Ada Lovelace");
+    expect((await readWidgets(bytes))[2]).toMatchObject({ x: 300, y: 100 });
+  });
+
+  it("rebuilds resized appearances upright and defers rotated ones to readers", async () => {
+    const source = await formOnPages();
+    const resized = await setWidgetGeometry(source, {
+      field: "Name",
+      widget: 0,
+      x: 72,
+      y: 100,
+      width: 300,
+      height: 40,
+    });
+    expect(resized.scaledAppearance).toBe(false);
+    const saved = await PDFDocument.load(resized.bytes);
+    const [widget] = saved.getForm().getTextField("Name").acroField.getWidgets();
+    const appearance = saved.context.lookup(widget.getNormalAppearance()) as unknown as {
+      dict: PDFDict;
+    };
+    expect(numbers(appearance.dict, "BBox")).toEqual([0, 0, 300, 40]);
+
+    const rotated = await setWidgetGeometry(source, {
+      field: "Note",
+      widget: 0,
+      x: 50,
+      y: 60,
+      width: 250,
+      height: 40,
+    });
+    expect(rotated.scaledAppearance).toBe(true);
+    const form = (await PDFDocument.load(rotated.bytes)).getForm();
+    expect(form.acroForm.dict.get(PDFName.of("NeedAppearances"))?.toString()).toBe("true");
+    // A widget on a page turned 90 degrees spans user-space height with its displayed width.
+    const [x1, y1, x2, y2] = (await widgetsOf(await reopen(rotated.bytes))).Note[0].rect;
+    expect([x1, y1, x2 - x1, y2 - y1].map(Math.round)).toEqual([60, 50, 40, 250]);
+  });
+
+  it("keeps fields on the page and rejects unknown fields", async () => {
+    const source = await formOnPages();
+    const base = { field: "Name", widget: 0, x: 0, y: 0, width: 100, height: 20 };
+    await expect(setWidgetGeometry(source, { ...base, field: "Missing" })).rejects.toThrow(
+      /was not found/,
+    );
+    await expect(setWidgetGeometry(source, { ...base, widget: 3 })).rejects.toThrow(/no widget 4/);
+    await expect(setWidgetGeometry(source, { ...base, width: 2 })).rejects.toThrow(/at least 4/);
+    await expect(setWidgetGeometry(source, { ...base, width: 700 })).rejects.toThrow(
+      /larger than the page/,
+    );
+    const clamped = await setWidgetGeometry(source, { ...base, x: 600, y: 900 });
+    const [moved] = await readWidgets(clamped.bytes);
+    expect([moved.x, moved.y]).toEqual([512, 772]);
   });
 });

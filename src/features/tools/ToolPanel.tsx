@@ -27,6 +27,7 @@ import {
   ListOrdered,
   LayoutGrid,
   MessageSquareText,
+  Move,
   Heading,
   Droplets,
   Paperclip,
@@ -346,6 +347,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       category: "convert",
       icon: Download,
       action: () => s.set({ activeModal: "compress" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "field-layout",
+      label: "Move & Resize Fields",
+      description: "Reposition or resize existing form fields precisely",
+      category: "forms",
+      icon: Move,
+      action: () => s.set({ activeModal: "field-layout" }),
       disabled: !hasDoc,
     },
     {

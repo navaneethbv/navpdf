@@ -8,6 +8,8 @@ import { addStamp } from "../../src/services/pdf/stamps";
 import { PageLabelsDialog } from "../../src/features/pages/PageLabelsDialog";
 import { ImposeDialog } from "../../src/features/pages/ImposeDialog";
 import { CommentSummaryDialog } from "../../src/features/annotations/CommentSummaryDialog";
+import { FieldLayoutDialog } from "../../src/features/forms/FieldLayoutDialog";
+import { readWidgets } from "../../src/services/pdf/field-geometry";
 import { readPageLabels, setPageLabels } from "../../src/services/pdf/page-labels";
 import { useWorkspace } from "../../src/stores/workspace";
 
@@ -241,5 +243,53 @@ describe("CommentSummaryDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Summary" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/no comments/);
     expect(names).toEqual([]);
+  });
+});
+
+describe("FieldLayoutDialog", () => {
+  async function formPdf() {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+    const form = doc.getForm();
+    form.createTextField("First").addToPage(page, { x: 72, y: 700, width: 200, height: 20 });
+    form.createTextField("Second").addToPage(page, { x: 72, y: 650, width: 200, height: 20 });
+    return doc.save();
+  }
+
+  it("moves the chosen field and stays open for more changes", async () => {
+    seed(1);
+    const { controller, replaceWithBytes } = await editableController(await formPdf());
+    const onClose = vi.fn();
+    render(<FieldLayoutDialog controller={controller as never} onClose={onClose} />);
+    const field = await screen.findByLabelText("Field");
+    fireEvent.change(field, { target: { value: "0:Second" } });
+    expect((screen.getByLabelText("From left (points)") as HTMLInputElement).value).toBe("71.5");
+    fireEvent.change(screen.getByLabelText("From left (points)"), { target: { value: "300" } });
+    fireEvent.change(screen.getByLabelText("From top (points)"), { target: { value: "40" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    const { doc, status } = await committed(replaceWithBytes);
+    expect(status).toBe('Form field "Second" moved');
+    const second = (await readWidgets(await doc.save())).find((item) => item.field === "Second");
+    expect(second).toMatchObject({ x: 300, y: 40 });
+    expect(await screen.findByText("Field moved.")).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("explains documents without fields and invalid sizes", async () => {
+    seed(1);
+    const { controller } = await editableController(await blankPdf(1));
+    const { unmount } = render(
+      <FieldLayoutDialog controller={controller as never} onClose={vi.fn()} />,
+    );
+    expect((await screen.findByRole("alert")).textContent).toMatch(/no form fields/);
+    unmount();
+
+    const form = await editableController(await formPdf());
+    render(<FieldLayoutDialog controller={form.controller as never} onClose={vi.fn()} />);
+    await screen.findByLabelText("Field");
+    fireEvent.change(screen.getByLabelText("Width (points)"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/at least 4 points/);
+    expect(form.replaceWithBytes).not.toHaveBeenCalled();
   });
 });

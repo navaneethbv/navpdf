@@ -5,6 +5,7 @@ import { FlattenDialog } from "../document/FlattenDialog";
 import { PageLabelsDialog } from "../pages/PageLabelsDialog";
 import { ImposeDialog } from "../pages/ImposeDialog";
 import { CommentSummaryDialog } from "../annotations/CommentSummaryDialog";
+import { FieldLayoutDialog } from "../forms/FieldLayoutDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -18,4 +19,5 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   "page-labels": PageLabelsDialog,
   impose: ImposeDialog,
   "comment-summary": CommentSummaryDialog,
+  "field-layout": FieldLayoutDialog,
 };
