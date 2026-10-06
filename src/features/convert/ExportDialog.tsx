@@ -19,6 +19,7 @@ import {
 } from "./raster";
 
 const MAX_EXPORT_PIXELS = 32 * 1024 * 1024;
+const IMAGE_EXPORT_FAILED = "The image could not be exported.";
 /** Matches the native export size limit so an oversized export fails before encoding. */
 const MAX_EXPORT_BYTES = 1024 ** 3;
 
@@ -575,13 +576,13 @@ async function renderPage(
 function canvasBytes(canvas: HTMLCanvasElement, mime: string, quality: number): Uint8Array {
   try {
     const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
-    if (!dataUrl.startsWith(`data:${mime}`)) throw new Error("The image could not be exported.");
+    if (!dataUrl.startsWith(`data:${mime}`)) throw new Error(IMAGE_EXPORT_FAILED);
     const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
     return Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
   } catch (error) {
-    if (error instanceof Error && error.message === "The image could not be exported.") {
+    if (error instanceof Error && error.message === IMAGE_EXPORT_FAILED) {
       throw error;
     }
-    throw new Error("The image could not be exported.", { cause: error });
+    throw new Error(IMAGE_EXPORT_FAILED, { cause: error });
   }
 }

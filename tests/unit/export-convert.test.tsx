@@ -48,6 +48,9 @@ function textPages(texts: string[]) {
   };
 }
 
+/** Stands in for anchor clicks so tests do not navigate. */
+const ignoreClick = vi.fn();
+
 beforeEach(() => {
   useWorkspace.getState().reset();
   vi.clearAllMocks();
@@ -90,9 +93,7 @@ describe("ExportDialog", () => {
   it("explains that pages without a text layer need OCR instead of saving headers only", async () => {
     seedDocument(1);
     const controller = textPages([""]);
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(ignoreClick);
     const onClose = vi.fn();
     render(<ExportDialog controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Export"));

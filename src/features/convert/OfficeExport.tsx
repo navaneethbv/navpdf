@@ -20,7 +20,7 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 export type Format =
   | "docx"
   | "xlsx"
-  | "xml-spreadsheet"
+  | typeof XML_SPREADSHEET
   | "csv"
   | "pptx-text"
   | "pptx-images"
@@ -28,6 +28,7 @@ export type Format =
   | "html"
   | "xml";
 
+const XML_SPREADSHEET = "xml-spreadsheet";
 const XML_MIME = "application/xml";
 const PRESENTATION = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const FORMATS: {
@@ -54,7 +55,7 @@ const FORMATS: {
       "One sheet per page with text aligned into columns. Numbers and ISO dates become typed cells; formulas are never created.",
   },
   {
-    id: "xml-spreadsheet",
+    id: XML_SPREADSHEET,
     label: "XML Spreadsheet 2003 (.xml)",
     extension: "xml",
     mime: XML_MIME,
@@ -109,7 +110,7 @@ const FORMATS: {
   },
 ];
 
-const TABLE_FORMATS = new Set<Format>(["xlsx", "xml-spreadsheet", "csv"]);
+const TABLE_FORMATS = new Set<Format>(["xlsx", XML_SPREADSHEET, "csv"]);
 
 const MAX_PICTURE_SLIDES = 200;
 const PICTURE_DPI = 150;
@@ -142,7 +143,7 @@ function textExport(format: Format, pages: PageLayout[], baseName: string) {
   const sheets = () => pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) }));
   if (format === "docx") return buildDocx(pages, baseName);
   if (format === "xlsx") return buildXlsx(sheets());
-  if (format === "xml-spreadsheet") return buildSpreadsheetXml(sheets());
+  if (format === XML_SPREADSHEET) return buildSpreadsheetXml(sheets());
   if (format === "csv") return buildCsv(pages.map((page) => tableRows(page)));
   if (format === "html") return buildHtml(pages, baseName);
   if (format === "xml") return buildXmlDocument(pages, baseName);

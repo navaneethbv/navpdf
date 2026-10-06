@@ -7,6 +7,9 @@ import type { ViewerController } from "../../src/features/viewer/controller";
 describe("ExportDialog Hardening (P6.5)", () => {
   let mockController: ViewerController;
 
+  /** Stands in for anchor clicks so tests do not navigate. */
+  const ignoreClick = vi.fn();
+
   beforeEach(() => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       fillStyle: "",
@@ -106,7 +109,7 @@ describe("ExportDialog Hardening (P6.5)", () => {
       created.push(blob as Blob);
       return "blob:mock";
     });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(ignoreClick);
     render(<ExportDialog controller={mockController} onClose={onClose} />);
 
     const exportBtn = screen.getByRole("button", { name: "Export" });
