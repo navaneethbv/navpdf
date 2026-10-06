@@ -1,6 +1,8 @@
 // TIFF, PostScript and EPS writers for rendered page images. Pages are rasterized, so text
 // and vector drawings are not editable or resolution independent in the output.
 
+import { crc32 } from "./ooxml.ts";
+
 export interface RgbaPage {
   width: number;
   height: number;
@@ -349,4 +351,55 @@ function dscText(text: string) {
       .join("")
       .slice(0, 200) || "Untitled"
   );
+}
+
+async function zlibDeflate(bytes: Uint8Array): Promise<Uint8Array> {
+  const stream = new Blob([bytes as Uint8Array<ArrayBuffer>])
+    .stream()
+    .pipeThrough(new CompressionStream("deflate"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function pngChunk(type: string, data: Uint8Array) {
+  const chunk = new Uint8Array(12 + data.length);
+  const view = new DataView(chunk.buffer);
+  view.setUint32(0, data.length);
+  chunk.set(new TextEncoder().encode(type), 4);
+  chunk.set(data, 8);
+  view.setUint32(8 + data.length, crc32(chunk.subarray(4, 8 + data.length)));
+  return chunk;
+}
+
+/** A PNG file from 8-bit RGB (3 channels) or RGBA (4 channels) pixels, rows unfiltered. */
+export async function encodePng(
+  pixels: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+  channels: 3 | 4,
+): Promise<Uint8Array> {
+  if (pixels.length < width * height * channels) throw new Error("The image data is incomplete.");
+  const stride = width * channels;
+  const raw = new Uint8Array((stride + 1) * height);
+  for (let y = 0; y < height; y++) {
+    // Each row starts with filter type 0 (none).
+    raw.set(pixels.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+  }
+  const header = new Uint8Array(13);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, width);
+  view.setUint32(4, height);
+  header.set([8, channels === 4 ? 6 : 2, 0, 0, 0], 8);
+  const parts = [
+    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", await zlibDeflate(raw)),
+    pngChunk("IEND", new Uint8Array(0)),
+  ];
+  const result = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+  return result;
 }

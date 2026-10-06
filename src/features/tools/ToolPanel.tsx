@@ -29,6 +29,7 @@ import {
   MessageSquareText,
   Move,
   Accessibility,
+  Images,
   Heading,
   Droplets,
   Paperclip,
@@ -348,6 +349,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       category: "convert",
       icon: Download,
       action: () => s.set({ activeModal: "convert" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "extract-images",
+      label: "Export All Images",
+      description: "Save every embedded picture once as a lossless PNG",
+      category: "convert",
+      icon: Images,
+      action: () => s.set({ activeModal: "extract-images" }),
       disabled: !hasDoc,
     },
     {

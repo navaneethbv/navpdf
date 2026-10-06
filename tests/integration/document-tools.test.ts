@@ -16,6 +16,7 @@ import { flattenDocument, placementMatrix } from "../../src/services/pdf/flatten
 import { bookletOrder, imposePages } from "../../src/services/pdf/impose";
 import { findPatternMarks } from "../../src/features/redact/redaction-marks";
 import { readWidgets, setWidgetGeometry } from "../../src/services/pdf/field-geometry";
+import { pageImages } from "../../src/features/convert/embedded-images";
 import {
   checkAccessibility,
   checkAccessibilityBytes,
@@ -710,5 +711,71 @@ describe("accessibility check", () => {
     expect(checks.find((item) => item.id === "figures")?.detail).toBe(
       "1 of 2 tagged figure(s) have alternate text.",
     );
+  });
+});
+
+describe("embedded image export", () => {
+  /** Decodes an unfiltered 8-bit PNG written by `encodePng`, independently of the writer. */
+  async function decodePng(png: Uint8Array) {
+    const view = new DataView(png.buffer, png.byteOffset);
+    expect([...png.subarray(1, 4)].map((code) => String.fromCodePoint(code)).join("")).toBe("PNG");
+    const width = view.getUint32(16);
+    const height = view.getUint32(20);
+    const channels = png[25] === 6 ? 4 : 3;
+    const length = view.getUint32(33);
+    const compressed = png.subarray(41, 41 + length);
+    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate"));
+    const raw = new Uint8Array(await new Response(stream).arrayBuffer());
+    const stride = width * channels;
+    const pixels = new Uint8Array(stride * height);
+    for (let y = 0; y < height; y++)
+      pixels.set(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)), y * stride);
+    return { width, height, channels, pixels };
+  }
+
+  it("exports each embedded image once with its exact pixels", async () => {
+    const doc = await PDFDocument.create();
+    const width = 6;
+    const height = 4;
+    const source = new Uint8Array(width * height * 3).map((_, index) => (index * 37) % 256);
+    const raw = doc.context.flateStream(source, {
+      Type: "XObject",
+      Subtype: "Image",
+      Width: width,
+      Height: height,
+      ColorSpace: "DeviceRGB",
+      BitsPerComponent: 8,
+    });
+    const image = doc.context.register(raw);
+    const tiny = doc.context.register(
+      doc.context.flateStream(new Uint8Array(3), {
+        Type: "XObject",
+        Subtype: "Image",
+        Width: 1,
+        Height: 1,
+        ColorSpace: "DeviceRGB",
+        BitsPerComponent: 8,
+      }),
+    );
+    for (let page = 0; page < 2; page++) {
+      const added = doc.addPage([200, 200]);
+      const name = added.node.newXObject("Im", image);
+      const small = added.node.newXObject("Tiny", tiny);
+      const drawing = doc.context.register(
+        doc.context.stream(`q 60 0 0 40 10 10 cm ${name} Do Q q 5 0 0 5 100 100 cm ${small} Do Q`),
+      );
+      added.node.set(PDFName.of("Contents"), drawing);
+    }
+    const pdf = await reopen(await doc.save());
+    const seen = new Set<string>();
+    const first = await pageImages((await pdf.getPage(1)) as never, 1, seen, 2);
+    const second = await pageImages((await pdf.getPage(2)) as never, 2, seen, 2);
+    expect(first.map((item) => [item.page, item.index, item.width, item.height])).toEqual([
+      [1, 1, 6, 4],
+    ]);
+    expect(second).toEqual([]);
+    const decoded = await decodePng(first[0].png);
+    expect(decoded).toMatchObject({ width: 6, height: 4, channels: 3 });
+    expect([...decoded.pixels]).toEqual([...source]);
   });
 });

@@ -10,6 +10,8 @@ import { ImposeDialog } from "../../src/features/pages/ImposeDialog";
 import { CommentSummaryDialog } from "../../src/features/annotations/CommentSummaryDialog";
 import { FieldLayoutDialog } from "../../src/features/forms/FieldLayoutDialog";
 import { AccessibilityDialog } from "../../src/features/document/AccessibilityDialog";
+import { ExtractImagesDialog } from "../../src/features/convert/ExtractImagesDialog";
+import { OPS } from "pdfjs-dist";
 import { readWidgets } from "../../src/services/pdf/field-geometry";
 import { readPageLabels, setPageLabels } from "../../src/services/pdf/page-labels";
 import { useWorkspace } from "../../src/stores/workspace";
@@ -338,5 +340,66 @@ describe("AccessibilityDialog", () => {
       "disabled",
       true,
     );
+  });
+});
+
+describe("ExtractImagesDialog", () => {
+  /** Pages that each draw one 2x2 RGBA image, shared across pages when `shared` is set. */
+  function imageController(pages: number, shared: boolean) {
+    const image = { width: 2, height: 2, kind: 3, data: new Uint8ClampedArray(16).fill(200) };
+    return {
+      pdf: {
+        numPages: pages,
+        getPage: vi.fn(async (number: number) => ({
+          getOperatorList: async () => ({
+            fnArray: [OPS.paintImageXObject],
+            argsArray: [[`img_p${number}_1`]],
+          }),
+          objs: {
+            get: (_id: string, callback: (value: unknown) => void) =>
+              callback({ ...image, ref: shared ? "12R" : `${number}R` }),
+          },
+          commonObjs: { get: vi.fn() },
+        })),
+      },
+    };
+  }
+
+  it("saves several images as one ZIP and skips repeats", async () => {
+    seed(3);
+    const { saved, names } = captureSaves();
+    const onClose = vi.fn();
+    render(
+      <ExtractImagesDialog controller={imageController(3, false) as never} onClose={onClose} />,
+    );
+    fireEvent.change(screen.getByLabelText("Skip images smaller than (pixels)"), {
+      target: { value: "1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Export Images" }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(names).toEqual(["report-images.zip"]);
+    const zip = new TextDecoder().decode(await saved[0].arrayBuffer());
+    expect(zip).toContain("report-page-3-image-1.png");
+    expect(useWorkspace.getState().status).toBe("Exported 3 image(s)");
+  });
+
+  it("saves a single image directly and explains when none are large enough", async () => {
+    seed(2);
+    const { names } = captureSaves();
+    const { unmount } = render(
+      <ExtractImagesDialog controller={imageController(2, true) as never} onClose={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByLabelText("Skip images smaller than (pixels)"), {
+      target: { value: "1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Export Images" }));
+    await vi.waitFor(() => expect(names).toEqual(["report-page-1-image-1.png"]));
+    unmount();
+
+    render(
+      <ExtractImagesDialog controller={imageController(2, true) as never} onClose={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Export Images" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/No images were found/);
   });
 });
