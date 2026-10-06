@@ -45,7 +45,7 @@ function unpackBits(bytes: Uint8Array) {
       out.push(...bytes.subarray(i, i + header + 1));
       i += header + 1;
     } else if (header !== -128) {
-      out.push(...new Array<number>(1 - header).fill(bytes[i]));
+      out.push(...Array.from({ length: 1 - header }, () => bytes[i]));
       i++;
     }
   }
@@ -69,7 +69,7 @@ function decodeAscii85(text: string) {
       out.push(0, 0, 0, 0);
       continue;
     }
-    group.push(char.charCodeAt(0) - 33);
+    group.push((char.codePointAt(0) ?? 33) - 33);
     if (group.length === 5) flush(4);
   }
   if (group.length) {
@@ -172,7 +172,7 @@ describe("text-layer export formats", () => {
 describe("raster export formats", () => {
   it("encodes PackBits rows that decode back to the input", () => {
     const row = new Uint8Array([
-      ...new Array<number>(200).fill(255),
+      ...Array.from({ length: 200 }, () => 255),
       1,
       2,
       3,
@@ -212,7 +212,9 @@ describe("raster export formats", () => {
           type === 3 ? view.getUint16(entry + 8, true) : view.getUint32(entry + 8, true),
         ]);
       }
-      expect([...tags.keys()]).toEqual([...tags.keys()].sort((a, b) => a - b));
+      const tagNumbers = [...tags.keys()];
+      // TIFF readers require directory entries in ascending tag order.
+      expect(tagNumbers.every((tag, i) => i === 0 || tagNumbers[i - 1] < tag)).toBe(true);
       directories.push(tags);
       offset = view.getUint32(offset + 2 + count * 12, true);
     }
@@ -226,7 +228,7 @@ describe("raster export formats", () => {
     const first = directories[0].get(273)?.[2] ?? 0;
     const firstLength = directories[0].get(279)?.[2] ?? 0;
     expect(unpackBits(tiff.subarray(first, first + firstLength))).toEqual(
-      new Array<number>(18).fill(0),
+      Array.from({ length: 18 }, () => 0),
     );
     const resolution = directories[0].get(282)?.[2] ?? 0;
     expect(view.getUint32(resolution, true) / view.getUint32(resolution + 4, true)).toBe(300);

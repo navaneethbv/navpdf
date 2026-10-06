@@ -338,7 +338,7 @@ export function buildEps(page: JpegPage, title: string) {
 /** DSC comment values must be printable 7-bit ASCII on a single line. */
 function dscText(text: string) {
   return (
-    Array.from(text)
+    [...text]
       .map((char) => (/^[\x20-\x7e]$/.test(char) ? char : "?"))
       .join("")
       .slice(0, 200) || "Untitled"
