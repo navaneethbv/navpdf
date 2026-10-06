@@ -24,6 +24,7 @@ import {
   CheckSquare,
   PenLine,
   Stamp,
+  ListOrdered,
   Heading,
   Droplets,
   Paperclip,
@@ -89,6 +90,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       category: "pages",
       icon: Crop,
       action: () => s.set({ activeModal: "page-workspace" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "page-labels",
+      label: "Page Labels",
+      description: "Number front matter i, ii, iii and sections with prefixes",
+      category: "pages",
+      icon: ListOrdered,
+      action: () => s.set({ activeModal: "page-labels" }),
       disabled: !hasDoc,
     },
     {

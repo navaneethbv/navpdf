@@ -13,6 +13,13 @@ import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mj
 import { addStamp } from "../../src/services/pdf/stamps";
 import { flattenDocument, placementMatrix } from "../../src/services/pdf/flatten";
 import {
+  previewLabels,
+  readPageLabelsFromBytes,
+  setPageLabels,
+  validateRanges,
+  type PageLabelRange,
+} from "../../src/services/pdf/page-labels";
+import {
   addFormField,
   addLinkAnnotation,
   addShapeAnnotation,
@@ -225,5 +232,61 @@ describe("flattening", () => {
     await expect(
       flattenDocument(await doc.save(), { annotations: false, forms: true }),
     ).rejects.toThrow(/digitally signed/);
+  });
+});
+
+describe("page labels", () => {
+  const front: PageLabelRange[] = [
+    { startPage: 1, style: "roman-lower", prefix: "", firstNumber: 1 },
+    { startPage: 4, style: "decimal", prefix: "", firstNumber: 1 },
+    { startPage: 7, style: "letters-upper", prefix: "App-", firstNumber: 1 },
+    { startPage: 9, style: "none", prefix: "Back cover", firstNumber: 1 },
+  ];
+
+  it("writes labels that PDF.js reads back and round-trips the ranges", async () => {
+    const source = await pages(...Array.from({ length: 9 }, () => ({})));
+    const labeled = await setPageLabels(source, front);
+    const pdf = await reopen(labeled);
+    expect(await pdf.getPageLabels()).toEqual([
+      "i",
+      "ii",
+      "iii",
+      "1",
+      "2",
+      "3",
+      "App-A",
+      "App-B",
+      "Back cover",
+    ]);
+    expect(previewLabels(front, 9)).toEqual(await pdf.getPageLabels());
+    expect((await readPageLabelsFromBytes(labeled)).ranges).toEqual(front);
+
+    const plain = await setPageLabels(labeled, []);
+    expect(await (await reopen(plain)).getPageLabels()).toBeNull();
+  });
+
+  it("formats large roman numerals, repeated letters and starting offsets", () => {
+    const ranges: PageLabelRange[] = [
+      { startPage: 1, style: "roman-upper", prefix: "", firstNumber: 1994 },
+      { startPage: 2, style: "letters-lower", prefix: "", firstNumber: 27 },
+      { startPage: 3, style: "decimal", prefix: "S-", firstNumber: 99 },
+    ];
+    expect(previewLabels(ranges, 4)).toEqual(["MCMXCIV", "aa", "S-99", "S-100"]);
+  });
+
+  it("rejects ranges that do not describe the document", () => {
+    const range = (startPage: number, extra: Partial<PageLabelRange> = {}): PageLabelRange => ({
+      startPage,
+      style: "decimal",
+      prefix: "",
+      firstNumber: 1,
+      ...extra,
+    });
+    expect(() => validateRanges([range(2)], 5)).toThrow(/must start on page 1/);
+    expect(() => validateRanges([range(1), range(1)], 5)).toThrow(/Two label ranges/);
+    expect(() => validateRanges([range(1), range(6)], 5)).toThrow(/between page 1 and page 5/);
+    expect(() => validateRanges([range(1, { firstNumber: 0 })], 5)).toThrow(/whole number/);
+    expect(() => validateRanges([range(1, { style: "none" })], 5)).toThrow(/prefix or a style/);
+    expect(validateRanges([range(3), range(1)], 5).map((item) => item.startPage)).toEqual([1, 3]);
   });
 });

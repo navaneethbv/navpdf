@@ -5,6 +5,8 @@ import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import { StampDialog } from "../../src/features/annotations/StampDialog";
 import { FlattenDialog } from "../../src/features/document/FlattenDialog";
 import { addStamp } from "../../src/services/pdf/stamps";
+import { PageLabelsDialog } from "../../src/features/pages/PageLabelsDialog";
+import { readPageLabels, setPageLabels } from "../../src/services/pdf/page-labels";
 import { useWorkspace } from "../../src/stores/workspace";
 
 async function blankPdf(pages = 2) {
@@ -118,5 +120,46 @@ describe("FlattenDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Flatten" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/nothing to flatten/);
     expect(replaceWithBytes).not.toHaveBeenCalled();
+  });
+});
+
+describe("PageLabelsDialog", () => {
+  it("loads existing ranges, previews edits and applies them", async () => {
+    seed(4);
+    const labeled = await setPageLabels(await blankPdf(4), [
+      { startPage: 1, style: "roman-lower", prefix: "", firstNumber: 1 },
+    ]);
+    const { controller, replaceWithBytes } = await editableController(labeled);
+    const onClose = vi.fn();
+    render(<PageLabelsDialog controller={controller as never} onClose={onClose} />);
+    expect(await screen.findByText("Preview: i, ii, iii, iv")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Add Range/ }));
+    const starts = screen.getAllByLabelText("Starts on page");
+    fireEvent.change(starts[1], { target: { value: "3" } });
+    fireEvent.change(screen.getAllByLabelText("Prefix")[1], { target: { value: "P-" } });
+    expect(screen.getByText("Preview: i, ii, P-1, P-2")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Apply Labels" }));
+    const { doc, status } = await committed(replaceWithBytes);
+    expect(status).toBe("Page labels updated");
+    expect(readPageLabels(doc).map((range) => [range.startPage, range.prefix])).toEqual([
+      [1, ""],
+      [3, "P-"],
+    ]);
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("explains invalid ranges and can restore plain numbers", async () => {
+    seed(3);
+    const { controller, replaceWithBytes } = await editableController(await blankPdf(3));
+    render(<PageLabelsDialog controller={controller as never} onClose={vi.fn()} />);
+    await screen.findByText("Preview: 1, 2, 3");
+    fireEvent.click(screen.getByRole("button", { name: /Add Range/ }));
+    fireEvent.change(screen.getAllByLabelText("Starts on page")[1], { target: { value: "1" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/Two label ranges start on page 1/);
+    expect(screen.getByRole("button", { name: "Apply Labels" })).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Use Plain Numbers" }));
+    const { doc, status } = await committed(replaceWithBytes);
+    expect(status).toBe("Page labels removed");
+    expect(readPageLabels(doc)).toEqual([]);
   });
 });
