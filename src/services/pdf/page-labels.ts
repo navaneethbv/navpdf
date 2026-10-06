@@ -88,10 +88,11 @@ function numberLabel(style: LabelStyle, value: number) {
 
 /** The label each page shows under the given ranges, as PDF readers compute it. */
 export function previewLabels(ranges: PageLabelRange[], pageCount: number): string[] {
-  const sorted = [...ranges].sort((a, b) => a.startPage - b.startPage);
+  // Latest start first, so the first range at or before a page is the one that applies.
+  const latestFirst = [...ranges].sort((a, b) => a.startPage - b.startPage).reverse();
   return Array.from({ length: pageCount }, (_, index) => {
     const page = index + 1;
-    const range = sorted.filter((candidate) => candidate.startPage <= page).at(-1);
+    const range = latestFirst.find((candidate) => candidate.startPage <= page);
     if (!range) return String(page);
     return `${range.prefix}${numberLabel(range.style, range.firstNumber + page - range.startPage)}`;
   });
