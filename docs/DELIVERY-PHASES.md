@@ -7,6 +7,34 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## October 6 document review and preparation tools
+
+[ADR 0015](adr/0015-document-review-tools.md) adds ten local tools selected by comparing NavPDF with common Acrobat Standard tools and the October 4 follow-up list.
+They are review stamps, flattening, page labels, pages per sheet and booklets, comment summaries, sensitive-data search for redaction, moving and resizing existing form fields, an accessibility check, export of all embedded images, and distance, perimeter and area measurement.
+Moving and resizing existing form fields closes follow-up item 3 of the October 4 review for numeric geometry; dragging fields on the page remains open.
+Browser-preview testing reproduced shapes being added to the viewer's current page instead of the page they were drawn on, and shapes and measurements now use the drawn page.
+Browser-preview testing also reproduced every in-place edit (shapes, stamps, measurements, undo and redo) resetting the zoom to the default, which moved the page under the pointer between measurements; revisions of the open document now keep the reader's zoom.
+In the same run, a 3 by 2 inch rectangle measured at 1 in = 10 ft read 601.25 sq ft at 46% zoom, and Enter finished the area after mouse clicks.
+Imposition of blank pages without a content stream failed in a regression test and now succeeds.
+The field geometry dialog blocked submission of fractional positions through form validation; it now accepts any number.
+Automated checks, independent-reader acceptance and the native acceptance blocker are recorded in `docs/VERIFICATION.md`.
+No feature-parity, native acceptance or distribution gate is closed by this delivery.
+
+## October 6 export formats and export review
+
+[ADR 0014](adr/0014-additional-export-formats.md) adds CSV, XML Spreadsheet 2003, HTML, XML 1.0, TIFF, PostScript and EPS exports, alongside the existing DOCX, XLSX, PPTX, RTF, plain text, PNG and JPEG exports.
+The selection follows Acrobat's documented Export PDF formats.
+Word 97-2003 `.doc`, JPEG 2000 and accessible text remain unavailable for the reasons recorded in the ADR.
+Text-layer formats carry text, headings, paragraphs and aligned columns only; TIFF, PostScript and EPS contain rendered page images.
+The review reproduced plain-text export joining every line of a page into one line with real PDF.js text, and the export now keeps each reconstructed line.
+Multipage PNG and JPEG exports asked for one native destination per page; several exported pages are now saved as one ZIP archive.
+Closing the editable-format export dialog during an export no longer lets that export save a file afterward, and its close button is disabled while it runs.
+The editable-format progress text no longer reports a page number as a page count for custom ranges.
+Spreadsheet sheet names are now unique case-insensitively, and a colliding 31-character name no longer loops indefinitely.
+Text export of pages without a text layer now asks for OCR instead of saving page headers only.
+Automated checks, independent-reader acceptance and the native acceptance blocker are recorded in `docs/VERIFICATION.md`.
+No feature-parity, native acceptance or distribution gate is closed by this delivery.
+
 ## October 4 feature and reliability review
 
 The [current review](REVIEW-2026-10-04.md) records implemented features, scoped limitations and prioritized follow-up.

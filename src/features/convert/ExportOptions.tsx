@@ -12,14 +12,15 @@ export function ExportOptions() {
       }}
     >
       <p>
-        Choose an editable Office document, page images, or plain text. Save As keeps a PDF copy.
+        Choose an editable document, page images, PostScript or plain text. Save As keeps a PDF
+        copy.
       </p>
       <div className="export-options">
         <button className="button" onClick={() => set({ activeModal: "office-export" })}>
-          Word, PowerPoint, Excel or Rich Text
+          Word, Excel, PowerPoint, Rich Text, HTML, CSV or XML
         </button>
         <button className="button" onClick={() => set({ activeModal: "convert" })}>
-          PNG, JPEG or plain text
+          PNG, JPEG, TIFF, PostScript, EPS or plain text
         </button>
         <button className="button" onClick={() => set({ activeModal: "compress" })}>
           Compressed PDF copy

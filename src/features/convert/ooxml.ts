@@ -380,19 +380,30 @@ function columnName(index: number) {
   return name;
 }
 
-export function buildXlsx(sheets: { name: string; rows: string[][] }[]) {
-  const safeSheets = sheets.length ? sheets : [{ name: "Sheet1", rows: [] }];
+/** Spreadsheet sheet names: at most 31 characters, no reserved characters, unique. */
+export function uniqueSheetNames(requested: string[]) {
   const names = new Set<string>();
-  const sheetNames = safeSheets.map((sheet, index) => {
-    let name =
-      sheet.name
+  return requested.map((requestedName, index) => {
+    const base =
+      requestedName
         .replaceAll(/[\\/?*[\]:]/g, " ")
         .slice(0, 31)
         .trim() || `Sheet${index + 1}`;
-    while (names.has(name)) name = `${name.slice(0, 28)} ${index + 1}`;
-    names.add(name);
+    let name = base;
+    let suffix = 1;
+    while (names.has(name.toLowerCase())) {
+      suffix += 1;
+      const tail = ` ${suffix}`;
+      name = `${base.slice(0, 31 - tail.length)}${tail}`;
+    }
+    names.add(name.toLowerCase());
     return name;
   });
+}
+
+export function buildXlsx(sheets: { name: string; rows: string[][] }[]) {
+  const safeSheets = sheets.length ? sheets : [{ name: "Sheet1", rows: [] }];
+  const sheetNames = uniqueSheetNames(safeSheets.map((sheet) => sheet.name));
   const worksheet = (rows: string[][]) =>
     `${XML}<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows
       .map(

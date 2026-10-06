@@ -7,6 +7,9 @@ import type { ViewerController } from "../../src/features/viewer/controller";
 describe("ExportDialog Hardening (P6.5)", () => {
   let mockController: ViewerController;
 
+  /** Stands in for anchor clicks so tests do not navigate. */
+  const ignoreClick = vi.fn();
+
   beforeEach(() => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       fillStyle: "",
@@ -25,9 +28,14 @@ describe("ExportDialog Hardening (P6.5)", () => {
             getTextContent: vi.fn().mockResolvedValue({
               items: [
                 // Unsorted items to verify top-to-bottom reading order
-                { str: "Second Line", transform: [1, 0, 0, 1, 50, 600] },
-                { str: "First Line", transform: [1, 0, 0, 1, 50, 700] },
-                { str: `Page ${pageNum} Title`, transform: [1, 0, 0, 1, 50, 750] },
+                { str: "Second Line", transform: [12, 0, 0, 12, 50, 600], width: 60, height: 12 },
+                { str: "First Line", transform: [12, 0, 0, 12, 50, 700], width: 55, height: 12 },
+                {
+                  str: `Page ${pageNum} Title`,
+                  transform: [12, 0, 0, 12, 50, 750],
+                  width: 70,
+                  height: 12,
+                },
               ],
             }),
           }),
@@ -94,8 +102,14 @@ describe("ExportDialog Hardening (P6.5)", () => {
     expect(dpi300.className).toContain("active");
   });
 
-  it("dispatches plain text export in reading order", async () => {
+  it("dispatches plain text export in reading order, one text line per line", async () => {
     const onClose = vi.fn();
+    const created: Blob[] = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      created.push(blob as Blob);
+      return "blob:mock";
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(ignoreClick);
     render(<ExportDialog controller={mockController} onClose={onClose} />);
 
     const exportBtn = screen.getByRole("button", { name: "Export" });
@@ -105,6 +119,8 @@ describe("ExportDialog Hardening (P6.5)", () => {
       expect(mockController.pdf?.getPage).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
     });
+    const text = await created[0].text();
+    expect(text).toContain("--- Page 1 ---\n\nPage 1 Title\nFirst Line\nSecond Line\n");
   });
 
   it("dispatches image export for selected pages", async () => {
