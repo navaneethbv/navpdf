@@ -881,7 +881,13 @@ export class ViewerController {
       });
     });
   }
-  async addShape(kind: ShapeKind, start: [number, number], end: [number, number]) {
+  /** Adds a shape to `page`, the page it was drawn on, which need not be the current page. */
+  async addShape(
+    kind: ShapeKind,
+    start: [number, number],
+    end: [number, number],
+    page = this.currentPage(),
+  ) {
     if (!this.pdf) throw new Error("Open a PDF before adding a shape.");
     const status = `${kind === "Arrow" ? "Arrow" : kind} added to document`;
     return this.mutate(status, async () => {
@@ -894,7 +900,7 @@ export class ViewerController {
       ];
       const bytes = await this.pdf!.saveDocument();
       const shaped = await addShapeAnnotation(bytes, {
-        page: this.currentPage(),
+        page,
         kind,
         start,
         end,

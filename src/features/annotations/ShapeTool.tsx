@@ -131,7 +131,7 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
     )
       return;
     try {
-      await controller.addShape(kind, startPdf, endPdf);
+      await controller.addShape(kind, startPdf, endPdf, Number(current.page.dataset.pageNumber));
       useWorkspace.getState().set({ tool: "select" });
       controller.setTool("select");
     } catch (error) {

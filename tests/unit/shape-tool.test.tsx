@@ -10,10 +10,10 @@ beforeEach(() => {
 });
 
 describe("ShapeTool", () => {
-  function setupDom() {
+  function setupDom(pageNumber = 1) {
     const page = document.createElement("div");
     page.className = "page";
-    page.dataset.pageNumber = "1";
+    page.dataset.pageNumber = String(pageNumber);
     document.body.append(page);
     const rect = {
       left: 100,
@@ -45,6 +45,35 @@ describe("ShapeTool", () => {
     fireEvent.keyDown(overlay, { key: "Escape" });
     expect(useWorkspace.getState().tool).toBe("select");
     expect(controller.setTool).toHaveBeenCalledWith("select");
+  });
+
+  it("adds the shape to the page it was drawn on, not the current page", async () => {
+    const { cleanup } = setupDom(2);
+    const pdf = {
+      getPage: vi.fn(async () => ({
+        rotate: 0,
+        getViewport: () => ({
+          width: 400,
+          height: 400,
+          convertToPdfPoint: (x: number, y: number) => [x, 400 - y],
+        }),
+      })),
+    };
+    const controller = { setTool: vi.fn(), addShape: vi.fn(async () => undefined), pdf };
+    useWorkspace.getState().set({ tool: "shape", shapeKind: "Square", page: 1 });
+    render(<ShapeTool controller={controller as never} />);
+    const overlay = screen.getByRole("application", { name: "Draw square shape" });
+    fireEvent.pointerDown(overlay, { button: 0, pointerId: 7, clientX: 150, clientY: 150 });
+    await vi.waitFor(() => expect(pdf.getPage).toHaveBeenCalledWith(2));
+    await vi.waitFor(() => {
+      fireEvent.pointerMove(overlay, { pointerId: 7, clientX: 250, clientY: 250 });
+      expect(document.querySelector(".shape-preview-square")).toBeTruthy();
+    });
+    fireEvent.pointerUp(overlay, { pointerId: 7, clientX: 250, clientY: 250 });
+    await vi.waitFor(() =>
+      expect(controller.addShape).toHaveBeenCalledWith("Square", [50, 350], [150, 250], 2),
+    );
+    cleanup();
   });
 
   it("draws a square shape on pointer drag", async () => {
@@ -108,6 +137,7 @@ describe("ShapeTool", () => {
         "Square",
         expect.any(Array),
         expect.any(Array),
+        1,
       );
       expect(useWorkspace.getState().tool).toBe("select");
       expect(controller.setTool).toHaveBeenCalledWith("select");
