@@ -8,12 +8,11 @@ import {
   buildPptx,
   buildRtf,
   buildXlsx,
-  layoutPage,
   tableRows,
   type PageLayout,
   type Slide,
-  type TextItem,
 } from "./ooxml";
+import { readPageLayout, type PageProxy } from "./pdf-page";
 import { buildCsv, buildHtml, buildSpreadsheetXml, buildXmlDocument } from "./formats";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
@@ -115,23 +114,6 @@ const MAX_PICTURE_SLIDES = 200;
 const PICTURE_DPI = 150;
 const MAX_PICTURE_EDGE = 4096;
 
-interface PageProxy {
-  getViewport(options: { scale: number }): { width: number; height: number };
-  getTextContent(): Promise<{ items: unknown[] }>;
-  render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): {
-    promise: Promise<void>;
-  };
-}
-
-function isTextItem(item: unknown): item is TextItem {
-  const candidate = item as Partial<TextItem>;
-  return (
-    typeof candidate?.str === "string" &&
-    Array.isArray(candidate.transform) &&
-    typeof candidate.width === "number"
-  );
-}
-
 async function pagePicture(
   page: PageProxy,
 ): Promise<{ width: number; height: number; image: Uint8Array }> {
@@ -227,10 +209,9 @@ export function OfficeExport({
     for (const [index, number] of numbers.entries()) {
       if (cancelled.current) return null;
       setProgress(`Reading page ${number} (${index + 1} of ${numbers.length})…`);
-      const page = (await pdf.getPage(number)) as unknown as PageProxy;
-      const { width, height } = page.getViewport({ scale: 1 });
-      const content = await page.getTextContent();
-      result.push(layoutPage(number, content.items.filter(isTextItem), width, height));
+      result.push(
+        await readPageLayout((await pdf.getPage(number)) as unknown as PageProxy, number),
+      );
     }
     return result;
   };

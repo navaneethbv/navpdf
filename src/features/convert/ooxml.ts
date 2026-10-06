@@ -390,7 +390,9 @@ export function uniqueSheetNames(requested: string[]) {
         .slice(0, 31)
         .trim() || `Sheet${index + 1}`;
     let name = base;
-    for (let suffix = 2; names.has(name.toLowerCase()); suffix++) {
+    let suffix = 1;
+    while (names.has(name.toLowerCase())) {
+      suffix += 1;
       const tail = ` ${suffix}`;
       name = `${base.slice(0, 31 - tail.length)}${tail}`;
     }

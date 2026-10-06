@@ -34,7 +34,8 @@ class ByteWriter {
 
   byte(value: number) {
     this.reserve(1);
-    this.buffer[this.length++] = value;
+    this.buffer[this.length] = value;
+    this.length += 1;
   }
 
   bytes(values: Uint8Array) {
@@ -107,23 +108,25 @@ export interface TiffPage {
   byteLength: number;
 }
 
+/** Composites one RGBA row onto white so transparent canvas pixels do not turn black. */
+function rgbRow(page: RgbaPage, y: number, row: Uint8Array) {
+  const offset = y * page.width * 4;
+  for (let pixel = 0; pixel < page.width * 3; pixel++) {
+    const x = Math.floor(pixel / 3);
+    const alpha = page.rgba[offset + x * 4 + 3] / 255;
+    const value = page.rgba[offset + x * 4 + (pixel % 3)];
+    row[pixel] = Math.round(value * alpha + 255 * (1 - alpha));
+  }
+  return row;
+}
+
 export function compressTiffPage(page: RgbaPage): TiffPage {
   const strips: Uint8Array[] = [];
   const row = new Uint8Array(page.width * 3);
   for (let top = 0; top < page.height; top += ROWS_PER_STRIP) {
     const strip = new ByteWriter();
-    for (let y = top; y < Math.min(page.height, top + ROWS_PER_STRIP); y++) {
-      const offset = y * page.width * 4;
-      for (let x = 0; x < page.width; x++) {
-        // Composite onto white so transparent canvas pixels do not turn black.
-        const alpha = page.rgba[offset + x * 4 + 3] / 255;
-        for (let channel = 0; channel < 3; channel++) {
-          const value = page.rgba[offset + x * 4 + channel];
-          row[x * 3 + channel] = Math.round(value * alpha + 255 * (1 - alpha));
-        }
-      }
-      packBits(row, strip);
-    }
+    for (let y = top; y < Math.min(page.height, top + ROWS_PER_STRIP); y++)
+      packBits(rgbRow(page, y, row), strip);
     strips.push(strip.result());
   }
   return {
@@ -244,12 +247,12 @@ export function ascii85(bytes: Uint8Array) {
       emit("z");
       continue;
     }
-    const digits = new Array<string>(5);
-    for (let digit = 4; digit >= 0; digit--) {
-      digits[digit] = String.fromCodePoint(33 + (value % 85));
+    let group = "";
+    for (let digit = 0; digit < 5; digit++) {
+      group = String.fromCodePoint(33 + (value % 85)) + group;
       value = Math.floor(value / 85);
     }
-    emit(digits.slice(0, remaining + 1).join(""));
+    emit(group.slice(0, remaining + 1));
   }
   if (line) push(line);
   return `${chunks.join("\n")}~>`;

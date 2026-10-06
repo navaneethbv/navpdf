@@ -6,7 +6,8 @@ import type { ViewerController } from "../viewer/controller";
 import { downloadBlob, safeFileName } from "../../utils/download";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
-import { createZip, layoutPage, type PageLayout, type TextItem } from "./ooxml";
+import { createZip, type PageLayout } from "./ooxml";
+import { readPageLayout, type PageProxy } from "./pdf-page";
 import { buildPlainText } from "./formats";
 import {
   buildEps,
@@ -42,23 +43,6 @@ const HINTS: Record<RasterFormat, string> = {
 };
 
 const usesJpeg = (format: ExportFormat) => format === "jpg" || format === "ps" || format === "eps";
-
-interface PageProxy {
-  getViewport(options: { scale: number }): { width: number; height: number };
-  getTextContent(): Promise<{ items: unknown[] }>;
-  render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): {
-    promise: Promise<void>;
-  };
-}
-
-function isTextItem(item: unknown): item is TextItem {
-  const candidate = item as Partial<TextItem>;
-  return (
-    typeof candidate?.str === "string" &&
-    Array.isArray(candidate.transform) &&
-    typeof candidate.width === "number"
-  );
-}
 
 interface ExportImagePagesOptions {
   source: NonNullable<ViewerController["pdf"]>;
@@ -261,7 +245,14 @@ export function ExportDialog({
     }
   };
 
-  const handleExportText = async () => {
+  type Produce = (
+    source: NonNullable<ViewerController["pdf"]>,
+    targetIndices: number[],
+    cancelled: () => boolean,
+  ) => Promise<{ blob: Blob; name: string; status: string } | null>;
+
+  /** Runs one export: selects pages, builds the file, saves it and reports the outcome. */
+  const runExport = async (produce: Produce) => {
     const context = beginExport();
     if (!context) return;
     const { run, source, cancelled } = context;
@@ -270,27 +261,10 @@ export function ExportDialog({
       if (targetIndices.length === 0) {
         throw new Error("No valid pages selected for export.");
       }
-
-      const layouts = await collectPageLayouts(source, targetIndices, cancelled, setProgress);
-      if (!layouts || cancelled()) return;
-      if (!layouts.some((layout) => layout.lines.length)) {
-        throw new Error("These pages have no text layer to export. Run OCR first.");
-      }
-
-      if (
-        !(await downloadBlob(
-          new Blob([buildPlainText(layouts)], { type: "text/plain;charset=utf-8" }),
-          `${baseName}.txt`,
-        ))
-      )
-        return;
-      if (cancelled()) return;
-      s.set({
-        status:
-          targetIndices.length === totalPages
-            ? "Text exported successfully"
-            : `Text exported successfully for ${targetIndices.length} page(s).`,
-      });
+      const exported = await produce(source, targetIndices, cancelled);
+      if (!exported || cancelled()) return;
+      if (!(await downloadBlob(exported.blob, exported.name)) || cancelled()) return;
+      s.set({ status: exported.status });
       onClose();
     } catch (err) {
       if (!cancelled()) s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -299,16 +273,25 @@ export function ExportDialog({
     }
   };
 
-  const handleExportImage = async (rasterFormat: RasterFormat) => {
-    const context = beginExport();
-    if (!context) return;
-    const { run, source, cancelled } = context;
-    try {
-      const targetIndices = getTargetPages();
-      if (targetIndices.length === 0) {
-        throw new Error("No valid pages selected for export.");
-      }
+  const produceText: Produce = async (source, targetIndices, cancelled) => {
+    const layouts = await collectPageLayouts(source, targetIndices, cancelled, setProgress);
+    if (!layouts) return null;
+    if (!layouts.some((layout) => layout.lines.length)) {
+      throw new Error("These pages have no text layer to export. Run OCR first.");
+    }
+    return {
+      blob: new Blob([buildPlainText(layouts)], { type: "text/plain;charset=utf-8" }),
+      name: `${baseName}.txt`,
+      status:
+        targetIndices.length === totalPages
+          ? "Text exported successfully"
+          : `Text exported successfully for ${targetIndices.length} page(s).`,
+    };
+  };
 
+  const produceImages =
+    (rasterFormat: RasterFormat): Produce =>
+    async (source, targetIndices, cancelled) => {
       const exported = await exportImagePages({
         source,
         targetIndices,
@@ -319,18 +302,18 @@ export function ExportDialog({
         quality,
         baseName,
       });
-      if (!exported || cancelled()) return;
-      if (!(await downloadBlob(exported.blob, exported.name))) return;
-      if (cancelled()) return;
-      s.set({
-        status: `Exported ${targetIndices.length} page(s) as ${rasterFormat.toUpperCase()} (${dpi} DPI).`,
-      });
-      onClose();
-    } catch (err) {
-      if (!cancelled()) s.set({ error: err instanceof Error ? err.message : String(err) });
-    } finally {
-      endExport(run);
-    }
+      if (!exported) return null;
+      const label = rasterFormat.toUpperCase();
+      return {
+        ...exported,
+        status: `Exported ${targetIndices.length} page(s) as ${label} (${dpi} DPI).`,
+      };
+    };
+
+  const startExport = () => {
+    const task = runExport(format === "txt" ? produceText : produceImages(format));
+    // The runner reports its own failures; this only guards against an unexpected rejection.
+    task.catch((error: unknown) => s.set({ error: String(error) }));
   };
 
   const cancelExport = () => {
@@ -523,9 +506,7 @@ export function ExportDialog({
           )}
           <button
             type="button"
-            onClick={() => {
-              void (format === "txt" ? handleExportText() : handleExportImage(format));
-            }}
+            onClick={startExport}
             disabled={exporting}
             className="button-primary"
           >
@@ -550,9 +531,7 @@ async function collectPageLayouts(
     onProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
     const page = (await source.getPage(pageNum)) as unknown as PageProxy;
     if (cancelled()) return null;
-    const { width, height } = page.getViewport({ scale: 1 });
-    const content = await page.getTextContent();
-    layouts.push(layoutPage(pageNum, content.items.filter(isTextItem), width, height));
+    layouts.push(await readPageLayout(page, pageNum));
   }
   return layouts;
 }
