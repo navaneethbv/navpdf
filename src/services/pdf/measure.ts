@@ -28,6 +28,7 @@ import { toPdfDate } from "../document-commands.ts";
 import { visibleBox } from "./page-box.ts";
 import {
   APPEARANCE_FONT_NAMES,
+  annotationAuthor,
   embedAppearanceFonts,
   encodeStandardText,
   normalAppearance,
@@ -234,7 +235,7 @@ export async function addMeasurement(pdfBytes: Uint8Array, input: MeasurementInp
     F: 4,
     P: page.ref,
     NM: pdfText(`navpdf-measure-${crypto.randomUUID()}`),
-    T: pdfText(input.author?.trim() || "NavPDF"),
+    T: pdfText(annotationAuthor(input.author)),
     Contents: pdfText(label),
     Subj: pdfText(input.kind === "area" ? "Area measurement" : "Length measurement"),
     M: pdfText(toPdfDate()),

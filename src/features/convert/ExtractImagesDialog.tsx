@@ -44,7 +44,7 @@ export function ExtractImagesDialog({
     for (const [position, number] of pages.list.entries()) {
       if (cancelled.current) return null;
       setProgress(`Reading page ${number} (${position + 1} of ${pages.list.length})…`);
-      const found = await pageImages((await pdf.getPage(number)) as never, number, seen, minimum);
+      const found = await pageImages(await pdf.getPage(number), number, seen, minimum);
       images.push(...found);
       total += found.reduce((sum, image) => sum + image.png.length, 0);
       if (total > MAX_TOTAL_BYTES)

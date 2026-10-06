@@ -127,7 +127,8 @@ function rangeFrom(startIndex: number, dict: PDFDict): PageLabelRange {
   const first = dict.get(PDFName.of("St"));
   return {
     startPage: startIndex + 1,
-    style: (style instanceof PDFName && STYLES_BY_NAME.get(style.decodeText())) || "none",
+    style:
+      (style instanceof PDFName ? STYLES_BY_NAME.get(style.decodeText()) : undefined) ?? "none",
     prefix: textValue(dict.lookup(PDFName.of("P"))),
     firstNumber: first instanceof PDFNumber ? Math.max(1, first.asNumber()) : 1,
   };

@@ -39,6 +39,7 @@ describe("sensitive data patterns", () => {
     expect(found("user@localhost and @handle and a@b")).toEqual([]);
     expect(found("Invoice 5551234567, part 12345")).toEqual([]);
     expect(found("(12345678901 not a phone", ["phone"])).toEqual([]);
+    expect(found("Order 12, 2026 and Item 4 2026 and 3/4-2026", ["date"])).toEqual([]);
   });
 
   it("prefers the more specific kind where matches overlap and honors the chosen kinds", () => {

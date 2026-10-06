@@ -48,6 +48,8 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+const keys = () => screen.getByRole("button", { name: /^Measuring / });
+
 const click = (target: Element, x: number, y: number) =>
   fireEvent.pointerDown(target, { button: 0, pointerId: 1, clientX: x, clientY: y });
 
@@ -60,6 +62,7 @@ describe("MeasureTool", () => {
     const overlay = screen.getByRole("application", { name: "Measure distance" });
     click(overlay, 172, 400);
     await vi.waitFor(() => expect(controller.pdf.getPage).toHaveBeenCalledWith(3));
+    expect(document.activeElement).toBe(keys());
     click(overlay, 244, 400);
     await vi.waitFor(() =>
       expect(controller.addMeasurement).toHaveBeenCalledWith({
@@ -91,10 +94,10 @@ describe("MeasureTool", () => {
       click(overlay, x, y);
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    fireEvent.keyDown(overlay, { key: "Backspace" });
+    fireEvent.keyDown(keys(), { key: "Backspace" });
     fireEvent.pointerMove(overlay, { pointerId: 1, clientX: 172, clientY: 244 });
     expect(await screen.findByText(/sq in ·/)).toBeTruthy();
-    fireEvent.keyDown(overlay, { key: "Enter" });
+    fireEvent.keyDown(keys(), { key: "Enter" });
     await vi.waitFor(() => expect(controller.addMeasurement).toHaveBeenCalled());
     const [[input]] = controller.addMeasurement.mock.calls as unknown as [[{ points: number[][] }]];
     expect(input.points).toEqual([
@@ -112,9 +115,9 @@ describe("MeasureTool", () => {
     const overlay = screen.getByRole("application", { name: "Measure perimeter" });
     click(overlay, 150, 150);
     await vi.waitFor(() => expect(controller.pdf.getPage).toHaveBeenCalled());
-    fireEvent.keyDown(overlay, { key: "Escape" });
+    fireEvent.keyDown(keys(), { key: "Escape" });
     expect(useWorkspace.getState().tool).toBe("measure");
-    fireEvent.keyDown(overlay, { key: "Escape" });
+    fireEvent.keyDown(keys(), { key: "Escape" });
     expect(useWorkspace.getState().tool).toBe("select");
     expect(controller.setTool).toHaveBeenCalledWith("select");
     expect(controller.addMeasurement).not.toHaveBeenCalled();

@@ -83,7 +83,8 @@ interface Rule {
   accept: (match: string) => boolean;
 }
 
-const MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec";
+const MONTH = /^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+const startsWithMonth = (text: string) => MONTH.test(text);
 
 const RULES: Rule[] = [
   {
@@ -102,12 +103,28 @@ const RULES: Rule[] = [
     accept: ibanValid,
   },
   {
+    // 2026-03-04
     kind: "date",
-    pattern: new RegExp(
-      String.raw`\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/.-]\d{1,2}[/.-](?:\d{4}|\d{2})|(?:${MONTHS})[a-z]*\.? \d{1,2}(?:st|nd|rd|th)?,? \d{4}|\d{1,2} (?:${MONTHS})[a-z]*\.? \d{4})\b`,
-      "gi",
-    ),
+    pattern: /\b\d{4}-\d{2}-\d{2}\b/g,
     accept: () => true,
+  },
+  {
+    // 3/4/2026, 04.03.26
+    kind: "date",
+    pattern: /\b\d{1,2}([/.-])\d{1,2}\1(?:\d{4}|\d{2})\b/g,
+    accept: () => true,
+  },
+  {
+    // March 4, 2026 and Mar. 4th 2026
+    kind: "date",
+    pattern: /\b[a-z]{3,9}\.? \d{1,2}(?:st|nd|rd|th)?,? \d{4}\b/gi,
+    accept: startsWithMonth,
+  },
+  {
+    // 4 March 2026
+    kind: "date",
+    pattern: /\b\d{1,2} [a-z]{3,9}\.? \d{4}\b/gi,
+    accept: (match) => startsWithMonth(match.slice(match.indexOf(" ") + 1)),
   },
   {
     kind: "phone",

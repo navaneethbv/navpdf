@@ -131,3 +131,9 @@ export function normalAppearance(doc: PDFDocument, ref: PDFRef) {
 }
 
 export const APPEARANCE_FONT_NAMES = { regular: "Helv", bold: "HeBo" } as const;
+
+/** The /T author for a new annotation; a blank name falls back to the application. */
+export function annotationAuthor(author?: string) {
+  const name = author?.trim() ?? "";
+  return name.length > 0 ? name : "NavPDF";
+}

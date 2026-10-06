@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 import { pageAt, pdfPoint } from "./page-pointer";
@@ -48,7 +42,7 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
   const [message, setMessage] = useState(INSTRUCTIONS[kind]);
 
   useEffect(() => {
-    target.current?.focus();
+    target.current?.focus({ preventScroll: true });
   }, []);
 
   const reset = () => {
@@ -88,12 +82,14 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     pdf: await pdfPoint(controller, element, event.clientX, event.clientY),
   });
 
-  const addPoint = async (event: ReactPointerEvent) => {
+  const addPoint = async (event: PointerEvent) => {
     if (event.button !== 0 || useWorkspace.getState().busy || !controller.pdf) return;
     const element = pageAt(event.clientX, event.clientY);
     // A measurement stays on the page where it started.
     if (!element || (page.current && element !== page.current)) return;
     event.preventDefault();
+    // Keep keyboard focus on the tool so Enter, Backspace and Escape keep working.
+    target.current?.focus({ preventScroll: true });
     page.current = element;
     const mark = await markAt(event, element);
     if (page.current !== element) return;
@@ -107,7 +103,7 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     if (kind === "distance" && next.length === 2) await finish(next);
   };
 
-  const track = async (event: ReactPointerEvent) => {
+  const track = async (event: PointerEvent) => {
     if (!page.current || !latest.current.length) return;
     setHover(await markAt(event, page.current));
   };
@@ -126,6 +122,28 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     }
   };
 
+  // Pointer listeners are attached natively, as in the shape tool, and always call the latest
+  // handlers so they see the current kind and controller.
+  const handlers = useRef({ addPoint, track, finish });
+  useEffect(() => {
+    handlers.current = { addPoint, track, finish };
+  });
+  useEffect(() => {
+    const element = overlay.current;
+    if (!element) return;
+    const down = (event: PointerEvent) => void handlers.current.addPoint(event);
+    const move = (event: PointerEvent) => void handlers.current.track(event);
+    const double = () => void handlers.current.finish(latest.current);
+    element.addEventListener("pointerdown", down);
+    element.addEventListener("pointermove", move);
+    element.addEventListener("dblclick", double);
+    return () => {
+      element.removeEventListener("pointerdown", down);
+      element.removeEventListener("pointermove", move);
+      element.removeEventListener("dblclick", double);
+    };
+  }, []);
+
   const origin = overlay.current?.getBoundingClientRect();
   const local = (point: Point) =>
     `${point[0] - (origin?.left ?? 0)},${point[1] - (origin?.top ?? 0)}`;
@@ -135,10 +153,6 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
   return (
     <div
       ref={overlay}
-      onPointerDown={(event) => void addPoint(event)}
-      onPointerMove={(event) => void track(event)}
-      onDoubleClick={() => void finish(latest.current)}
-      onKeyDown={onKey}
       className="shape-tool-overlay measure-tool-overlay"
       role="application"
       aria-label={`Measure ${kind}`}
@@ -148,6 +162,7 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
         type="button"
         className="shape-tool-keyboard-target"
         aria-label={`Measuring ${kind}. Press Escape to stop.`}
+        onKeyDown={onKey}
       />
       {path && (
         <svg className="shape-preview-svg" aria-hidden="true">

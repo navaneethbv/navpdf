@@ -32,7 +32,8 @@ function pageOfWidget(doc: PDFDocument, widget: PDFWidgetAnnotation, ref: PDFRef
   if (byParent >= 0) return byParent;
   return pages.findIndex((page) =>
     (page.node.Annots()?.asArray() ?? []).some(
-      (item) => item === ref || doc.context.lookup(item) === widget.dict,
+      (item) =>
+        (item instanceof PDFRef && item === ref) || doc.context.lookup(item) === widget.dict,
     ),
   );
 }

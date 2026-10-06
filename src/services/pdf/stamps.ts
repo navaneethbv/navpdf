@@ -16,6 +16,7 @@ import { toPdfDate } from "../document-commands.ts";
 import { fromTopLeftVisual, visibleBox } from "./page-box.ts";
 import {
   APPEARANCE_FONT_NAMES,
+  annotationAuthor,
   appearanceStream,
   embedAppearanceFonts,
   encodeStandardText,
@@ -182,7 +183,7 @@ export async function addStamp(pdfBytes: Uint8Array, input: StampInput): Promise
     P: page.ref,
     C: color,
     NM: pdfText(input.id ?? `navpdf-stamp-${crypto.randomUUID()}`),
-    T: pdfText(input.author?.trim() || "NavPDF"),
+    T: pdfText(annotationAuthor(input.author)),
     Contents: pdfText(detail ? `${label}\n${detail}` : label),
     M: pdfText(now),
     CreationDate: pdfText(now),
