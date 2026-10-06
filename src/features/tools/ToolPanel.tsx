@@ -318,6 +318,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       action: () => s.set({ activeModal: "compress" }),
       disabled: !hasDoc,
     },
+    {
+      id: "flatten-pdf",
+      label: "Flatten PDF",
+      description: "Make comments, stamps and form values part of the page",
+      category: "forms",
+      icon: Layers,
+      action: () => s.set({ activeModal: "flatten" }),
+      disabled: !hasDoc,
+    },
     // Forms & Sign
     {
       id: "fill-and-sign",

@@ -2,6 +2,11 @@ import { useState } from "react";
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 
+export interface EditResult {
+  bytes: Uint8Array;
+  status: string;
+}
+
 export const errorMessage = (cause: unknown) =>
   cause instanceof Error ? cause.message : "The operation could not be completed.";
 
@@ -14,9 +19,10 @@ export function useDocumentEdit(controller: ViewerController | null) {
   const [error, setError] = useState("");
   const set = useWorkspace((state) => state.set);
 
+  /** `edit` may return a status describing what changed instead of the default `status`. */
   const apply = async (
     status: string,
-    edit: (bytes: Uint8Array) => Promise<Uint8Array>,
+    edit: (bytes: Uint8Array) => Promise<Uint8Array | EditResult>,
   ): Promise<boolean> => {
     const source = controller?.pdf;
     if (!controller || !source || busy) return false;
@@ -24,12 +30,14 @@ export function useDocumentEdit(controller: ViewerController | null) {
     setError("");
     try {
       const bytes = await source.saveDocument();
-      const changed = await edit(bytes);
-      await controller.replaceWithBytes(changed, status, {
+      const result = await edit(bytes);
+      const changed = result instanceof Uint8Array ? result : result.bytes;
+      const message = result instanceof Uint8Array ? status : result.status;
+      await controller.replaceWithBytes(changed, message, {
         expectedSource: source,
         preMutationBytes: bytes,
       });
-      set({ status });
+      set({ status: message });
       return true;
     } catch (cause) {
       setError(errorMessage(cause));

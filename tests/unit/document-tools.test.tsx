@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import { StampDialog } from "../../src/features/annotations/StampDialog";
+import { FlattenDialog } from "../../src/features/document/FlattenDialog";
+import { addStamp } from "../../src/services/pdf/stamps";
 import { useWorkspace } from "../../src/stores/workspace";
 
 async function blankPdf(pages = 2) {
@@ -83,5 +85,38 @@ describe("StampDialog", () => {
     );
     expect(replaceWithBytes).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("FlattenDialog", () => {
+  it("flattens comments and reports what changed", async () => {
+    seed();
+    const stamped = await addStamp(await blankPdf(1), {
+      page: 1,
+      stamp: "Draft",
+      position: "center",
+    });
+    const { controller, replaceWithBytes } = await editableController(stamped);
+    const onClose = vi.fn();
+    render(<FlattenDialog controller={controller as never} onClose={onClose} />);
+    fireEvent.click(screen.getByLabelText("Form fields and their current values"));
+    fireEvent.click(screen.getByRole("button", { name: "Flatten" }));
+    const { doc, status } = await committed(replaceWithBytes);
+    expect(status).toBe("Flattened 1 comment(s) and markup.");
+    expect(doc.getPage(0).node.Annots()).toBeUndefined();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("requires a choice and explains when nothing can be flattened", async () => {
+    seed();
+    const { controller, replaceWithBytes } = await editableController(await blankPdf(1));
+    render(<FlattenDialog controller={controller as never} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("Comments, markup and stamps"));
+    fireEvent.click(screen.getByLabelText("Form fields and their current values"));
+    expect(screen.getByRole("button", { name: "Flatten" })).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByLabelText("Comments, markup and stamps"));
+    fireEvent.click(screen.getByRole("button", { name: "Flatten" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/nothing to flatten/);
+    expect(replaceWithBytes).not.toHaveBeenCalled();
   });
 });
