@@ -16,6 +16,32 @@ updates:
     directory: "/src-tauri"
     patterns: ["*"]
     multi-ecosystem-group: all-dependencies
+    ignore:
+      # The certificate stack has to move as one unit, and its next releases
+      # (der 0.8, x509-cert 0.3, p256 0.14, ...) only work with cms 0.3 and
+      # rsa 0.10, which are still pre-releases. A partial bump does not compile.
+      # Patch releases stay allowed; drop this once cms and rsa ship stable
+      # releases on the new stack and src/engine/sign.rs is migrated.
+      - dependency-name: "cms"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "const-oid"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "der"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "p12-keystore"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "p256"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "pkcs1"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "pkcs8"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "rsa"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "spki"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "x509-cert"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: "github-actions"
     directory: "/"
     patterns: ["*"]

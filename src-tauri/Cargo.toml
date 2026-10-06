@@ -31,15 +31,15 @@ zeroize = { version = "1", features = ["serde"] }
 url = "2"
 aes-gcm = "0.11"
 cms = { version = "0.2.3", features = ["builder"] }
-const-oid = { version = "0.10", features = ["db"] }
-der = { version = "0.8", features = ["alloc", "derive", "oid"] }
-p12-keystore = "0.3.2"
-p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+const-oid = { version = "0.9", features = ["db"] }
+der = { version = "0.7", features = ["alloc", "derive", "oid"] }
+p12-keystore = "0.1.5"
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
 rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
-x509-cert = "0.3.0"
+x509-cert = "0.2.5"
 
 [dev-dependencies]
-x509-cert = { version = "0.3.0", features = ["builder"] }
+x509-cert = { version = "0.2.5", features = ["builder"] }
 
 [patch.crates-io]
 # Upstream RUSTSEC-2024-0429 fix backported without changing GTK 0.18's API.

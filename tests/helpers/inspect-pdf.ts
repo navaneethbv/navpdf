@@ -28,6 +28,7 @@ export async function loadWithPdfJs(bytes: Uint8Array): Promise<PDFDocumentProxy
     data: new Uint8Array(bytes),
     disableAutoFetch: true,
     disableStream: true,
+    fontExtraProperties: true,
   }).promise;
 }
 
