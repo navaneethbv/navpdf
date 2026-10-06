@@ -29,8 +29,7 @@ export function ExtractImagesDialog({
   const cancelled = useRef(false);
 
   const pages = useMemo(() => {
-    if (!range.trim())
-      return { list: allPageNumbers(pageCount), error: "" };
+    if (!range.trim()) return { list: allPageNumbers(pageCount), error: "" };
     try {
       return { list: parsePageRange(range, pageCount).map((page) => page + 1), error: "" };
     } catch (cause) {
