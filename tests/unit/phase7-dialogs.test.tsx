@@ -334,6 +334,47 @@ describe("redaction workflow", () => {
     expect(useWorkspace.getState().status).toMatch(/Save As/);
   });
 
+  it("marks sensitive data patterns and audits the matched text", async () => {
+    seed();
+    const view = controller([
+      "Email ana@example.org or call (555) 123-4567",
+      "Card 4111 1111 1111 1111",
+    ]);
+    engine.redactDocument.mockResolvedValueOnce({ bytes: new Uint8Array([5]), report: result });
+    render(<RedactionTool controller={view as never} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText("Mark Sensitive Data"));
+    expect(
+      await screen.findByText(
+        /Marked 1 × email addresses, 1 × phone numbers, 1 × payment card numbers on 2 pages/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Marked regions (3)")).toBeTruthy();
+    fireEvent.click(screen.getByText("Review and Apply…"));
+    fireEvent.click(screen.getByText("Apply Redactions"));
+    await vi.waitFor(() => expect(engine.redactDocument).toHaveBeenCalled());
+    const request = engine.redactDocument.mock.calls[0][2];
+    expect(request.terms).toEqual(["ana@example.org", "(555) 123-4567", "4111 1111 1111 1111"]);
+    expect(request.regions).toHaveLength(3);
+  });
+
+  it("reports when no sensitive data is found", async () => {
+    seed();
+    render(
+      <RedactionTool
+        controller={controller(["Nothing here", "Still nothing"]) as never}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("Email addresses"));
+    fireEvent.click(screen.getByLabelText("Phone numbers"));
+    fireEvent.click(screen.getByLabelText("US Social Security numbers"));
+    fireEvent.click(screen.getByLabelText("Payment card numbers"));
+    expect(screen.getByText("Mark Sensitive Data").closest("button")?.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("Dates"));
+    fireEvent.click(screen.getByText("Mark Sensitive Data"));
+    expect(await screen.findByText(/No matching data was found/)).toBeTruthy();
+  });
+
   it("requires acknowledgement for signed documents and supports cancel and removal", async () => {
     seed();
     act(() => useWorkspace.getState().set({ hasDigitalSignature: true }));

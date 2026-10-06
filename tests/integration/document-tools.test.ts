@@ -13,6 +13,7 @@ import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mj
 import { addStamp } from "../../src/services/pdf/stamps";
 import { flattenDocument, placementMatrix } from "../../src/services/pdf/flatten";
 import { bookletOrder, imposePages } from "../../src/services/pdf/impose";
+import { findPatternMarks } from "../../src/features/redact/redaction-marks";
 import {
   collectComments,
   commentSummaryCsv,
@@ -456,5 +457,29 @@ describe("comment summaries", () => {
     expect(parsePdfDate("D:2026")).toBe("2026-01-01T00:00:00.000Z");
     expect(parsePdfDate("D:20261306")).toBe("");
     expect(parsePdfDate("yesterday")).toBe("");
+  });
+});
+
+describe("sensitive data marks", () => {
+  it("places marks over the matched text in the real text layer", async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    doc.addPage([612, 792]).drawText("Contact ana@example.org today", {
+      x: 72,
+      y: 700,
+      size: 12,
+      font,
+    });
+    const pdf = await reopen(await doc.save());
+    const [mark] = await findPatternMarks(pdf, ["email"]);
+    expect(mark).toMatchObject({ page: 1, kind: "email", text: "ana@example.org" });
+    const before = font.widthOfTextAtSize("Contact ", 12);
+    const width = font.widthOfTextAtSize("ana@example.org", 12);
+    // Without a canvas, glyph positions use average widths, so allow a few points either way;
+    // the matched text is also audited after redaction. The mark stays clear of nearby words.
+    expect(Math.abs(mark.rect[0] - (72 + before))).toBeLessThan(3);
+    expect(Math.abs(mark.rect[2] - (72 + before + width))).toBeLessThan(3);
+    expect(mark.rect[1]).toBeLessThan(700);
+    expect(mark.rect[3]).toBeGreaterThan(708);
   });
 });
