@@ -28,6 +28,7 @@ import {
   LayoutGrid,
   MessageSquareText,
   Move,
+  Accessibility,
   Heading,
   Droplets,
   Paperclip,
@@ -219,6 +220,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       category: "edit",
       icon: LinkIcon,
       action: () => s.set({ activeModal: "add-link" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "accessibility-check",
+      label: "Accessibility Check",
+      description: "Check tags, title, language, text and tab order; fix what NavPDF can",
+      category: "review",
+      icon: Accessibility,
+      action: () => s.set({ activeModal: "accessibility" }),
       disabled: !hasDoc,
     },
     {

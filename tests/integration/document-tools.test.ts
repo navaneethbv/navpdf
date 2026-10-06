@@ -6,6 +6,7 @@ import {
   PDFDocument,
   PDFName,
   PDFNumber,
+  PDFString,
   StandardFonts,
   degrees,
 } from "pdf-lib";
@@ -15,6 +16,12 @@ import { flattenDocument, placementMatrix } from "../../src/services/pdf/flatten
 import { bookletOrder, imposePages } from "../../src/services/pdf/impose";
 import { findPatternMarks } from "../../src/features/redact/redaction-marks";
 import { readWidgets, setWidgetGeometry } from "../../src/services/pdf/field-geometry";
+import {
+  checkAccessibility,
+  checkAccessibilityBytes,
+  fixAccessibility,
+  type AccessibilityCheck,
+} from "../../src/services/pdf/accessibility";
 import {
   collectComments,
   commentSummaryCsv,
@@ -593,5 +600,115 @@ describe("form field geometry", () => {
     const clamped = await setWidgetGeometry(source, { ...base, x: 600, y: 900 });
     const [moved] = await readWidgets(clamped.bytes);
     expect([moved.x, moved.y]).toEqual([512, 772]);
+  });
+});
+
+describe("accessibility check", () => {
+  async function factsFor(bytes: Uint8Array) {
+    const pdf = await reopen(bytes);
+    const hasText: boolean[] = [];
+    for (let number = 1; number <= pdf.numPages; number++) {
+      const content = await (await pdf.getPage(number)).getTextContent();
+      hasText.push(content.items.some((item) => "str" in item && item.str.trim() !== ""));
+    }
+    const permissions = await pdf.getPermissions();
+    return { hasText, permissions: permissions ? [...permissions] : null };
+  }
+
+  async function untagged() {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    doc.addPage([612, 792]).drawText("Readable text", { x: 72, y: 700, size: 12, font });
+    doc.addPage([612, 792]);
+    const form = doc.getForm();
+    form.createTextField("Email").addToPage(doc.getPage(0), { x: 72, y: 600 });
+    return addLinkAnnotation(await doc.save(), {
+      page: 1,
+      rect: [72, 100, 200, 120],
+      target: { type: "page", page: 2 },
+    });
+  }
+
+  const statuses = (checks: AccessibilityCheck[]) =>
+    Object.fromEntries(checks.map((item) => [item.id, item.status]));
+
+  it("reports what an untagged document is missing and fixes what it can", async () => {
+    const bytes = await untagged();
+    const { checks } = await checkAccessibilityBytes(bytes, await factsFor(bytes));
+    expect(statuses(checks)).toMatchObject({
+      tagged: "failed",
+      figures: "manual",
+      title: "failed",
+      "display-title": "failed",
+      language: "failed",
+      text: "failed",
+      "tab-order": "failed",
+      "field-tooltips": "failed",
+      security: "passed",
+      bookmarks: "passed",
+      manual: "manual",
+    });
+    expect(checks.find((item) => item.id === "text")?.detail).toMatch(
+      /Page\(s\) 2 contain no text/,
+    );
+
+    const fixed = await fixAccessibility(bytes, {
+      title: "Quarterly report",
+      displayTitle: true,
+      language: "en-CA",
+      tabOrder: true,
+    });
+    const again = await checkAccessibilityBytes(fixed, await factsFor(fixed));
+    expect(statuses(again.checks)).toMatchObject({
+      title: "passed",
+      "display-title": "passed",
+      language: "passed",
+      "tab-order": "passed",
+    });
+    expect(again.language).toBe("en-CA");
+    const pdf = await reopen(fixed);
+    expect((await pdf.getMetadata()).info).toMatchObject({
+      Title: "Quarterly report",
+      Language: "en-CA",
+    });
+    await expect(fixAccessibility(bytes, { language: "english!" })).rejects.toThrow(
+      /language code/,
+    );
+    await expect(fixAccessibility(bytes, { title: "  " })).rejects.toThrow(
+      /Enter a document title/,
+    );
+  });
+
+  it("counts tagged figures without alternate text and blocked assistive access", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage();
+    const figure = (alt?: string) =>
+      doc.context.obj({
+        Type: "StructElem",
+        S: "Figure",
+        ...(alt ? { Alt: PDFString.of(alt) } : {}),
+      });
+    const root = doc.context.obj({
+      Type: "StructTreeRoot",
+      K: doc.context.obj({
+        Type: "StructElem",
+        S: "Document",
+        K: [doc.context.register(figure("Chart of sales")), doc.context.register(figure())],
+      }),
+    });
+    doc.catalog.set(PDFName.of("StructTreeRoot"), doc.context.register(root));
+    doc.catalog.set(PDFName.of("MarkInfo"), doc.context.obj({ Marked: true }));
+    const checks = checkAccessibility(await PDFDocument.load(await doc.save()), {
+      hasText: [true],
+      permissions: [4],
+    });
+    expect(statuses(checks)).toMatchObject({
+      tagged: "passed",
+      figures: "failed",
+      security: "failed",
+    });
+    expect(checks.find((item) => item.id === "figures")?.detail).toBe(
+      "1 of 2 tagged figure(s) have alternate text.",
+    );
   });
 });

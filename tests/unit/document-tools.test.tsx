@@ -9,6 +9,7 @@ import { PageLabelsDialog } from "../../src/features/pages/PageLabelsDialog";
 import { ImposeDialog } from "../../src/features/pages/ImposeDialog";
 import { CommentSummaryDialog } from "../../src/features/annotations/CommentSummaryDialog";
 import { FieldLayoutDialog } from "../../src/features/forms/FieldLayoutDialog";
+import { AccessibilityDialog } from "../../src/features/document/AccessibilityDialog";
 import { readWidgets } from "../../src/services/pdf/field-geometry";
 import { readPageLabels, setPageLabels } from "../../src/services/pdf/page-labels";
 import { useWorkspace } from "../../src/stores/workspace";
@@ -22,7 +23,14 @@ async function blankPdf(pages = 2) {
 /** A controller double that serializes real bytes and records the committed replacement. */
 async function editableController(bytes?: Uint8Array) {
   const source = bytes ?? (await blankPdf());
-  const pdf = { saveDocument: vi.fn(async () => source) };
+  const pdf = {
+    numPages: (await PDFDocument.load(source)).getPageCount(),
+    saveDocument: vi.fn(async () => source),
+    getPermissions: vi.fn(async () => null),
+    getPage: vi.fn(async () => ({
+      getTextContent: vi.fn(async () => ({ items: [{ str: "Page text" }] })),
+    })),
+  };
   const replaceWithBytes = vi.fn(async () => undefined);
   return { controller: { pdf, replaceWithBytes }, pdf, replaceWithBytes };
 }
@@ -291,5 +299,44 @@ describe("FieldLayoutDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/at least 4 points/);
     expect(form.replaceWithBytes).not.toHaveBeenCalled();
+  });
+});
+
+describe("AccessibilityDialog", () => {
+  it("lists check results and applies title and language fixes", async () => {
+    seed(1);
+    const { controller, replaceWithBytes } = await editableController(await blankPdf(1));
+    render(<AccessibilityDialog controller={controller as never} onClose={vi.fn()} />);
+    const list = await screen.findByRole("list", { name: "Accessibility checks" });
+    expect(list.textContent).toMatch(/Tagged PDF \(Failed\)/);
+    expect(list.textContent).toMatch(/Pages have real text \(Passed\)/);
+    expect(screen.getByRole("button", { name: "Fix Selected Issues" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.change(screen.getByLabelText("Document title"), { target: { value: "Annual plan" } });
+    fireEvent.change(screen.getByLabelText("Language (for example en-US)"), {
+      target: { value: "de-DE" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Fix Selected Issues" }));
+    const { doc, status } = await committed(replaceWithBytes);
+    expect(status).toBe("Accessibility settings updated");
+    expect(doc.getTitle()).toBe("Annual plan");
+    expect(doc.catalog.lookup(PDFName.of("Lang"))?.toString()).toContain("de-DE");
+  });
+
+  it("disables fixing until the language code is valid", async () => {
+    seed(1);
+    const { controller } = await editableController(await blankPdf(1));
+    render(<AccessibilityDialog controller={controller as never} onClose={vi.fn()} />);
+    await screen.findByRole("list", { name: "Accessibility checks" });
+    fireEvent.change(screen.getByLabelText("Document title"), { target: { value: "Plan" } });
+    fireEvent.change(screen.getByLabelText("Language (for example en-US)"), {
+      target: { value: "not a language" },
+    });
+    expect(screen.getByRole("button", { name: "Fix Selected Issues" })).toHaveProperty(
+      "disabled",
+      true,
+    );
   });
 });

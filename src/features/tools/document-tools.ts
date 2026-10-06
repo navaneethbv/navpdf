@@ -6,6 +6,7 @@ import { PageLabelsDialog } from "../pages/PageLabelsDialog";
 import { ImposeDialog } from "../pages/ImposeDialog";
 import { CommentSummaryDialog } from "../annotations/CommentSummaryDialog";
 import { FieldLayoutDialog } from "../forms/FieldLayoutDialog";
+import { AccessibilityDialog } from "../document/AccessibilityDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -20,4 +21,5 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   impose: ImposeDialog,
   "comment-summary": CommentSummaryDialog,
   "field-layout": FieldLayoutDialog,
+  accessibility: AccessibilityDialog,
 };
