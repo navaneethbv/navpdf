@@ -28,6 +28,7 @@ export type Format =
   | "html"
   | "xml";
 
+const XML_MIME = "application/xml";
 const PRESENTATION = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const FORMATS: {
   id: Format;
@@ -56,7 +57,7 @@ const FORMATS: {
     id: "xml-spreadsheet",
     label: "XML Spreadsheet 2003 (.xml)",
     extension: "xml",
-    mime: "application/xml",
+    mime: XML_MIME,
     description:
       "Typed cells, one worksheet per page, in the older XML format that Excel and LibreOffice open.",
   },
@@ -103,7 +104,7 @@ const FORMATS: {
     id: "xml",
     label: "XML document (.xml)",
     extension: "xml",
-    mime: "application/xml",
+    mime: XML_MIME,
     description: "Pages, headings and paragraphs as structured XML 1.0 for other tools to process.",
   },
 ];

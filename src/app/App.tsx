@@ -42,19 +42,17 @@ import { DesignTools } from "../features/design/DesignTools";
 import { ExportOptions } from "../features/convert/ExportOptions";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
+/** Menu and modal identifiers for the editable export dialog and the format each selects. */
+const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
+  ["office-export", "docx"],
+  ["office-pptx", "pptx-text"],
+  ["office-xlsx", "xlsx"],
+  ["office-rtf", "rtf"],
+  ["office-html", "html"],
+]);
+
 function officeFormat(modal: string | null): OfficeFormat {
-  switch (modal) {
-    case "office-html":
-      return "html";
-    case "office-pptx":
-      return "pptx-text";
-    case "office-xlsx":
-      return "xlsx";
-    case "office-rtf":
-      return "rtf";
-    default:
-      return "docx";
-  }
+  return OFFICE_EXPORT_FORMATS.get(modal ?? "") ?? "docx";
 }
 
 /** Page turns for keys that do not scroll a single-page view. */
@@ -228,22 +226,11 @@ function handleShortcut(
   return true;
 }
 
-const OFFICE_EXPORT_MODALS = new Set([
-  "office-export",
-  "office-pptx",
-  "office-xlsx",
-  "office-rtf",
-  "office-html",
-]);
 const creationMenuActions = new Set(["create-pdf", "import-pdf", "combine-pdf", "open-recent"]);
 const documentMenuActions = new Set([
   "edit-objects",
   "page-workspace",
-  "office-export",
-  "office-pptx",
-  "office-xlsx",
-  "office-rtf",
-  "office-html",
+  ...OFFICE_EXPORT_FORMATS.keys(),
   "convert",
   "compress",
   "protect",
@@ -786,7 +773,7 @@ export default function App() {
         {s.activeModal === "convert" && (
           <ExportDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {OFFICE_EXPORT_MODALS.has(s.activeModal ?? "") && (
+        {OFFICE_EXPORT_FORMATS.has(s.activeModal ?? "") && (
           <OfficeExport
             controller={controller}
             initialFormat={officeFormat(s.activeModal)}

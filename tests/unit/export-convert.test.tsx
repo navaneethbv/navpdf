@@ -54,6 +54,7 @@ beforeEach(() => {
 });
 
 const originalCreateElement = Document.prototype.createElement;
+const EXPORT_FILE = "Export File";
 
 function mockCanvas2d() {
   const spy = vi.spyOn(document, "createElement").mockImplementation(((
@@ -164,7 +165,7 @@ describe("OfficeExport", () => {
     });
     const onClose = vi.fn();
     const { unmount } = render(<OfficeExport controller={controller as never} onClose={onClose} />);
-    fireEvent.click(screen.getByText("Export File"));
+    fireEvent.click(screen.getByText(EXPORT_FILE));
     await vi.waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect(created[0].type).toBe(
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -178,7 +179,7 @@ describe("OfficeExport", () => {
     fireEvent.click(screen.getByLabelText(/Excel workbook/));
     fireEvent.click(screen.getByText("Preview Page 1 Cells"));
     expect(await screen.findByText("=1+1")).toBeTruthy();
-    fireEvent.click(screen.getByText("Export File"));
+    fireEvent.click(screen.getByText(EXPORT_FILE));
     await vi.waitFor(() => expect(click).toHaveBeenCalledTimes(2));
     expect(created[1].type).toContain("spreadsheetml.sheet");
     click.mockRestore();
@@ -192,7 +193,7 @@ describe("OfficeExport", () => {
     render(<OfficeExport controller={controller as never} onClose={() => {}} />);
     expect(screen.getByText(/Editable formats are rebuilt from the PDF text layer/)).toBeTruthy();
     fireEvent.click(screen.getByLabelText(/Rich Text/));
-    fireEvent.click(screen.getByText("Export File"));
+    fireEvent.click(screen.getByText(EXPORT_FILE));
     await vi.waitFor(() => expect(click).toHaveBeenCalled());
     click.mockRestore();
   });
@@ -207,7 +208,7 @@ describe("OfficeExport", () => {
     fireEvent.change(screen.getByLabelText("Office export page range"), {
       target: { value: "2" },
     });
-    fireEvent.click(screen.getByText("Export File"));
+    fireEvent.click(screen.getByText(EXPORT_FILE));
 
     await vi.waitFor(() => expect(click).toHaveBeenCalled());
     expect(controller.pdf.getPage).toHaveBeenCalledWith(2);
@@ -361,7 +362,7 @@ describe("additional export formats", () => {
         <OfficeExport controller={controller as never} onClose={vi.fn()} />,
       );
       fireEvent.click(screen.getByLabelText(label));
-      fireEvent.click(screen.getByText("Export File"));
+      fireEvent.click(screen.getByText(EXPORT_FILE));
       await vi.waitFor(() => expect(downloads.names).toHaveLength(index + 1));
       expect(downloads.names[index]).toBe(name);
       expect(downloads.created[index].type).toBe(type);
@@ -384,7 +385,7 @@ describe("additional export formats", () => {
     ) as never;
     const downloads = captureDownloads();
     const { unmount } = render(<OfficeExport controller={controller as never} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByText("Export File"));
+    fireEvent.click(screen.getByText(EXPORT_FILE));
     expect(screen.getByLabelText("Close")).toHaveProperty("disabled", true);
     unmount();
     finish(await realPage(1));
