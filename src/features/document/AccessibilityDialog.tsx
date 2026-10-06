@@ -37,6 +37,12 @@ async function textPresence(pdf: Source, cancelled: () => boolean) {
   return result;
 }
 
+/** The system language as a PDF language tag, without POSIX suffixes such as "@posix". */
+function defaultLanguage() {
+  const tag = (navigator.language || "").split(/[@.]/)[0].replace("_", "-");
+  return LANGUAGE_TAG.test(tag) ? tag : "en";
+}
+
 interface Result {
   checks: AccessibilityCheck[];
   title: string;
@@ -69,7 +75,7 @@ export function AccessibilityDialog({
       if (!current) return;
       setResult(checked);
       setTitle(checked.title);
-      setLanguage(checked.language || navigator.language || "en");
+      setLanguage(checked.language || defaultLanguage());
     };
     setResult(null);
     run().catch((cause: unknown) => {
@@ -119,9 +125,12 @@ export function AccessibilityDialog({
             {result.checks.map((item) => {
               const Icon = ICONS[item.status];
               return (
-                <li key={item.id}>
-                  <Icon size={15} aria-hidden="true" /> <strong>{item.label}</strong> (
-                  {STATUS_TEXT[item.status]}): {item.detail}
+                <li key={item.id} className={`accessibility-check ${item.status}`}>
+                  <Icon size={15} aria-hidden="true" />
+                  <span>
+                    <strong>{item.label}</strong>: {STATUS_TEXT[item.status]}
+                    <span className="field-hint">{item.detail}</span>
+                  </span>
                 </li>
               );
             })}
@@ -156,6 +165,10 @@ export function AccessibilityDialog({
                 onChange={(event) => setLanguage(event.target.value)}
               />
             </>
+          )}
+          {!title.trim() && <p className="field-hint">Enter a title to apply the fixes.</p>}
+          {!languageValid && (
+            <p className="field-hint">Use a language code such as en, en-US or fr-CA.</p>
           )}
           {fixable.has("tab-order") && (
             <p className="field-hint">Tab order will follow the document structure.</p>

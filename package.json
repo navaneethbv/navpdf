@@ -25,6 +25,7 @@
     "acceptance:phase8": "node scripts/phase8-acceptance.mjs",
     "acceptance:phase10": "node scripts/phase10-acceptance.mjs",
     "acceptance:export-formats": "node scripts/export-formats-acceptance.mjs",
+    "acceptance:document-tools": "node scripts/document-tools-acceptance.mjs",
     "acceptance:ocr": "node scripts/ocr-native-acceptance.mjs",
     "acceptance:licenses": "node scripts/license-inventory.mjs",
     "acceptance:check-tools": "node scripts/check-tools.mjs",

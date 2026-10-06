@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import { Move } from "lucide-react";
 import { ToolDialog } from "../../components/ToolDialog";
 import type { ViewerController } from "../viewer/controller";
@@ -131,7 +131,7 @@ export function FieldLayoutDialog({
             ))}
           </select>
           {DIMENSIONS.map(([key, label]) => (
-            <div key={key}>
+            <Fragment key={key}>
               <label className="setting-title" htmlFor={`${ids}-${key}`}>
                 {label} (points)
               </label>
@@ -145,7 +145,7 @@ export function FieldLayoutDialog({
                   setDraft((current) => ({ ...current, [key]: event.target.value }))
                 }
               />
-            </div>
+            </Fragment>
           ))}
         </div>
       )}

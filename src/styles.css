@@ -2959,6 +2959,17 @@ p {
   gap: 6px;
   align-items: center;
 }
+.check-list li.accessibility-check {
+  align-items: flex-start;
+}
+.check-list li.accessibility-check svg {
+  flex: none;
+  margin-top: 2px;
+}
+.check-list li.accessibility-check .field-hint {
+  display: block;
+  margin: 0;
+}
 .check-list li.passed svg {
   color: var(--accent-ink);
 }

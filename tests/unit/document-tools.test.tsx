@@ -310,8 +310,8 @@ describe("AccessibilityDialog", () => {
     const { controller, replaceWithBytes } = await editableController(await blankPdf(1));
     render(<AccessibilityDialog controller={controller as never} onClose={vi.fn()} />);
     const list = await screen.findByRole("list", { name: "Accessibility checks" });
-    expect(list.textContent).toMatch(/Tagged PDF \(Failed\)/);
-    expect(list.textContent).toMatch(/Pages have real text \(Passed\)/);
+    expect(list.textContent).toMatch(/Tagged PDF: Failed/);
+    expect(list.textContent).toMatch(/Pages have real text: Passed/);
     expect(screen.getByRole("button", { name: "Fix Selected Issues" })).toHaveProperty(
       "disabled",
       true,
@@ -340,6 +340,7 @@ describe("AccessibilityDialog", () => {
       "disabled",
       true,
     );
+    expect(screen.getByText(/Use a language code/)).toBeTruthy();
   });
 });
 
