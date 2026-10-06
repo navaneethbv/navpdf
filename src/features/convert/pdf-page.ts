@@ -24,5 +24,10 @@ export function isTextItem(item: unknown): item is TextItem {
 export async function readPageLayout(page: PageProxy, number: number): Promise<PageLayout> {
   const { width, height } = page.getViewport({ scale: 1 });
   const content = await page.getTextContent();
-  return layoutPage(number, content.items.filter(isTextItem), width, height);
+  return layoutPage(
+    number,
+    content.items.filter((item): item is TextItem => isTextItem(item)),
+    width,
+    height,
+  );
 }

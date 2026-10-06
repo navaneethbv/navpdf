@@ -10,7 +10,7 @@ Source base: `779bb98`, plus the uncommitted source changes in this delivery.
 The Linux container provided Node `22.22.0` rather than the CI Node 24; `npm ci` was used.
 Formatting, lint, typecheck, production build, `git diff --check` and `cmp AGENTS.md CLAUDE.md` pass.
 The frontend suite passes 733 tests across 105 files.
-Coverage is 85.36% statements, 77.44% branches, 84.01% functions and 88.38% lines, with the existing thresholds unchanged and LCOV retained.
+Coverage is 85.37% statements, 77.44% branches, 84.03% functions and 88.39% lines, with the existing thresholds unchanged and LCOV retained.
 `npm audit --audit-level=high` initially reported the new `source-map-js` 1.2.1 advisory GHSA-68fv-2mgg-jv7q in a transitive development dependency already on `main`; the lockfile now resolves the patched 1.2.2 and the audit reports zero vulnerabilities.
 `cargo fmt --check` passes.
 Clippy passes with warnings denied.

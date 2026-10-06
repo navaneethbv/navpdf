@@ -228,6 +228,13 @@ function handleShortcut(
   return true;
 }
 
+const OFFICE_EXPORT_MODALS = new Set([
+  "office-export",
+  "office-pptx",
+  "office-xlsx",
+  "office-rtf",
+  "office-html",
+]);
 const creationMenuActions = new Set(["create-pdf", "import-pdf", "combine-pdf", "open-recent"]);
 const documentMenuActions = new Set([
   "edit-objects",
@@ -779,9 +786,7 @@ export default function App() {
         {s.activeModal === "convert" && (
           <ExportDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {["office-export", "office-pptx", "office-xlsx", "office-rtf", "office-html"].includes(
-          s.activeModal ?? "",
-        ) && (
+        {OFFICE_EXPORT_MODALS.has(s.activeModal ?? "") && (
           <OfficeExport
             controller={controller}
             initialFormat={officeFormat(s.activeModal)}

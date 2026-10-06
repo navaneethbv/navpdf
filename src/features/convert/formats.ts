@@ -31,12 +31,14 @@ export function buildCsv(pages: string[][][]) {
   };
   const rows = pages.flatMap((rowsOfPage, index) => [
     ...(index > 0 ? [""] : []),
-    ...rowsOfPage.map((row) => row.map(quote).join(",")),
+    ...rowsOfPage.map((row) => row.map((cell) => quote(cell)).join(",")),
   ]);
   return `\uFEFF${rows.join("\r\n")}\r\n`;
 }
 
 const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
+/** Excel number format escapes literal hyphens with a backslash. */
+const DATE_FORMAT = String.raw`yyyy\-mm\-dd`;
 
 /** Microsoft XML Spreadsheet 2003 with one worksheet per page and typed number and date cells. */
 export function buildSpreadsheetXml(sheets: { name: string; rows: string[][] }[]) {
@@ -68,12 +70,12 @@ export function buildSpreadsheetXml(sheets: { name: string; rows: string[][] }[]
   const worksheets = safeSheets
     .map(
       (sheet, index) =>
-        `<Worksheet ss:Name="${escapeXml(names[index])}"><Table>${sheet.rows.map(row).join("")}</Table></Worksheet>`,
+        `<Worksheet ss:Name="${escapeXml(names[index])}"><Table>${sheet.rows.map((cells) => row(cells)).join("")}</Table></Worksheet>`,
     )
     .join("");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Default" ss:Name="Normal"/><Style ss:ID="date"><NumberFormat ss:Format="yyyy\\-mm\\-dd"/></Style></Styles>${worksheets}</Workbook>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Default" ss:Name="Normal"/><Style ss:ID="date"><NumberFormat ss:Format="${DATE_FORMAT}"/></Style></Styles>${worksheets}</Workbook>
 `;
 }
 

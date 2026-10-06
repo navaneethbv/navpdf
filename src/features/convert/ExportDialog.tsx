@@ -313,7 +313,7 @@ export function ExportDialog({
   const startExport = () => {
     const task = runExport(format === "txt" ? produceText : produceImages(format));
     // The runner reports its own failures; this only guards against an unexpected rejection.
-    task.catch((error: unknown) => s.set({ error: String(error) }));
+    task.catch(() => s.set({ error: "The export could not be completed." }));
   };
 
   const cancelExport = () => {
