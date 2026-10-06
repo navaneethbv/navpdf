@@ -8,6 +8,7 @@ import { CommentSummaryDialog } from "../annotations/CommentSummaryDialog";
 import { FieldLayoutDialog } from "../forms/FieldLayoutDialog";
 import { AccessibilityDialog } from "../document/AccessibilityDialog";
 import { ExtractImagesDialog } from "../convert/ExtractImagesDialog";
+import { MeasureDialog } from "../annotations/MeasureDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -24,4 +25,5 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   "field-layout": FieldLayoutDialog,
   accessibility: AccessibilityDialog,
   "extract-images": ExtractImagesDialog,
+  measure: MeasureDialog,
 };

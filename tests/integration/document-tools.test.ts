@@ -18,6 +18,16 @@ import { findPatternMarks } from "../../src/features/redact/redaction-marks";
 import { readWidgets, setWidgetGeometry } from "../../src/services/pdf/field-geometry";
 import { pageImages } from "../../src/features/convert/embedded-images";
 import {
+  ACTUAL_SIZE,
+  addMeasurement,
+  measurementText,
+  pathLength,
+  polygonArea,
+  unitsPerPoint,
+  type MeasureScale,
+  type Point,
+} from "../../src/services/pdf/measure";
+import {
   checkAccessibility,
   checkAccessibilityBytes,
   fixAccessibility,
@@ -777,5 +787,104 @@ describe("embedded image export", () => {
     const decoded = await decodePng(first[0].png);
     expect(decoded).toMatchObject({ width: 6, height: 4, channels: 3 });
     expect([...decoded.pixels]).toEqual([...source]);
+  });
+});
+
+describe("measurements", () => {
+  const feet: MeasureScale = { pageInches: 1, realValue: 10, unit: "ft" };
+
+  it("computes lengths and areas at a drawing scale", () => {
+    const square: Point[] = [
+      [0, 0],
+      [144, 0],
+      [144, 144],
+      [0, 144],
+    ];
+    expect(pathLength(square)).toBe(432);
+    expect(pathLength(square, true)).toBe(576);
+    expect(polygonArea(square)).toBe(144 * 144);
+    expect(measurementText("distance", square.slice(0, 2), feet)).toBe("20.00 ft");
+    expect(measurementText("area", square, feet)).toBe("400.00 sq ft");
+    expect(measurementText("perimeter", square.slice(0, 3), ACTUAL_SIZE)).toBe("4.00 in");
+    expect(() => unitsPerPoint({ ...feet, pageInches: 0 })).toThrow(/positive scale/);
+  });
+
+  it("saves standard measurement annotations that PDF.js reads with their values", async () => {
+    let bytes = await pages({}, { rotation: 90 });
+    const distance = await addMeasurement(bytes, {
+      page: 1,
+      kind: "distance",
+      points: [
+        [72, 700],
+        [288, 700],
+      ],
+      scale: feet,
+    });
+    expect(distance.label).toBe("30.00 ft");
+    bytes = (
+      await addMeasurement(distance.bytes, {
+        page: 2,
+        kind: "area",
+        points: [
+          [100, 100],
+          [172, 100],
+          [172, 172],
+        ],
+        scale: { pageInches: 1, realValue: 2.54, unit: "cm" },
+      })
+    ).bytes;
+
+    const saved = await PDFDocument.load(bytes);
+    const [line] = annotationDicts(saved, 0);
+    expect(line.get(PDFName.of("IT"))).toEqual(PDFName.of("LineDimension"));
+    const measure = line.lookup(PDFName.of("Measure"), PDFDict);
+    expect(measure.lookup(PDFName.of("R"))?.toString()).toBe("(1 in = 10 ft)");
+    const [polygon] = annotationDicts(saved, 1);
+    expect(polygon.get(PDFName.of("Subtype"))).toEqual(PDFName.of("Polygon"));
+
+    const pdf = await reopen(bytes);
+    const [first] = await (await pdf.getPage(1)).getAnnotations();
+    expect(first).toMatchObject({ subtype: "Line", hasAppearance: true });
+    expect(first.contentsObj.str).toBe("30.00 ft");
+    const [area] = await (await pdf.getPage(2)).getAnnotations();
+    expect(area).toMatchObject({ subtype: "Polygon", hasAppearance: true });
+    // A right triangle with one-inch legs is half a square inch.
+    expect(area.contentsObj.str).toBe("3.23 sq cm");
+  });
+
+  it("rejects too few points and pages outside the document", async () => {
+    const bytes = await pages({});
+    const base = { page: 1, scale: feet };
+    await expect(
+      addMeasurement(bytes, {
+        ...base,
+        kind: "area",
+        points: [
+          [0, 0],
+          [10, 0],
+        ],
+      }),
+    ).rejects.toThrow(/three corners/);
+    await expect(
+      addMeasurement(bytes, {
+        ...base,
+        kind: "distance",
+        points: [
+          [5, 5],
+          [5, 5],
+        ],
+      }),
+    ).rejects.toThrow(/all in one place/);
+    await expect(
+      addMeasurement(bytes, {
+        ...base,
+        page: 3,
+        kind: "distance",
+        points: [
+          [0, 0],
+          [9, 9],
+        ],
+      }),
+    ).rejects.toThrow(/outside the document/);
   });
 });

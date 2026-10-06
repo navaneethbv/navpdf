@@ -30,6 +30,7 @@ import {
   Move,
   Accessibility,
   Images,
+  Ruler,
   Heading,
   Droplets,
   Paperclip,
@@ -267,6 +268,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       category: "review",
       icon: PenTool,
       action: () => s.set({ tool: "draw", activeModal: "annotations" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "measure",
+      label: "Measure",
+      description: "Distance, perimeter and area at a drawing scale",
+      category: "review",
+      icon: Ruler,
+      action: () => s.set({ activeModal: "measure" }),
       disabled: !hasDoc,
     },
     {

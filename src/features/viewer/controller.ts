@@ -41,6 +41,7 @@ import {
   updateAnnotation,
   type TextMarkupKind,
 } from "../../services/document-commands";
+import { addMeasurement, type MeasurementInput } from "../../services/pdf/measure";
 import { PDFDocument } from "pdf-lib";
 import { readComment } from "../../services/pdf/read-comment";
 import { installHighlightInterop } from "./highlight-interop";
@@ -237,6 +238,15 @@ async function readPageComments(
   return annotations
     .map((raw) => readComment(raw, pageNumber, annotsPdfLib))
     .filter((comment): comment is Comment => comment !== null);
+}
+
+/** A "#rrggbb" color as PDF RGB components from 0 to 1. */
+function rgbFromHex(hex: string): [number, number, number] {
+  return [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255) as [
+    number,
+    number,
+    number,
+  ];
 }
 
 export class ViewerController {
@@ -892,12 +902,7 @@ export class ViewerController {
     const status = `${kind === "Arrow" ? "Arrow" : kind} added to document`;
     return this.mutate(status, async () => {
       const state = useWorkspace.getState();
-      const hex = state.inkColor;
-      const color: [number, number, number] = [
-        Number.parseInt(hex.slice(1, 3), 16) / 255,
-        Number.parseInt(hex.slice(3, 5), 16) / 255,
-        Number.parseInt(hex.slice(5, 7), 16) / 255,
-      ];
+      const color = rgbFromHex(state.inkColor);
       const bytes = await this.pdf!.saveDocument();
       const shaped = await addShapeAnnotation(bytes, {
         page,
@@ -909,6 +914,19 @@ export class ViewerController {
         opacity: state.inkOpacity,
       });
       await this.replaceWithBytes(shaped, status, { preMutationBytes: bytes });
+    });
+  }
+  /** Saves a measurement drawn on `input.page` with the current markup color. */
+  async addMeasurement(input: Omit<MeasurementInput, "color">) {
+    if (!this.pdf) throw new Error("Open a PDF before measuring.");
+    return this.mutate("Measurement added to document", async () => {
+      const color = rgbFromHex(useWorkspace.getState().inkColor);
+      const bytes = await this.pdf!.saveDocument();
+      const result = await addMeasurement(bytes, { ...input, color });
+      await this.replaceWithBytes(result.bytes, `Measured ${result.label}`, {
+        preMutationBytes: bytes,
+      });
+      return result.label;
     });
   }
   async readSelectedTextGeometry(): Promise<SelectedTextGeometry[]> {
