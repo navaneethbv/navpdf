@@ -22,6 +22,8 @@ GlobalWorkerOptions.workerSrc = resolve("node_modules/pdfjs-dist/legacy/build/pd
 const pdfOptions = {
   standardFontDataUrl: resolve("node_modules/pdfjs-dist/standard_fonts") + "/",
   useSystemFonts: false,
+  // Matches the app: PDF.js 6.4+ only exposes font names with this flag.
+  fontExtraProperties: true,
 };
 
 describe("nearestStandardStyle", () => {

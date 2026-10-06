@@ -23,6 +23,9 @@ export const nativePdfOptions = {
   isImageDecoderSupported: false,
   useWasm: false,
   useSystemFonts: false,
+  // PDF.js 6.4+ only sends a font's PDF name (BaseFont) to the main thread
+  // with this flag; text-style reading and matching need it.
+  fontExtraProperties: true,
   // Prefer a CPU-backed canvas in WKWebView. Accelerated backing stores can
   // stop presenting updates until a native window resize invalidates them.
   enableHWA: false,
