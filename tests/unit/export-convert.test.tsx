@@ -89,7 +89,7 @@ describe("ExportDialog", () => {
   it("explains that pages without a text layer need OCR instead of saving headers only", async () => {
     seedDocument(1);
     const controller = textPages([""]);
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     const onClose = vi.fn();
     render(<ExportDialog controller={controller as never} onClose={onClose} />);
     fireEvent.click(screen.getByText("Export"));
@@ -333,7 +333,7 @@ describe("additional export formats", () => {
     seedDocument(1);
     const canvas = mockRasterCanvas("data:image/png;base64,iVBORw0KGgo=");
     const downloads = captureDownloads();
-    render(<ExportDialog controller={textPages(["one"]) as never} onClose={() => {}} />);
+    render(<ExportDialog controller={textPages(["one"]) as never} onClose={vi.fn()} />);
     fireEvent.click(screen.getByText("PostScript (.ps)"));
     fireEvent.click(screen.getByText("Export"));
     await vi.waitFor(() =>
@@ -356,7 +356,7 @@ describe("additional export formats", () => {
     ];
     for (const [index, [label, name, type, content]] of expectations.entries()) {
       const { unmount } = render(
-        <OfficeExport controller={controller as never} onClose={() => {}} />,
+        <OfficeExport controller={controller as never} onClose={vi.fn()} />,
       );
       fireEvent.click(screen.getByLabelText(label));
       fireEvent.click(screen.getByText("Export File"));
@@ -381,9 +381,7 @@ describe("additional export formats", () => {
         }),
     ) as never;
     const downloads = captureDownloads();
-    const { unmount } = render(
-      <OfficeExport controller={controller as never} onClose={() => {}} />,
-    );
+    const { unmount } = render(<OfficeExport controller={controller as never} onClose={vi.fn()} />);
     fireEvent.click(screen.getByText("Export File"));
     expect(screen.getByLabelText("Close")).toHaveProperty("disabled", true);
     unmount();

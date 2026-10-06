@@ -106,7 +106,7 @@ describe("ExportDialog Hardening (P6.5)", () => {
       created.push(blob as Blob);
       return "blob:mock";
     });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     render(<ExportDialog controller={mockController} onClose={onClose} />);
 
     const exportBtn = screen.getByRole("button", { name: "Export" });
