@@ -15,6 +15,7 @@ import type {
 } from "../types/document";
 import type { ReadAloudState } from "../features/viewer/read-aloud";
 import { defaultPreferences } from "../types/document";
+import { ACTUAL_SIZE, type MeasureKind, type MeasureScale } from "../services/pdf/measure";
 interface Workspace {
   document: DocumentDescriptor | null;
   info: DocumentInfo | null;
@@ -65,6 +66,8 @@ interface Workspace {
   inkWidth: number;
   inkOpacity: number;
   shapeKind: ShapeKind;
+  measureKind: MeasureKind;
+  measureScale: MeasureScale;
   toolMode: ToolMode | null;
   activeModal: string | null;
   quickRailVisible: boolean;
@@ -134,6 +137,8 @@ export const useWorkspace = create<Workspace>((set) => ({
   inkWidth: 2,
   inkOpacity: 1,
   shapeKind: "Square",
+  measureKind: "distance",
+  measureScale: ACTUAL_SIZE,
   toolMode: null,
   activeModal: null,
   quickRailVisible: true,

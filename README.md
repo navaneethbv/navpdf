@@ -28,6 +28,7 @@ Available features:
 - Bookmarks and inspection of saved notes/highlights.
 - Standard highlight annotations, colors, deletion, undo, and redo.
 - Underline, strike-through, sticky notes, ink, free text, shapes, arrows, comments, page operations, forms, Fill & Sign, content placement, decorations, links, and attachments.
+- Review stamps, flattening, page labels, pages-per-sheet and booklet PDFs, comment summaries, sensitive-data search for redaction, moving and resizing form fields, an accessibility check, embedded image export, and distance, perimeter and area measurement.
 - Offline OCR, searchable text layers, plain-text, PNG, JPEG, TIFF, PostScript and EPS exports, DOCX/XLSX/PPTX/RTF/HTML/CSV/XML exports, existing-object editing, AES-256 protection, measured compression, permanent redaction, and local certificate signatures.
 - Password prompts for reading encrypted PDFs.
 - Light, dark, and system appearance with 15 palettes per mode, custom background and accent overrides, and optional local recent history.

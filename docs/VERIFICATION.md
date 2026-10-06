@@ -1,5 +1,47 @@
 # Verification ledger
 
+## October 6 document review and preparation tools
+
+Source base: the October 6 export formats branch, plus the changes in this delivery.
+[ADR 0015](adr/0015-document-review-tools.md) records the ten tools and their limits.
+
+### Automated gates
+
+The Linux container provided Node `22.22.0` rather than the CI Node 24; `npm ci` was used.
+Formatting, lint, typecheck, production build, `git diff --check`, `cmp AGENTS.md CLAUDE.md` and `npm audit --audit-level=high` pass.
+The frontend suite passes 789 tests across 109 files.
+Coverage is 85.76% statements, 77.44% branches, 84.82% functions and 88.78% lines, with the existing thresholds unchanged and LCOV retained.
+No Rust source changed in this delivery.
+
+### Reproduced defects
+
+In the Chromium browser preview with pages 1 and 2 visible and page 1 current, a rectangle drawn on page 2 was listed as `Square · Page 1`; after the fix the same run lists `Square · Page 2`.
+A booklet built from blank pages without a content stream failed with `Can't embed page with missing Contents` in a component test; pages without contents now embed.
+A form field whose position was fractional could not be moved because the number inputs used whole-number steps, which blocked form submission silently; the inputs now accept any number.
+Each regression failed before its fix and passes afterward.
+
+### Independent-reader checks
+
+`npm run acceptance:document-tools` passes 9 of 9 checks and writes its files and `results.json` under ignored `output/document-tools/`.
+pypdf reads stamp names and appearances, and Ghostscript draws both stamps in place, upright on a page rotated 90 degrees.
+pypdf finds no annotations or form after flattening, and Poppler's `pdftotext` still reads the flattened field value and stamp text.
+pypdf reads the page labels `i, ii, A-1, A-2`.
+Poppler reads a two-sheet landscape booklet with page 4 beside page 1 on the first side.
+Python's csv and HTML parsers read the comment summary with its reply and escaped text.
+pypdf reads the moved field rectangle and the fixed title, language, title display and tab order.
+Pillow decodes an exported embedded image pixel-exactly.
+pypdf reads the area measurement's Polygon subtype, PolygonDimension intent, `16.00 sq m` value and `1 in = 2 m` scale, and Ghostscript draws it.
+
+Chromium browser preview measured 30.00 ft between two points 3 inches apart on page 2 at 1 in = 10 ft, and the comment list showed `Line · Page 2`.
+Screenshots of every new dialog at 1280x860 showed no clipping after the accessibility check list and field inputs were adjusted.
+
+### Remaining limits
+
+Native macOS, WebKit, Preview and Acrobat acceptance of these tools were not available in this environment and remain open.
+Sensitive-data marks use average glyph widths when no canvas is available; the matched text is still audited after redaction.
+Rotated form widgets that are resized keep their existing appearance and rely on readers honoring NeedAppearances.
+No feature-parity, native acceptance or distribution gate is closed by this delivery.
+
 ## October 6 export formats and export review
 
 Source base: `779bb98`, plus the uncommitted source changes in this delivery.

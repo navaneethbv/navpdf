@@ -40,6 +40,7 @@ import { ProtectDialog } from "../features/protect/ProtectDialog";
 import { CertificateSignature } from "../features/signatures/CertificateSignature";
 import { DesignTools } from "../features/design/DesignTools";
 import { ExportOptions } from "../features/convert/ExportOptions";
+import { DOCUMENT_TOOL_DIALOGS } from "../features/tools/document-tools";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
 /** Menu and modal identifiers for the editable export dialog and the format each selects. */
@@ -406,7 +407,9 @@ function handleMenuAction(
   if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;
-  if (creationMenuActions.has(payload) || (state.document && documentMenuActions.has(payload))) {
+  const documentAction =
+    documentMenuActions.has(payload) || Object.hasOwn(DOCUMENT_TOOL_DIALOGS, payload);
+  if (creationMenuActions.has(payload) || (state.document && documentAction)) {
     state.set({ activeModal: payload });
     return;
   }
@@ -423,6 +426,10 @@ export default function App() {
     [passwordValue, setPasswordValue] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const s = useWorkspace();
+  const ActiveTool =
+    s.activeModal && Object.hasOwn(DOCUMENT_TOOL_DIALOGS, s.activeModal)
+      ? DOCUMENT_TOOL_DIALOGS[s.activeModal]
+      : null;
   const session = useDocumentSession(controller);
   const ready = useCallback((value: ViewerController) => setController(value), []);
   // The app owns document lifetime. A render boundary can remove ViewerHost
@@ -746,6 +753,9 @@ export default function App() {
             type="image"
             onClose={() => s.set({ activeModal: null })}
           />
+        )}
+        {ActiveTool && (
+          <ActiveTool controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
         {s.activeModal === "add-link" && (
           <LinkDialog controller={controller} onClose={() => s.set({ activeModal: null })} />

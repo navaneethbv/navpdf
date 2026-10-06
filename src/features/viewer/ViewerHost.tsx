@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ViewerController } from "./controller";
 import { useWorkspace } from "../../stores/workspace";
 import { ShapeTool } from "../annotations/ShapeTool";
+import { MeasureTool } from "../annotations/MeasureTool";
 import { AnnotationSelectionLayer } from "../annotations/AnnotationSelectionLayer";
 import { ContextMenu } from "../../components/ContextMenu";
 import { ExternalLinkDialog } from "../../components/ExternalLinkDialog";
@@ -210,6 +211,7 @@ export function ViewerHost({
         />
       )}
       {hasDocument && tool === "shape" && controller && <ShapeTool controller={controller} />}
+      {hasDocument && tool === "measure" && controller && <MeasureTool controller={controller} />}
       {hasDocument && tool === "select" && controller && (
         <AnnotationSelectionLayer controller={controller} />
       )}

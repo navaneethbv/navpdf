@@ -19,7 +19,8 @@ function formulaLike(text: string) {
   return /^[=+\-@\t\r]/.test(text) && cellValue(text).kind !== "number";
 }
 
-function csvField(cell: string) {
+/** One RFC 4180 field; formula-like text is prefixed with an apostrophe so it never runs. */
+export function csvField(cell: string) {
   const text = formulaLike(cell) ? `'${cell}` : cell;
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
