@@ -8,6 +8,20 @@ updates:
     directory: "/src-tauri"
     schedule:
       interval: "weekly"
+    groups:
+      # These crates share der/spki types, so a lone bump of one fails to compile.
+      certificate-stack:
+        patterns:
+          - "cms"
+          - "const-oid"
+          - "der"
+          - "p12-keystore"
+          - "p256"
+          - "pkcs1"
+          - "pkcs8"
+          - "rsa"
+          - "spki"
+          - "x509-cert"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
