@@ -26,6 +26,7 @@ import {
   Stamp,
   ListOrdered,
   LayoutGrid,
+  MessageSquareText,
   Heading,
   Droplets,
   Paperclip,
@@ -254,6 +255,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       category: "review",
       icon: PenTool,
       action: () => s.set({ tool: "draw", activeModal: "annotations" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "comment-summary",
+      label: "Summarize Comments",
+      description: "Save a printable report or CSV of comments, replies and status",
+      category: "review",
+      icon: MessageSquareText,
+      action: () => s.set({ activeModal: "comment-summary" }),
       disabled: !hasDoc,
     },
     {

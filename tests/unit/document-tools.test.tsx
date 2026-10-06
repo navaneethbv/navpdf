@@ -7,6 +7,7 @@ import { FlattenDialog } from "../../src/features/document/FlattenDialog";
 import { addStamp } from "../../src/services/pdf/stamps";
 import { PageLabelsDialog } from "../../src/features/pages/PageLabelsDialog";
 import { ImposeDialog } from "../../src/features/pages/ImposeDialog";
+import { CommentSummaryDialog } from "../../src/features/annotations/CommentSummaryDialog";
 import { readPageLabels, setPageLabels } from "../../src/services/pdf/page-labels";
 import { useWorkspace } from "../../src/stores/workspace";
 
@@ -34,6 +35,22 @@ function seed(pages = 2) {
   );
 }
 
+/** Records browser-preview downloads: each saved blob and its file name. */
+function captureSaves() {
+  const saved: Blob[] = [];
+  const names: string[] = [];
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    saved.push(blob as Blob);
+    return "blob:saved";
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    names.push(this.download);
+  });
+  return { saved, names };
+}
+
 async function committed(replaceWithBytes: ReturnType<typeof vi.fn>) {
   await vi.waitFor(() => expect(replaceWithBytes).toHaveBeenCalled());
   const [bytes, status, options] = replaceWithBytes.mock.calls[0] as [
@@ -46,6 +63,7 @@ async function committed(replaceWithBytes: ReturnType<typeof vi.fn>) {
 
 beforeEach(() => {
   useWorkspace.getState().reset();
+  vi.restoreAllMocks();
 });
 
 describe("StampDialog", () => {
@@ -169,17 +187,7 @@ describe("ImposeDialog", () => {
   it("saves a new booklet PDF without changing the open document", async () => {
     seed(3);
     const { controller, replaceWithBytes } = await editableController(await blankPdf(3));
-    const saved: Blob[] = [];
-    const names: string[] = [];
-    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
-      saved.push(blob as Blob);
-      return "blob:booklet";
-    });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      names.push(this.download);
-    });
+    const { saved, names } = captureSaves();
     const onClose = vi.fn();
     render(<ImposeDialog controller={controller as never} onClose={onClose} />);
     fireEvent.change(screen.getByLabelText("Layout"), { target: { value: "booklet" } });
@@ -191,7 +199,6 @@ describe("ImposeDialog", () => {
     expect(booklet.getPageCount()).toBe(2);
     expect(replaceWithBytes).not.toHaveBeenCalled();
     expect(useWorkspace.getState().status).toBe("Saved a 2-sheet booklet PDF");
-    vi.restoreAllMocks();
   });
 
   it("validates the page range before arranging", async () => {
@@ -201,5 +208,38 @@ describe("ImposeDialog", () => {
     fireEvent.change(screen.getByLabelText("Pages (all when empty)"), { target: { value: "2-" } });
     expect(screen.getByRole("alert").textContent).toMatch(/Incomplete range/);
     expect(screen.getByRole("button", { name: "Save PDF" })).toHaveProperty("disabled", true);
+  });
+});
+
+describe("CommentSummaryDialog", () => {
+  it("saves a CSV summary of the document's comments", async () => {
+    seed(1);
+    const stamped = await addStamp(await blankPdf(1), {
+      page: 1,
+      stamp: "Approved",
+      position: "center",
+      author: "Rae",
+    });
+    const { controller, replaceWithBytes } = await editableController(stamped);
+    const { saved, names } = captureSaves();
+    const onClose = vi.fn();
+    render(<CommentSummaryDialog controller={controller as never} onClose={onClose} />);
+    fireEvent.change(screen.getByLabelText("Format"), { target: { value: "csv" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Summary" }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(names).toEqual(["report-comments.csv"]);
+    expect(await saved[0].text()).toContain(",Stamp,Rae,");
+    expect(replaceWithBytes).not.toHaveBeenCalled();
+    expect(useWorkspace.getState().status).toBe("Summarized 1 comment(s)");
+  });
+
+  it("explains when there is nothing to summarize", async () => {
+    seed(1);
+    const { controller } = await editableController(await blankPdf(1));
+    const { names } = captureSaves();
+    render(<CommentSummaryDialog controller={controller as never} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Save Summary" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/no comments/);
+    expect(names).toEqual([]);
   });
 });

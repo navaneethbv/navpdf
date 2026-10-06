@@ -14,6 +14,12 @@ import { addStamp } from "../../src/services/pdf/stamps";
 import { flattenDocument, placementMatrix } from "../../src/services/pdf/flatten";
 import { bookletOrder, imposePages } from "../../src/services/pdf/impose";
 import {
+  collectComments,
+  commentSummaryCsv,
+  commentSummaryHtml,
+  parsePdfDate,
+} from "../../src/features/annotations/comment-summary";
+import {
   previewLabels,
   readPageLabelsFromBytes,
   setPageLabels,
@@ -23,9 +29,11 @@ import {
 import {
   addFormField,
   addLinkAnnotation,
+  addReply,
   addShapeAnnotation,
   addStickyNote,
   addTextMarkupAnnotations,
+  setReviewState,
   updateFormField,
 } from "../../src/services/document-commands";
 
@@ -382,5 +390,71 @@ describe("imposition", () => {
     await expect(imposePages(source, { ...base, layout: "16", margin: 300 })).rejects.toThrow(
       /no room/,
     );
+  });
+});
+
+describe("comment summaries", () => {
+  async function reviewed() {
+    let bytes = await setPageLabels(await pages({}, {}), [
+      { startPage: 1, style: "roman-lower", prefix: "", firstNumber: 1 },
+    ]);
+    bytes = await addStickyNote(bytes, {
+      page: 2,
+      x: 100,
+      y: 700,
+      contents: "Check the <total>, please",
+      author: "Ana",
+      id: "note-2",
+    });
+    bytes = await addStickyNote(bytes, {
+      page: 1,
+      x: 100,
+      y: 700,
+      contents: "Intro reads well",
+      author: "Ben",
+      id: "note-1",
+    });
+    bytes = await addReply(bytes, { parentId: "note-2", contents: "Fixed", author: "Ben" });
+    bytes = await setReviewState(bytes, "note-2", "Accepted");
+    return addStamp(bytes, { page: 1, stamp: "Approved", position: "center", author: "Ana" });
+  }
+
+  it("threads replies, applies review status and labels pages", async () => {
+    const entries = collectComments(await PDFDocument.load(await reviewed()));
+    expect(entries.map((entry) => [entry.pageLabel, entry.type, entry.author])).toEqual([
+      ["i", "Note", "Ben"],
+      ["i", "Stamp", "Ana"],
+      ["ii", "Note", "Ana"],
+    ]);
+    const note = entries[2];
+    expect(note.status).toBe("Accepted");
+    expect(note.replies.map((reply) => [reply.author, reply.text])).toEqual([["Ben", "Fixed"]]);
+    expect(note.modified).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    const byAuthor = collectComments(await PDFDocument.load(await reviewed()), "author");
+    expect(byAuthor.map((entry) => entry.author)).toEqual(["Ana", "Ana", "Ben"]);
+  });
+
+  it("writes escaped HTML and CSV that keep threads and status", async () => {
+    const entries = collectComments(await PDFDocument.load(await reviewed()));
+    const html = commentSummaryHtml(entries, "report <draft>");
+    expect(html).toContain("<title>Comments: report &lt;draft&gt;</title>");
+    expect(html).toContain("<h2>Page ii</h2>");
+    expect(html).toContain("Check the &lt;total&gt;, please");
+    expect(html).toContain("Status: Accepted");
+    expect(html).toContain('<div class="replies">');
+    expect(html).not.toContain("<total>");
+
+    const csv = commentSummaryCsv(entries).slice(1).split("\r\n");
+    expect(csv[0]).toBe("Page,Type,Author,Modified,Status,In reply to,Text");
+    expect(csv.at(-2)).toMatch(/^ii,Reply,Ben,.*,,note-2,Fixed$/);
+    expect(csv.some((line) => line.includes('"Check the <total>, please"'))).toBe(true);
+  });
+
+  it("parses PDF dates with offsets and rejects malformed ones", () => {
+    expect(parsePdfDate("D:20261006093000+02'00'")).toBe("2026-10-06T07:30:00.000Z");
+    expect(parsePdfDate("D:2026")).toBe("2026-01-01T00:00:00.000Z");
+    expect(parsePdfDate("D:20261306")).toBe("");
+    expect(parsePdfDate("yesterday")).toBe("");
   });
 });
