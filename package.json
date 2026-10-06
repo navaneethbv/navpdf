@@ -38,7 +38,7 @@
     "pretest": "npm run fixtures"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/api": "^2.12.1",
     "lucide-react": "^1.48.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "6.4.299",
