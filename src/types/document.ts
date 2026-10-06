@@ -1,7 +1,16 @@
 export type Layout = "continuous" | "single" | "spread";
 export type ToolMode = "all" | "edit" | "convert" | "esign" | "create";
 export type Tool =
-  "select" | "hand" | "highlight" | "ink" | "draw" | "text" | "shape" | "signature" | "snapshot";
+  | "select"
+  | "hand"
+  | "highlight"
+  | "ink"
+  | "draw"
+  | "text"
+  | "shape"
+  | "measure"
+  | "signature"
+  | "snapshot";
 export type ShapeKind = "Square" | "Circle" | "Line" | "Arrow";
 export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "layers" | "tools";
 /** An optional content group the reader can show or hide. */

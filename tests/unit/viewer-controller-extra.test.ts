@@ -79,6 +79,7 @@ vi.mock("../../src/services/pdf", () => ({
 import { ViewerController } from "../../src/features/viewer/controller";
 import { useWorkspace } from "../../src/stores/workspace";
 import { rememberPage } from "../../src/services/native";
+import { loadPdfFromBytes } from "../../src/services/pdf";
 
 function makePdf(numPages = 3) {
   return {
@@ -135,6 +136,29 @@ describe("ViewerController bus reactions", () => {
     await vi.advanceTimersByTimeAsync(600);
     expect(rememberPage).toHaveBeenCalled();
     vi.useRealTimers();
+  });
+
+  it("keeps the reader's zoom when an edit reloads the document", async () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+    const defaultZoom = useWorkspace.getState().local.preferences.defaultZoom;
+    await controller.attach(makePdf(2) as never);
+    busHandlers.get("pagesinit")!(undefined as never);
+    expect(controller.viewer.currentScaleValue).toBe(defaultZoom);
+
+    controller.viewer.currentScaleValue = "1.75";
+    vi.mocked(loadPdfFromBytes).mockReturnValue({
+      promise: Promise.resolve(makePdf(2)),
+      destroy: vi.fn(async () => {}),
+    } as never);
+    await controller.replaceWithBytes(new Uint8Array([1]), "Shape added");
+    busHandlers.get("pagesinit")!(undefined as never);
+    expect(controller.viewer.currentScaleValue).toBe("1.75");
+
+    await controller.attach(makePdf(3) as never);
+    busHandlers.get("pagesinit")!(undefined as never);
+    expect(controller.viewer.currentScaleValue).toBe(defaultZoom);
+    vi.restoreAllMocks();
   });
 
   it("forwards editor params and mode switches it understands", async () => {

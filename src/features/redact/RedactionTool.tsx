@@ -15,7 +15,9 @@ import {
   placePageBoxes,
   viewportToPdfRect,
   type ViewerLike,
+  type PatternMark,
 } from "./redaction-marks";
+import { PatternFinder, patternSummary } from "./PatternFinder";
 
 interface Mark {
   id: string;
@@ -182,6 +184,31 @@ export function RedactionTool({
     }
   };
 
+  const markPatterns = (found: PatternMark[]) => {
+    setMarks((current) => [
+      ...current,
+      ...found.map(({ page, rect }) => ({
+        id: crypto.randomUUID(),
+        page,
+        rect,
+        source: "search" as const,
+      })),
+    ]);
+    // Matched text is also audited in the redacted output, like searched terms.
+    setTerms((current) => {
+      const known = new Set(current.map((value) => value.toLowerCase()));
+      const added: string[] = [];
+      for (const { text } of found) {
+        const key = text.toLowerCase();
+        if (known.has(key)) continue;
+        known.add(key);
+        added.push(text);
+      }
+      return added.length ? [...current, ...added] : current;
+    });
+    setNotice(patternSummary(found));
+  };
+
   const addRegion = () => {
     const page = Math.max(1, Math.min(Math.round(region.page), pageCount));
     const { x, y, width, height } = region;
@@ -330,6 +357,11 @@ export function RedactionTool({
                 </button>
               </div>
             </form>
+            <PatternFinder
+              controller={controller}
+              onFound={markPatterns}
+              onError={(message) => s.set({ error: message })}
+            />
             <button
               type="button"
               className={drawing ? "button-primary" : "button-secondary"}

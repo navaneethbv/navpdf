@@ -1,5 +1,92 @@
 # Verification ledger
 
+## October 6 document review and preparation tools
+
+Source base: the October 6 export formats branch, plus the changes in this delivery.
+[ADR 0015](adr/0015-document-review-tools.md) records the ten tools and their limits.
+
+### Automated gates
+
+The Linux container provided Node `22.22.0` rather than the CI Node 24; `npm ci` was used.
+Formatting, lint, typecheck, production build, `git diff --check`, `cmp AGENTS.md CLAUDE.md` and `npm audit --audit-level=high` pass.
+The frontend suite passes 789 tests across 109 files.
+Coverage is 85.76% statements, 77.44% branches, 84.82% functions and 88.78% lines, with the existing thresholds unchanged and LCOV retained.
+No Rust source changed in this delivery.
+
+### Reproduced defects
+
+In the Chromium browser preview with pages 1 and 2 visible and page 1 current, a rectangle drawn on page 2 was listed as `Square · Page 1`; after the fix the same run lists `Square · Page 2`.
+A booklet built from blank pages without a content stream failed with `Can't embed page with missing Contents` in a component test; pages without contents now embed.
+A form field whose position was fractional could not be moved because the number inputs used whole-number steps, which blocked form submission silently; the inputs now accept any number.
+Each regression failed before its fix and passes afterward.
+
+### Independent-reader checks
+
+`npm run acceptance:document-tools` passes 9 of 9 checks and writes its files and `results.json` under ignored `output/document-tools/`.
+pypdf reads stamp names and appearances, and Ghostscript draws both stamps in place, upright on a page rotated 90 degrees.
+pypdf finds no annotations or form after flattening, and Poppler's `pdftotext` still reads the flattened field value and stamp text.
+pypdf reads the page labels `i, ii, A-1, A-2`.
+Poppler reads a two-sheet landscape booklet with page 4 beside page 1 on the first side.
+Python's csv and HTML parsers read the comment summary with its reply and escaped text.
+pypdf reads the moved field rectangle and the fixed title, language, title display and tab order.
+Pillow decodes an exported embedded image pixel-exactly.
+pypdf reads the area measurement's Polygon subtype, PolygonDimension intent, `16.00 sq m` value and `1 in = 2 m` scale, and Ghostscript draws it.
+
+Chromium browser preview measured 30.00 ft between two points 3 inches apart on page 2 at 1 in = 10 ft, and the comment list showed `Line · Page 2`.
+Screenshots of every new dialog at 1280x860 showed no clipping after the accessibility check list and field inputs were adjusted.
+
+### Remaining limits
+
+Native macOS, WebKit, Preview and Acrobat acceptance of these tools were not available in this environment and remain open.
+Sensitive-data marks use average glyph widths when no canvas is available; the matched text is still audited after redaction.
+Rotated form widgets that are resized keep their existing appearance and rely on readers honoring NeedAppearances.
+No feature-parity, native acceptance or distribution gate is closed by this delivery.
+
+## October 6 export formats and export review
+
+Source base: `779bb98`, plus the uncommitted source changes in this delivery.
+[ADR 0014](adr/0014-additional-export-formats.md) records the format selection and exclusions.
+
+### Automated gates
+
+The Linux container provided Node `22.22.0` rather than the CI Node 24; `npm ci` was used.
+Formatting, lint, typecheck, production build, `git diff --check` and `cmp AGENTS.md CLAUDE.md` pass.
+The frontend suite passes 733 tests across 105 files.
+Coverage is 85.37% statements, 77.44% branches, 84.03% functions and 88.39% lines, with the existing thresholds unchanged and LCOV retained.
+`npm audit --audit-level=high` initially reported the new `source-map-js` 1.2.1 advisory GHSA-68fv-2mgg-jv7q in a transitive development dependency already on `main`; the lockfile now resolves the patched 1.2.2 and the audit reports zero vulnerabilities.
+`cargo fmt --check` passes.
+Clippy passes with warnings denied.
+Rust passes 95 tests with the existing constrained-volume test ignored when run without the root `CAP_DAC_OVERRIDE` capability.
+Run directly as root, two existing permission tests fail because root ignores the read-only directory modes they depend on; neither test touches export code.
+
+### Reproduced defects
+
+Real PDF.js text from a synthetic three-line PDF exported by the previous plain-text algorithm produced `Quarterly Report First paragraph line. Second paragraph line.` on one line.
+The previous sheet-name loop did not terminate within 100,000 iterations for two sheets named with 28 characters plus ` 2`; NavPDF's own sheet names are `Page N`, so the hang was latent.
+The per-page native destination prompt for multipage PNG and JPEG exports and the uncancelled editable export after closing its dialog were identified from source and covered by new component regressions, not reproduced in native NavPDF.
+
+### Independent-reader checks
+
+`npm run acceptance:export-formats` passes 13 of 13 checks and writes its files and `results.json` under ignored `output/export-formats/`.
+Python's csv module reads the CSV with quoted commas intact and formula-like cells prefixed by an apostrophe.
+LibreOffice 24 converts the XML Spreadsheet 2003 file to XLSX, and openpyxl reads one sheet per page, typed numbers and dates, and formula-like text as text with no formulas.
+Python's HTML parser and LibreOffice Writer read the HTML page; it contains no script element, escapes PDF text and declares the restrictive policy.
+Python's XML parser reads the XML 1.0 document's pages, headings and paragraphs.
+Pillow decodes both TIFF pages pixel-exactly with PackBits compression and the recorded resolution, and ImageMagick identifies both pages.
+Ghostscript 10.02.1 renders every PostScript page at its page size within a mean channel difference of 1 from the JPEG source, and renders the EPS cropped to its bounding box.
+
+Chromium browser preview exported `mixed-forms-annotations.pdf` as PostScript, HTML and TIFF through the real dialogs.
+Ghostscript rendered all four mixed-size PostScript pages, including the rotated page and the visible form value.
+Pillow and ImageMagick read four TIFF frames at 150 DPI with sizes 1275x1651, 1240x1755, 834x834 and 625x2084 pixels.
+The SHA-256 values were `80d77f07fac2973afd49258e04518ea30a9b2dcb75d2fe0479aa06e33b0ae81e` for PostScript, `dfb5cbb476de514be465cb5b6a5e57e2a45eeaa1b0653d2c369537cfad7480d2` for HTML and `1596fc69e9aef57ae52c80c3f11b0f07588155d2e401dd3826a77bc3e4605b10` for TIFF.
+Screenshots showed both export dialogs without clipping at 1280x860.
+
+### Remaining limits
+
+This delivery was produced in a Linux container without macOS, so native NavPDF packaging, WebKit rendering, the native Save dialog and Preview inspection were not exercised.
+Microsoft Excel, Word and Adobe Acrobat were unavailable, so XML Spreadsheet 2003, CSV and HTML acceptance in those applications remains open.
+No feature-parity, native acceptance or distribution gate is closed by this delivery.
+
 ## October 4 feature-review corrections
 
 Source base: `4902cfc`, plus the source changes in this PR.
