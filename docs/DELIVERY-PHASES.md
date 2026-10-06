@@ -7,6 +7,21 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## October 6 export formats and export review
+
+[ADR 0014](adr/0014-additional-export-formats.md) adds CSV, XML Spreadsheet 2003, HTML, XML 1.0, TIFF, PostScript and EPS exports, alongside the existing DOCX, XLSX, PPTX, RTF, plain text, PNG and JPEG exports.
+The selection follows Acrobat's documented Export PDF formats.
+Word 97-2003 `.doc`, JPEG 2000 and accessible text remain unavailable for the reasons recorded in the ADR.
+Text-layer formats carry text, headings, paragraphs and aligned columns only; TIFF, PostScript and EPS contain rendered page images.
+The review reproduced plain-text export joining every line of a page into one line with real PDF.js text, and the export now keeps each reconstructed line.
+Multipage PNG and JPEG exports asked for one native destination per page; several exported pages are now saved as one ZIP archive.
+Closing the editable-format export dialog during an export no longer lets that export save a file afterward, and its close button is disabled while it runs.
+The editable-format progress text no longer reports a page number as a page count for custom ranges.
+Spreadsheet sheet names are now unique case-insensitively, and a colliding 31-character name no longer loops indefinitely.
+Text export of pages without a text layer now asks for OCR instead of saving page headers only.
+Automated checks, independent-reader acceptance and the native acceptance blocker are recorded in `docs/VERIFICATION.md`.
+No feature-parity, native acceptance or distribution gate is closed by this delivery.
+
 ## October 4 feature and reliability review
 
 The [current review](REVIEW-2026-10-04.md) records implemented features, scoped limitations and prioritized follow-up.

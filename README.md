@@ -28,7 +28,7 @@ Available features:
 - Bookmarks and inspection of saved notes/highlights.
 - Standard highlight annotations, colors, deletion, undo, and redo.
 - Underline, strike-through, sticky notes, ink, free text, shapes, arrows, comments, page operations, forms, Fill & Sign, content placement, decorations, links, and attachments.
-- Offline OCR, searchable text layers, plain-text/image exports, DOCX/XLSX/PPTX/RTF exports, existing-object editing, AES-256 protection, measured compression, permanent redaction, and local certificate signatures.
+- Offline OCR, searchable text layers, plain-text, PNG, JPEG, TIFF, PostScript and EPS exports, DOCX/XLSX/PPTX/RTF/HTML/CSV/XML exports, existing-object editing, AES-256 protection, measured compression, permanent redaction, and local certificate signatures.
 - Password prompts for reading encrypted PDFs.
 - Light, dark, and system appearance with 15 palettes per mode, custom background and accent overrides, and optional local recent history.
 - Validated atomic saves, external-change detection, private recovery copies, and unsaved-change prompts.
@@ -42,7 +42,8 @@ Browser preview and other platforms report OCR unavailable.
 Searchable export supports standard-font characters; other recognized text can be extracted without modifying the PDF.
 See [the PR 2 corrective review](docs/PR-2-REVIEW.md) for reopened acceptance gates and remaining capability gaps.
 
-Office exports reconstruct editable text from the PDF text layer; PowerPoint can alternatively preserve each page as a picture.
+Office, HTML, CSV and XML exports reconstruct editable text from the PDF text layer; PowerPoint can alternatively preserve each page as a picture.
+TIFF, PostScript and EPS exports contain rendered page images, and several exported page images are saved as one ZIP archive.
 Office-to-PDF import requires saving a PDF from the original Office application.
 PNG and JPEG imports are limited to 25 MB, 32 megapixels and 16,384 pixels per edge.
 Native exports ask for a destination and retain the active document on cancellation or write failure.

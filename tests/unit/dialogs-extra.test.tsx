@@ -72,7 +72,7 @@ function mockCanvas2d() {
         fillRect: vi.fn(),
         fillText: vi.fn(),
       }));
-      el.toDataURL = vi.fn(() => "data:image/png;base64,AAA");
+      el.toDataURL = vi.fn((type = "image/png") => `data:${type};base64,AAA`);
     }
     return el;
   }) as typeof document.createElement);

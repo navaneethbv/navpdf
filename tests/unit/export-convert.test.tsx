@@ -35,7 +35,12 @@ function textPages(texts: string[]) {
         getViewport: vi.fn(() => ({ width: 100, height: 100 })),
         render: vi.fn(() => ({ promise: Promise.resolve() })),
         getTextContent: vi.fn(async () => ({
-          items: texts[n - 1].split(" ").map((str) => ({ str })),
+          items: texts[n - 1].split(" ").map((str, index) => ({
+            str,
+            transform: [10, 0, 0, 10, 10 + index * 40, 80],
+            width: str.length * 5,
+            height: 10,
+          })),
         })),
       })),
     },
@@ -78,6 +83,21 @@ describe("ExportDialog", () => {
     });
     expect(useWorkspace.getState().status).toBe("Text exported successfully");
     expect(click).toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  it("explains that pages without a text layer need OCR instead of saving headers only", async () => {
+    seedDocument(1);
+    const controller = textPages([""]);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const onClose = vi.fn();
+    render(<ExportDialog controller={controller as never} onClose={onClose} />);
+    fireEvent.click(screen.getByText("Export"));
+    await vi.waitFor(() => {
+      expect(useWorkspace.getState().error).toMatch(/no text layer.*OCR/);
+    });
+    expect(click).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
     click.mockRestore();
   });
 
@@ -192,6 +212,185 @@ describe("OfficeExport", () => {
     expect(controller.pdf.getPage).not.toHaveBeenCalledWith(1);
     expect(controller.pdf.getPage).not.toHaveBeenCalledWith(3);
     click.mockRestore();
+  });
+});
+
+describe("additional export formats", () => {
+  function captureDownloads() {
+    const created: Blob[] = [];
+    const names: string[] = [];
+    const original = URL.createObjectURL;
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      created.push(blob);
+      return "blob:mock";
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    return {
+      created,
+      names,
+      restore: () => {
+        URL.createObjectURL = original;
+        click.mockRestore();
+      },
+    };
+  }
+
+  function mockRasterCanvas(dataUrl: string) {
+    const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => ({
+      data: new Uint8ClampedArray(width * height * 4).fill(255),
+    }));
+    const canvases: HTMLCanvasElement[] = [];
+    const spy = vi.spyOn(document, "createElement").mockImplementation(((
+      tag: string,
+      options?: ElementCreationOptions,
+    ) => {
+      const el = originalCreateElement.call(document, tag, options);
+      if (tag === "canvas") {
+        el.getContext = vi.fn(() => ({ fillStyle: "", fillRect: vi.fn(), getImageData }));
+        el.toDataURL = vi.fn(() => dataUrl);
+        canvases.push(el);
+      }
+      return el;
+    }) as typeof document.createElement);
+    return { canvases, getImageData, restore: () => spy.mockRestore() };
+  }
+
+  const JPEG_URL = "data:image/jpeg;base64,/9j/2Q==";
+
+  it("exports all selected pages as one multipage TIFF and releases each canvas", async () => {
+    seedDocument(2);
+    const canvas = mockRasterCanvas(JPEG_URL);
+    const downloads = captureDownloads();
+    const onClose = vi.fn();
+    render(<ExportDialog controller={textPages(["one", "two"]) as never} onClose={onClose} />);
+    fireEvent.click(screen.getByText("TIFF Image"));
+    expect(screen.queryByText(/JPEG Quality/)).toBeNull();
+    fireEvent.click(screen.getByText("Export"));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(downloads.names).toEqual(["report.tiff"]);
+    expect(downloads.created[0].type).toBe("image/tiff");
+    const bytes = new Uint8Array(await downloads.created[0].arrayBuffer());
+    expect([...bytes.subarray(0, 4)]).toEqual([0x49, 0x49, 42, 0]);
+    expect(canvas.getImageData).toHaveBeenCalledTimes(2);
+    expect(canvas.canvases.every((item) => item.width === 0)).toBe(true);
+    expect(useWorkspace.getState().status).toBe("Exported 2 page(s) as TIFF (150 DPI).");
+    downloads.restore();
+    canvas.restore();
+  });
+
+  it("packages several page images into one ZIP so only one destination is requested", async () => {
+    seedDocument(2);
+    const canvas = mockRasterCanvas("data:image/png;base64,iVBORw0KGgo=");
+    const downloads = captureDownloads();
+    const onClose = vi.fn();
+    render(<ExportDialog controller={textPages(["one", "two"]) as never} onClose={onClose} />);
+    fireEvent.click(screen.getByText("PNG Image"));
+    fireEvent.click(screen.getByText("Export"));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(downloads.names).toEqual(["report-png-pages.zip"]);
+    const zip = new TextDecoder().decode(await downloads.created[0].arrayBuffer());
+    expect(zip).toContain("report-page-1.png");
+    expect(zip).toContain("report-page-2.png");
+    downloads.restore();
+    canvas.restore();
+  });
+
+  it("exports PostScript with one page per PDF page and EPS per page", async () => {
+    seedDocument(2);
+    const canvas = mockRasterCanvas(JPEG_URL);
+    const downloads = captureDownloads();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <ExportDialog controller={textPages(["one", "two"]) as never} onClose={onClose} />,
+    );
+    fireEvent.click(screen.getByText("PostScript (.ps)"));
+    expect(screen.getByText(/JPEG Quality/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Export"));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(downloads.names).toEqual(["report.ps"]);
+    expect(downloads.created[0].type).toBe("application/postscript");
+    const ps = await downloads.created[0].text();
+    expect(ps).toContain("%%Pages: 2");
+    expect(ps).toContain("/DCTDecode filter");
+    unmount();
+
+    render(<ExportDialog controller={textPages(["one", "two"]) as never} onClose={onClose} />);
+    fireEvent.click(screen.getByText("EPS (.eps)"));
+    fireEvent.click(screen.getByText(/Current Page/));
+    fireEvent.click(screen.getByText("Export"));
+    await vi.waitFor(() => expect(downloads.names).toHaveLength(2));
+    expect(downloads.names[1]).toBe("report-page-1.eps");
+    expect(await downloads.created[1].text()).toMatch(/^%!PS-Adobe-3\.0 EPSF-3\.0/);
+    downloads.restore();
+    canvas.restore();
+  });
+
+  it("refuses to embed non-JPEG data when the browser cannot encode JPEG", async () => {
+    seedDocument(1);
+    const canvas = mockRasterCanvas("data:image/png;base64,iVBORw0KGgo=");
+    const downloads = captureDownloads();
+    render(<ExportDialog controller={textPages(["one"]) as never} onClose={() => {}} />);
+    fireEvent.click(screen.getByText("PostScript (.ps)"));
+    fireEvent.click(screen.getByText("Export"));
+    await vi.waitFor(() =>
+      expect(useWorkspace.getState().error).toBe("The image could not be exported."),
+    );
+    expect(downloads.names).toEqual([]);
+    downloads.restore();
+    canvas.restore();
+  });
+
+  it("exports CSV, XML Spreadsheet 2003, HTML and XML from the text layer", async () => {
+    seedDocument(1);
+    const controller = layoutPages([["Name", "=1+1"]]);
+    const downloads = captureDownloads();
+    const expectations: [RegExp, string, string, RegExp][] = [
+      [/Comma-separated/, "report.csv", "text/csv", /^\uFEFFName,'=1\+1\r\n$/],
+      [/XML Spreadsheet 2003/, "report.xml", "application/xml", /urn:schemas-microsoft-com/],
+      [/HTML web page/, "report.html", "text/html", /<p>Name =1\+1<\/p>/],
+      [/XML document/, "report.xml", "application/xml", /<paragraph>Name =1\+1<\/paragraph>/],
+    ];
+    for (const [index, [label, name, type, content]] of expectations.entries()) {
+      const { unmount } = render(
+        <OfficeExport controller={controller as never} onClose={() => {}} />,
+      );
+      fireEvent.click(screen.getByLabelText(label));
+      fireEvent.click(screen.getByText("Export File"));
+      await vi.waitFor(() => expect(downloads.names).toHaveLength(index + 1));
+      expect(downloads.names[index]).toBe(name);
+      expect(downloads.created[index].type).toBe(type);
+      expect(await downloads.created[index].text()).toMatch(content);
+      unmount();
+    }
+    downloads.restore();
+  });
+
+  it("abandons an editable export when the dialog closes before it finishes", async () => {
+    seedDocument(1);
+    let finish!: (page: unknown) => void;
+    const controller = layoutPages([["Name"]]);
+    const realPage = controller.pdf.getPage;
+    controller.pdf.getPage = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    ) as never;
+    const downloads = captureDownloads();
+    const { unmount } = render(
+      <OfficeExport controller={controller as never} onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByText("Export File"));
+    expect(screen.getByLabelText("Close")).toHaveProperty("disabled", true);
+    unmount();
+    finish(await realPage(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(downloads.names).toEqual([]);
+    downloads.restore();
   });
 });
 

@@ -274,6 +274,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       disabled: !hasDoc,
     },
     {
+      id: "export-html",
+      label: "HTML Web Page (.html)",
+      description: "Headings and paragraphs as a self-contained web page",
+      category: "convert",
+      icon: FileText,
+      action: () => s.set({ activeModal: "office-html" }),
+      disabled: !hasDoc,
+    },
+    {
       id: "ocr-text",
       label: "Scan & OCR",
       description: "Recognize scanned pages locally or extract embedded page text",
@@ -285,7 +294,7 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
     {
       id: "export-images",
       label: "Export to Images",
-      description: "Export pages as high-resolution PNG or JPEG",
+      description: "Export pages as PNG, JPEG, TIFF, PostScript or EPS",
       category: "convert",
       icon: Download,
       action: () => s.set({ activeModal: "convert" }),
@@ -379,7 +388,7 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
     {
       id: "export-pdf",
       label: "Export a PDF",
-      description: "Word, PowerPoint, Excel, images and text",
+      description: "Word, Excel, PowerPoint, HTML, CSV, XML, images, PostScript and text",
       category: "convert",
       icon: Download,
       action: () => s.set({ activeModal: "export-options" }),

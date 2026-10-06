@@ -1,12 +1,64 @@
 import { useId, useEffect, useRef, useState } from "react";
-import { Download, FileText, Image as ImageIcon, X, Sliders } from "lucide-react";
+import { Download, FileText, Image as ImageIcon, Printer, X, Sliders } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { downloadBlob, safeFileName } from "../../utils/download";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
+import { createZip, layoutPage, type PageLayout, type TextItem } from "./ooxml";
+import { buildPlainText } from "./formats";
+import {
+  buildEps,
+  buildPostScript,
+  buildTiff,
+  compressTiffPage,
+  type JpegPage,
+  type TiffPage,
+} from "./raster";
 
 const MAX_EXPORT_PIXELS = 32 * 1024 * 1024;
+/** Matches the native export size limit so an oversized export fails before encoding. */
+const MAX_EXPORT_BYTES = 1024 ** 3;
+
+type ExportFormat = "txt" | "png" | "jpg" | "tiff" | "ps" | "eps";
+type RasterFormat = Exclude<ExportFormat, "txt">;
+
+const FORMATS: { id: ExportFormat; label: string; icon: LucideIcon }[] = [
+  { id: "txt", label: "Plain Text (.txt)", icon: FileText },
+  { id: "png", label: "PNG Image", icon: ImageIcon },
+  { id: "jpg", label: "JPEG Image", icon: ImageIcon },
+  { id: "tiff", label: "TIFF Image", icon: ImageIcon },
+  { id: "ps", label: "PostScript (.ps)", icon: Printer },
+  { id: "eps", label: "EPS (.eps)", icon: Printer },
+];
+
+const HINTS: Record<RasterFormat, string> = {
+  png: "Exports each page as a lossless PNG image.",
+  jpg: "Exports each page as a JPEG image on a white background.",
+  tiff: "Exports the selected pages as one multipage TIFF with lossless PackBits compression.",
+  ps: "Exports one PostScript file with a page image per page. Text and drawings become pixels.",
+  eps: "Exports each page as an Encapsulated PostScript image for page layout applications.",
+};
+
+const usesJpeg = (format: ExportFormat) => format === "jpg" || format === "ps" || format === "eps";
+
+interface PageProxy {
+  getViewport(options: { scale: number }): { width: number; height: number };
+  getTextContent(): Promise<{ items: unknown[] }>;
+  render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): {
+    promise: Promise<void>;
+  };
+}
+
+function isTextItem(item: unknown): item is TextItem {
+  const candidate = item as Partial<TextItem>;
+  return (
+    typeof candidate?.str === "string" &&
+    Array.isArray(candidate.transform) &&
+    typeof candidate.width === "number"
+  );
+}
 
 interface ExportImagePagesOptions {
   source: NonNullable<ViewerController["pdf"]>;
@@ -14,11 +66,25 @@ interface ExportImagePagesOptions {
   cancelled: () => boolean;
   setProgress: (value: number) => void;
   dpi: number;
-  format: "txt" | "png" | "jpg";
+  format: RasterFormat;
   quality: number;
   baseName: string;
 }
 
+interface ExportFile {
+  name: string;
+  data: Uint8Array;
+}
+
+const MIME: Record<RasterFormat, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  tiff: "image/tiff",
+  ps: "application/postscript",
+  eps: "application/postscript",
+};
+
+/** Renders pages one at a time and returns the finished export, or null when cancelled. */
 async function exportImagePages({
   source,
   targetIndices,
@@ -28,26 +94,84 @@ async function exportImagePages({
   format,
   quality,
   baseName,
-}: ExportImagePagesOptions): Promise<boolean> {
+}: ExportImagePagesOptions): Promise<{ blob: Blob; name: string } | null> {
   const scale = dpi / 72;
-  const imageFormat = format === "jpg" ? "jpg" : "png";
+  const files: ExportFile[] = [];
+  const tiffPages: TiffPage[] = [];
+  const jpegPages: JpegPage[] = [];
+  const encoder = new TextEncoder();
+  let total = 0;
   for (let i = 0; i < targetIndices.length; i++) {
-    if (cancelled()) return false;
+    if (cancelled()) return null;
     const pageNum = targetIndices[i] + 1;
     setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-    const page = await source.getPage(pageNum);
-    if (cancelled()) return false;
-    const saved = await exportSinglePageImage({
-      page,
-      scale,
-      format: imageFormat,
-      quality,
-      pageNum,
-      baseName,
-    });
-    if (!saved) return false;
+    const page = (await source.getPage(pageNum)) as unknown as PageProxy;
+    if (cancelled()) return null;
+    const rendered = await renderPage(page, scale, pageNum, format !== "png");
+    try {
+      if (format === "tiff") {
+        const { canvas, context } = rendered;
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+        const compressed = compressTiffPage({
+          width: canvas.width,
+          height: canvas.height,
+          rgba: pixels.data,
+          dpi,
+        });
+        tiffPages.push(compressed);
+        total += compressed.byteLength;
+      } else if (format === "png") {
+        const data = canvasBytes(rendered.canvas, "image/png", quality);
+        files.push({ name: `${baseName}-page-${pageNum}.png`, data });
+        total += data.length;
+      } else {
+        const jpeg = canvasBytes(rendered.canvas, "image/jpeg", quality);
+        const jpegPage: JpegPage = {
+          jpeg,
+          pixelWidth: rendered.canvas.width,
+          pixelHeight: rendered.canvas.height,
+          width: rendered.width,
+          height: rendered.height,
+        };
+        if (format === "jpg") files.push({ name: `${baseName}-page-${pageNum}.jpg`, data: jpeg });
+        else if (format === "eps")
+          files.push({
+            name: `${baseName}-page-${pageNum}.eps`,
+            data: encoder.encode(buildEps(jpegPage, `${baseName} page ${pageNum}`)),
+          });
+        else jpegPages.push(jpegPage);
+        // ASCII85 expands embedded image data by a quarter.
+        total += format === "jpg" ? jpeg.length : Math.ceil(jpeg.length * 1.25);
+      }
+    } finally {
+      // Release the backing store now; WebKit otherwise keeps it until collection.
+      rendered.canvas.width = 0;
+      rendered.canvas.height = 0;
+    }
+    if (total > MAX_EXPORT_BYTES) {
+      throw new Error(
+        "The export exceeds the 1 GB limit. Choose fewer pages or a lower resolution.",
+      );
+    }
   }
-  return !cancelled();
+  if (cancelled()) return null;
+  if (format === "tiff")
+    return { blob: blobOf(buildTiff(tiffPages), MIME.tiff), name: `${baseName}.tiff` };
+  if (format === "ps")
+    return {
+      blob: new Blob([buildPostScript(jpegPages, baseName)], { type: MIME.ps }),
+      name: `${baseName}.ps`,
+    };
+  if (files.length === 1) return { blob: blobOf(files[0].data, MIME[format]), name: files[0].name };
+  // Several pages are packaged together so the export asks for one destination, not one per page.
+  return {
+    blob: blobOf(createZip(files), "application/zip"),
+    name: `${baseName}-${format}-pages.zip`,
+  };
+}
+
+function blobOf(bytes: Uint8Array, type: string) {
+  return new Blob([bytes as Uint8Array<ArrayBuffer>], { type });
 }
 
 export function ExportDialog({
@@ -59,7 +183,7 @@ export function ExportDialog({
 }>) {
   const fieldIds = useId();
   const s = useWorkspace();
-  const [format, setFormat] = useState<"txt" | "png" | "jpg">("txt");
+  const [format, setFormat] = useState<ExportFormat>("txt");
   const [scope, setScope] = useState<"current" | "all" | "range">("all");
   const [customRange, setCustomRange] = useState("");
   const [dpi, setDpi] = useState<72 | 150 | 300>(150);
@@ -118,13 +242,15 @@ export function ExportDialog({
         throw new Error("No valid pages selected for export.");
       }
 
-      const textChunks = await collectPagesText(source, targetIndices, cancelled, setProgress);
-      if (!textChunks || cancelled()) return;
+      const layouts = await collectPageLayouts(source, targetIndices, cancelled, setProgress);
+      if (!layouts || cancelled()) return;
+      if (!layouts.some((layout) => layout.lines.length)) {
+        throw new Error("These pages have no text layer to export. Run OCR first.");
+      }
 
-      const fullText = textChunks.join("\n");
       if (
         !(await downloadBlob(
-          new Blob([fullText], { type: "text/plain;charset=utf-8" }),
+          new Blob([buildPlainText(layouts)], { type: "text/plain;charset=utf-8" }),
           `${baseName}.txt`,
         ))
       )
@@ -144,7 +270,7 @@ export function ExportDialog({
     }
   };
 
-  const handleExportImage = async () => {
+  const handleExportImage = async (rasterFormat: RasterFormat) => {
     const context = beginExport();
     if (!context) return;
     const { run, source, cancelled } = context;
@@ -160,13 +286,15 @@ export function ExportDialog({
         cancelled,
         setProgress,
         dpi,
-        format,
+        format: rasterFormat,
         quality,
         baseName,
       });
-      if (!exported) return;
+      if (!exported || cancelled()) return;
+      if (!(await downloadBlob(exported.blob, exported.name))) return;
+      if (cancelled()) return;
       s.set({
-        status: `Exported ${targetIndices.length} page(s) as ${format.toUpperCase()} (${dpi} DPI).`,
+        status: `Exported ${targetIndices.length} page(s) as ${rasterFormat.toUpperCase()} (${dpi} DPI).`,
       });
       onClose();
     } catch (err) {
@@ -179,7 +307,7 @@ export function ExportDialog({
   const cancelExport = () => {
     if (!exporting) return;
     if (active.current) active.current.cancelled = true;
-    s.set({ status: "Export cancelled. No additional pages were downloaded." });
+    s.set({ status: "Export cancelled. No file was saved." });
   };
 
   return (
@@ -199,39 +327,20 @@ export function ExportDialog({
           <fieldset className="setting-group">
             <legend className="setting-title">Export Format</legend>
             <div className="tab-buttons-bar">
-              <button
-                type="button"
-                className={format === "txt" ? "active" : ""}
-                aria-pressed={format === "txt"}
-                onClick={() => {
-                  setFormat("txt");
-                }}
-                disabled={exporting}
-              >
-                <FileText size={15} /> Plain Text (.txt)
-              </button>
-              <button
-                type="button"
-                className={format === "png" ? "active" : ""}
-                aria-pressed={format === "png"}
-                onClick={() => {
-                  setFormat("png");
-                }}
-                disabled={exporting}
-              >
-                <ImageIcon size={15} /> PNG Image
-              </button>
-              <button
-                type="button"
-                className={format === "jpg" ? "active" : ""}
-                aria-pressed={format === "jpg"}
-                onClick={() => {
-                  setFormat("jpg");
-                }}
-                disabled={exporting}
-              >
-                <ImageIcon size={15} /> JPEG Image
-              </button>
+              {FORMATS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={format === id ? "active" : ""}
+                  aria-pressed={format === id}
+                  onClick={() => {
+                    setFormat(id);
+                  }}
+                  disabled={exporting}
+                >
+                  <Icon size={15} /> {label}
+                </button>
+              ))}
             </div>
           </fieldset>
 
@@ -276,6 +385,7 @@ export function ExportDialog({
               <input
                 type="text"
                 placeholder="e.g. 1-3, 5"
+                aria-label="Export page range"
                 value={customRange}
                 onChange={(e) => {
                   setCustomRange(e.target.value);
@@ -294,40 +404,30 @@ export function ExportDialog({
                   (DPI)
                 </legend>
                 <div className="tab-buttons-bar">
-                  <button
-                    type="button"
-                    className={dpi === 72 ? "active" : ""}
-                    onClick={() => {
-                      setDpi(72);
-                    }}
-                    disabled={exporting}
-                  >
-                    72 DPI (Draft)
-                  </button>
-                  <button
-                    type="button"
-                    className={dpi === 150 ? "active" : ""}
-                    onClick={() => {
-                      setDpi(150);
-                    }}
-                    disabled={exporting}
-                  >
-                    150 DPI (Standard)
-                  </button>
-                  <button
-                    type="button"
-                    className={dpi === 300 ? "active" : ""}
-                    onClick={() => {
-                      setDpi(300);
-                    }}
-                    disabled={exporting}
-                  >
-                    300 DPI (High Print)
-                  </button>
+                  {(
+                    [
+                      [72, "72 DPI (Draft)"],
+                      [150, "150 DPI (Standard)"],
+                      [300, "300 DPI (High Print)"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={dpi === value ? "active" : ""}
+                      aria-pressed={dpi === value}
+                      onClick={() => {
+                        setDpi(value);
+                      }}
+                      disabled={exporting}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </fieldset>
 
-              {format === "jpg" && (
+              {usesJpeg(format) && (
                 <div className="setting-group">
                   <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
                     JPEG Quality: {Math.round(quality * 100)}%
@@ -351,11 +451,14 @@ export function ExportDialog({
 
           {format === "txt" ? (
             <p className="field-hint">
-              Exports UTF-8 plain text in top-to-bottom reading order with structured page headers.
+              Exports UTF-8 plain text line by line in reading order, with a header for each page.
             </p>
           ) : (
             <p className="field-hint">
-              Exports each page as a {dpi} DPI {format.toUpperCase()} image with bounds protection.
+              {HINTS[format]} Pages render at {dpi} DPI with bounds protection
+              {format === "tiff" || format === "ps"
+                ? "."
+                : "; several pages are saved together as one ZIP archive."}
             </p>
           )}
 
@@ -395,7 +498,7 @@ export function ExportDialog({
           <button
             type="button"
             onClick={() => {
-              void (format === "txt" ? handleExportText() : handleExportImage());
+              void (format === "txt" ? handleExportText() : handleExportImage(format));
             }}
             disabled={exporting}
             className="button-primary"
@@ -408,84 +511,68 @@ export function ExportDialog({
   );
 }
 
-async function collectPagesText(
+async function collectPageLayouts(
   source: NonNullable<ViewerController["pdf"]>,
   targetIndices: number[],
   cancelled: () => boolean,
   onProgress: (percent: number) => void,
-): Promise<string[] | null> {
-  const textChunks: string[] = [];
+): Promise<PageLayout[] | null> {
+  const layouts: PageLayout[] = [];
   for (let i = 0; i < targetIndices.length; i++) {
     if (cancelled()) return null;
     const pageNum = targetIndices[i] + 1;
     onProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-    const page = await source.getPage(pageNum);
+    const page = (await source.getPage(pageNum)) as unknown as PageProxy;
     if (cancelled()) return null;
+    const { width, height } = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
-    // @ts-expect-error PDF.js text items
-    const pageText = extractPageTextContent(content.items);
-    textChunks.push(`--- Page ${pageNum} ---\n\n${pageText}\n\n`);
+    layouts.push(layoutPage(pageNum, content.items.filter(isTextItem), width, height));
   }
-  return textChunks;
+  return layouts;
 }
 
-function extractPageTextContent(items: Array<{ str?: string; transform?: number[] }>): string {
-  const filtered = items
-    .filter((item) => item.str?.trim())
-    .sort((a, b) => {
-      const aY = a.transform?.[5] ?? 0;
-      const bY = b.transform?.[5] ?? 0;
-      if (Math.abs(aY - bY) > 6) {
-        return bY - aY;
-      }
-      const aX = a.transform?.[4] ?? 0;
-      const bX = b.transform?.[4] ?? 0;
-      return aX - bX;
-    });
-  return filtered.map((item) => item.str).join(" ");
+interface RenderedPage {
+  canvas: HTMLCanvasElement;
+  context: CanvasRenderingContext2D;
+  /** Page size in points. */
+  width: number;
+  height: number;
 }
 
-interface RenderPageOptions {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  page: any;
-  scale: number;
-  format: "jpg" | "png";
-  quality: number;
-  pageNum: number;
-  baseName: string;
-}
-
-async function exportSinglePageImage(options: RenderPageOptions): Promise<boolean> {
-  const { page, scale, format, quality, pageNum, baseName } = options;
+async function renderPage(
+  page: PageProxy,
+  scale: number,
+  pageNum: number,
+  opaque: boolean,
+): Promise<RenderedPage> {
   const viewport = page.getViewport({ scale });
-  const pixelArea = Math.ceil(viewport.width) * Math.ceil(viewport.height);
-  if (pixelArea > MAX_EXPORT_PIXELS || viewport.width > 8192 || viewport.height > 8192) {
+  const width = Math.ceil(viewport.width);
+  const height = Math.ceil(viewport.height);
+  if (width * height > MAX_EXPORT_PIXELS || width > 8192 || height > 8192) {
     throw new Error(`Export resolution too high: page ${pageNum} would exceed maximum dimensions.`);
   }
 
   const canvas = document.createElement("canvas");
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("The page could not be rendered for export.");
-  if (format === "jpg") {
-    ctx.fillStyle = "#ffffff";
-    if (typeof ctx.fillRect === "function") {
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("The page could not be rendered for export.");
+  if (opaque) {
+    context.fillStyle = "#ffffff";
+    if (typeof context.fillRect === "function") {
+      context.fillRect(0, 0, canvas.width, canvas.height);
     }
   }
-  await page.render({ canvasContext: ctx, viewport }).promise;
+  await page.render({ canvasContext: context, viewport }).promise;
+  return { canvas, context, width: viewport.width / scale, height: viewport.height / scale };
+}
 
-  const mime = format === "jpg" ? "image/jpeg" : "image/png";
+function canvasBytes(canvas: HTMLCanvasElement, mime: string, quality: number): Uint8Array {
   try {
     const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
-    if (!dataUrl) throw new Error("The image could not be exported.");
+    if (!dataUrl.startsWith(`data:${mime}`)) throw new Error("The image could not be exported.");
     const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
-    const imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
-    return await downloadBlob(
-      new Blob([imageBytes], { type: mime }),
-      `${baseName}-page-${pageNum}.${format}`,
-    );
+    return Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
   } catch (error) {
     if (error instanceof Error && error.message === "The image could not be exported.") {
       throw error;

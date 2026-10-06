@@ -33,7 +33,7 @@ import { FormManager } from "../features/forms/FormManager";
 import { FillAndSign } from "../features/signatures/FillAndSign";
 import { OcrPanel } from "../features/ocr/OcrPanel";
 import { ExportDialog } from "../features/convert/ExportDialog";
-import { OfficeExport } from "../features/convert/OfficeExport";
+import { OfficeExport, type Format as OfficeFormat } from "../features/convert/OfficeExport";
 import { RedactionTool } from "../features/redact/RedactionTool";
 import { CompressDialog } from "../features/compress/CompressDialog";
 import { ProtectDialog } from "../features/protect/ProtectDialog";
@@ -42,8 +42,10 @@ import { DesignTools } from "../features/design/DesignTools";
 import { ExportOptions } from "../features/convert/ExportOptions";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
-function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "docx" {
+function officeFormat(modal: string | null): OfficeFormat {
   switch (modal) {
+    case "office-html":
+      return "html";
     case "office-pptx":
       return "pptx-text";
     case "office-xlsx":
@@ -234,6 +236,7 @@ const documentMenuActions = new Set([
   "office-pptx",
   "office-xlsx",
   "office-rtf",
+  "office-html",
   "convert",
   "compress",
   "protect",
@@ -776,7 +779,7 @@ export default function App() {
         {s.activeModal === "convert" && (
           <ExportDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {["office-export", "office-pptx", "office-xlsx", "office-rtf"].includes(
+        {["office-export", "office-pptx", "office-xlsx", "office-rtf", "office-html"].includes(
           s.activeModal ?? "",
         ) && (
           <OfficeExport
