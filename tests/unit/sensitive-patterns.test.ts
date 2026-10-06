@@ -6,6 +6,7 @@ import {
   type SensitiveKind,
 } from "../../src/features/redact/sensitive-patterns";
 
+const VISA = "4111 1111 1111 1111";
 const ALL: SensitiveKind[] = ["email", "phone", "ssn", "card", "iban", "date"];
 const found = (text: string, kinds: SensitiveKind[] = ALL) =>
   findSensitive(text, kinds).map((match) => [match.kind, match.text]);
@@ -41,8 +42,8 @@ describe("sensitive data patterns", () => {
   });
 
   it("prefers the more specific kind where matches overlap and honors the chosen kinds", () => {
-    expect(found("4111 1111 1111 1111")).toEqual([["card", "4111 1111 1111 1111"]]);
-    expect(found("4111 1111 1111 1111", ["phone"])).toEqual([]);
+    expect(found(VISA)).toEqual([["card", VISA]]);
+    expect(found(VISA, ["phone"])).toEqual([]);
     expect(found("mail a@example.com on 2026-01-02", ["date"])).toEqual([["date", "2026-01-02"]]);
   });
 

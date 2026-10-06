@@ -35,6 +35,9 @@ interface Row {
 
 const row = (range: PageLabelRange): Row => ({ key: crypto.randomUUID(), range });
 
+/** A whole number from an input, or `fallback` when it is empty or not a number. */
+const whole = (value: string, fallback: number) => Math.trunc(Number(value) || fallback);
+
 function RangeRow({
   range,
   index,
@@ -49,7 +52,6 @@ function RangeRow({
   onRemove: () => void;
 }>) {
   const ids = useId();
-  const whole = (value: string, fallback: number) => Math.trunc(Number(value) || fallback);
   return (
     <fieldset className="preset-list">
       <legend className="setting-title">Range {index + 1}</legend>
@@ -131,7 +133,7 @@ export function PageLabelsDialog({
         const existing = await readPageLabelsFromBytes(await controller.pdf.saveDocument());
         if (!current) return;
         setPageCount(existing.pageCount);
-        if (existing.ranges.length) setRows(existing.ranges.map(row));
+        if (existing.ranges.length) setRows(existing.ranges.map((range) => row(range)));
       } catch (cause) {
         if (current) setLoadError(errorMessage(cause));
       }

@@ -58,8 +58,9 @@ export function annotationColor(dict: PDFDict, key: "C" | "IC"): [number, number
 }
 
 export function annotationRect(dict: PDFDict): Rect | null {
-  const [x1, y1, x2, y2] = numbersOf(dict, "Rect");
-  if ([x1, y1, x2, y2].some((value) => value === undefined)) return null;
+  const values = numbersOf(dict, "Rect");
+  if (values.length < 4) return null;
+  const [x1, y1, x2, y2] = values;
   return [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)];
 }
 

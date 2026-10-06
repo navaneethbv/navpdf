@@ -1,7 +1,16 @@
 // A comment summary lists every review annotation with its page, author, date, text, replies and
 // review status, for sharing outside a PDF reader. It reads the saved PDF, not the viewer state.
 
-import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRef, PDFString } from "pdf-lib";
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFRef,
+  PDFString,
+  type PDFPage,
+} from "pdf-lib";
 import { previewLabels, readPageLabels } from "../../services/pdf/page-labels.ts";
 import { csvField } from "../convert/formats.ts";
 import { escapeXml } from "../convert/ooxml.ts";
@@ -50,18 +59,24 @@ function nameOf(dict: PDFDict, key: string) {
   return value instanceof PDFName ? value.decodeText() : "";
 }
 
+/** The ISO offset for a PDF date's time zone part, "Z" for UTC or none, or null when invalid. */
+function timeZone(part: string): string | null {
+  if (!part || /^[Zz]/.test(part)) return "Z";
+  const zone = /^([+-])(\d{2})'?(\d{2})?'?$/.exec(part);
+  return zone ? `${zone[1]}${zone[2]}:${zone[3] ?? "00"}` : null;
+}
+
 /** Parses a PDF date string (D:YYYYMMDDHHmmSSOHH'mm') into ISO 8601, or "" when invalid. */
 export function parsePdfDate(value: string): string {
-  const match =
-    /^(?:D:)?(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([Zz+-])?(\d{2})?'?(\d{2})?'?$/.exec(
-      value.trim(),
-    );
-  if (!match) return "";
-  const [, year, month = "01", day = "01", hour = "00", minute = "00", second = "00"] = match;
-  const sign = match[7];
-  const offset =
-    !sign || sign.toUpperCase() === "Z" ? "Z" : `${sign}${match[8] ?? "00"}:${match[9] ?? "00"}`;
-  const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`);
+  const parts = /^(?:D:)?(\d{4,14})(.*)$/.exec(value.trim());
+  if (!parts || parts[1].length % 2) return "";
+  // Missing fields default to the start of the period: month and day 01, time 00.
+  const digits = parts[1].length >= 8 ? parts[1] : `${parts[1]}0101`.slice(0, 8);
+  const offset = timeZone(parts[2]);
+  if (offset === null) return "";
+  const field = (start: number, fallback: string) => digits.slice(start, start + 2) || fallback;
+  const iso = `${digits.slice(0, 4)}-${field(4, "01")}-${field(6, "01")}T${field(8, "00")}:${field(10, "00")}:${field(12, "00")}${offset}`;
+  const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
@@ -104,20 +119,23 @@ function compareBy(sort: CommentSort) {
   };
 }
 
+function pageAnnotations(doc: PDFDocument, page: PDFPage, number: number, label: string): Raw[] {
+  const annots = page.node.lookup(PDFName.of("Annots"));
+  if (!(annots instanceof PDFArray)) return [];
+  return annots.asArray().flatMap((ref) => {
+    const dict = doc.context.lookup(ref);
+    const raw =
+      dict instanceof PDFDict ? readAnnotation(dict, ref.toString(), number, label) : null;
+    return raw ? [raw] : [];
+  });
+}
+
 /** Threads replies under their comments; review states become the comment's status. */
 export function collectComments(doc: PDFDocument, sort: CommentSort = "page"): CommentEntry[] {
   const labels = previewLabels(readPageLabels(doc), doc.getPageCount());
-  const all: Raw[] = [];
-  for (const [index, page] of doc.getPages().entries()) {
-    const annots = page.node.lookup(PDFName.of("Annots"));
-    if (!(annots instanceof PDFArray)) continue;
-    for (const ref of annots.asArray()) {
-      const dict = doc.context.lookup(ref);
-      if (!(dict instanceof PDFDict)) continue;
-      const raw = readAnnotation(dict, ref.toString(), index + 1, labels[index]);
-      if (raw) all.push(raw);
-    }
-  }
+  const all = doc
+    .getPages()
+    .flatMap((page, index) => pageAnnotations(doc, page, index + 1, labels[index]));
   const byRef = new Map(all.map((raw) => [raw.ref, raw]));
   const roots: CommentEntry[] = [];
   for (const raw of all) {
@@ -143,7 +161,7 @@ function htmlEntry(entry: CommentEntry, reply: boolean): string {
     entry.status && `Status: ${entry.status}`,
   ]
     .filter(Boolean)
-    .map(escapeHtml)
+    .map((part) => escapeHtml(part))
     .join(" · ");
   const body = entry.text ? `<p>${escapeHtml(entry.text).replaceAll("\n", "<br>")}</p>` : "";
   const replies = entry.replies.map((item) => htmlEntry(item, true)).join("");

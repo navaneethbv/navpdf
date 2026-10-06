@@ -57,19 +57,23 @@ function figures(doc: PDFDocument) {
     const { node, depth } = stack.pop()!;
     if (seen.has(node) || depth > MAX_DEPTH) continue;
     seen.add(node);
-    const type = node.get(PDFName.of("S"));
-    if (type === PDFName.of("Figure")) {
+    if (node.get(PDFName.of("S")) === PDFName.of("Figure")) {
       result.total++;
       if (!textOf(node, "Alt") && !textOf(node, "ActualText")) result.missing++;
     }
-    const kids = node.lookup(PDFName.of("K"));
-    const children = kids instanceof PDFArray ? kids.asArray() : [kids];
-    for (const child of children) {
-      const resolved = child ? doc.context.lookup(child) : undefined;
-      if (resolved instanceof PDFDict) stack.push({ node: resolved, depth: depth + 1 });
-    }
+    for (const child of childElements(doc, node)) stack.push({ node: child, depth: depth + 1 });
   }
   return result;
+}
+
+/** Structure elements below a node; marked-content and object references are skipped. */
+function childElements(doc: PDFDocument, node: PDFDict): PDFDict[] {
+  const kids = node.lookup(PDFName.of("K"));
+  const children = kids instanceof PDFArray ? kids.asArray() : [kids];
+  return children.flatMap((child) => {
+    const resolved = child ? doc.context.lookup(child) : undefined;
+    return resolved instanceof PDFDict ? [resolved] : [];
+  });
 }
 
 function annotationsOf(doc: PDFDocument, pageIndex: number) {
@@ -159,22 +163,24 @@ function documentChecks(doc: PDFDocument): AccessibilityCheck[] {
 
 function pageChecks(doc: PDFDocument, facts: PageFacts): AccessibilityCheck[] {
   const imageOnly = facts.hasText.flatMap((has, index) => (has ? [] : [index + 1]));
-  const needsTabs: number[] = [];
-  const untitledFields: string[] = [];
-  let links = 0;
-  let undescribedLinks = 0;
-  for (const [index, page] of doc.getPages().entries()) {
-    const annotations = annotationsOf(doc, index);
-    if (annotations.length && page.node.get(PDFName.of("Tabs")) !== PDFName.of("S"))
-      needsTabs.push(index + 1);
-    for (const annotation of annotations) {
-      if (subtypeOf(annotation) !== PDFName.of("Link")) continue;
-      links++;
-      if (!textOf(annotation, "Contents")) undescribedLinks++;
-    }
-  }
-  for (const field of doc.getForm().getFields())
-    if (!textOf(field.acroField.dict, "TU")) untitledFields.push(field.getName());
+  const needsTabs = doc
+    .getPages()
+    .flatMap((page, index) =>
+      annotationsOf(doc, index).length && page.node.get(PDFName.of("Tabs")) !== PDFName.of("S")
+        ? [index + 1]
+        : [],
+    );
+  const linkAnnotations = doc
+    .getPageIndices()
+    .flatMap((index) => annotationsOf(doc, index))
+    .filter((annotation) => subtypeOf(annotation) === PDFName.of("Link"));
+  const links = linkAnnotations.length;
+  const undescribedLinks = linkAnnotations.filter((link) => !textOf(link, "Contents")).length;
+  const untitledFields = doc
+    .getForm()
+    .getFields()
+    .filter((field) => !textOf(field.acroField.dict, "TU"))
+    .map((field) => field.getName());
   return [
     check("text", "Pages have real text", !imageOnly.length, {
       pass: "Every page has a text layer.",

@@ -33,7 +33,7 @@ async function editableController(bytes?: Uint8Array) {
       getTextContent: vi.fn(async () => ({ items: [{ str: "Page text" }] })),
     })),
   };
-  const replaceWithBytes = vi.fn(async () => undefined);
+  const replaceWithBytes = vi.fn(() => Promise.resolve());
   return { controller: { pdf, replaceWithBytes }, pdf, replaceWithBytes };
 }
 
@@ -72,6 +72,9 @@ async function committed(replaceWithBytes: ReturnType<typeof vi.fn>) {
   ];
   return { doc: await PDFDocument.load(bytes), status, options };
 }
+
+const FIX_ISSUES = "Fix Selected Issues";
+const EXPORT_IMAGES = "Export Images";
 
 beforeEach(() => {
   useWorkspace.getState().reset();
@@ -256,16 +259,16 @@ describe("CommentSummaryDialog", () => {
   });
 });
 
-describe("FieldLayoutDialog", () => {
-  async function formPdf() {
-    const doc = await PDFDocument.create();
-    const page = doc.addPage([612, 792]);
-    const form = doc.getForm();
-    form.createTextField("First").addToPage(page, { x: 72, y: 700, width: 200, height: 20 });
-    form.createTextField("Second").addToPage(page, { x: 72, y: 650, width: 200, height: 20 });
-    return doc.save();
-  }
+async function formPdf() {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([612, 792]);
+  const form = doc.getForm();
+  form.createTextField("First").addToPage(page, { x: 72, y: 700, width: 200, height: 20 });
+  form.createTextField("Second").addToPage(page, { x: 72, y: 650, width: 200, height: 20 });
+  return doc.save();
+}
 
+describe("FieldLayoutDialog", () => {
   it("moves the chosen field and stays open for more changes", async () => {
     seed(1);
     const { controller, replaceWithBytes } = await editableController(await formPdf());
@@ -312,15 +315,12 @@ describe("AccessibilityDialog", () => {
     const list = await screen.findByRole("list", { name: "Accessibility checks" });
     expect(list.textContent).toMatch(/Tagged PDF: Failed/);
     expect(list.textContent).toMatch(/Pages have real text: Passed/);
-    expect(screen.getByRole("button", { name: "Fix Selected Issues" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(screen.getByRole("button", { name: FIX_ISSUES })).toHaveProperty("disabled", true);
     fireEvent.change(screen.getByLabelText("Document title"), { target: { value: "Annual plan" } });
     fireEvent.change(screen.getByLabelText("Language (for example en-US)"), {
       target: { value: "de-DE" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Fix Selected Issues" }));
+    fireEvent.click(screen.getByRole("button", { name: FIX_ISSUES }));
     const { doc, status } = await committed(replaceWithBytes);
     expect(status).toBe("Accessibility settings updated");
     expect(doc.getTitle()).toBe("Annual plan");
@@ -336,36 +336,33 @@ describe("AccessibilityDialog", () => {
     fireEvent.change(screen.getByLabelText("Language (for example en-US)"), {
       target: { value: "not a language" },
     });
-    expect(screen.getByRole("button", { name: "Fix Selected Issues" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(screen.getByRole("button", { name: FIX_ISSUES })).toHaveProperty("disabled", true);
     expect(screen.getByText(/Use a language code/)).toBeTruthy();
   });
 });
 
-describe("ExtractImagesDialog", () => {
-  /** Pages that each draw one 2x2 RGBA image, shared across pages when `shared` is set. */
-  function imageController(pages: number, shared: boolean) {
-    const image = { width: 2, height: 2, kind: 3, data: new Uint8ClampedArray(16).fill(200) };
-    return {
-      pdf: {
-        numPages: pages,
-        getPage: vi.fn(async (number: number) => ({
-          getOperatorList: async () => ({
-            fnArray: [OPS.paintImageXObject],
-            argsArray: [[`img_p${number}_1`]],
-          }),
-          objs: {
-            get: (_id: string, callback: (value: unknown) => void) =>
-              callback({ ...image, ref: shared ? "12R" : `${number}R` }),
-          },
-          commonObjs: { get: vi.fn() },
-        })),
-      },
-    };
-  }
+/** Pages that each draw one 2x2 RGBA image, shared across pages when `shared` is set. */
+function imageController(pages: number, shared: boolean) {
+  const image = { width: 2, height: 2, kind: 3, data: new Uint8ClampedArray(16).fill(200) };
+  return {
+    pdf: {
+      numPages: pages,
+      getPage: vi.fn(async (number: number) => ({
+        getOperatorList: async () => ({
+          fnArray: [OPS.paintImageXObject],
+          argsArray: [[`img_p${number}_1`]],
+        }),
+        objs: {
+          get: (_id: string, callback: (value: unknown) => void) =>
+            callback({ ...image, ref: shared ? "12R" : `${number}R` }),
+        },
+        commonObjs: { get: vi.fn() },
+      })),
+    },
+  };
+}
 
+describe("ExtractImagesDialog", () => {
   it("saves several images as one ZIP and skips repeats", async () => {
     seed(3);
     const { saved, names } = captureSaves();
@@ -376,7 +373,7 @@ describe("ExtractImagesDialog", () => {
     fireEvent.change(screen.getByLabelText("Skip images smaller than (pixels)"), {
       target: { value: "1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Export Images" }));
+    fireEvent.click(screen.getByRole("button", { name: EXPORT_IMAGES }));
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(names).toEqual(["report-images.zip"]);
     const zip = new TextDecoder().decode(await saved[0].arrayBuffer());
@@ -393,14 +390,14 @@ describe("ExtractImagesDialog", () => {
     fireEvent.change(screen.getByLabelText("Skip images smaller than (pixels)"), {
       target: { value: "1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Export Images" }));
+    fireEvent.click(screen.getByRole("button", { name: EXPORT_IMAGES }));
     await vi.waitFor(() => expect(names).toEqual(["report-page-1-image-1.png"]));
     unmount();
 
     render(
       <ExtractImagesDialog controller={imageController(2, true) as never} onClose={vi.fn()} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Export Images" }));
+    fireEvent.click(screen.getByRole("button", { name: EXPORT_IMAGES }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/No images were found/);
   });
 });

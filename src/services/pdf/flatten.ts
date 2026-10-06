@@ -123,6 +123,21 @@ function popupOf(annotation: PDFDict) {
   return popup instanceof PDFRef ? popup : null;
 }
 
+/**
+ * Decides one annotation's fate: drawn, removed without drawing (a hidden widget disappears
+ * with its form) or skipped (a hidden comment, or an appearance that cannot be drawn).
+ */
+function flattenOne(
+  doc: PDFDocument,
+  page: PDFPage,
+  annotation: PDFDict,
+): "skipped" | { kind: "annotations" | "widgets"; operation: string | null } {
+  const kind = subtypeOf(annotation) === "Widget" ? "widgets" : "annotations";
+  if (isInvisible(annotation)) return kind === "widgets" ? { kind, operation: null } : "skipped";
+  const operation = drawOperation(doc, page, annotation);
+  return operation ? { kind, operation } : "skipped";
+}
+
 function flattenPage(doc: PDFDocument, page: PDFPage, options: FlattenOptions): FlattenReport {
   const report: FlattenReport = { annotations: 0, widgets: 0, skipped: 0 };
   const annots = page.node.Annots();
@@ -130,30 +145,28 @@ function flattenPage(doc: PDFDocument, page: PDFPage, options: FlattenOptions): 
   const drawn: string[] = [];
   const removed = new Set<string>();
   for (const ref of annots.asArray()) {
-    if (!(ref instanceof PDFRef)) continue;
-    const annotation = doc.context.lookup(ref);
+    const annotation = ref instanceof PDFRef ? doc.context.lookup(ref) : undefined;
     if (!(annotation instanceof PDFDict) || !shouldFlatten(annotation, options)) continue;
-    const widget = subtypeOf(annotation) === "Widget";
-    const hidden = isInvisible(annotation);
-    // A hidden widget disappears with its form; a hidden comment is left for the reviewer.
-    const operation = hidden ? null : drawOperation(doc, page, annotation);
-    if (!operation && !(hidden && widget)) {
+    const outcome = flattenOne(doc, page, annotation);
+    if (outcome === "skipped") {
       report.skipped++;
       continue;
     }
-    if (operation) drawn.push(operation);
+    if (outcome.operation) drawn.push(outcome.operation);
     removed.add(ref.toString());
     const popup = popupOf(annotation);
     if (popup) removed.add(popup.toString());
-    if (widget) report.widgets++;
-    else report.annotations++;
+    report[outcome.kind]++;
   }
-  if (!removed.size) return report;
   if (drawn.length) isolateAndAppend(doc, page, drawn);
-  const kept = annots.asArray().filter((ref) => !removed.has(ref.toString()));
+  if (removed.size) removeAnnotations(doc, page, removed);
+  return report;
+}
+
+function removeAnnotations(doc: PDFDocument, page: PDFPage, removed: Set<string>) {
+  const kept = (page.node.Annots()?.asArray() ?? []).filter((ref) => !removed.has(ref.toString()));
   if (kept.length) page.node.set(PDFName.of("Annots"), doc.context.obj(kept));
   else page.node.delete(PDFName.of("Annots"));
-  return report;
 }
 
 function isolateAndAppend(doc: PDFDocument, page: PDFPage, drawn: string[]) {
@@ -195,6 +208,15 @@ function completeFieldAppearances(doc: PDFDocument) {
   }
 }
 
+/** Refuses forms that cannot be flattened safely and completes missing field appearances. */
+function prepareForm(doc: PDFDocument, acroForm: PDFDict) {
+  if (acroForm.get(PDFName.of("XFA")))
+    throw new Error("XFA forms cannot be flattened. Flatten them in the authoring application.");
+  if (hasSignedSignature(doc))
+    throw new Error("This PDF is digitally signed. Flattening would invalidate the signature.");
+  completeFieldAppearances(doc);
+}
+
 /** Flattens annotations, form fields or both throughout the document. */
 export async function flattenDocument(
   pdfBytes: Uint8Array,
@@ -203,13 +225,8 @@ export async function flattenDocument(
   if (!options.annotations && !options.forms) throw new Error("Choose what to flatten.");
   const doc = await PDFDocument.load(pdfBytes);
   const acroForm = doc.catalog.lookup(PDFName.of("AcroForm"));
-  if (options.forms && acroForm instanceof PDFDict) {
-    if (acroForm.get(PDFName.of("XFA")))
-      throw new Error("XFA forms cannot be flattened. Flatten them in the authoring application.");
-    if (hasSignedSignature(doc))
-      throw new Error("This PDF is digitally signed. Flattening would invalidate the signature.");
-    completeFieldAppearances(doc);
-  }
+  const flattenForm = options.forms && acroForm instanceof PDFDict;
+  if (flattenForm) prepareForm(doc, acroForm);
   const report: FlattenReport = { annotations: 0, widgets: 0, skipped: 0 };
   for (const page of doc.getPages()) {
     const pageReport = flattenPage(doc, page, options);
@@ -217,7 +234,7 @@ export async function flattenDocument(
     report.widgets += pageReport.widgets;
     report.skipped += pageReport.skipped;
   }
-  if (options.forms && acroForm instanceof PDFDict) {
+  if (flattenForm) {
     if (report.skipped && hasRemainingWidgets(doc))
       throw new Error("Some form fields could not be drawn, so the form was left unchanged.");
     doc.catalog.delete(PDFName.of("AcroForm"));

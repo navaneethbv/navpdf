@@ -84,6 +84,8 @@ function controller(texts: string[] = ["Invoice SYNTHETIC-CANARY total", "No mat
   };
 }
 
+const MARK_SENSITIVE = "Mark Sensitive Data";
+
 const type = (label: string, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
@@ -342,7 +344,7 @@ describe("redaction workflow", () => {
     ]);
     engine.redactDocument.mockResolvedValueOnce({ bytes: new Uint8Array([5]), report: result });
     render(<RedactionTool controller={view as never} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByText("Mark Sensitive Data"));
+    fireEvent.click(screen.getByText(MARK_SENSITIVE));
     expect(
       await screen.findByText(
         /Marked 1 × email addresses, 1 × phone numbers, 1 × payment card numbers on 2 pages/,
@@ -369,9 +371,9 @@ describe("redaction workflow", () => {
     fireEvent.click(screen.getByLabelText("Phone numbers"));
     fireEvent.click(screen.getByLabelText("US Social Security numbers"));
     fireEvent.click(screen.getByLabelText("Payment card numbers"));
-    expect(screen.getByText("Mark Sensitive Data").closest("button")?.disabled).toBe(true);
+    expect(screen.getByText(MARK_SENSITIVE).closest("button")?.disabled).toBe(true);
     fireEvent.click(screen.getByLabelText("Dates"));
-    fireEvent.click(screen.getByText("Mark Sensitive Data"));
+    fireEvent.click(screen.getByText(MARK_SENSITIVE));
     expect(await screen.findByText(/No matching data was found/)).toBeTruthy();
   });
 

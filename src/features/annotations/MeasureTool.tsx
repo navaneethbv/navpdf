@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 import { pageAt, pdfPoint } from "./page-pointer";
@@ -82,7 +88,7 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     pdf: await pdfPoint(controller, element, event.clientX, event.clientY),
   });
 
-  const addPoint = async (event: PointerEvent) => {
+  const addPoint = async (event: ReactPointerEvent) => {
     if (event.button !== 0 || useWorkspace.getState().busy || !controller.pdf) return;
     const element = pageAt(event.clientX, event.clientY);
     // A measurement stays on the page where it started.
@@ -101,12 +107,12 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     if (kind === "distance" && next.length === 2) await finish(next);
   };
 
-  const track = async (event: PointerEvent) => {
+  const track = async (event: ReactPointerEvent) => {
     if (!page.current || !latest.current.length) return;
     setHover(await markAt(event, page.current));
   };
 
-  const onKey = (event: KeyboardEvent) => {
+  const onKey = (event: ReactKeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
       void finish(latest.current);
@@ -120,24 +126,6 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     }
   };
 
-  useEffect(() => {
-    const element = overlay.current;
-    if (!element) return;
-    const down = (event: PointerEvent) => void addPoint(event);
-    const move = (event: PointerEvent) => void track(event);
-    const double = () => void finish(latest.current);
-    element.addEventListener("pointerdown", down);
-    element.addEventListener("pointermove", move);
-    element.addEventListener("dblclick", double);
-    element.addEventListener("keydown", onKey);
-    return () => {
-      element.removeEventListener("pointerdown", down);
-      element.removeEventListener("pointermove", move);
-      element.removeEventListener("dblclick", double);
-      element.removeEventListener("keydown", onKey);
-    };
-  });
-
   const origin = overlay.current?.getBoundingClientRect();
   const local = (point: Point) =>
     `${point[0] - (origin?.left ?? 0)},${point[1] - (origin?.top ?? 0)}`;
@@ -147,6 +135,10 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
   return (
     <div
       ref={overlay}
+      onPointerDown={(event) => void addPoint(event)}
+      onPointerMove={(event) => void track(event)}
+      onDoubleClick={() => void finish(latest.current)}
+      onKeyDown={onKey}
       className="shape-tool-overlay measure-tool-overlay"
       role="application"
       aria-label={`Measure ${kind}`}

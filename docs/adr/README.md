@@ -17,3 +17,4 @@
 
 - [0013: Local image import and document tool extensions](0013-imageio-import-and-document-tools.md).
 - [0014: Additional local export formats](0014-additional-export-formats.md).
+- [0015: Document review and preparation tools](0015-document-review-tools.md).

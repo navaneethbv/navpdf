@@ -120,14 +120,13 @@ export function toTopLeftVisual(page: PDFPage, rect: UserSpaceRect): UserSpaceRe
   const bottom = rect.y - box.y;
   const right = box.x + box.width - (rect.x + rect.width);
   const top = box.y + box.height - (rect.y + rect.height);
-  switch (box.rotation) {
-    case 0:
-      return { x: left, y: top, width: rect.width, height: rect.height };
-    case 90:
-      return { x: bottom, y: left, width: rect.height, height: rect.width };
-    case 180:
-      return { x: right, y: bottom, width: rect.width, height: rect.height };
-    case 270:
-      return { x: top, y: right, width: rect.height, height: rect.width };
-  }
+  const upright = { width: rect.width, height: rect.height };
+  const turned = { width: rect.height, height: rect.width };
+  const shown: Record<PageBox["rotation"], UserSpaceRect> = {
+    0: { x: left, y: top, ...upright },
+    90: { x: bottom, y: left, ...turned },
+    180: { x: right, y: bottom, ...upright },
+    270: { x: top, y: right, ...turned },
+  };
+  return shown[box.rotation];
 }

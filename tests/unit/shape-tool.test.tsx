@@ -59,7 +59,7 @@ describe("ShapeTool", () => {
         }),
       })),
     };
-    const controller = { setTool: vi.fn(), addShape: vi.fn(async () => undefined), pdf };
+    const controller = { setTool: vi.fn(), addShape: vi.fn(() => Promise.resolve()), pdf };
     useWorkspace.getState().set({ tool: "shape", shapeKind: "Square", page: 1 });
     render(<ShapeTool controller={controller as never} />);
     const overlay = screen.getByRole("application", { name: "Draw square shape" });

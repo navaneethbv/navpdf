@@ -73,7 +73,8 @@ async function widgetsOf(pdf: Awaited<ReturnType<typeof reopen>>) {
   for (let number = 1; number <= pdf.numPages; number++) {
     for (const item of await (await pdf.getPage(number)).getAnnotations()) {
       if (item.subtype !== "Widget") continue;
-      (result[item.fieldName] ??= []).push({ ...item, page: number });
+      result[item.fieldName] ??= [];
+      result[item.fieldName].push({ ...item, page: number });
     }
   }
   return result;
@@ -97,6 +98,163 @@ function numbers(dict: PDFDict, key: string) {
     .lookup(PDFName.of(key), PDFArray)
     .asArray()
     .map((value) => (value as PDFNumber).asNumber());
+}
+
+async function markedUpForm() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage([612, 792]).drawText("Body text", { x: 72, y: 700, size: 12, font });
+  doc.addPage([612, 792]);
+  let bytes = await doc.save();
+  bytes = await addTextMarkupAnnotations(bytes, "Highlight", [
+    { page: 1, quads: [{ x1: 70, y1: 696, x2: 140, y2: 712 }], opacity: 0.5 },
+  ]);
+  bytes = await addShapeAnnotation(bytes, {
+    page: 1,
+    kind: "Square",
+    start: [100, 300],
+    end: [200, 360],
+  });
+  bytes = await addStickyNote(bytes, { page: 1, x: 500, y: 700, contents: "Review" });
+  bytes = await addLinkAnnotation(bytes, {
+    page: 1,
+    rect: [72, 100, 200, 120],
+    target: { type: "page", page: 2 },
+  });
+  bytes = await addStamp(bytes, { page: 2, stamp: "Final", position: "center" });
+  bytes = await addFormField(bytes, {
+    type: "text",
+    name: "Reviewer",
+    page: 1,
+    x: 72,
+    y: 600,
+    width: 200,
+    height: 24,
+  });
+  return updateFormField(bytes, { name: "Reviewer", value: "Flattened Value" });
+}
+
+async function pageText(pdf: Awaited<ReturnType<typeof reopen>>, number: number) {
+  const content = await (await pdf.getPage(number)).getTextContent();
+  return content.items.map((item) => ("str" in item ? item.str : "")).join(" ");
+}
+
+async function numbered(count: number, rotateSecond = false) {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (let index = 1; index <= count; index++) {
+    const page = doc.addPage([612, 792]);
+    page.drawText(`Page${index}`, { x: 250, y: 400, size: 40, font });
+    if (rotateSecond && index === 2) page.setRotation(degrees(90));
+  }
+  return doc.save();
+}
+
+async function sheetText(bytes: Uint8Array) {
+  const pdf = await reopen(bytes);
+  const sheets: { size: number[]; words: { text: string; x: number; y: number }[] }[] = [];
+  for (let number = 1; number <= pdf.numPages; number++) {
+    const page = await pdf.getPage(number);
+    const { width, height } = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    sheets.push({
+      size: [Math.round(width), Math.round(height)],
+      words: content.items.flatMap((item) =>
+        "str" in item && item.str.trim()
+          ? [{ text: item.str, x: item.transform[4], y: item.transform[5] }]
+          : [],
+      ),
+    });
+  }
+  return sheets;
+}
+
+async function reviewed() {
+  let bytes = await setPageLabels(await pages({}, {}), [
+    { startPage: 1, style: "roman-lower", prefix: "", firstNumber: 1 },
+  ]);
+  bytes = await addStickyNote(bytes, {
+    page: 2,
+    x: 100,
+    y: 700,
+    contents: "Check the <total>, please",
+    author: "Ana",
+    id: "note-2",
+  });
+  bytes = await addStickyNote(bytes, {
+    page: 1,
+    x: 100,
+    y: 700,
+    contents: "Intro reads well",
+    author: "Ben",
+    id: "note-1",
+  });
+  bytes = await addReply(bytes, { parentId: "note-2", contents: "Fixed", author: "Ben" });
+  bytes = await setReviewState(bytes, "note-2", "Accepted");
+  return addStamp(bytes, { page: 1, stamp: "Approved", position: "center", author: "Ana" });
+}
+
+async function formOnPages() {
+  const doc = await PDFDocument.create();
+  const upright = doc.addPage([612, 792]);
+  const turned = doc.addPage([612, 792]);
+  turned.setRotation(degrees(90));
+  const form = doc.getForm();
+  const name = form.createTextField("Name");
+  name.addToPage(upright, { x: 72, y: 600, width: 200, height: 24 });
+  name.setText("Ada Lovelace");
+  const plan = form.createRadioGroup("Plan");
+  plan.addOptionToPage("A", upright, { x: 72, y: 500, width: 14, height: 14 });
+  plan.addOptionToPage("B", upright, { x: 120, y: 500, width: 14, height: 14 });
+  plan.select("B");
+  form.createTextField("Note").addToPage(turned, { x: 100, y: 100, width: 30, height: 200 });
+  return doc.save();
+}
+
+async function factsFor(bytes: Uint8Array) {
+  const pdf = await reopen(bytes);
+  const hasText: boolean[] = [];
+  for (let number = 1; number <= pdf.numPages; number++) {
+    const content = await (await pdf.getPage(number)).getTextContent();
+    hasText.push(content.items.some((item) => "str" in item && item.str.trim() !== ""));
+  }
+  const permissions = await pdf.getPermissions();
+  return { hasText, permissions: permissions ? [...permissions] : null };
+}
+
+async function untagged() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage([612, 792]).drawText("Readable text", { x: 72, y: 700, size: 12, font });
+  doc.addPage([612, 792]);
+  const form = doc.getForm();
+  form.createTextField("Email").addToPage(doc.getPage(0), { x: 72, y: 600 });
+  return addLinkAnnotation(await doc.save(), {
+    page: 1,
+    rect: [72, 100, 200, 120],
+    target: { type: "page", page: 2 },
+  });
+}
+
+const statuses = (checks: AccessibilityCheck[]) =>
+  Object.fromEntries(checks.map((item) => [item.id, item.status]));
+
+/** Decodes an unfiltered 8-bit PNG written by `encodePng`, independently of the writer. */
+async function decodePng(png: Uint8Array) {
+  const view = new DataView(png.buffer, png.byteOffset);
+  expect([...png.subarray(1, 4)].map((code) => String.fromCodePoint(code)).join("")).toBe("PNG");
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  const channels = png[25] === 6 ? 4 : 3;
+  const length = view.getUint32(33);
+  const compressed = png.subarray(41, 41 + length);
+  const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate"));
+  const raw = new Uint8Array(await new Response(stream).arrayBuffer());
+  const stride = width * channels;
+  const pixels = new Uint8Array(stride * height);
+  for (let y = 0; y < height; y++)
+    pixels.set(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)), y * stride);
+  return { width, height, channels, pixels };
 }
 
 describe("stamps", () => {
@@ -176,45 +334,6 @@ describe("stamps", () => {
 });
 
 describe("flattening", () => {
-  async function markedUpForm() {
-    const doc = await PDFDocument.create();
-    const font = await doc.embedFont(StandardFonts.Helvetica);
-    doc.addPage([612, 792]).drawText("Body text", { x: 72, y: 700, size: 12, font });
-    doc.addPage([612, 792]);
-    let bytes = await doc.save();
-    bytes = await addTextMarkupAnnotations(bytes, "Highlight", [
-      { page: 1, quads: [{ x1: 70, y1: 696, x2: 140, y2: 712 }], opacity: 0.5 },
-    ]);
-    bytes = await addShapeAnnotation(bytes, {
-      page: 1,
-      kind: "Square",
-      start: [100, 300],
-      end: [200, 360],
-    });
-    bytes = await addStickyNote(bytes, { page: 1, x: 500, y: 700, contents: "Review" });
-    bytes = await addLinkAnnotation(bytes, {
-      page: 1,
-      rect: [72, 100, 200, 120],
-      target: { type: "page", page: 2 },
-    });
-    bytes = await addStamp(bytes, { page: 2, stamp: "Final", position: "center" });
-    bytes = await addFormField(bytes, {
-      type: "text",
-      name: "Reviewer",
-      page: 1,
-      x: 72,
-      y: 600,
-      width: 200,
-      height: 24,
-    });
-    return updateFormField(bytes, { name: "Reviewer", value: "Flattened Value" });
-  }
-
-  async function pageText(pdf: Awaited<ReturnType<typeof reopen>>, number: number) {
-    const content = await (await pdf.getPage(number)).getTextContent();
-    return content.items.map((item) => ("str" in item ? item.str : "")).join(" ");
-  }
-
   it("draws comments, stamps and field values into the page and keeps links", async () => {
     const { bytes, report } = await flattenDocument(await markedUpForm(), {
       annotations: true,
@@ -276,6 +395,15 @@ describe("flattening", () => {
   });
 });
 
+/** A decimal label range starting on `startPage`, with overrides. */
+const range = (startPage: number, extra: Partial<PageLabelRange> = {}): PageLabelRange => ({
+  startPage,
+  style: "decimal",
+  prefix: "",
+  firstNumber: 1,
+  ...extra,
+});
+
 describe("page labels", () => {
   const front: PageLabelRange[] = [
     { startPage: 1, style: "roman-lower", prefix: "", firstNumber: 1 },
@@ -316,13 +444,6 @@ describe("page labels", () => {
   });
 
   it("rejects ranges that do not describe the document", () => {
-    const range = (startPage: number, extra: Partial<PageLabelRange> = {}): PageLabelRange => ({
-      startPage,
-      style: "decimal",
-      prefix: "",
-      firstNumber: 1,
-      ...extra,
-    });
     expect(() => validateRanges([range(2)], 5)).toThrow(/must start on page 1/);
     expect(() => validateRanges([range(1), range(1)], 5)).toThrow(/Two label ranges/);
     expect(() => validateRanges([range(1), range(6)], 5)).toThrow(/between page 1 and page 5/);
@@ -333,36 +454,6 @@ describe("page labels", () => {
 });
 
 describe("imposition", () => {
-  async function numbered(count: number, rotateSecond = false) {
-    const doc = await PDFDocument.create();
-    const font = await doc.embedFont(StandardFonts.Helvetica);
-    for (let index = 1; index <= count; index++) {
-      const page = doc.addPage([612, 792]);
-      page.drawText(`Page${index}`, { x: 250, y: 400, size: 40, font });
-      if (rotateSecond && index === 2) page.setRotation(degrees(90));
-    }
-    return doc.save();
-  }
-
-  async function sheetText(bytes: Uint8Array) {
-    const pdf = await reopen(bytes);
-    const sheets: { size: number[]; words: { text: string; x: number; y: number }[] }[] = [];
-    for (let number = 1; number <= pdf.numPages; number++) {
-      const page = await pdf.getPage(number);
-      const { width, height } = page.getViewport({ scale: 1 });
-      const content = await page.getTextContent();
-      sheets.push({
-        size: [Math.round(width), Math.round(height)],
-        words: content.items.flatMap((item) =>
-          "str" in item && item.str.trim()
-            ? [{ text: item.str, x: item.transform[4], y: item.transform[5] }]
-            : [],
-        ),
-      });
-    }
-    return sheets;
-  }
-
   const base = { sheet: "letter", orientation: "auto", margin: 18, gap: 9, border: false } as const;
 
   it("places four pages per portrait sheet in reading order", async () => {
@@ -426,31 +517,6 @@ describe("imposition", () => {
 });
 
 describe("comment summaries", () => {
-  async function reviewed() {
-    let bytes = await setPageLabels(await pages({}, {}), [
-      { startPage: 1, style: "roman-lower", prefix: "", firstNumber: 1 },
-    ]);
-    bytes = await addStickyNote(bytes, {
-      page: 2,
-      x: 100,
-      y: 700,
-      contents: "Check the <total>, please",
-      author: "Ana",
-      id: "note-2",
-    });
-    bytes = await addStickyNote(bytes, {
-      page: 1,
-      x: 100,
-      y: 700,
-      contents: "Intro reads well",
-      author: "Ben",
-      id: "note-1",
-    });
-    bytes = await addReply(bytes, { parentId: "note-2", contents: "Fixed", author: "Ben" });
-    bytes = await setReviewState(bytes, "note-2", "Accepted");
-    return addStamp(bytes, { page: 1, stamp: "Approved", position: "center", author: "Ana" });
-  }
-
   it("threads replies, applies review status and labels pages", async () => {
     const entries = collectComments(await PDFDocument.load(await reviewed()));
     expect(entries.map((entry) => [entry.pageLabel, entry.type, entry.author])).toEqual([
@@ -516,23 +582,6 @@ describe("sensitive data marks", () => {
 });
 
 describe("form field geometry", () => {
-  async function formOnPages() {
-    const doc = await PDFDocument.create();
-    const upright = doc.addPage([612, 792]);
-    const turned = doc.addPage([612, 792]);
-    turned.setRotation(degrees(90));
-    const form = doc.getForm();
-    const name = form.createTextField("Name");
-    name.addToPage(upright, { x: 72, y: 600, width: 200, height: 24 });
-    name.setText("Ada Lovelace");
-    const plan = form.createRadioGroup("Plan");
-    plan.addOptionToPage("A", upright, { x: 72, y: 500, width: 14, height: 14 });
-    plan.addOptionToPage("B", upright, { x: 120, y: 500, width: 14, height: 14 });
-    plan.select("B");
-    form.createTextField("Note").addToPage(turned, { x: 100, y: 100, width: 30, height: 200 });
-    return doc.save();
-  }
-
   it("lists widgets in displayed coordinates and moves one without touching values", async () => {
     const source = await formOnPages();
     const widgets = await readWidgets(source);
@@ -558,7 +607,12 @@ describe("form field geometry", () => {
     const pdf = await reopen(bytes);
     const fields = await widgetsOf(pdf);
     const [, moved] = fields.Plan;
-    expect(moved.rect.map(Math.round)).toEqual([300, 792 - 100 - 25, 325, 792 - 100]);
+    expect(moved.rect.map((value) => Math.round(value))).toEqual([
+      300,
+      792 - 100 - 25,
+      325,
+      792 - 100,
+    ]);
     expect(fields.Name[0].fieldValue).toBe("Ada Lovelace");
     expect((await readWidgets(bytes))[2]).toMatchObject({ x: 300, y: 100 });
   });
@@ -594,7 +648,7 @@ describe("form field geometry", () => {
     expect(form.acroForm.dict.get(PDFName.of("NeedAppearances"))?.toString()).toBe("true");
     // A widget on a page turned 90 degrees spans user-space height with its displayed width.
     const [x1, y1, x2, y2] = (await widgetsOf(await reopen(rotated.bytes))).Note[0].rect;
-    expect([x1, y1, x2 - x1, y2 - y1].map(Math.round)).toEqual([60, 50, 40, 250]);
+    expect([x1, y1, x2 - x1, y2 - y1].map((value) => Math.round(value))).toEqual([60, 50, 40, 250]);
   });
 
   it("keeps fields on the page and rejects unknown fields", async () => {
@@ -615,34 +669,6 @@ describe("form field geometry", () => {
 });
 
 describe("accessibility check", () => {
-  async function factsFor(bytes: Uint8Array) {
-    const pdf = await reopen(bytes);
-    const hasText: boolean[] = [];
-    for (let number = 1; number <= pdf.numPages; number++) {
-      const content = await (await pdf.getPage(number)).getTextContent();
-      hasText.push(content.items.some((item) => "str" in item && item.str.trim() !== ""));
-    }
-    const permissions = await pdf.getPermissions();
-    return { hasText, permissions: permissions ? [...permissions] : null };
-  }
-
-  async function untagged() {
-    const doc = await PDFDocument.create();
-    const font = await doc.embedFont(StandardFonts.Helvetica);
-    doc.addPage([612, 792]).drawText("Readable text", { x: 72, y: 700, size: 12, font });
-    doc.addPage([612, 792]);
-    const form = doc.getForm();
-    form.createTextField("Email").addToPage(doc.getPage(0), { x: 72, y: 600 });
-    return addLinkAnnotation(await doc.save(), {
-      page: 1,
-      rect: [72, 100, 200, 120],
-      target: { type: "page", page: 2 },
-    });
-  }
-
-  const statuses = (checks: AccessibilityCheck[]) =>
-    Object.fromEntries(checks.map((item) => [item.id, item.status]));
-
   it("reports what an untagged document is missing and fixes what it can", async () => {
     const bytes = await untagged();
     const { checks } = await checkAccessibilityBytes(bytes, await factsFor(bytes));
@@ -725,24 +751,6 @@ describe("accessibility check", () => {
 });
 
 describe("embedded image export", () => {
-  /** Decodes an unfiltered 8-bit PNG written by `encodePng`, independently of the writer. */
-  async function decodePng(png: Uint8Array) {
-    const view = new DataView(png.buffer, png.byteOffset);
-    expect([...png.subarray(1, 4)].map((code) => String.fromCodePoint(code)).join("")).toBe("PNG");
-    const width = view.getUint32(16);
-    const height = view.getUint32(20);
-    const channels = png[25] === 6 ? 4 : 3;
-    const length = view.getUint32(33);
-    const compressed = png.subarray(41, 41 + length);
-    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate"));
-    const raw = new Uint8Array(await new Response(stream).arrayBuffer());
-    const stride = width * channels;
-    const pixels = new Uint8Array(stride * height);
-    for (let y = 0; y < height; y++)
-      pixels.set(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)), y * stride);
-    return { width, height, channels, pixels };
-  }
-
   it("exports each embedded image once with its exact pixels", async () => {
     const doc = await PDFDocument.create();
     const width = 6;

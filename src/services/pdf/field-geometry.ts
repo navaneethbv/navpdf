@@ -124,7 +124,8 @@ export async function setWidgetGeometry(
   const widget = field.acroField.getWidgets()[target.widget];
   if (!widget) throw new Error(`Form field "${target.field}" has no widget ${target.widget + 1}.`);
   const values = [target.x, target.y, target.width, target.height];
-  if (!values.every(Number.isFinite)) throw new Error("Enter numbers for the position and size.");
+  if (!values.every((value) => Number.isFinite(value)))
+    throw new Error("Enter numbers for the position and size.");
   if (target.width < MIN_SIZE || target.height < MIN_SIZE)
     throw new Error(`Fields must be at least ${MIN_SIZE} points wide and high.`);
   const pageIndex = pageOfWidget(doc, widget, widgetRefs(doc, field)[target.widget]);
