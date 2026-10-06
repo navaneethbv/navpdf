@@ -1,5 +1,6 @@
 import type { PageViewport } from "pdfjs-dist";
 import type { PdfRect, RedactionRegion } from "../../types/engine";
+import { allPageNumbers, pagesInOrder } from "../../utils/pdf-pages";
 import { findSensitive, type SensitiveKind } from "./sensitive-patterns";
 
 export interface TextItemLike {
@@ -177,9 +178,9 @@ export async function findTermMarks(
   signal?: AbortSignal,
 ): Promise<RedactionRegion[]> {
   const marks: RedactionRegion[] = [];
-  for (let page = 1; page <= pdf.numPages; page++) {
+  for await (const [page, source] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
     if (signal?.aborted) break;
-    const content = await (await pdf.getPage(page)).getTextContent();
+    const content = await source.getTextContent();
     const measure = canvasMeasure(content.styles);
     for (const rect of termRects(content.items.filter(isTextItem), term, measure)) {
       marks.push({ page, rect });
@@ -200,9 +201,9 @@ export async function findPatternMarks(
   signal?: AbortSignal,
 ): Promise<PatternMark[]> {
   const marks: PatternMark[] = [];
-  for (let page = 1; page <= pdf.numPages; page++) {
+  for await (const [page, source] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
     if (signal?.aborted) break;
-    const content = await (await pdf.getPage(page)).getTextContent();
+    const content = await source.getTextContent();
     const measure = canvasMeasure(content.styles);
     for (const item of content.items.filter(isTextItem)) {
       for (const match of findSensitive(item.str, kinds)) {

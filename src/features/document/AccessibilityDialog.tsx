@@ -10,6 +10,7 @@ import {
   type AccessibilityCheck,
   type CheckStatus,
 } from "../../services/pdf/accessibility";
+import { allPageNumbers, pagesInOrder } from "../../utils/pdf-pages";
 
 const ICONS: Record<CheckStatus, typeof CheckCircle2> = {
   passed: CheckCircle2,
@@ -30,8 +31,9 @@ type Source = NonNullable<ViewerController["pdf"]>;
 /** Whether each page has a text layer, read page by page so large files stay responsive. */
 async function textPresence(pdf: Source, cancelled: () => boolean) {
   const result: boolean[] = [];
-  for (let number = 1; number <= pdf.numPages && !cancelled(); number++) {
-    const content = await (await pdf.getPage(number)).getTextContent();
+  for await (const [, page] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
+    if (cancelled()) break;
+    const content = await page.getTextContent();
     result.push(content.items.some((item) => "str" in item && item.str.trim() !== ""));
   }
   return result;

@@ -87,6 +87,24 @@ export async function imageToPng(image: DecodedImage): Promise<Uint8Array> {
 }
 
 /**
+ * The images a page paints, in drawing order, with the object name of each image XObject.
+ * Each XObject is decoded only when the previous image has been consumed.
+ */
+async function* paintedImages(
+  page: ImagePage,
+): AsyncGenerator<{ image: DecodedImage; name: string | null }> {
+  const { fnArray, argsArray } = await page.getOperatorList();
+  for (const [index, operation] of fnArray.entries()) {
+    if (operation === OPS.paintInlineImageXObject) {
+      yield { image: argsArray[index][0] as DecodedImage, name: null };
+    } else if (operation === OPS.paintImageXObject) {
+      const name = String(argsArray[index][0]);
+      yield resolveObject(page, name).then((image) => ({ image, name }));
+    }
+  }
+}
+
+/**
  * The distinct images drawn on a page. Images already exported from earlier pages, identified
  * by their PDF object, are skipped through `seen`.
  */
@@ -96,14 +114,9 @@ export async function pageImages(
   seen: Set<string>,
   minimumSize: number,
 ): Promise<ExtractedImage[]> {
-  const { fnArray, argsArray } = await page.getOperatorList();
   const results: ExtractedImage[] = [];
-  for (const [index, operation] of fnArray.entries()) {
-    const args = argsArray[index];
-    const inline = operation === OPS.paintInlineImageXObject;
-    if (operation !== OPS.paintImageXObject && !inline) continue;
-    const image = inline ? (args[0] as DecodedImage) : await resolveObject(page, String(args[0]));
-    const identity = image.ref ?? (inline ? null : `${pageNumber}:${String(args[0])}`);
+  for await (const { image, name } of paintedImages(page)) {
+    const identity = image.ref ?? (name === null ? null : `${pageNumber}:${name}`);
     if (identity && seen.has(identity)) continue;
     if (identity) seen.add(identity);
     if (image.width < minimumSize || image.height < minimumSize) continue;

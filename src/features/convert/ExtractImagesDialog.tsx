@@ -6,6 +6,7 @@ import { useWorkspace } from "../../stores/workspace";
 import { downloadBlob, safeFileName } from "../../utils/download";
 import { errorMessage } from "../document/use-document-edit";
 import { parsePageRange } from "../pages/page-range";
+import { allPageNumbers, pagesInOrder } from "../../utils/pdf-pages";
 import { createZip } from "./ooxml";
 import { pageImages, type ExtractedImage } from "./embedded-images";
 
@@ -29,7 +30,7 @@ export function ExtractImagesDialog({
 
   const pages = useMemo(() => {
     if (!range.trim())
-      return { list: Array.from({ length: pageCount }, (_, i) => i + 1), error: "" };
+      return { list: allPageNumbers(pageCount), error: "" };
     try {
       return { list: parsePageRange(range, pageCount).map((page) => page + 1), error: "" };
     } catch (cause) {
@@ -41,10 +42,12 @@ export function ExtractImagesDialog({
     const seen = new Set<string>();
     const images: ExtractedImage[] = [];
     let total = 0;
-    for (const [position, number] of pages.list.entries()) {
+    let position = 0;
+    for await (const [number, page] of pagesInOrder(pdf, pages.list)) {
       if (cancelled.current) return null;
-      setProgress(`Reading page ${number} (${position + 1} of ${pages.list.length})…`);
-      const found = await pageImages(await pdf.getPage(number), number, seen, minimum);
+      position += 1;
+      setProgress(`Reading page ${number} (${position} of ${pages.list.length})…`);
+      const found = await pageImages(page, number, seen, minimum);
       images.push(...found);
       total += found.reduce((sum, image) => sum + image.png.length, 0);
       if (total > MAX_TOTAL_BYTES)
