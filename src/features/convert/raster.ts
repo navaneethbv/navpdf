@@ -43,31 +43,55 @@ class ByteWriter {
     this.length += values.length;
   }
 
+  u16(value: number) {
+    this.byte(value & 0xff);
+    this.byte((value >>> 8) & 0xff);
+  }
+
+  u32(value: number) {
+    this.u16(value & 0xffff);
+    this.u16((value >>> 16) & 0xffff);
+  }
+
+  /** Pads to an even offset, as TIFF requires for values stored outside a directory. */
+  align() {
+    if (this.length % 2) this.byte(0);
+  }
+
   result() {
     return this.buffer.slice(0, this.length);
   }
+}
+
+function repeatLength(row: Uint8Array, start: number) {
+  let length = 1;
+  while (length < 128 && start + length < row.length && row[start + length] === row[start])
+    length++;
+  return length;
+}
+
+/** Literal bytes end before the next run of three equal bytes, or after 128 bytes. */
+function literalEnd(row: Uint8Array, start: number) {
+  let end = start;
+  while (end < row.length && end - start < 128 && repeatLength(row, end) < 3) end++;
+  return end;
 }
 
 /** Apple PackBits run-length encoding of one row, as TIFF compression 32773 requires. */
 export function packBits(row: Uint8Array, out = new ByteWriter()) {
   let index = 0;
   while (index < row.length) {
-    let run = 1;
-    while (run < 128 && index + run < row.length && row[index + run] === row[index]) run++;
+    const run = repeatLength(row, index);
     if (run >= 3) {
       out.byte(257 - run);
       out.byte(row[index]);
       index += run;
       continue;
     }
-    const start = index;
-    while (index < row.length && index - start < 128) {
-      if (index + 2 < row.length && row[index] === row[index + 1] && row[index] === row[index + 2])
-        break;
-      index++;
-    }
-    out.byte(index - start - 1);
-    out.bytes(row.subarray(start, index));
+    const end = literalEnd(row, index);
+    out.byte(end - index - 1);
+    out.bytes(row.subarray(index, end));
+    index = end;
   }
   return out;
 }
@@ -111,6 +135,70 @@ export function compressTiffPage(page: RgbaPage): TiffPage {
   };
 }
 
+const SHORT = 3;
+const LONG = 4;
+const RATIONAL = 5;
+const ASCII = 2;
+const SOFTWARE = new TextEncoder().encode("NavPDF\0");
+
+/** Writes one page's data and directory, returning the offsets the file header must link. */
+function writeTiffPage(out: ByteWriter, page: TiffPage, pageIndex: number, pageCount: number) {
+  const { strips } = page;
+  const stripOffsets = strips.map((strip) => {
+    const at = out.length;
+    out.bytes(strip);
+    return at;
+  });
+  const extra = (write: () => void) => {
+    out.align();
+    const at = out.length;
+    write();
+    return at;
+  };
+  const bitsAt = extra(() => [8, 8, 8].forEach((bits) => out.u16(bits)));
+  const offsetsAt = extra(() => stripOffsets.forEach((offset) => out.u32(offset)));
+  const countsAt = extra(() => strips.forEach((strip) => out.u32(strip.length)));
+  const resolutionAt = extra(() => {
+    out.u32(Math.round(page.dpi));
+    out.u32(1);
+  });
+  const softwareAt = extra(() => out.bytes(SOFTWARE));
+  out.align();
+
+  const directory = out.length;
+  const single = strips.length === 1;
+  const entries: [number, number, number, number][] = [
+    [254, LONG, 1, 2],
+    [256, LONG, 1, page.width],
+    [257, LONG, 1, page.height],
+    [258, SHORT, 3, bitsAt],
+    [259, SHORT, 1, 32773],
+    [262, SHORT, 1, 2],
+    [273, LONG, strips.length, single ? stripOffsets[0] : offsetsAt],
+    [277, SHORT, 1, 3],
+    [278, LONG, 1, ROWS_PER_STRIP],
+    [279, LONG, strips.length, single ? strips[0].length : countsAt],
+    [282, RATIONAL, 1, resolutionAt],
+    [283, RATIONAL, 1, resolutionAt],
+    [284, SHORT, 1, 1],
+    [296, SHORT, 1, 2],
+    [297, SHORT, 2, pageIndex | (pageCount << 16)],
+    [305, ASCII, SOFTWARE.length, softwareAt],
+  ];
+  out.u16(entries.length);
+  for (const [tag, type, count, value] of entries) {
+    out.u16(tag);
+    out.u16(type);
+    out.u32(count);
+    // A single SHORT value is stored left-justified in the four-byte value field.
+    if (type === SHORT && count === 1) out.u32(value & 0xffff);
+    else out.u32(value);
+  }
+  const next = out.length;
+  out.u32(0);
+  return { directory, next };
+}
+
 /**
  * A baseline little-endian RGB TIFF with one image file directory per page, PackBits
  * compression and the export resolution recorded in the file.
@@ -118,90 +206,19 @@ export function compressTiffPage(page: RgbaPage): TiffPage {
 export function buildTiff(pages: (RgbaPage | TiffPage)[]) {
   if (!pages.length) throw new Error("No pages to export.");
   const out = new ByteWriter();
-  const u16 = (value: number) => {
-    out.byte(value & 0xff);
-    out.byte((value >>> 8) & 0xff);
-  };
-  const u32 = (value: number) => {
-    u16(value & 0xffff);
-    u16((value >>> 16) & 0xffff);
-  };
-  const patches: { at: number; value: number }[] = [];
-  const placeholder = () => {
-    const at = out.length;
-    u32(0);
-    return at;
-  };
   out.bytes(new Uint8Array([0x49, 0x49, 42, 0]));
-  let nextDirectory = placeholder();
-  const software = new TextEncoder().encode("NavPDF\0");
-
-  pages.forEach((input, pageIndex) => {
+  const links: { at: number; value: number }[] = [];
+  let pointer = out.length;
+  out.u32(0);
+  pages.forEach((input, index) => {
     const page = "strips" in input ? input : compressTiffPage(input);
-    const { strips } = page;
-    const stripOffsets: number[] = [];
-    for (const strip of strips) {
-      stripOffsets.push(out.length);
-      out.bytes(strip);
-    }
-    if (out.length % 2) out.byte(0);
-    const extra = (bytes: () => void) => {
-      const at = out.length;
-      bytes();
-      if (out.length % 2) out.byte(0);
-      return at;
-    };
-    const bitsAt = extra(() => [8, 8, 8].forEach(u16));
-    const offsetsAt = extra(() => stripOffsets.forEach(u32));
-    const countsAt = extra(() => strips.forEach((strip) => u32(strip.length)));
-    const resolutionAt = extra(() => {
-      u32(Math.round(page.dpi));
-      u32(1);
-    });
-    const softwareAt = extra(() => out.bytes(software));
-
-    patches.push({ at: nextDirectory, value: out.length });
-    const SHORT = 3;
-    const LONG = 4;
-    const RATIONAL = 5;
-    const ASCII = 2;
-    const many = strips.length > 1;
-    const entries: [number, number, number, number][] = [
-      [254, LONG, 1, 2],
-      [256, LONG, 1, page.width],
-      [257, LONG, 1, page.height],
-      [258, SHORT, 3, bitsAt],
-      [259, SHORT, 1, 32773],
-      [262, SHORT, 1, 2],
-      [273, LONG, strips.length, many ? offsetsAt : stripOffsets[0]],
-      [277, SHORT, 1, 3],
-      [278, LONG, 1, ROWS_PER_STRIP],
-      [279, LONG, strips.length, many ? countsAt : strips[0].length],
-      [282, RATIONAL, 1, resolutionAt],
-      [283, RATIONAL, 1, resolutionAt],
-      [284, SHORT, 1, 1],
-      [296, SHORT, 1, 2],
-      [297, SHORT, 2, pageIndex | (pages.length << 16)],
-      [305, ASCII, software.length, softwareAt],
-    ];
-    u16(entries.length);
-    for (const [tag, type, count, value] of entries) {
-      u16(tag);
-      u16(type);
-      u32(count);
-      if (type === SHORT && count === 1) {
-        u16(value);
-        u16(0);
-      } else {
-        u32(value);
-      }
-    }
-    nextDirectory = placeholder();
+    const { directory, next } = writeTiffPage(out, page, index, pages.length);
+    links.push({ at: pointer, value: directory });
+    pointer = next;
   });
-
   const bytes = out.result();
   const view = new DataView(bytes.buffer);
-  for (const patch of patches) view.setUint32(patch.at, patch.value, true);
+  for (const link of links) view.setUint32(link.at, link.value, true);
   return bytes;
 }
 

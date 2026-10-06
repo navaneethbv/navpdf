@@ -34,11 +34,11 @@ const FORMATS: { id: ExportFormat; label: string; icon: LucideIcon }[] = [
 ];
 
 const HINTS: Record<RasterFormat, string> = {
-  png: "Exports each page as a lossless PNG image.",
-  jpg: "Exports each page as a JPEG image on a white background.",
+  png: "Exports each page as a lossless PNG image; several pages are saved as one ZIP archive.",
+  jpg: "Exports each page as a JPEG image on a white background; several pages are saved as one ZIP archive.",
   tiff: "Exports the selected pages as one multipage TIFF with lossless PackBits compression.",
   ps: "Exports one PostScript file with a page image per page. Text and drawings become pixels.",
-  eps: "Exports each page as an Encapsulated PostScript image for page layout applications.",
+  eps: "Exports each page as an Encapsulated PostScript image; several pages are saved as one ZIP archive.",
 };
 
 const usesJpeg = (format: ExportFormat) => format === "jpg" || format === "ps" || format === "eps";
@@ -84,6 +84,78 @@ const MIME: Record<RasterFormat, string> = {
   eps: "application/postscript",
 };
 
+interface ExportParts {
+  files: ExportFile[];
+  tiffPages: TiffPage[];
+  jpegPages: JpegPage[];
+  bytes: number;
+}
+
+const encoder = new TextEncoder();
+
+/** Encodes one rendered page into the parts of the export being assembled. */
+function addRenderedPage(
+  parts: ExportParts,
+  rendered: RenderedPage,
+  options: { format: RasterFormat; dpi: number; quality: number; name: string; title: string },
+) {
+  const { canvas, context } = rendered;
+  const { format, quality, name } = options;
+  if (format === "tiff") {
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+    const page = compressTiffPage({
+      width: canvas.width,
+      height: canvas.height,
+      rgba: pixels.data,
+      dpi: options.dpi,
+    });
+    parts.tiffPages.push(page);
+    parts.bytes += page.byteLength;
+    return;
+  }
+  if (format === "png") {
+    const data = canvasBytes(canvas, "image/png", quality);
+    parts.files.push({ name: `${name}.png`, data });
+    parts.bytes += data.length;
+    return;
+  }
+  const jpeg = canvasBytes(canvas, "image/jpeg", quality);
+  if (format === "jpg") {
+    parts.files.push({ name: `${name}.jpg`, data: jpeg });
+    parts.bytes += jpeg.length;
+    return;
+  }
+  const page: JpegPage = {
+    jpeg,
+    pixelWidth: canvas.width,
+    pixelHeight: canvas.height,
+    width: rendered.width,
+    height: rendered.height,
+  };
+  if (format === "eps")
+    parts.files.push({ name: `${name}.eps`, data: encoder.encode(buildEps(page, options.title)) });
+  else parts.jpegPages.push(page);
+  // ASCII85 expands embedded image data by a quarter.
+  parts.bytes += Math.ceil(jpeg.length * 1.25);
+}
+
+function assembleExport(parts: ExportParts, format: RasterFormat, baseName: string) {
+  if (format === "tiff")
+    return { blob: blobOf(buildTiff(parts.tiffPages), MIME.tiff), name: `${baseName}.tiff` };
+  if (format === "ps")
+    return {
+      blob: new Blob([buildPostScript(parts.jpegPages, baseName)], { type: MIME.ps }),
+      name: `${baseName}.ps`,
+    };
+  const [only] = parts.files;
+  if (parts.files.length === 1) return { blob: blobOf(only.data, MIME[format]), name: only.name };
+  // Several pages are packaged together so the export asks for one destination, not one per page.
+  return {
+    blob: blobOf(createZip(parts.files), "application/zip"),
+    name: `${baseName}-${format}-pages.zip`,
+  };
+}
+
 /** Renders pages one at a time and returns the finished export, or null when cancelled. */
 async function exportImagePages({
   source,
@@ -96,11 +168,7 @@ async function exportImagePages({
   baseName,
 }: ExportImagePagesOptions): Promise<{ blob: Blob; name: string } | null> {
   const scale = dpi / 72;
-  const files: ExportFile[] = [];
-  const tiffPages: TiffPage[] = [];
-  const jpegPages: JpegPage[] = [];
-  const encoder = new TextEncoder();
-  let total = 0;
+  const parts: ExportParts = { files: [], tiffPages: [], jpegPages: [], bytes: 0 };
   for (let i = 0; i < targetIndices.length; i++) {
     if (cancelled()) return null;
     const pageNum = targetIndices[i] + 1;
@@ -109,65 +177,26 @@ async function exportImagePages({
     if (cancelled()) return null;
     const rendered = await renderPage(page, scale, pageNum, format !== "png");
     try {
-      if (format === "tiff") {
-        const { canvas, context } = rendered;
-        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-        const compressed = compressTiffPage({
-          width: canvas.width,
-          height: canvas.height,
-          rgba: pixels.data,
-          dpi,
-        });
-        tiffPages.push(compressed);
-        total += compressed.byteLength;
-      } else if (format === "png") {
-        const data = canvasBytes(rendered.canvas, "image/png", quality);
-        files.push({ name: `${baseName}-page-${pageNum}.png`, data });
-        total += data.length;
-      } else {
-        const jpeg = canvasBytes(rendered.canvas, "image/jpeg", quality);
-        const jpegPage: JpegPage = {
-          jpeg,
-          pixelWidth: rendered.canvas.width,
-          pixelHeight: rendered.canvas.height,
-          width: rendered.width,
-          height: rendered.height,
-        };
-        if (format === "jpg") files.push({ name: `${baseName}-page-${pageNum}.jpg`, data: jpeg });
-        else if (format === "eps")
-          files.push({
-            name: `${baseName}-page-${pageNum}.eps`,
-            data: encoder.encode(buildEps(jpegPage, `${baseName} page ${pageNum}`)),
-          });
-        else jpegPages.push(jpegPage);
-        // ASCII85 expands embedded image data by a quarter.
-        total += format === "jpg" ? jpeg.length : Math.ceil(jpeg.length * 1.25);
-      }
+      addRenderedPage(parts, rendered, {
+        format,
+        dpi,
+        quality,
+        name: `${baseName}-page-${pageNum}`,
+        title: `${baseName} page ${pageNum}`,
+      });
     } finally {
       // Release the backing store now; WebKit otherwise keeps it until collection.
       rendered.canvas.width = 0;
       rendered.canvas.height = 0;
     }
-    if (total > MAX_EXPORT_BYTES) {
+    if (parts.bytes > MAX_EXPORT_BYTES) {
       throw new Error(
         "The export exceeds the 1 GB limit. Choose fewer pages or a lower resolution.",
       );
     }
   }
   if (cancelled()) return null;
-  if (format === "tiff")
-    return { blob: blobOf(buildTiff(tiffPages), MIME.tiff), name: `${baseName}.tiff` };
-  if (format === "ps")
-    return {
-      blob: new Blob([buildPostScript(jpegPages, baseName)], { type: MIME.ps }),
-      name: `${baseName}.ps`,
-    };
-  if (files.length === 1) return { blob: blobOf(files[0].data, MIME[format]), name: files[0].name };
-  // Several pages are packaged together so the export asks for one destination, not one per page.
-  return {
-    blob: blobOf(createZip(files), "application/zip"),
-    name: `${baseName}-${format}-pages.zip`,
-  };
+  return assembleExport(parts, format, baseName);
 }
 
 function blobOf(bytes: Uint8Array, type: string) {
@@ -455,10 +484,7 @@ export function ExportDialog({
             </p>
           ) : (
             <p className="field-hint">
-              {HINTS[format]} Pages render at {dpi} DPI with bounds protection
-              {format === "tiff" || format === "ps"
-                ? "."
-                : "; several pages are saved together as one ZIP archive."}
+              {HINTS[format]} Pages render at {dpi} DPI with bounds protection.
             </p>
           )}
 
