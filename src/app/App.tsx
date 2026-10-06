@@ -33,7 +33,7 @@ import { FormManager } from "../features/forms/FormManager";
 import { FillAndSign } from "../features/signatures/FillAndSign";
 import { OcrPanel } from "../features/ocr/OcrPanel";
 import { ExportDialog } from "../features/convert/ExportDialog";
-import { OfficeExport } from "../features/convert/OfficeExport";
+import { OfficeExport, type Format as OfficeFormat } from "../features/convert/OfficeExport";
 import { RedactionTool } from "../features/redact/RedactionTool";
 import { CompressDialog } from "../features/compress/CompressDialog";
 import { ProtectDialog } from "../features/protect/ProtectDialog";
@@ -42,17 +42,18 @@ import { DesignTools } from "../features/design/DesignTools";
 import { ExportOptions } from "../features/convert/ExportOptions";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
-function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "docx" {
-  switch (modal) {
-    case "office-pptx":
-      return "pptx-text";
-    case "office-xlsx":
-      return "xlsx";
-    case "office-rtf":
-      return "rtf";
-    default:
-      return "docx";
-  }
+/** Menu and modal identifiers for the editable export dialog and the format each selects. */
+const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
+  ["office-export", "docx"],
+  ["office-pptx", "pptx-text"],
+  ["office-xlsx", "xlsx"],
+  ["office-rtf", "rtf"],
+  ["office-html", "html"],
+]);
+
+function officeFormat(modal: string | null): OfficeFormat {
+  if (!modal) return "docx";
+  return OFFICE_EXPORT_FORMATS.get(modal) ?? "docx";
 }
 
 /** Page turns for keys that do not scroll a single-page view. */
@@ -230,10 +231,7 @@ const creationMenuActions = new Set(["create-pdf", "import-pdf", "combine-pdf", 
 const documentMenuActions = new Set([
   "edit-objects",
   "page-workspace",
-  "office-export",
-  "office-pptx",
-  "office-xlsx",
-  "office-rtf",
+  ...OFFICE_EXPORT_FORMATS.keys(),
   "convert",
   "compress",
   "protect",
@@ -776,9 +774,7 @@ export default function App() {
         {s.activeModal === "convert" && (
           <ExportDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {["office-export", "office-pptx", "office-xlsx", "office-rtf"].includes(
-          s.activeModal ?? "",
-        ) && (
+        {OFFICE_EXPORT_FORMATS.has(s.activeModal ?? "") && (
           <OfficeExport
             controller={controller}
             initialFormat={officeFormat(s.activeModal)}

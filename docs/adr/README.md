@@ -16,3 +16,4 @@
 | [0012: GLib string iterator security backport](0012-glib-security-backport.md) | Accepted for September 20 security remediation |
 
 - [0013: Local image import and document tool extensions](0013-imageio-import-and-document-tools.md).
+- [0014: Additional local export formats](0014-additional-export-formats.md).

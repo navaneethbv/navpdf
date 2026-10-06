@@ -287,6 +287,7 @@ describe("App keyboard and menus", () => {
       "office-pptx",
       "office-xlsx",
       "office-rtf",
+      "office-html",
       "convert",
       "compress",
       "protect",

@@ -181,7 +181,7 @@ describe("App shell", () => {
       ["fill-sign", "Fill & Sign"],
       ["ocr", "Optical Character Recognition (OCR)"],
       ["convert", "Export Document"],
-      ["office-export", "Export to Office Formats"],
+      ["office-export", "Export to Editable Formats"],
       ["redact", "Redact Sensitive Content"],
       ["compress", "Compress PDF"],
       ["protect", "Password Protect PDF"],

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -8,17 +8,28 @@ import {
   buildPptx,
   buildRtf,
   buildXlsx,
-  layoutPage,
   tableRows,
   type PageLayout,
   type Slide,
-  type TextItem,
 } from "./ooxml";
+import { readPageLayout, type PageProxy } from "./pdf-page";
+import { buildCsv, buildHtml, buildSpreadsheetXml, buildXmlDocument } from "./formats";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
-type Format = "docx" | "xlsx" | "pptx-text" | "pptx-images" | "rtf";
+export type Format =
+  | "docx"
+  | "xlsx"
+  | typeof XML_SPREADSHEET
+  | "csv"
+  | "pptx-text"
+  | "pptx-images"
+  | "rtf"
+  | "html"
+  | "xml";
 
+const XML_SPREADSHEET = "xml-spreadsheet";
+const XML_MIME = "application/xml";
 const PRESENTATION = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const FORMATS: {
   id: Format;
@@ -44,6 +55,22 @@ const FORMATS: {
       "One sheet per page with text aligned into columns. Numbers and ISO dates become typed cells; formulas are never created.",
   },
   {
+    id: XML_SPREADSHEET,
+    label: "XML Spreadsheet 2003 (.xml)",
+    extension: "xml",
+    mime: XML_MIME,
+    description:
+      "Typed cells, one worksheet per page, in the older XML format that Excel and LibreOffice open.",
+  },
+  {
+    id: "csv",
+    label: "Comma-separated values (.csv)",
+    extension: "csv",
+    mime: "text/csv",
+    description:
+      "Page text aligned into columns as UTF-8 CSV. Formula-like cells are prefixed with an apostrophe so they never run.",
+  },
+  {
     id: "pptx-text",
     label: "PowerPoint, editable text (.pptx)",
     extension: "pptx",
@@ -66,28 +93,28 @@ const FORMATS: {
     mime: "application/rtf",
     description: "Paragraphs and headings for any word processor.",
   },
+  {
+    id: "html",
+    label: "HTML web page (.html)",
+    extension: "html",
+    mime: "text/html",
+    description:
+      "A self-contained page with headings and paragraphs. Scripts and remote content are blocked.",
+  },
+  {
+    id: "xml",
+    label: "XML document (.xml)",
+    extension: "xml",
+    mime: XML_MIME,
+    description: "Pages, headings and paragraphs as structured XML 1.0 for other tools to process.",
+  },
 ];
+
+const TABLE_FORMATS = new Set<Format>(["xlsx", XML_SPREADSHEET, "csv"]);
 
 const MAX_PICTURE_SLIDES = 200;
 const PICTURE_DPI = 150;
 const MAX_PICTURE_EDGE = 4096;
-
-interface PageProxy {
-  getViewport(options: { scale: number }): { width: number; height: number };
-  getTextContent(): Promise<{ items: unknown[] }>;
-  render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): {
-    promise: Promise<void>;
-  };
-}
-
-function isTextItem(item: unknown): item is TextItem {
-  const candidate = item as Partial<TextItem>;
-  return (
-    typeof candidate?.str === "string" &&
-    Array.isArray(candidate.transform) &&
-    typeof candidate.width === "number"
-  );
-}
 
 async function pagePicture(
   page: PageProxy,
@@ -113,9 +140,13 @@ async function pagePicture(
 }
 
 function textExport(format: Format, pages: PageLayout[], baseName: string) {
+  const sheets = () => pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) }));
   if (format === "docx") return buildDocx(pages, baseName);
-  if (format === "xlsx")
-    return buildXlsx(pages.map((page) => ({ name: `Page ${page.page}`, rows: tableRows(page) })));
+  if (format === "xlsx") return buildXlsx(sheets());
+  if (format === XML_SPREADSHEET) return buildSpreadsheetXml(sheets());
+  if (format === "csv") return buildCsv(pages.map((page) => tableRows(page)));
+  if (format === "html") return buildHtml(pages, baseName);
+  if (format === "xml") return buildXmlDocument(pages, baseName);
   if (format === "pptx-text")
     return buildPptx(
       pages.map((page) => ({
@@ -150,6 +181,13 @@ export function OfficeExport({
   const [pageScope, setPageScope] = useState<"all" | "custom">("all");
   const [customRange, setCustomRange] = useState("");
   const cancelled = useRef(false);
+  // Closing the dialog abandons any export still in progress instead of saving it later.
+  useEffect(
+    () => () => {
+      cancelled.current = true;
+    },
+    [],
+  );
   const totalPages = controller?.pdf?.numPages ?? s.info?.pages ?? 1;
   const pageRange = useMemo<{ pages?: number[]; error?: string }>(() => {
     if (pageScope === "all") return { pages: Array.from({ length: totalPages }, (_, i) => i) };
@@ -170,13 +208,12 @@ export function OfficeExport({
     if (!pdf) return null;
     const numbers = pageNumbers ?? Array.from({ length: pdf.numPages }, (_, i) => i + 1);
     const result: PageLayout[] = [];
-    for (const number of numbers) {
+    for (const [index, number] of numbers.entries()) {
       if (cancelled.current) return null;
-      setProgress(`Reading page ${number} of ${numbers.length}…`);
-      const page = (await pdf.getPage(number)) as unknown as PageProxy;
-      const { width, height } = page.getViewport({ scale: 1 });
-      const content = await page.getTextContent();
-      result.push(layoutPage(number, content.items.filter(isTextItem), width, height));
+      setProgress(`Reading page ${number} (${index + 1} of ${numbers.length})…`);
+      result.push(
+        await readPageLayout((await pdf.getPage(number)) as unknown as PageProxy, number),
+      );
     }
     return result;
   };
@@ -191,9 +228,9 @@ export function OfficeExport({
       );
     }
     const slides: Slide[] = [];
-    for (const number of pageNumbers) {
+    for (const [index, number] of pageNumbers.entries()) {
       if (cancelled.current) return null;
-      setProgress(`Rendering page ${number} of ${pageNumbers.length}…`);
+      setProgress(`Rendering page ${number} (${index + 1} of ${pageNumbers.length})…`);
       slides.push(await pagePicture((await pdf.getPage(number)) as unknown as PageProxy));
     }
     return buildPptx(slides, baseName);
@@ -256,14 +293,14 @@ export function OfficeExport({
     });
 
   return (
-    <FeatureDialog title="Export to Office Formats" onClose={onClose} busy={running}>
+    <FeatureDialog title="Export to Editable Formats" onClose={onClose} busy={running}>
       <div className="modal-dialog">
         <div className="modal-header">
           <div className="modal-title">
             <Download size={18} />
-            <h3>Export to Office Formats</h3>
+            <h3>Export to Editable Formats</h3>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
+          <button className="icon-button" onClick={onClose} aria-label="Close" disabled={running}>
             <X size={18} />
           </button>
         </div>
@@ -332,7 +369,7 @@ export function OfficeExport({
               </>
             )}
           </fieldset>
-          {format === "xlsx" && (
+          {TABLE_FORMATS.has(format) && (
             <button
               type="button"
               className="button-secondary"
