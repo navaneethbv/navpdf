@@ -1,28 +1,22 @@
 version: 2
+# The single group also keeps the certificate crates (cms, der, spki, x509-cert
+# and friends) together; they share types, so a lone bump fails to compile.
+# Every ecosystem below is batched into one weekly pull request per repository.
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: weekly
+
 updates:
   - package-ecosystem: "npm"
     directory: "/"
-    schedule:
-      interval: "weekly"
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
-    schedule:
-      interval: "weekly"
-    groups:
-      # These crates share der/spki types, so a lone bump of one fails to compile.
-      certificate-stack:
-        patterns:
-          - "cms"
-          - "const-oid"
-          - "der"
-          - "p12-keystore"
-          - "p256"
-          - "pkcs1"
-          - "pkcs8"
-          - "rsa"
-          - "spki"
-          - "x509-cert"
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "weekly"
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
