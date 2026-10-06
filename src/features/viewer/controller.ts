@@ -41,6 +41,7 @@ import {
   updateAnnotation,
   type TextMarkupKind,
 } from "../../services/document-commands";
+import { addMeasurement, type MeasurementInput } from "../../services/pdf/measure";
 import { PDFDocument } from "pdf-lib";
 import { readComment } from "../../services/pdf/read-comment";
 import { installHighlightInterop } from "./highlight-interop";
@@ -239,6 +240,15 @@ async function readPageComments(
     .filter((comment): comment is Comment => comment !== null);
 }
 
+/** A "#rrggbb" color as PDF RGB components from 0 to 1. */
+function rgbFromHex(hex: string): [number, number, number] {
+  return [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255) as [
+    number,
+    number,
+    number,
+  ];
+}
+
 export class ViewerController {
   readonly bus = new EventBus();
   readonly links = new HistoryLinkService({
@@ -269,6 +279,8 @@ export class ViewerController {
   private readonly mutationQueue = new MutationQueue();
   private identity: string | null = null;
   private replacing = false;
+  /** The zoom to restore when a revision of the open document is attached. */
+  private keptScale: string | null = null;
   readonly views = new ViewHistory();
   readonly readAloud = new ReadAloud({
     pageText: (page) => this.pageText(page),
@@ -346,8 +358,10 @@ export class ViewerController {
       this.bus.on(name, handler, { signal: this.abort.signal });
     on("pagesinit", () => {
       this.setLayout(useWorkspace.getState().layout);
+      const scale = this.keptScale ?? useWorkspace.getState().local.preferences.defaultZoom;
+      this.keptScale = null;
       if (this.container.clientWidth > 0 && this.container.clientHeight > 0) {
-        this.viewer.currentScaleValue = useWorkspace.getState().local.preferences.defaultZoom;
+        this.viewer.currentScaleValue = scale;
       }
       // PDF.js can receive pagesinit while the native WebKit view is still
       // completing its first layout pass. Re-run visibility and render
@@ -453,7 +467,8 @@ export class ViewerController {
       { capture: true, signal: this.abort.signal },
     );
   }
-  async attach(pdf: PDFDocumentProxy) {
+  /** Shows a document; `keepScale` keeps the current zoom for a revision of the open document. */
+  async attach(pdf: PDFDocumentProxy, keepScale = this.replacing) {
     this.started = performance.now();
     this.generation++;
     const generation = this.generation;
@@ -461,6 +476,8 @@ export class ViewerController {
     this.nativeCanRedo = false;
     this.contexts.clear();
     this.storageModified = false;
+    // An edit reloads the document; keep the reader's zoom instead of the default.
+    this.keptScale = keepScale ? String(this.viewer.currentScaleValue) : null;
     if (!this.replacing) {
       this.views.clear();
       this.readAloud.stop();
@@ -713,13 +730,13 @@ export class ViewerController {
     let loaded: PDFDocumentProxy;
     try {
       loaded = await task.promise;
-      await this.attach(loaded);
+      await this.attach(loaded, true);
       await this.viewer.firstPagePromise;
       await this.commitNativeRevision(revision.bytes, loaded.numPages, previousState.document);
     } catch (error) {
       await task.destroy().catch(() => {});
       if (previousPdf && this.pdf !== previousPdf) {
-        await this.attach(previousPdf);
+        await this.attach(previousPdf, true);
         this.goTo(previousState.page);
       }
       useWorkspace.getState().set(previousState);
@@ -881,20 +898,21 @@ export class ViewerController {
       });
     });
   }
-  async addShape(kind: ShapeKind, start: [number, number], end: [number, number]) {
+  /** Adds a shape to `page`, the page it was drawn on, which need not be the current page. */
+  async addShape(
+    kind: ShapeKind,
+    start: [number, number],
+    end: [number, number],
+    page = this.currentPage(),
+  ) {
     if (!this.pdf) throw new Error("Open a PDF before adding a shape.");
     const status = `${kind === "Arrow" ? "Arrow" : kind} added to document`;
     return this.mutate(status, async () => {
       const state = useWorkspace.getState();
-      const hex = state.inkColor;
-      const color: [number, number, number] = [
-        Number.parseInt(hex.slice(1, 3), 16) / 255,
-        Number.parseInt(hex.slice(3, 5), 16) / 255,
-        Number.parseInt(hex.slice(5, 7), 16) / 255,
-      ];
+      const color = rgbFromHex(state.inkColor);
       const bytes = await this.pdf!.saveDocument();
       const shaped = await addShapeAnnotation(bytes, {
-        page: this.currentPage(),
+        page,
         kind,
         start,
         end,
@@ -903,6 +921,19 @@ export class ViewerController {
         opacity: state.inkOpacity,
       });
       await this.replaceWithBytes(shaped, status, { preMutationBytes: bytes });
+    });
+  }
+  /** Saves a measurement drawn on `input.page` with the current markup color. */
+  async addMeasurement(input: Omit<MeasurementInput, "color">) {
+    if (!this.pdf) throw new Error("Open a PDF before measuring.");
+    return this.mutate("Measurement added to document", async () => {
+      const color = rgbFromHex(useWorkspace.getState().inkColor);
+      const bytes = await this.pdf!.saveDocument();
+      const result = await addMeasurement(bytes, { ...input, color });
+      await this.replaceWithBytes(result.bytes, `Measured ${result.label}`, {
+        preMutationBytes: bytes,
+      });
+      return result.label;
     });
   }
   async readSelectedTextGeometry(): Promise<SelectedTextGeometry[]> {

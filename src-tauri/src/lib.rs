@@ -61,7 +61,8 @@ pub fn run() {
                 .text("office-pptx", "Microsoft PowerPoint...")
                 .text("office-xlsx", "Microsoft Excel...")
                 .text("office-rtf", "Rich Text...")
-                .text("convert", "Images or Plain Text...")
+                .text("office-html", "HTML, CSV or XML...")
+                .text("convert", "Images, PostScript or Plain Text...")
                 .build()?;
             let file = SubmenuBuilder::new(app, "File")
                 .item(&open)

@@ -1,5 +1,7 @@
 import type { PageViewport } from "pdfjs-dist";
 import type { PdfRect, RedactionRegion } from "../../types/engine";
+import { allPageNumbers, pagesInOrder } from "../../utils/pdf-pages";
+import { findSensitive, type SensitiveKind } from "./sensitive-patterns";
 
 export interface TextItemLike {
   str: string;
@@ -87,17 +89,17 @@ function isTextItem(item: unknown): item is TextItemLike {
   );
 }
 
+/** Character ranges [start, end) within one text item's string. */
+export type FindRanges = (text: string) => [number, number][];
+
 /**
- * PDF user-space rectangles for each case-insensitive occurrence of `term` inside text
- * items. Character positions are proportional estimates, so each rectangle is padded;
- * the native audit still blocks redaction if any occurrence survives elsewhere.
+ * PDF user-space rectangles for character ranges inside text items. Character positions are
+ * proportional estimates, so each rectangle is padded; the native audit still blocks
+ * redaction if any audited text survives elsewhere.
  */
-export function termRects(items: TextItemLike[], term: string, measure?: MeasureText): PdfRect[] {
-  const needle = term.trim().toLowerCase();
-  if (!needle) return [];
+export function rangeRects(items: TextItemLike[], find: FindRanges, measure?: MeasureText) {
   const rects: PdfRect[] = [];
   for (const item of items) {
-    const text = item.str.toLowerCase();
     const length = item.str.length;
     if (!length || item.width <= 0) continue;
     const [a, b, c, d, e, f] = item.transform;
@@ -105,17 +107,12 @@ export function termRects(items: TextItemLike[], term: string, measure?: Measure
     const [ux, uy] = [a / scale, b / scale];
     const height = Math.hypot(c, d) || item.height || 10;
     const advance = item.width / length;
-    // Measured prefixes place proportional glyphs; lowercasing that changes length cannot be mapped.
-    const whole = measure && text.length === length ? measure(item.str, item) : 0;
+    const whole = measure ? measure(item.str, item) : 0;
     const offset = (count: number) =>
       whole > 0 ? (measure!(item.str.slice(0, count), item) / whole) * item.width : count * advance;
-    for (
-      let index = text.indexOf(needle);
-      index !== -1;
-      index = text.indexOf(needle, index + needle.length)
-    ) {
-      const start = offset(index) - CHARACTER_PADDING * advance;
-      const end = offset(index + needle.length) + CHARACTER_PADDING * advance;
+    for (const [from, to] of find(item.str)) {
+      const start = offset(from) - CHARACTER_PADDING * advance;
+      const end = offset(to) + CHARACTER_PADDING * advance;
       // Up is perpendicular to the baseline direction, so rotated text is covered too.
       const [vx, vy] = [-uy, ux];
       const corners = [
@@ -130,6 +127,26 @@ export function termRects(items: TextItemLike[], term: string, measure?: Measure
     }
   }
   return rects;
+}
+
+/** Rectangles for each case-insensitive occurrence of `term` inside text items. */
+export function termRects(items: TextItemLike[], term: string, measure?: MeasureText): PdfRect[] {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return [];
+  return items.flatMap((item) => {
+    const lower = item.str.toLowerCase();
+    const ranges: [number, number][] = [];
+    for (
+      let index = lower.indexOf(needle);
+      index !== -1;
+      index = lower.indexOf(needle, index + needle.length)
+    )
+      ranges.push([index, index + needle.length]);
+    if (!ranges.length) return [];
+    // Lowercasing that changes length cannot be mapped to measured glyphs; use averages.
+    const usable = lower.length === item.str.length ? measure : undefined;
+    return rangeRects([item], () => ranges, usable);
+  });
 }
 
 /** Canvas text measurement in each item's substituted font family, when a 2D canvas exists. */
@@ -161,12 +178,38 @@ export async function findTermMarks(
   signal?: AbortSignal,
 ): Promise<RedactionRegion[]> {
   const marks: RedactionRegion[] = [];
-  for (let page = 1; page <= pdf.numPages; page++) {
+  for await (const [page, source] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
     if (signal?.aborted) break;
-    const content = await (await pdf.getPage(page)).getTextContent();
+    const content = await source.getTextContent();
     const measure = canvasMeasure(content.styles);
     for (const rect of termRects(content.items.filter(isTextItem), term, measure)) {
       marks.push({ page, rect });
+    }
+  }
+  return marks;
+}
+
+export interface PatternMark extends RedactionRegion {
+  kind: SensitiveKind;
+  text: string;
+}
+
+/** Marks each sensitive-data match of the chosen kinds, page by page. */
+export async function findPatternMarks(
+  pdf: TextSource,
+  kinds: SensitiveKind[],
+  signal?: AbortSignal,
+): Promise<PatternMark[]> {
+  const marks: PatternMark[] = [];
+  for await (const [page, source] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
+    if (signal?.aborted) break;
+    const content = await source.getTextContent();
+    const measure = canvasMeasure(content.styles);
+    for (const item of content.items.filter(isTextItem)) {
+      for (const match of findSensitive(item.str, kinds)) {
+        const [rect] = rangeRects([item], () => [[match.start, match.end]], measure);
+        if (rect) marks.push({ page, rect, kind: match.kind, text: match.text });
+      }
     }
   }
   return marks;

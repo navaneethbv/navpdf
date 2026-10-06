@@ -109,3 +109,24 @@ export function fromTopLeftVisual(
       };
   }
 }
+
+/**
+ * Maps a user-space rectangle to displayed coordinates with origin at the top-left: the
+ * inverse of `fromTopLeftVisual`.
+ */
+export function toTopLeftVisual(page: PDFPage, rect: UserSpaceRect): UserSpaceRect {
+  const box = visibleBox(page);
+  const left = rect.x - box.x;
+  const bottom = rect.y - box.y;
+  const right = box.x + box.width - (rect.x + rect.width);
+  const top = box.y + box.height - (rect.y + rect.height);
+  const upright = { width: rect.width, height: rect.height };
+  const turned = { width: rect.height, height: rect.width };
+  const shown: Record<PageBox["rotation"], UserSpaceRect> = {
+    0: { x: left, y: top, ...upright },
+    90: { x: bottom, y: left, ...turned },
+    180: { x: right, y: bottom, ...upright },
+    270: { x: top, y: right, ...turned },
+  };
+  return shown[box.rotation];
+}

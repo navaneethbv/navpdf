@@ -33,26 +33,28 @@ import { FormManager } from "../features/forms/FormManager";
 import { FillAndSign } from "../features/signatures/FillAndSign";
 import { OcrPanel } from "../features/ocr/OcrPanel";
 import { ExportDialog } from "../features/convert/ExportDialog";
-import { OfficeExport } from "../features/convert/OfficeExport";
+import { OfficeExport, type Format as OfficeFormat } from "../features/convert/OfficeExport";
 import { RedactionTool } from "../features/redact/RedactionTool";
 import { CompressDialog } from "../features/compress/CompressDialog";
 import { ProtectDialog } from "../features/protect/ProtectDialog";
 import { CertificateSignature } from "../features/signatures/CertificateSignature";
 import { DesignTools } from "../features/design/DesignTools";
 import { ExportOptions } from "../features/convert/ExportOptions";
+import { DOCUMENT_TOOL_DIALOGS } from "../features/tools/document-tools";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
-function officeFormat(modal: string | null): "pptx-text" | "xlsx" | "rtf" | "docx" {
-  switch (modal) {
-    case "office-pptx":
-      return "pptx-text";
-    case "office-xlsx":
-      return "xlsx";
-    case "office-rtf":
-      return "rtf";
-    default:
-      return "docx";
-  }
+/** Menu and modal identifiers for the editable export dialog and the format each selects. */
+const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
+  ["office-export", "docx"],
+  ["office-pptx", "pptx-text"],
+  ["office-xlsx", "xlsx"],
+  ["office-rtf", "rtf"],
+  ["office-html", "html"],
+]);
+
+function officeFormat(modal: string | null): OfficeFormat {
+  if (!modal) return "docx";
+  return OFFICE_EXPORT_FORMATS.get(modal) ?? "docx";
 }
 
 /** Page turns for keys that do not scroll a single-page view. */
@@ -230,10 +232,7 @@ const creationMenuActions = new Set(["create-pdf", "import-pdf", "combine-pdf", 
 const documentMenuActions = new Set([
   "edit-objects",
   "page-workspace",
-  "office-export",
-  "office-pptx",
-  "office-xlsx",
-  "office-rtf",
+  ...OFFICE_EXPORT_FORMATS.keys(),
   "convert",
   "compress",
   "protect",
@@ -408,7 +407,9 @@ function handleMenuAction(
   if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;
-  if (creationMenuActions.has(payload) || (state.document && documentMenuActions.has(payload))) {
+  const documentAction =
+    documentMenuActions.has(payload) || Object.hasOwn(DOCUMENT_TOOL_DIALOGS, payload);
+  if (creationMenuActions.has(payload) || (state.document && documentAction)) {
     state.set({ activeModal: payload });
     return;
   }
@@ -425,6 +426,10 @@ export default function App() {
     [passwordValue, setPasswordValue] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const s = useWorkspace();
+  const ActiveTool =
+    s.activeModal && Object.hasOwn(DOCUMENT_TOOL_DIALOGS, s.activeModal)
+      ? DOCUMENT_TOOL_DIALOGS[s.activeModal]
+      : null;
   const session = useDocumentSession(controller);
   const ready = useCallback((value: ViewerController) => setController(value), []);
   // The app owns document lifetime. A render boundary can remove ViewerHost
@@ -749,6 +754,9 @@ export default function App() {
             onClose={() => s.set({ activeModal: null })}
           />
         )}
+        {ActiveTool && (
+          <ActiveTool controller={controller} onClose={() => s.set({ activeModal: null })} />
+        )}
         {s.activeModal === "add-link" && (
           <LinkDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
@@ -776,9 +784,7 @@ export default function App() {
         {s.activeModal === "convert" && (
           <ExportDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {["office-export", "office-pptx", "office-xlsx", "office-rtf"].includes(
-          s.activeModal ?? "",
-        ) && (
+        {OFFICE_EXPORT_FORMATS.has(s.activeModal ?? "") && (
           <OfficeExport
             controller={controller}
             initialFormat={officeFormat(s.activeModal)}

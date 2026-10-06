@@ -1,12 +1,49 @@
 import { useId, useEffect, useRef, useState } from "react";
-import { Download, FileText, Image as ImageIcon, X, Sliders } from "lucide-react";
+import { Download, FileText, Image as ImageIcon, Printer, X, Sliders } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { downloadBlob, safeFileName } from "../../utils/download";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
+import { createZip, type PageLayout } from "./ooxml";
+import { readPageLayout, type PageProxy } from "./pdf-page";
+import { buildPlainText } from "./formats";
+import {
+  buildEps,
+  buildPostScript,
+  buildTiff,
+  compressTiffPage,
+  type JpegPage,
+  type TiffPage,
+} from "./raster";
 
 const MAX_EXPORT_PIXELS = 32 * 1024 * 1024;
+const IMAGE_EXPORT_FAILED = "The image could not be exported.";
+/** Matches the native export size limit so an oversized export fails before encoding. */
+const MAX_EXPORT_BYTES = 1024 ** 3;
+
+type ExportFormat = "txt" | "png" | "jpg" | "tiff" | "ps" | "eps";
+type RasterFormat = Exclude<ExportFormat, "txt">;
+
+const FORMATS: { id: ExportFormat; label: string; icon: LucideIcon }[] = [
+  { id: "txt", label: "Plain Text (.txt)", icon: FileText },
+  { id: "png", label: "PNG Image", icon: ImageIcon },
+  { id: "jpg", label: "JPEG Image", icon: ImageIcon },
+  { id: "tiff", label: "TIFF Image", icon: ImageIcon },
+  { id: "ps", label: "PostScript (.ps)", icon: Printer },
+  { id: "eps", label: "EPS (.eps)", icon: Printer },
+];
+
+const HINTS: Record<RasterFormat, string> = {
+  png: "Exports each page as a lossless PNG image; several pages are saved as one ZIP archive.",
+  jpg: "Exports each page as a JPEG image on a white background; several pages are saved as one ZIP archive.",
+  tiff: "Exports the selected pages as one multipage TIFF with lossless PackBits compression.",
+  ps: "Exports one PostScript file with a page image per page. Text and drawings become pixels.",
+  eps: "Exports each page as an Encapsulated PostScript image; several pages are saved as one ZIP archive.",
+};
+
+const usesJpeg = (format: ExportFormat) => format === "jpg" || format === "ps" || format === "eps";
 
 interface ExportImagePagesOptions {
   source: NonNullable<ViewerController["pdf"]>;
@@ -14,11 +51,97 @@ interface ExportImagePagesOptions {
   cancelled: () => boolean;
   setProgress: (value: number) => void;
   dpi: number;
-  format: "txt" | "png" | "jpg";
+  format: RasterFormat;
   quality: number;
   baseName: string;
 }
 
+interface ExportFile {
+  name: string;
+  data: Uint8Array;
+}
+
+const MIME: Record<RasterFormat, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  tiff: "image/tiff",
+  ps: "application/postscript",
+  eps: "application/postscript",
+};
+
+interface ExportParts {
+  files: ExportFile[];
+  tiffPages: TiffPage[];
+  jpegPages: JpegPage[];
+  bytes: number;
+}
+
+const encoder = new TextEncoder();
+
+/** Encodes one rendered page into the parts of the export being assembled. */
+function addRenderedPage(
+  parts: ExportParts,
+  rendered: RenderedPage,
+  options: { format: RasterFormat; dpi: number; quality: number; name: string; title: string },
+) {
+  const { canvas, context } = rendered;
+  const { format, quality, name } = options;
+  if (format === "tiff") {
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+    const page = compressTiffPage({
+      width: canvas.width,
+      height: canvas.height,
+      rgba: pixels.data,
+      dpi: options.dpi,
+    });
+    parts.tiffPages.push(page);
+    parts.bytes += page.byteLength;
+    return;
+  }
+  if (format === "png") {
+    const data = canvasBytes(canvas, "image/png", quality);
+    parts.files.push({ name: `${name}.png`, data });
+    parts.bytes += data.length;
+    return;
+  }
+  const jpeg = canvasBytes(canvas, "image/jpeg", quality);
+  if (format === "jpg") {
+    parts.files.push({ name: `${name}.jpg`, data: jpeg });
+    parts.bytes += jpeg.length;
+    return;
+  }
+  const page: JpegPage = {
+    jpeg,
+    pixelWidth: canvas.width,
+    pixelHeight: canvas.height,
+    width: rendered.width,
+    height: rendered.height,
+  };
+  if (format === "eps")
+    parts.files.push({ name: `${name}.eps`, data: encoder.encode(buildEps(page, options.title)) });
+  else parts.jpegPages.push(page);
+  // ASCII85 expands embedded image data by a quarter.
+  parts.bytes += Math.ceil(jpeg.length * 1.25);
+}
+
+function assembleExport(parts: ExportParts, format: RasterFormat, baseName: string) {
+  if (format === "tiff")
+    return { blob: blobOf(buildTiff(parts.tiffPages), MIME.tiff), name: `${baseName}.tiff` };
+  if (format === "ps")
+    return {
+      blob: new Blob([buildPostScript(parts.jpegPages, baseName)], { type: MIME.ps }),
+      name: `${baseName}.ps`,
+    };
+  const [only] = parts.files;
+  if (parts.files.length === 1) return { blob: blobOf(only.data, MIME[format]), name: only.name };
+  // Several pages are packaged together so the export asks for one destination, not one per page.
+  return {
+    blob: blobOf(createZip(parts.files), "application/zip"),
+    name: `${baseName}-${format}-pages.zip`,
+  };
+}
+
+/** Renders pages one at a time and returns the finished export, or null when cancelled. */
 async function exportImagePages({
   source,
   targetIndices,
@@ -28,26 +151,41 @@ async function exportImagePages({
   format,
   quality,
   baseName,
-}: ExportImagePagesOptions): Promise<boolean> {
+}: ExportImagePagesOptions): Promise<{ blob: Blob; name: string } | null> {
   const scale = dpi / 72;
-  const imageFormat = format === "jpg" ? "jpg" : "png";
+  const parts: ExportParts = { files: [], tiffPages: [], jpegPages: [], bytes: 0 };
   for (let i = 0; i < targetIndices.length; i++) {
-    if (cancelled()) return false;
+    if (cancelled()) return null;
     const pageNum = targetIndices[i] + 1;
     setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-    const page = await source.getPage(pageNum);
-    if (cancelled()) return false;
-    const saved = await exportSinglePageImage({
-      page,
-      scale,
-      format: imageFormat,
-      quality,
-      pageNum,
-      baseName,
-    });
-    if (!saved) return false;
+    const page = (await source.getPage(pageNum)) as unknown as PageProxy;
+    if (cancelled()) return null;
+    const rendered = await renderPage(page, scale, pageNum, format !== "png");
+    try {
+      addRenderedPage(parts, rendered, {
+        format,
+        dpi,
+        quality,
+        name: `${baseName}-page-${pageNum}`,
+        title: `${baseName} page ${pageNum}`,
+      });
+    } finally {
+      // Release the backing store now; WebKit otherwise keeps it until collection.
+      rendered.canvas.width = 0;
+      rendered.canvas.height = 0;
+    }
+    if (parts.bytes > MAX_EXPORT_BYTES) {
+      throw new Error(
+        "The export exceeds the 1 GB limit. Choose fewer pages or a lower resolution.",
+      );
+    }
   }
-  return !cancelled();
+  if (cancelled()) return null;
+  return assembleExport(parts, format, baseName);
+}
+
+function blobOf(bytes: Uint8Array, type: string) {
+  return new Blob([bytes as Uint8Array<ArrayBuffer>], { type });
 }
 
 export function ExportDialog({
@@ -59,7 +197,7 @@ export function ExportDialog({
 }>) {
   const fieldIds = useId();
   const s = useWorkspace();
-  const [format, setFormat] = useState<"txt" | "png" | "jpg">("txt");
+  const [format, setFormat] = useState<ExportFormat>("txt");
   const [scope, setScope] = useState<"current" | "all" | "range">("all");
   const [customRange, setCustomRange] = useState("");
   const [dpi, setDpi] = useState<72 | 150 | 300>(150);
@@ -108,7 +246,14 @@ export function ExportDialog({
     }
   };
 
-  const handleExportText = async () => {
+  type Produce = (
+    source: NonNullable<ViewerController["pdf"]>,
+    targetIndices: number[],
+    cancelled: () => boolean,
+  ) => Promise<{ blob: Blob; name: string; status: string } | null>;
+
+  /** Runs one export: selects pages, builds the file, saves it and reports the outcome. */
+  const runExport = async (produce: Produce) => {
     const context = beginExport();
     if (!context) return;
     const { run, source, cancelled } = context;
@@ -117,25 +262,10 @@ export function ExportDialog({
       if (targetIndices.length === 0) {
         throw new Error("No valid pages selected for export.");
       }
-
-      const textChunks = await collectPagesText(source, targetIndices, cancelled, setProgress);
-      if (!textChunks || cancelled()) return;
-
-      const fullText = textChunks.join("\n");
-      if (
-        !(await downloadBlob(
-          new Blob([fullText], { type: "text/plain;charset=utf-8" }),
-          `${baseName}.txt`,
-        ))
-      )
-        return;
-      if (cancelled()) return;
-      s.set({
-        status:
-          targetIndices.length === totalPages
-            ? "Text exported successfully"
-            : `Text exported successfully for ${targetIndices.length} page(s).`,
-      });
+      const exported = await produce(source, targetIndices, cancelled);
+      if (!exported || cancelled()) return;
+      if (!(await downloadBlob(exported.blob, exported.name)) || cancelled()) return;
+      s.set({ status: exported.status });
       onClose();
     } catch (err) {
       if (!cancelled()) s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -144,42 +274,53 @@ export function ExportDialog({
     }
   };
 
-  const handleExportImage = async () => {
-    const context = beginExport();
-    if (!context) return;
-    const { run, source, cancelled } = context;
-    try {
-      const targetIndices = getTargetPages();
-      if (targetIndices.length === 0) {
-        throw new Error("No valid pages selected for export.");
-      }
+  const produceText: Produce = async (source, targetIndices, cancelled) => {
+    const layouts = await collectPageLayouts(source, targetIndices, cancelled, setProgress);
+    if (!layouts) return null;
+    if (!layouts.some((layout) => layout.lines.length)) {
+      throw new Error("These pages have no text layer to export. Run OCR first.");
+    }
+    return {
+      blob: new Blob([buildPlainText(layouts)], { type: "text/plain;charset=utf-8" }),
+      name: `${baseName}.txt`,
+      status:
+        targetIndices.length === totalPages
+          ? "Text exported successfully"
+          : `Text exported successfully for ${targetIndices.length} page(s).`,
+    };
+  };
 
+  const produceImages =
+    (rasterFormat: RasterFormat): Produce =>
+    async (source, targetIndices, cancelled) => {
       const exported = await exportImagePages({
         source,
         targetIndices,
         cancelled,
         setProgress,
         dpi,
-        format,
+        format: rasterFormat,
         quality,
         baseName,
       });
-      if (!exported) return;
-      s.set({
-        status: `Exported ${targetIndices.length} page(s) as ${format.toUpperCase()} (${dpi} DPI).`,
-      });
-      onClose();
-    } catch (err) {
-      if (!cancelled()) s.set({ error: err instanceof Error ? err.message : String(err) });
-    } finally {
-      endExport(run);
-    }
+      if (!exported) return null;
+      const label = rasterFormat.toUpperCase();
+      return {
+        ...exported,
+        status: `Exported ${targetIndices.length} page(s) as ${label} (${dpi} DPI).`,
+      };
+    };
+
+  const startExport = () => {
+    const task = runExport(format === "txt" ? produceText : produceImages(format));
+    // The runner reports its own failures; this only guards against an unexpected rejection.
+    task.catch(() => s.set({ error: "The export could not be completed." }));
   };
 
   const cancelExport = () => {
     if (!exporting) return;
     if (active.current) active.current.cancelled = true;
-    s.set({ status: "Export cancelled. No additional pages were downloaded." });
+    s.set({ status: "Export cancelled. No file was saved." });
   };
 
   return (
@@ -199,39 +340,20 @@ export function ExportDialog({
           <fieldset className="setting-group">
             <legend className="setting-title">Export Format</legend>
             <div className="tab-buttons-bar">
-              <button
-                type="button"
-                className={format === "txt" ? "active" : ""}
-                aria-pressed={format === "txt"}
-                onClick={() => {
-                  setFormat("txt");
-                }}
-                disabled={exporting}
-              >
-                <FileText size={15} /> Plain Text (.txt)
-              </button>
-              <button
-                type="button"
-                className={format === "png" ? "active" : ""}
-                aria-pressed={format === "png"}
-                onClick={() => {
-                  setFormat("png");
-                }}
-                disabled={exporting}
-              >
-                <ImageIcon size={15} /> PNG Image
-              </button>
-              <button
-                type="button"
-                className={format === "jpg" ? "active" : ""}
-                aria-pressed={format === "jpg"}
-                onClick={() => {
-                  setFormat("jpg");
-                }}
-                disabled={exporting}
-              >
-                <ImageIcon size={15} /> JPEG Image
-              </button>
+              {FORMATS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={format === id ? "active" : ""}
+                  aria-pressed={format === id}
+                  onClick={() => {
+                    setFormat(id);
+                  }}
+                  disabled={exporting}
+                >
+                  <Icon size={15} /> {label}
+                </button>
+              ))}
             </div>
           </fieldset>
 
@@ -276,6 +398,7 @@ export function ExportDialog({
               <input
                 type="text"
                 placeholder="e.g. 1-3, 5"
+                aria-label="Export page range"
                 value={customRange}
                 onChange={(e) => {
                   setCustomRange(e.target.value);
@@ -294,40 +417,30 @@ export function ExportDialog({
                   (DPI)
                 </legend>
                 <div className="tab-buttons-bar">
-                  <button
-                    type="button"
-                    className={dpi === 72 ? "active" : ""}
-                    onClick={() => {
-                      setDpi(72);
-                    }}
-                    disabled={exporting}
-                  >
-                    72 DPI (Draft)
-                  </button>
-                  <button
-                    type="button"
-                    className={dpi === 150 ? "active" : ""}
-                    onClick={() => {
-                      setDpi(150);
-                    }}
-                    disabled={exporting}
-                  >
-                    150 DPI (Standard)
-                  </button>
-                  <button
-                    type="button"
-                    className={dpi === 300 ? "active" : ""}
-                    onClick={() => {
-                      setDpi(300);
-                    }}
-                    disabled={exporting}
-                  >
-                    300 DPI (High Print)
-                  </button>
+                  {(
+                    [
+                      [72, "72 DPI (Draft)"],
+                      [150, "150 DPI (Standard)"],
+                      [300, "300 DPI (High Print)"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={dpi === value ? "active" : ""}
+                      aria-pressed={dpi === value}
+                      onClick={() => {
+                        setDpi(value);
+                      }}
+                      disabled={exporting}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </fieldset>
 
-              {format === "jpg" && (
+              {usesJpeg(format) && (
                 <div className="setting-group">
                   <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
                     JPEG Quality: {Math.round(quality * 100)}%
@@ -351,11 +464,11 @@ export function ExportDialog({
 
           {format === "txt" ? (
             <p className="field-hint">
-              Exports UTF-8 plain text in top-to-bottom reading order with structured page headers.
+              Exports UTF-8 plain text line by line in reading order, with a header for each page.
             </p>
           ) : (
             <p className="field-hint">
-              Exports each page as a {dpi} DPI {format.toUpperCase()} image with bounds protection.
+              {HINTS[format]} Pages render at {dpi} DPI with bounds protection.
             </p>
           )}
 
@@ -394,9 +507,7 @@ export function ExportDialog({
           )}
           <button
             type="button"
-            onClick={() => {
-              void (format === "txt" ? handleExportText() : handleExportImage());
-            }}
+            onClick={startExport}
             disabled={exporting}
             className="button-primary"
           >
@@ -408,88 +519,70 @@ export function ExportDialog({
   );
 }
 
-async function collectPagesText(
+async function collectPageLayouts(
   source: NonNullable<ViewerController["pdf"]>,
   targetIndices: number[],
   cancelled: () => boolean,
   onProgress: (percent: number) => void,
-): Promise<string[] | null> {
-  const textChunks: string[] = [];
+): Promise<PageLayout[] | null> {
+  const layouts: PageLayout[] = [];
   for (let i = 0; i < targetIndices.length; i++) {
     if (cancelled()) return null;
     const pageNum = targetIndices[i] + 1;
     onProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
-    const page = await source.getPage(pageNum);
+    const page = (await source.getPage(pageNum)) as unknown as PageProxy;
     if (cancelled()) return null;
-    const content = await page.getTextContent();
-    // @ts-expect-error PDF.js text items
-    const pageText = extractPageTextContent(content.items);
-    textChunks.push(`--- Page ${pageNum} ---\n\n${pageText}\n\n`);
+    layouts.push(await readPageLayout(page, pageNum));
   }
-  return textChunks;
+  return layouts;
 }
 
-function extractPageTextContent(items: Array<{ str?: string; transform?: number[] }>): string {
-  const filtered = items
-    .filter((item) => item.str?.trim())
-    .sort((a, b) => {
-      const aY = a.transform?.[5] ?? 0;
-      const bY = b.transform?.[5] ?? 0;
-      if (Math.abs(aY - bY) > 6) {
-        return bY - aY;
-      }
-      const aX = a.transform?.[4] ?? 0;
-      const bX = b.transform?.[4] ?? 0;
-      return aX - bX;
-    });
-  return filtered.map((item) => item.str).join(" ");
+interface RenderedPage {
+  canvas: HTMLCanvasElement;
+  context: CanvasRenderingContext2D;
+  /** Page size in points. */
+  width: number;
+  height: number;
 }
 
-interface RenderPageOptions {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  page: any;
-  scale: number;
-  format: "jpg" | "png";
-  quality: number;
-  pageNum: number;
-  baseName: string;
-}
-
-async function exportSinglePageImage(options: RenderPageOptions): Promise<boolean> {
-  const { page, scale, format, quality, pageNum, baseName } = options;
+async function renderPage(
+  page: PageProxy,
+  scale: number,
+  pageNum: number,
+  opaque: boolean,
+): Promise<RenderedPage> {
   const viewport = page.getViewport({ scale });
-  const pixelArea = Math.ceil(viewport.width) * Math.ceil(viewport.height);
-  if (pixelArea > MAX_EXPORT_PIXELS || viewport.width > 8192 || viewport.height > 8192) {
+  const width = Math.ceil(viewport.width);
+  const height = Math.ceil(viewport.height);
+  if (width * height > MAX_EXPORT_PIXELS || width > 8192 || height > 8192) {
     throw new Error(`Export resolution too high: page ${pageNum} would exceed maximum dimensions.`);
   }
 
   const canvas = document.createElement("canvas");
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("The page could not be rendered for export.");
-  if (format === "jpg") {
-    ctx.fillStyle = "#ffffff";
-    if (typeof ctx.fillRect === "function") {
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("The page could not be rendered for export.");
+  if (opaque) {
+    context.fillStyle = "#ffffff";
+    if (typeof context.fillRect === "function") {
+      context.fillRect(0, 0, canvas.width, canvas.height);
     }
   }
-  await page.render({ canvasContext: ctx, viewport }).promise;
+  await page.render({ canvasContext: context, viewport }).promise;
+  return { canvas, context, width: viewport.width / scale, height: viewport.height / scale };
+}
 
-  const mime = format === "jpg" ? "image/jpeg" : "image/png";
+function canvasBytes(canvas: HTMLCanvasElement, mime: string, quality: number): Uint8Array {
   try {
     const dataUrl = canvas.toDataURL ? canvas.toDataURL(mime, quality) : "";
-    if (!dataUrl) throw new Error("The image could not be exported.");
+    if (!dataUrl.startsWith(`data:${mime}`)) throw new Error(IMAGE_EXPORT_FAILED);
     const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
-    const imageBytes = Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
-    return await downloadBlob(
-      new Blob([imageBytes], { type: mime }),
-      `${baseName}-page-${pageNum}.${format}`,
-    );
+    return Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
   } catch (error) {
-    if (error instanceof Error && error.message === "The image could not be exported.") {
+    if (error instanceof Error && error.message === IMAGE_EXPORT_FAILED) {
       throw error;
     }
-    throw new Error("The image could not be exported.", { cause: error });
+    throw new Error(IMAGE_EXPORT_FAILED, { cause: error });
   }
 }
