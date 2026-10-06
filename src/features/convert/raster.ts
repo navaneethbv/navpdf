@@ -345,7 +345,7 @@ export function buildEps(page: JpegPage, title: string) {
 function dscText(text: string) {
   return (
     [...text]
-      .map((char) => (/^[\x20-\x7e]$/.test(char) ? char : "?"))
+      .map((char) => (/^[\x20-\x7E]$/.test(char) ? char : "?"))
       .join("")
       .slice(0, 200) || "Untitled"
   );
