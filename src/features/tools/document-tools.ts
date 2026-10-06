@@ -3,6 +3,7 @@ import type { ViewerController } from "../viewer/controller";
 import { StampDialog } from "../annotations/StampDialog";
 import { FlattenDialog } from "../document/FlattenDialog";
 import { PageLabelsDialog } from "../pages/PageLabelsDialog";
+import { ImposeDialog } from "../pages/ImposeDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -14,4 +15,5 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   stamp: StampDialog,
   flatten: FlattenDialog,
   "page-labels": PageLabelsDialog,
+  impose: ImposeDialog,
 };

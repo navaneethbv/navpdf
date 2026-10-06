@@ -6,6 +6,7 @@ import { StampDialog } from "../../src/features/annotations/StampDialog";
 import { FlattenDialog } from "../../src/features/document/FlattenDialog";
 import { addStamp } from "../../src/services/pdf/stamps";
 import { PageLabelsDialog } from "../../src/features/pages/PageLabelsDialog";
+import { ImposeDialog } from "../../src/features/pages/ImposeDialog";
 import { readPageLabels, setPageLabels } from "../../src/services/pdf/page-labels";
 import { useWorkspace } from "../../src/stores/workspace";
 
@@ -161,5 +162,44 @@ describe("PageLabelsDialog", () => {
     const { doc, status } = await committed(replaceWithBytes);
     expect(status).toBe("Page labels removed");
     expect(readPageLabels(doc)).toEqual([]);
+  });
+});
+
+describe("ImposeDialog", () => {
+  it("saves a new booklet PDF without changing the open document", async () => {
+    seed(3);
+    const { controller, replaceWithBytes } = await editableController(await blankPdf(3));
+    const saved: Blob[] = [];
+    const names: string[] = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      saved.push(blob as Blob);
+      return "blob:booklet";
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    const onClose = vi.fn();
+    render(<ImposeDialog controller={controller as never} onClose={onClose} />);
+    fireEvent.change(screen.getByLabelText("Layout"), { target: { value: "booklet" } });
+    expect(screen.getByText(/flipping on the short edge/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save PDF" }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(names).toEqual(["report-booklet.pdf"]);
+    const booklet = await PDFDocument.load(new Uint8Array(await saved[0].arrayBuffer()));
+    expect(booklet.getPageCount()).toBe(2);
+    expect(replaceWithBytes).not.toHaveBeenCalled();
+    expect(useWorkspace.getState().status).toBe("Saved a 2-sheet booklet PDF");
+    vi.restoreAllMocks();
+  });
+
+  it("validates the page range before arranging", async () => {
+    seed(3);
+    const { controller } = await editableController(await blankPdf(3));
+    render(<ImposeDialog controller={controller as never} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Pages (all when empty)"), { target: { value: "2-" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/Incomplete range/);
+    expect(screen.getByRole("button", { name: "Save PDF" })).toHaveProperty("disabled", true);
   });
 });

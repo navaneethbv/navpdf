@@ -25,6 +25,7 @@ import {
   PenLine,
   Stamp,
   ListOrdered,
+  LayoutGrid,
   Heading,
   Droplets,
   Paperclip,
@@ -90,6 +91,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       category: "pages",
       icon: Crop,
       action: () => s.set({ activeModal: "page-workspace" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "impose-pages",
+      label: "Pages per Sheet & Booklet",
+      description: "Save a 2-, 4-, 6-, 9- or 16-up PDF or a fold-in-half booklet",
+      category: "pages",
+      icon: LayoutGrid,
+      action: () => s.set({ activeModal: "impose" }),
       disabled: !hasDoc,
     },
     {

@@ -12,6 +12,7 @@ import {
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { addStamp } from "../../src/services/pdf/stamps";
 import { flattenDocument, placementMatrix } from "../../src/services/pdf/flatten";
+import { bookletOrder, imposePages } from "../../src/services/pdf/impose";
 import {
   previewLabels,
   readPageLabelsFromBytes,
@@ -288,5 +289,98 @@ describe("page labels", () => {
     expect(() => validateRanges([range(1, { firstNumber: 0 })], 5)).toThrow(/whole number/);
     expect(() => validateRanges([range(1, { style: "none" })], 5)).toThrow(/prefix or a style/);
     expect(validateRanges([range(3), range(1)], 5).map((item) => item.startPage)).toEqual([1, 3]);
+  });
+});
+
+describe("imposition", () => {
+  async function numbered(count: number, rotateSecond = false) {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    for (let index = 1; index <= count; index++) {
+      const page = doc.addPage([612, 792]);
+      page.drawText(`Page${index}`, { x: 250, y: 400, size: 40, font });
+      if (rotateSecond && index === 2) page.setRotation(degrees(90));
+    }
+    return doc.save();
+  }
+
+  async function sheetText(bytes: Uint8Array) {
+    const pdf = await reopen(bytes);
+    const sheets: { size: number[]; words: { text: string; x: number; y: number }[] }[] = [];
+    for (let number = 1; number <= pdf.numPages; number++) {
+      const page = await pdf.getPage(number);
+      const { width, height } = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      sheets.push({
+        size: [Math.round(width), Math.round(height)],
+        words: content.items.flatMap((item) =>
+          "str" in item && item.str.trim()
+            ? [{ text: item.str, x: item.transform[4], y: item.transform[5] }]
+            : [],
+        ),
+      });
+    }
+    return sheets;
+  }
+
+  const base = { sheet: "letter", orientation: "auto", margin: 18, gap: 9, border: false } as const;
+
+  it("places four pages per portrait sheet in reading order", async () => {
+    const { bytes, sheets } = await imposePages(await numbered(6), { ...base, layout: "4" });
+    expect(sheets).toBe(2);
+    const read = await sheetText(bytes);
+    expect(read.map((sheet) => sheet.size)).toEqual([
+      [612, 792],
+      [612, 792],
+    ]);
+    const [first] = read;
+    const at = (text: string) => first.words.find((word) => word.text === text)!;
+    expect(at("Page1").x).toBeLessThan(at("Page2").x);
+    expect(at("Page1").y).toBeGreaterThan(at("Page3").y);
+    expect(read[1].words.map((word) => word.text)).toEqual(["Page5", "Page6"]);
+  });
+
+  it("uses landscape sheets for two-up and keeps rotated pages upright", async () => {
+    const { bytes } = await imposePages(await numbered(2, true), { ...base, layout: "2" });
+    const [sheet] = await sheetText(bytes);
+    expect(sheet.size).toEqual([792, 612]);
+    const rotated = (
+      await (await reopen(bytes)).getPage(1).then((page) => page.getTextContent())
+    ).items.find((item) => "str" in item && item.str === "Page2") as { transform: number[] };
+    // The second page is displayed turned 90 degrees, so its text runs downward on the sheet.
+    expect(rotated.transform[1]).toBeLessThan(0);
+  });
+
+  it("orders booklet sides for saddle stitching with blank padding", async () => {
+    expect(bookletOrder(6)).toEqual([
+      [null, 0],
+      [1, null],
+      [5, 2],
+      [3, 4],
+    ]);
+    const { bytes, sheets } = await imposePages(await numbered(6), { ...base, layout: "booklet" });
+    expect(sheets).toBe(4);
+    const read = await sheetText(bytes);
+    const order = read.map((sheet) =>
+      [...sheet.words].sort((a, b) => a.x - b.x).map((word) => word.text),
+    );
+    expect(order).toEqual([["Page1"], ["Page2"], ["Page6", "Page3"], ["Page4", "Page5"]]);
+  });
+
+  it("imposes blank pages that have no content stream", async () => {
+    const { sheets } = await imposePages(await pages({}, {}, {}), { ...base, layout: "2" });
+    expect(sheets).toBe(2);
+  });
+
+  it("imposes only chosen pages and rejects impossible settings", async () => {
+    const source = await numbered(5);
+    const { bytes } = await imposePages(source, { ...base, layout: "9", pages: [5, 1] });
+    expect((await sheetText(bytes))[0].words.map((word) => word.text)).toEqual(["Page5", "Page1"]);
+    await expect(imposePages(source, { ...base, layout: "4", pages: [6] })).rejects.toThrow(
+      /outside the document/,
+    );
+    await expect(imposePages(source, { ...base, layout: "16", margin: 300 })).rejects.toThrow(
+      /no room/,
+    );
   });
 });
