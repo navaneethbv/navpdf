@@ -237,6 +237,15 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       disabled: !hasDoc,
     },
     {
+      id: "add-stamp",
+      label: "Add Stamp",
+      description: "Approved, Draft, Confidential and custom review stamps",
+      category: "review",
+      icon: Stamp,
+      action: () => s.set({ activeModal: "stamp" }),
+      disabled: !hasDoc,
+    },
+    {
       id: "snapshot-tool",
       label: "Take Snapshot",
       description: "Capture rendered region to clipboard or image file",
