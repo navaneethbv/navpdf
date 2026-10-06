@@ -279,6 +279,8 @@ export class ViewerController {
   private readonly mutationQueue = new MutationQueue();
   private identity: string | null = null;
   private replacing = false;
+  /** The zoom to restore when a revision of the open document is attached. */
+  private keptScale: string | null = null;
   readonly views = new ViewHistory();
   readonly readAloud = new ReadAloud({
     pageText: (page) => this.pageText(page),
@@ -356,8 +358,10 @@ export class ViewerController {
       this.bus.on(name, handler, { signal: this.abort.signal });
     on("pagesinit", () => {
       this.setLayout(useWorkspace.getState().layout);
+      const scale = this.keptScale ?? useWorkspace.getState().local.preferences.defaultZoom;
+      this.keptScale = null;
       if (this.container.clientWidth > 0 && this.container.clientHeight > 0) {
-        this.viewer.currentScaleValue = useWorkspace.getState().local.preferences.defaultZoom;
+        this.viewer.currentScaleValue = scale;
       }
       // PDF.js can receive pagesinit while the native WebKit view is still
       // completing its first layout pass. Re-run visibility and render
@@ -463,7 +467,8 @@ export class ViewerController {
       { capture: true, signal: this.abort.signal },
     );
   }
-  async attach(pdf: PDFDocumentProxy) {
+  /** Shows a document; `keepScale` keeps the current zoom for a revision of the open document. */
+  async attach(pdf: PDFDocumentProxy, keepScale = this.replacing) {
     this.started = performance.now();
     this.generation++;
     const generation = this.generation;
@@ -471,6 +476,8 @@ export class ViewerController {
     this.nativeCanRedo = false;
     this.contexts.clear();
     this.storageModified = false;
+    // An edit reloads the document; keep the reader's zoom instead of the default.
+    this.keptScale = keepScale ? String(this.viewer.currentScaleValue) : null;
     if (!this.replacing) {
       this.views.clear();
       this.readAloud.stop();
@@ -723,13 +730,13 @@ export class ViewerController {
     let loaded: PDFDocumentProxy;
     try {
       loaded = await task.promise;
-      await this.attach(loaded);
+      await this.attach(loaded, true);
       await this.viewer.firstPagePromise;
       await this.commitNativeRevision(revision.bytes, loaded.numPages, previousState.document);
     } catch (error) {
       await task.destroy().catch(() => {});
       if (previousPdf && this.pdf !== previousPdf) {
-        await this.attach(previousPdf);
+        await this.attach(previousPdf, true);
         this.goTo(previousState.page);
       }
       useWorkspace.getState().set(previousState);

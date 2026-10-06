@@ -13,6 +13,8 @@ Existing controls or passing unit tests do not establish completed native workfl
 They are review stamps, flattening, page labels, pages per sheet and booklets, comment summaries, sensitive-data search for redaction, moving and resizing existing form fields, an accessibility check, export of all embedded images, and distance, perimeter and area measurement.
 Moving and resizing existing form fields closes follow-up item 3 of the October 4 review for numeric geometry; dragging fields on the page remains open.
 Browser-preview testing reproduced shapes being added to the viewer's current page instead of the page they were drawn on, and shapes and measurements now use the drawn page.
+Browser-preview testing also reproduced every in-place edit (shapes, stamps, measurements, undo and redo) resetting the zoom to the default, which moved the page under the pointer between measurements; revisions of the open document now keep the reader's zoom.
+In the same run, a 3 by 2 inch rectangle measured at 1 in = 10 ft read 601.25 sq ft at 46% zoom, and Enter finished the area after mouse clicks.
 Imposition of blank pages without a content stream failed in a regression test and now succeeds.
 The field geometry dialog blocked submission of fractional positions through form validation; it now accepts any number.
 Automated checks, independent-reader acceptance and the native acceptance blocker are recorded in `docs/VERIFICATION.md`.
