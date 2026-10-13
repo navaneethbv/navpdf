@@ -49,6 +49,25 @@ Office-to-PDF import requires saving a PDF from the original Office application.
 PNG and JPEG imports are limited to 25 MB, 32 megapixels and 16,384 pixels per edge.
 Native exports ask for a destination and retain the active document on cancellation or write failure.
 
+## Local workflow additions
+
+The October 13 update adds [20 page, form, review and reader features](docs/IMPLEMENTATION-PLAN-2026-10-13.md).
+
+- **Organize Pages:** typed range selection, odd/even/inverted selection, reverse order, move a selection before a page or to the end, fixed-size split ZIPs, and individual-page ZIP exports.
+- **Form Data** in All Tools or Fill & Sign: export editable values as JSON or CSV, preview and import JSON, check missing required fields, and clear editable values after confirmation.
+- **Comments and Bookmarks:** search comments and replies, filter by author/type/review status, sort by page/author/date, and find bookmarks while keeping their ancestor paths.
+- **Document Insights** in All Tools: count words and characters, identify textless pages, and inspect page sizes, rotations and orientation for a page range.
+- **Search:** export displayed matches as CSV with total and exported counts.
+- **Help and tips > Keyboard shortcuts:** search the shortcut reference without opening a PDF.
+
+ZIP exports are limited to 1,000 PDFs and 1 GB and retain the existing extraction structure-loss warning.
+Form JSON is versioned and limited to 2 MB; read-only, unsupported and signature fields are preserved.
+XFA and encrypted form data are unavailable, signed PDFs cannot import or clear values, and choice fields with separate display/export labels are excluded.
+Imported text that the built-in appearance font cannot draw is rejected during preview.
+Clearing form values does not restore defaults or remove field definitions.
+Word counts are approximate text-layer tokens, character counts exclude whitespace, and textless pages are not necessarily blank.
+No document upload, new dependency or remote service is added.
+
 ## Getting started
 
 The first launch shows a five-step tour of opening, reading, editing, saving and personalizing the workspace.

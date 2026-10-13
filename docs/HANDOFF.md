@@ -1,5 +1,12 @@
 # NavPDF handoff
 
+## October 13 local workflow additions
+
+Branch `feat/twenty-local-workflow-features` adds the twenty capabilities listed in the [implementation plan](IMPLEMENTATION-PLAN-2026-10-13.md).
+The [verification ledger](VERIFICATION.md#october-13-twenty-local-workflow-features) records passing frontend gates, independent PDF checks and the unavailable native and visual checks.
+The user authorized implementation and opening a pull request; merging is outside this delivery.
+Existing native acceptance, product-parity and distribution gates remain open.
+
 ## September 20 repository safety maintenance
 
 PR 28 fixes oversized and non-terminating custom page ranges and stale print errors after a valid retry.

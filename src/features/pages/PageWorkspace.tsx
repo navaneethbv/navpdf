@@ -31,16 +31,27 @@ import {
   computeInsertMapping,
   computeReorderMapping,
 } from "../../services/document-commands";
-import { downloadBytes } from "../../utils/download";
+import { downloadBytes, safeFileName } from "../../utils/download";
 import { native } from "../../services/native";
 import { pruneDocument } from "../../services/engine";
 import type { ViewerController } from "../viewer/controller";
 import { parsePageRange } from "./page-range";
 import { ThumbCanvas } from "../viewer/Thumbnails";
+import { errorMessage, useDocumentEdit } from "../document/use-document-edit";
+import {
+  fixedPageGroups,
+  individualPageGroups,
+  moveSelectionBefore,
+  parseSelectionRange,
+  presetSelection,
+  reversePageOrder,
+} from "./page-selection";
+import { createPageArchive } from "./page-archives";
 
 function isPageWorkspaceInput(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
+    target instanceof HTMLButtonElement ||
     target instanceof HTMLSelectElement ||
     target instanceof HTMLTextAreaElement
   );
@@ -147,7 +158,7 @@ function handleRotateKey(
 
 export function PageWorkspace({
   controller,
-  onClose,
+  onClose: closeWorkspace,
 }: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
@@ -160,7 +171,19 @@ export function PageWorkspace({
   );
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [localBusy, setBusy] = useState(false);
+  const edit = useDocumentEdit(controller);
+  const busy = localBusy || edit.busy;
+  const workflowBlocked =
+    busy || s.busy || !controller?.pdf || !s.editingAllowed || !!s.info?.encrypted;
+  const [selectionRange, setSelectionRange] = useState("");
+  const [moveDestination, setMoveDestination] = useState("");
+  const [pagesPerFile, setPagesPerFile] = useState("1");
+  const [workflowError, setWorkflowError] = useState("");
+  const [archiveProgress, setArchiveProgress] = useState("");
+  const workflowRunning = useRef(false);
+  const active = useRef(true);
+  const exportCancelled = useRef(false);
   const [cropWidth, setCropWidth] = useState(500);
   const [cropHeight, setCropHeight] = useState(700);
   const [cropX, setCropX] = useState(0);
@@ -173,6 +196,19 @@ export function PageWorkspace({
   const replacePdfInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDialogElement>(null);
   const [structureLoss, setStructureLoss] = useState("");
+
+  const onClose = () => {
+    exportCancelled.current = true;
+    active.current = false;
+    closeWorkspace();
+  };
+
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     containerRef.current?.focus();
@@ -221,6 +257,103 @@ export function PageWorkspace({
 
   const selectAll = () => setSelected(pagesList);
   const selectNone = () => setSelected([]);
+
+  const selectRange = () => {
+    try {
+      const pages = parseSelectionRange(selectionRange, totalPages);
+      setSelected(pages);
+      setFocusedIndex(pages[0]);
+      setWorkflowError("");
+    } catch (cause) {
+      setWorkflowError(errorMessage(cause));
+    }
+  };
+
+  const reorderSelection = async (destination: number | "end" | "reverse") => {
+    if (workflowBlocked || workflowRunning.current) return;
+    setWorkflowError("");
+    edit.setError("");
+    try {
+      const order =
+        destination === "reverse"
+          ? reversePageOrder(totalPages)
+          : moveSelectionBefore(totalPages, selected, destination);
+      if (order.every((page, index) => page === index)) {
+        s.set({ status: "Pages are already in that order" });
+        return;
+      }
+      workflowRunning.current = true;
+      const changed = await edit.apply(
+        destination === "reverse" ? "Reversed page order" : `Moved ${selected.length} page(s)`,
+        (bytes) => reorderPages(bytes, order),
+        { pageMapping: computeReorderMapping(order) },
+      );
+      if (changed && active.current) {
+        const selection = new Set(selected);
+        setSelected(order.flatMap((page, index) => (selection.has(page) ? [index] : [])));
+        setFocusedIndex(order.indexOf(focusedIndex));
+      }
+    } catch (cause) {
+      setWorkflowError(errorMessage(cause));
+    } finally {
+      workflowRunning.current = false;
+    }
+  };
+
+  const exportArchive = async (mode: "split" | "individual") => {
+    const source = controller?.pdf;
+    if (!source || workflowBlocked || workflowRunning.current) return;
+    const documentId = s.document?.id;
+    const revision = s.revision;
+    const isCurrent = () =>
+      active.current &&
+      controller.pdf === source &&
+      useWorkspace.getState().document?.id === documentId &&
+      useWorkspace.getState().revision === revision;
+    exportCancelled.current = false;
+    workflowRunning.current = true;
+    setWorkflowError("");
+    setBusy(true);
+    s.set({ busy: true });
+    try {
+      const groups =
+        mode === "split"
+          ? fixedPageGroups(totalPages, Number(pagesPerFile))
+          : individualPageGroups(totalPages, selected);
+      const bytes = await source.saveDocument();
+      const output = await createPageArchive(bytes, groups, {
+        isCancelled: () => exportCancelled.current || !isCurrent(),
+        onProgress: (completed, total) =>
+          setArchiveProgress(`Preparing PDF ${completed} of ${total}`),
+      });
+      if (!isCurrent() || exportCancelled.current) return;
+      const base = safeFileName(
+        (s.document?.name ?? "document.pdf").replace(/\.pdf$/i, ""),
+        "document",
+      );
+      const saved = await downloadBytes(
+        output,
+        `${base}-${mode === "split" ? "split" : "pages"}.zip`,
+        "application/zip",
+      );
+      if (saved && isCurrent() && !exportCancelled.current) {
+        s.set({ status: `Exported ${groups.length} PDF files in a ZIP archive` });
+      }
+    } catch (cause) {
+      if (isCurrent() && !exportCancelled.current) setWorkflowError(errorMessage(cause));
+    } finally {
+      workflowRunning.current = false;
+      if (active.current) {
+        setBusy(false);
+        setArchiveProgress("");
+      }
+      if (
+        useWorkspace.getState().document?.id === documentId &&
+        useWorkspace.getState().revision === revision
+      )
+        s.set({ busy: false });
+    }
+  };
 
   const mutate = async (
     operation: (bytes: Uint8Array) => Promise<Uint8Array>,
@@ -459,6 +592,112 @@ export function PageWorkspace({
             Deselect
           </button>
         </div>
+
+        <div className="page-workspace-actions page-selection-controls">
+          <label>
+            Select page range
+            <input
+              type="text"
+              placeholder="1-3, 5"
+              value={selectionRange}
+              maxLength={10000}
+              disabled={busy}
+              onChange={(event) => setSelectionRange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  selectRange();
+                }
+              }}
+            />
+          </label>
+          <button type="button" onClick={selectRange} disabled={busy}>
+            Select range
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setSelected(presetSelection("odd", totalPages, selected))}
+          >
+            Odd pages
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setSelected(presetSelection("even", totalPages, selected))}
+          >
+            Even pages
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setSelected(presetSelection("invert", totalPages, selected))}
+          >
+            Invert selection
+          </button>
+        </div>
+
+        <div className="page-workspace-actions page-selection-controls">
+          <button
+            type="button"
+            disabled={workflowBlocked || totalPages < 2}
+            onClick={() => void reorderSelection("reverse")}
+          >
+            Reverse pages
+          </button>
+          <label>
+            Move before page
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              step={1}
+              value={moveDestination}
+              disabled={workflowBlocked}
+              onChange={(event) => setMoveDestination(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={workflowBlocked || selected.length === 0}
+            onClick={() => void reorderSelection(Number(moveDestination) - 1)}
+          >
+            Move selection
+          </button>
+          <button
+            type="button"
+            disabled={workflowBlocked || selected.length === 0}
+            onClick={() => void reorderSelection("end")}
+          >
+            Move to end
+          </button>
+          <button
+            type="button"
+            disabled={workflowBlocked || selected.length === 0}
+            onClick={() => void exportArchive("individual")}
+          >
+            Export individual PDFs
+          </button>
+        </div>
+
+        {(workflowError || edit.error) && <p role="alert">{workflowError || edit.error}</p>}
+        {(!s.editingAllowed || s.info?.encrypted) && (
+          <p className="field-hint">
+            The page order and ZIP tools above require an editable, unencrypted document.
+          </p>
+        )}
+        {archiveProgress && <output aria-live="polite">{archiveProgress}</output>}
+        {busy && workflowRunning.current && !edit.busy && (
+          <button
+            type="button"
+            data-cancel-operation
+            onClick={() => {
+              exportCancelled.current = true;
+            }}
+          >
+            Stop export
+          </button>
+        )}
 
         {structureLoss && (
           <output className="structure-warning">
@@ -724,6 +963,25 @@ export function PageWorkspace({
             }}
           >
             Cancel
+          </button>
+          <label>
+            Pages per file
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              step={1}
+              value={pagesPerFile}
+              disabled={busy}
+              onChange={(event) => setPagesPerFile(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={workflowBlocked}
+            onClick={() => void exportArchive("split")}
+          >
+            Split to ZIP
           </button>
         </div>
       )}

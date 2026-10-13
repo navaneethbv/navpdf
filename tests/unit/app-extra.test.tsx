@@ -145,6 +145,48 @@ beforeEach(() => {
 });
 
 describe("App keyboard and menus", () => {
+  it("allows keyboard focus and explicit cancellation while an export is busy", () => {
+    render(<App />);
+    act(() => useWorkspace.getState().set({ busy: true }));
+    const cancel = document.createElement("button");
+    cancel.dataset.cancelOperation = "true";
+    document.body.append(cancel);
+    const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    const undo = new KeyboardEvent("keydown", {
+      key: "z",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    cancel.dispatchEvent(tab);
+    cancel.dispatchEvent(enter);
+    cancel.dispatchEvent(undo);
+    expect(tab.defaultPrevented).toBe(false);
+    expect(enter.defaultPrevented).toBe(false);
+    expect(undo.defaultPrevented).toBe(true);
+    cancel.remove();
+  });
+
+  it("keeps document shortcuts inactive while the shortcut guide is open", async () => {
+    const undo = vi.spyOn(ViewerController.prototype, "undo").mockImplementation(() => {});
+    seedDocument();
+    render(<App />);
+    await act(async () => {});
+    act(() =>
+      useWorkspace.getState().set({ activeModal: "shortcuts", selectedAnnotationId: "a1" }),
+    );
+    const close = screen.getByRole("button", { name: "Close dialog" });
+    close.focus();
+    fireEvent.keyDown(close, { key: "z", ctrlKey: true });
+    fireEvent.keyDown(close, { key: "f", ctrlKey: true });
+    fireEvent.keyDown(close, { key: "Escape" });
+    expect(undo).not.toHaveBeenCalled();
+    expect(useWorkspace.getState().sidebar).toBe("bookmarks");
+    expect(useWorkspace.getState().selectedAnnotationId).toBe("a1");
+    undo.mockRestore();
+  });
+
   it("applies the system theme preference", () => {
     render(<App />);
     expect(document.documentElement.dataset.theme).toBe("dark");

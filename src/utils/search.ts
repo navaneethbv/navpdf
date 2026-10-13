@@ -9,3 +9,8 @@ export function clampPage(page: number, count: number) {
 export function boundedZoom(value: number) {
   return Math.max(0.25, Math.min(5, Number.isFinite(value) ? value : 1));
 }
+
+/** Identifies the exact query and matching options associated with a result set. */
+export function searchCriteriaKey(query: string, matchCase: boolean, wholeWord: boolean): string {
+  return JSON.stringify([query, matchCase, wholeWord]);
+}

@@ -63,6 +63,24 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
   const tools: ToolItem[] = [
     // Pages
     {
+      id: "document-insights",
+      label: "Document Insights",
+      description: "Count words and characters, find textless pages, and inspect page sizes",
+      category: "review",
+      icon: FileText,
+      action: () => s.set({ activeModal: "document-insights" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "form-data",
+      label: "Form Data",
+      description: "Export or import form values, check required fields, and reset editable fields",
+      category: "forms",
+      icon: FileSpreadsheet,
+      action: () => s.set({ activeModal: "form-data" }),
+      disabled: !hasDoc,
+    },
+    {
       id: "organize-pages",
       label: "Organize Pages",
       description: "Reorder, rotate, delete, and extract pages visually",

@@ -4,6 +4,7 @@ import { Dialog } from "../../components/Dialog";
 import { useWorkspace } from "../../stores/workspace";
 import { savePreferences } from "../../services/native";
 import type { Preferences } from "../../types/document";
+import { ShortcutGuide } from "./ShortcutGuide";
 
 const steps = [
   {
@@ -91,6 +92,8 @@ export function GettingStarted({ ready }: Readonly<{ ready: boolean }>) {
     else if (state.local.preferences.showStartupTips) state.set({ activeModal: "tips" });
   }, [ready, state]);
   const mode = state.activeModal;
+  if (mode === "shortcuts")
+    return <ShortcutGuide onClose={() => state.set({ activeModal: null })} />;
   if (mode !== "help" && mode !== "tour" && mode !== "tips") return null;
   return <GuideDialog key={mode} mode={mode} />;
 }
@@ -145,6 +148,12 @@ function GuideDialog({ mode }: Readonly<{ mode: GuideMode }>) {
             onClick={() => useWorkspace.getState().set({ activeModal: "tips" })}
           >
             <Lightbulb size={20} /> Browse tips
+          </button>
+          <button
+            className="button"
+            onClick={() => useWorkspace.getState().set({ activeModal: "shortcuts" })}
+          >
+            Keyboard shortcuts
           </button>
         </div>
       ) : (

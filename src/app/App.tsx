@@ -404,7 +404,7 @@ function handleMenuAction(
   // a dialog, has focus.
   if ((payload === "undo" || payload === "redo") && isEditableTarget(document.activeElement))
     return;
-  if (["help", "tour", "tips"].includes(state.activeModal ?? "")) return;
+  if (["help", "tour", "tips", "shortcuts"].includes(state.activeModal ?? "")) return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;
   const documentAction =
@@ -461,10 +461,18 @@ export default function App() {
         state.settingsOpen ||
         session.password ||
         session.confirm ||
-        ["help", "tour", "tips"].includes(state.activeModal ?? "")
+        ["help", "tour", "tips", "shortcuts"].includes(state.activeModal ?? "")
       )
         return;
       if (state.busy) {
+        const cancellation =
+          event.target instanceof HTMLElement &&
+          event.target.closest("button[data-cancel-operation]") &&
+          ["Enter", " "].includes(event.key) &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey;
+        if (event.key === "Tab" || cancellation) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         return;

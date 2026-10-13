@@ -1,5 +1,95 @@
 @import "tailwindcss";
 @import "pdfjs-dist/web/pdf_viewer.css";
+
+/* Local workflow reports and compact navigation filters. */
+.review-filters,
+.search-export {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+.review-filters input,
+.review-filters select {
+  width: 100%;
+  min-width: 0;
+}
+.review-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.review-filter-grid label,
+.page-selection-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.comment-meta,
+.workflow-table small {
+  color: var(--muted);
+}
+.page-workspace-actions.page-selection-controls,
+.split-controls-bar {
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.page-selection-controls input {
+  color: var(--ink);
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  max-width: 180px;
+}
+.workflow-table,
+.form-data-table,
+.document-insights-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+.workflow-table :is(th, td),
+.form-data-table :is(th, td),
+.document-insights-table :is(th, td) {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.form-data-table {
+  table-layout: fixed;
+  overflow-wrap: anywhere;
+}
+.workflow-table small,
+.workflow-table td > span {
+  display: block;
+}
+.workflow-table kbd {
+  font-family: inherit;
+  overflow-wrap: anywhere;
+}
+.document-insights-table-wrap {
+  overflow-x: auto;
+}
+.document-insights-pagination,
+.document-insights-progress {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.document-insights-summary {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+}
+.shortcut-guide {
+  width: min(720px, calc(100vw - 32px));
+}
 :root {
   font-family:
     Inter,

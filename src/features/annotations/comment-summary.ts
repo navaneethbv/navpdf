@@ -14,6 +14,8 @@ import {
 import { previewLabels, readPageLabels } from "../../services/pdf/page-labels.ts";
 import { csvField } from "../convert/formats.ts";
 import { escapeXml } from "../convert/ooxml.ts";
+import { parsePdfDate } from "../../utils/pdf-date.ts";
+export { parsePdfDate } from "../../utils/pdf-date.ts";
 
 export interface CommentEntry {
   id: string;
@@ -57,27 +59,6 @@ function text(dict: PDFDict, key: string) {
 function nameOf(dict: PDFDict, key: string) {
   const value = dict.get(PDFName.of(key));
   return value instanceof PDFName ? value.decodeText() : "";
-}
-
-/** The ISO offset for a PDF date's time zone part, "Z" for UTC or none, or null when invalid. */
-function timeZone(part: string): string | null {
-  if (!part || /^[Zz]/.test(part)) return "Z";
-  const zone = /^([+-])(\d{2})'?(\d{2})?'?$/.exec(part);
-  return zone ? `${zone[1]}${zone[2]}:${zone[3] ?? "00"}` : null;
-}
-
-/** Parses a PDF date string (D:YYYYMMDDHHmmSSOHH'mm') into ISO 8601, or "" when invalid. */
-export function parsePdfDate(value: string): string {
-  const parts = /^(?:D:)?(\d{4,14})(.*)$/.exec(value.trim());
-  if (!parts || parts[1].length % 2) return "";
-  // Missing fields default to the start of the period: month and day 01, time 00.
-  const digits = parts[1].length >= 8 ? parts[1] : `${parts[1]}0101`.slice(0, 8);
-  const offset = timeZone(parts[2]);
-  if (offset === null) return "";
-  const field = (start: number, fallback: string) => digits.slice(start, start + 2) || fallback;
-  const iso = `${digits.slice(0, 4)}-${field(4, "01")}-${field(6, "01")}T${field(8, "00")}:${field(10, "00")}:${field(12, "00")}${offset}`;
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
 interface Raw {

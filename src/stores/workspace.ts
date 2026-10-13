@@ -54,6 +54,7 @@ interface Workspace {
   wholeWord: boolean;
   searchCount: number;
   searchPending: boolean;
+  searchResultsKey: string;
   results: SearchResult[];
   bookmarks: Bookmark[];
   comments: Comment[];
@@ -107,6 +108,7 @@ const cleanDocument = {
   results: [],
   searchCount: 0,
   searchPending: false,
+  searchResultsKey: "",
   searchQuery: "",
   renderedPages: 0,
   firstRenderMs: null,
