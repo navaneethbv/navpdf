@@ -1,3 +1,4 @@
+import { mapInOrder } from "../../utils/async-sequence";
 import { useId, useEffect, useRef, useState } from "react";
 import { Download, FileText, Image as ImageIcon, Printer, X, Sliders } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -154,13 +155,17 @@ async function exportImagePages({
 }: ExportImagePagesOptions): Promise<{ blob: Blob; name: string } | null> {
   const scale = dpi / 72;
   const parts: ExportParts = { files: [], tiffPages: [], jpegPages: [], bytes: 0 };
-  for (let i = 0; i < targetIndices.length; i++) {
+  const renderSelectedPage = async ([i, pageIndex]: [number, number]) => {
     if (cancelled()) return null;
-    const pageNum = targetIndices[i] + 1;
+    const pageNum = pageIndex + 1;
     setProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
     const page = (await source.getPage(pageNum)) as unknown as PageProxy;
     if (cancelled()) return null;
-    const rendered = await renderPage(page, scale, pageNum, format !== "png");
+    return { pageNum, rendered: await renderPage(page, scale, pageNum, format !== "png") };
+  };
+  for await (const result of mapInOrder(targetIndices.entries(), renderSelectedPage)) {
+    if (!result) return null;
+    const { pageNum, rendered } = result;
     try {
       addRenderedPage(parts, rendered, {
         format,
@@ -526,13 +531,17 @@ async function collectPageLayouts(
   onProgress: (percent: number) => void,
 ): Promise<PageLayout[] | null> {
   const layouts: PageLayout[] = [];
-  for (let i = 0; i < targetIndices.length; i++) {
+  const readSelectedLayout = async ([i, pageIndex]: [number, number]) => {
     if (cancelled()) return null;
-    const pageNum = targetIndices[i] + 1;
+    const pageNum = pageIndex + 1;
     onProgress(Math.round(((i + 1) / targetIndices.length) * 80) + 10);
     const page = (await source.getPage(pageNum)) as unknown as PageProxy;
     if (cancelled()) return null;
-    layouts.push(await readPageLayout(page, pageNum));
+    return readPageLayout(page, pageNum);
+  };
+  for await (const layout of mapInOrder(targetIndices.entries(), readSelectedLayout)) {
+    if (!layout) return null;
+    layouts.push(layout);
   }
   return layouts;
 }

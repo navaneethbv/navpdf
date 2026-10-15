@@ -1,5 +1,95 @@
 @import "tailwindcss";
 @import "pdfjs-dist/web/pdf_viewer.css";
+
+/* Local workflow reports and compact navigation filters. */
+.review-filters,
+.search-export {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+.review-filters input,
+.review-filters select {
+  width: 100%;
+  min-width: 0;
+}
+.review-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.review-filter-grid label,
+.page-selection-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.comment-meta,
+.workflow-table small {
+  color: var(--muted);
+}
+.page-workspace-actions.page-selection-controls,
+.split-controls-bar {
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.page-selection-controls input {
+  color: var(--ink);
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  max-width: 180px;
+}
+.workflow-table,
+.form-data-table,
+.document-insights-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+.workflow-table :is(th, td),
+.form-data-table :is(th, td),
+.document-insights-table :is(th, td) {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.form-data-table {
+  table-layout: fixed;
+  overflow-wrap: anywhere;
+}
+.workflow-table small,
+.workflow-table td > span {
+  display: block;
+}
+.workflow-table kbd {
+  font-family: inherit;
+  overflow-wrap: anywhere;
+}
+.document-insights-table-wrap {
+  overflow-x: auto;
+}
+.document-insights-pagination,
+.document-insights-progress {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.document-insights-summary {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+}
+.shortcut-guide {
+  width: min(720px, calc(100vw - 32px));
+}
 :root {
   font-family:
     Inter,
@@ -826,7 +916,9 @@ p {
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent;
-  outline-offset: -3px !important;
+}
+.pdf-container:focus-visible {
+  outline-offset: -3px;
 }
 .pdfViewer {
   /* PDF.js reserves 5px of vertical space when fitting a page, so the space above the first
@@ -1374,6 +1466,7 @@ p {
   font-size: 11px;
 }
 .empty-message {
+  display: block;
   font-size: 11px;
   line-height: 1.8;
   color: var(--muted);
@@ -1692,13 +1785,6 @@ p {
   }
   .search-panel {
     padding: 0 7px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
   }
 }
 
@@ -3747,4 +3833,16 @@ p {
 .target-compression-options input {
   margin-left: 8px;
   max-width: 130px;
+}
+
+/* Scope the motion override to the app root, after component and PDF.js rules. */
+@media (prefers-reduced-motion: reduce) {
+  #root,
+  #root *,
+  #root *::before,
+  #root *::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
 }

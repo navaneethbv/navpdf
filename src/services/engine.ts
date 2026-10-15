@@ -31,7 +31,7 @@ function requireEngine() {
 
 /** Stages bytes natively so commands receive an opaque id instead of a large payload. */
 async function stage(bytes: Uint8Array): Promise<string> {
-  return invoke<string>("engine_stage", bytes);
+  return await invoke<string>("engine_stage", bytes);
 }
 
 async function take(id: string): Promise<Uint8Array<ArrayBuffer>> {
@@ -140,7 +140,7 @@ export async function unlockDocument(
 /** Opens the native certificate picker; resolves to null when the picker is cancelled. */
 export async function chooseCertificate(password: string): Promise<CertificateSummary | null> {
   requireEngine();
-  return invoke<CertificateSummary | null>("engine_choose_certificate", { password });
+  return await invoke<CertificateSummary | null>("engine_choose_certificate", { password });
 }
 
 /** Releases the decrypted signing key held by the native process. */
@@ -168,7 +168,7 @@ export async function saveSignedCopy(
 /** Checks the certificate signatures in the file as it was opened. */
 export async function verifySignatures(documentId: string): Promise<SignatureInfo[]> {
   requireEngine();
-  return invoke<SignatureInfo[]>("engine_verify_signatures", { documentId });
+  return await invoke<SignatureInfo[]>("engine_verify_signatures", { documentId });
 }
 
 /** Prunes unreferenced objects, renumbers objects, and compresses streams. */

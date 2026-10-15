@@ -23,6 +23,7 @@ export function useDocumentEdit(controller: ViewerController | null) {
   const apply = async (
     status: string,
     edit: (bytes: Uint8Array) => Promise<Uint8Array | EditResult>,
+    options?: { pageMapping?: number[]; warnings?: string[] },
   ): Promise<boolean> => {
     const source = controller?.pdf;
     if (!controller || !source || busy) return false;
@@ -34,6 +35,7 @@ export function useDocumentEdit(controller: ViewerController | null) {
       const changed = result instanceof Uint8Array ? result : result.bytes;
       const message = result instanceof Uint8Array ? status : result.status;
       await controller.replaceWithBytes(changed, message, {
+        ...options,
         expectedSource: source,
         preMutationBytes: bytes,
       });

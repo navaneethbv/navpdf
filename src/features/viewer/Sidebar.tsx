@@ -13,7 +13,8 @@ import { useWorkspace } from "../../stores/workspace";
 import { Thumbnails } from "./Thumbnails";
 import { SearchPanel } from "../search/SearchPanel";
 import type { ViewerController } from "./controller";
-import type { Bookmark } from "../../types/document";
+import { BookmarkPanel } from "./BookmarkPanel";
+import { CommentPanel } from "./CommentPanel";
 import { downloadBlob, safeFileName } from "../../utils/download";
 const tabs = [
   { id: "pages", label: "Pages", icon: Files },
@@ -24,6 +25,7 @@ const tabs = [
 ] as const;
 export function Sidebar({ controller }: Readonly<{ controller: ViewerController }>) {
   const tab = useWorkspace((s) => s.sidebar),
+    documentId = useWorkspace((s) => s.document?.id),
     bookmarks = useWorkspace((s) => s.bookmarks),
     comments = useWorkspace((s) => s.comments),
     selectedId = useWorkspace((s) => s.selectedAnnotationId),
@@ -95,11 +97,7 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
           >
             Edit bookmarks
           </button>
-          {bookmarks.length ? (
-            <BookmarkTree nodes={bookmarks} controller={controller} />
-          ) : (
-            <p className="empty-message">This PDF has no bookmarks.</p>
-          )}
+          <BookmarkPanel key={documentId} bookmarks={bookmarks} controller={controller} />
         </div>
       );
     return (
@@ -137,30 +135,12 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
             }}
           />
         </div>
-        {comments.length ? (
-          comments.map((c) => (
-            <button
-              className="comment-row"
-              key={`${c.page}-${c.id}`}
-              aria-pressed={selectedId === c.id}
-              onClick={() => {
-                if (typeof controller.selectAnnotation === "function")
-                  controller.selectAnnotation(c.id);
-                else controller.goTo(c.page);
-              }}
-            >
-              <strong>
-                {c.type} · Page {c.page}
-              </strong>
-              <span>{c.text}</span>
-            </button>
-          ))
-        ) : (
-          <p className="empty-message">
-            No saved comments or highlights found. New highlights appear here after saving and
-            reopening.
-          </p>
-        )}
+        <CommentPanel
+          key={documentId}
+          comments={comments}
+          selectedId={selectedId}
+          controller={controller}
+        />
       </div>
     );
   };
@@ -198,39 +178,5 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
       </h2>
       {renderPanel()}
     </aside>
-  );
-}
-function BookmarkTree({
-  nodes,
-  controller,
-}: Readonly<{ nodes: Bookmark[]; controller: ViewerController }>) {
-  return (
-    <ul className="bookmarks">
-      {nodes.map((node, i) => (
-        <li key={`${node.title}-${i}`}>
-          {node.destination ? (
-            <button
-              type="button"
-              onClick={() => {
-                const dest = node.destination;
-                if (!dest) return;
-                void controller.links.goToDestination(dest).catch(() =>
-                  useWorkspace.getState().set({
-                    error: "This bookmark has an invalid destination.",
-                  }),
-                );
-              }}
-            >
-              {node.title}
-            </button>
-          ) : (
-            <span className="bookmark-heading">{node.title}</span>
-          )}
-          {node.children.length > 0 && (
-            <BookmarkTree nodes={node.children} controller={controller} />
-          )}
-        </li>
-      ))}
-    </ul>
   );
 }

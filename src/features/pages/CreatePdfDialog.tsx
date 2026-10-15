@@ -1,3 +1,4 @@
+import { mapInOrder } from "../../utils/async-sequence";
 import { expandImageInput } from "./extended-image-import";
 import { useId, useState, useRef, useEffect } from "react";
 import { FilePlus, Combine, Check, X, ArrowUp, ArrowDown } from "lucide-react";
@@ -130,7 +131,7 @@ export function CreatePdfDialog({
       const mergeInputs: MergeInputItem[] = [];
       const manifestSummary: string[] = [];
 
-      for (const item of items) {
+      const prepareInput = async (item: (typeof items)[number]) => {
         const buffer = isImageFile(item.file)
           ? await imageFileToPdf(item.croppedFile ?? item.file)
           : new Uint8Array(await item.file.arrayBuffer());
@@ -139,12 +140,20 @@ export function CreatePdfDialog({
           const doc = await PDFDocument.load(buffer);
           const totalPages = doc.getPageCount();
           const parsed = parsePageRange("custom", rawRange, 1, totalPages);
-          mergeInputs.push({ name: item.file.name, bytes: buffer, ranges: parsed });
-          manifestSummary.push(`${item.file.name} (${parsed.length} of ${totalPages} pages)`);
+          return {
+            input: { name: item.file.name, bytes: buffer, ranges: parsed },
+            summary: `${item.file.name} (${parsed.length} of ${totalPages} pages)`,
+          };
         } else {
-          mergeInputs.push({ name: item.file.name, bytes: buffer });
-          manifestSummary.push(`${item.file.name} (all pages)`);
+          return {
+            input: { name: item.file.name, bytes: buffer },
+            summary: `${item.file.name} (all pages)`,
+          };
         }
+      };
+      for await (const { input, summary } of mapInOrder(items, prepareInput)) {
+        mergeInputs.push(input);
+        manifestSummary.push(summary);
       }
 
       const mergedBytes = await mergeDocuments(mergeInputs);
@@ -168,16 +177,23 @@ export function CreatePdfDialog({
     setCreating(true);
     const failures: string[] = [];
     try {
-      for (const file of files) {
+      const expandFile = async (file: File) => {
         try {
-          const expanded = await expandImageInput(file);
+          return { expanded: await expandImageInput(file), error: "" };
+        } catch (error) {
+          return {
+            expanded: [],
+            error: `${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+      };
+      for await (const { expanded, error } of mapInOrder(files, expandFile)) {
+        if (error) failures.push(error);
+        else
           setItems((previous) => [
             ...previous,
             ...expanded.map((image) => ({ id: crypto.randomUUID(), file: image, range: "" })),
           ]);
-        } catch (error) {
-          failures.push(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
-        }
       }
       if (failures.length) setError(failures.join("\n"));
     } finally {

@@ -102,6 +102,9 @@ export interface Bookmark {
 }
 export interface Comment {
   id: string;
+  author?: string;
+  /** ISO 8601 date from the PDF, absent when no valid date is recorded. */
+  modified?: string;
   page: number;
   type: string;
   text: string;

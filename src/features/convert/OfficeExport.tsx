@@ -1,3 +1,4 @@
+import { mapInOrder } from "../../utils/async-sequence";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
@@ -208,12 +209,14 @@ export function OfficeExport({
     if (!pdf) return null;
     const numbers = pageNumbers ?? Array.from({ length: pdf.numPages }, (_, i) => i + 1);
     const result: PageLayout[] = [];
-    for (const [index, number] of numbers.entries()) {
+    const readLayout = async ([index, number]: [number, number]) => {
       if (cancelled.current) return null;
       setProgress(`Reading page ${number} (${index + 1} of ${numbers.length})…`);
-      result.push(
-        await readPageLayout((await pdf.getPage(number)) as unknown as PageProxy, number),
-      );
+      return readPageLayout((await pdf.getPage(number)) as unknown as PageProxy, number);
+    };
+    for await (const layout of mapInOrder(numbers.entries(), readLayout)) {
+      if (!layout) return null;
+      result.push(layout);
     }
     return result;
   };
@@ -228,10 +231,14 @@ export function OfficeExport({
       );
     }
     const slides: Slide[] = [];
-    for (const [index, number] of pageNumbers.entries()) {
+    const renderSlide = async ([index, number]: [number, number]) => {
       if (cancelled.current) return null;
       setProgress(`Rendering page ${number} (${index + 1} of ${pageNumbers.length})…`);
-      slides.push(await pagePicture((await pdf.getPage(number)) as unknown as PageProxy));
+      return pagePicture((await pdf.getPage(number)) as unknown as PageProxy);
+    };
+    for await (const slide of mapInOrder(pageNumbers.entries(), renderSlide)) {
+      if (!slide) return null;
+      slides.push(slide);
     }
     return buildPptx(slides, baseName);
   };

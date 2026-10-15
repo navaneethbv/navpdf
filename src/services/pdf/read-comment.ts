@@ -1,18 +1,23 @@
 import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFString } from "pdf-lib";
 import type { Comment } from "../../types/document";
 import { annotationIdentifier } from "../document-commands";
+import { parsePdfDate } from "../../utils/pdf-date";
 
 interface AnnotationData {
   id: string;
   annotationName?: string;
   subtype?: string;
   contentsObj?: { str: string };
+  titleObj?: { str: string };
+  title?: string;
+  modificationDate?: string;
+  creationDate?: string;
   rect?: number[];
   lineCoordinates?: number[];
   lineEndings?: string[];
   name?: string;
   inReplyTo?: string;
-  state?: NonNullable<Comment["reviewState"]>;
+  state?: string | { name?: string };
   quadPoints?: number[];
   color?: ArrayLike<number>;
   opacity?: number;
@@ -51,7 +56,25 @@ function numberArray(dict: PDFDict, key: string): number[] | undefined {
   return value?.asArray().map((item) => (item as PDFNumber).asNumber());
 }
 
-function storedGeometry(annotations: PDFArray | undefined, id: string) {
+function storedText(dict: PDFDict, key: string): string | undefined {
+  const value = dict.lookup(PDFName.of(key));
+  return value instanceof PDFString || value instanceof PDFHexString
+    ? value.decodeText()
+    : undefined;
+}
+
+function storedState(dict: PDFDict, key: string): string | undefined {
+  const value = dict.lookup(PDFName.of(key));
+  return value instanceof PDFName ? value.decodeText() : storedText(dict, key);
+}
+
+function reviewState(value: string | undefined): Comment["reviewState"] {
+  return value && ["Accepted", "Rejected", "Cancelled", "Completed"].includes(value)
+    ? (value as NonNullable<Comment["reviewState"]>)
+    : undefined;
+}
+
+function storedAnnotation(annotations: PDFArray | undefined, id: string) {
   if (!annotations) return {};
   for (let i = 0; i < annotations.size(); i++) {
     const dict = annotations.lookup(i, PDFDict);
@@ -66,10 +89,24 @@ function storedGeometry(annotations: PDFArray | undefined, id: string) {
             rawEndings.lookupMaybe(1, PDFName)?.decodeText() ?? "None",
           ]
         : undefined;
+    const parentRef = dict.get(PDFName.of("IRT"));
+    const parent = dict.lookup(PDFName.of("IRT"));
+    const replyTo =
+      parentRef && parent instanceof PDFDict
+        ? storedText(parent, "NM") || annotationIdentifier(parentRef)
+        : undefined;
     return {
       line: rectangle(numberArray(dict, "L")),
       quads: quadBounds(numberArray(dict, "QuadPoints")),
       endings,
+      author: storedText(dict, "T"),
+      modificationDate: storedText(dict, "M"),
+      creationDate: storedText(dict, "CreationDate"),
+      reviewState:
+        storedState(dict, "StateModel") === "Review"
+          ? reviewState(storedState(dict, "State"))
+          : undefined,
+      replyTo,
     };
   }
   return {};
@@ -83,8 +120,8 @@ function applyAppearance(comment: Comment, data: AnnotationData) {
   if (width !== undefined && Number.isFinite(width)) comment.width = width;
   if (data.subtype === "Stamp") comment.stampName = data.name;
   if (data.inReplyTo) comment.replyTo = data.inReplyTo;
-  if (data.state && ["Accepted", "Rejected", "Cancelled", "Completed"].includes(data.state))
-    comment.reviewState = data.state;
+  const state = reviewState(typeof data.state === "string" ? data.state : data.state?.name);
+  if (state) comment.reviewState = state;
 }
 
 /** Merge PDF.js display data with saved geometry using decoded annotation identifiers. */
@@ -92,7 +129,7 @@ export function readComment(raw: unknown, page: number, annotations?: PDFArray):
   const data = raw as AnnotationData;
   if (!data.subtype || !supported.has(data.subtype)) return null;
   const id = data.annotationName || data.id;
-  const stored = storedGeometry(annotations, id);
+  const stored = storedAnnotation(annotations, id);
   const fallbackEndings: [string, string] | undefined =
     data.lineEndings?.length === 2 ? [data.lineEndings[0], data.lineEndings[1]] : undefined;
   const lineEndings = stored.endings ?? fallbackEndings;
@@ -109,5 +146,15 @@ export function readComment(raw: unknown, page: number, annotations?: PDFArray):
     quads: stored.quads ?? quadBounds(data.quadPoints),
   };
   applyAppearance(comment, data);
+  const author = data.titleObj?.str || data.title || stored.author;
+  if (author) comment.author = author;
+  const modified =
+    parsePdfDate(data.modificationDate ?? "") ||
+    parsePdfDate(stored.modificationDate ?? "") ||
+    parsePdfDate(data.creationDate ?? "") ||
+    parsePdfDate(stored.creationDate ?? "");
+  if (modified) comment.modified = modified;
+  if (stored.replyTo) comment.replyTo = stored.replyTo;
+  if (!comment.reviewState && stored.reviewState) comment.reviewState = stored.reviewState;
   return comment;
 }

@@ -7,6 +7,23 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## October 14 quality follow-up
+
+PR 66 quality corrections address its 31 initial findings and the 49 older main-branch findings while preserving sequential PDF work, cancellation, validation and accessible labels.
+The verification ledger records local gates and the blocked visual check.
+Zero unresolved PR analysis issues and passing hosted checks gate merge; native acceptance remains separate.
+
+## October 13 local workflow additions
+
+The [twenty-feature implementation plan](IMPLEMENTATION-PLAN-2026-10-13.md) adds page selection and batch ZIP exports, form-data exchange and required-field checking, review filtering, bookmark search, document statistics, page inventory, search-result CSV and a shortcut guide.
+The tools extend existing page operations, PDF serialization, viewer navigation and local exports without new dependencies or native IPC changes.
+Form imports are previewed and validated before mutation, and clearing editable values requires explicit confirmation.
+Page ordering retains navigation mappings and undo; export and inspection jobs reject stale document results.
+Review metadata now retains authors, dates and reply state, and parent review status follows the newest valid saved date.
+Search exports bind their rows to the exact query and matching options that produced them.
+The verification ledger records automated and independent Poppler results plus the unavailable browser and native acceptance checks.
+No historical phase, product-parity or distribution gate is closed by this delivery.
+
 ## October 6 document review and preparation tools
 
 [ADR 0015](adr/0015-document-review-tools.md) adds ten local tools selected by comparing NavPDF with common Acrobat Standard tools and the October 4 follow-up list.

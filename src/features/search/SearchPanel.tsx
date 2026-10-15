@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import { SearchResultExport } from "./SearchResultExport";
 
 function resultSummary(count: number, pending: boolean): string {
   if (pending) return "Searching...";
@@ -37,7 +38,7 @@ export function SearchPanel({ controller }: Readonly<{ controller: ViewerControl
           aria-label="Search document"
           placeholder="Find in document"
           value={query}
-          onChange={(e) => set({ searchQuery: e.target.value })}
+          onChange={(e) => set({ searchQuery: e.target.value, searchPending: true })}
           onKeyDown={(e) => {
             if (e.key === "Enter") controller.search(true, e.shiftKey);
           }}
@@ -48,7 +49,7 @@ export function SearchPanel({ controller }: Readonly<{ controller: ViewerControl
           <input
             type="checkbox"
             checked={matchCase}
-            onChange={(e) => set({ matchCase: e.target.checked })}
+            onChange={(e) => set({ matchCase: e.target.checked, searchPending: true })}
           />{" "}
           Match case
         </label>
@@ -56,7 +57,7 @@ export function SearchPanel({ controller }: Readonly<{ controller: ViewerControl
           <input
             type="checkbox"
             checked={wholeWord}
-            onChange={(e) => set({ wholeWord: e.target.checked })}
+            onChange={(e) => set({ wholeWord: e.target.checked, searchPending: true })}
           />{" "}
           Whole word
         </label>
@@ -80,6 +81,7 @@ export function SearchPanel({ controller }: Readonly<{ controller: ViewerControl
           <ChevronDown size={16} />
         </button>
       </div>
+      <SearchResultExport />
       <div className="search-results">
         {results.map((r) => (
           <button

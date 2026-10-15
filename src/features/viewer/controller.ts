@@ -1,3 +1,5 @@
+import { mapInOrder } from "../../utils/async-sequence";
+import { allPageNumbers } from "../../utils/pdf-pages";
 import {
   AnnotationEditorType,
   AnnotationMode,
@@ -27,7 +29,7 @@ import type {
 import type { DocumentRevision } from "../../types/operations";
 import { useWorkspace } from "../../stores/workspace";
 import { positionSearchCursor } from "../search/select-result";
-import { boundedZoom, snippet } from "../../utils/search";
+import { boundedZoom, snippet, searchCriteriaKey } from "../../utils/search";
 import { commitWorkingRevision, markDirty, native, rememberPage } from "../../services/native";
 import { pruneDocument } from "../../services/engine";
 import { loadPdfFromBytes } from "../../services/pdf";
@@ -271,6 +273,9 @@ export class ViewerController {
   private readonly contexts = new Map<number, string>();
   private readonly abort = new AbortController();
   private searchGeneration = 0;
+  private findPending = false;
+  private searchClosed = false;
+  private activeSearchKey = "";
   readonly history = new RevisionHistory();
   private nativeCanUndo = false;
   private nativeCanRedo = false;
@@ -451,7 +456,11 @@ export class ViewerController {
       this.queueResults();
     });
     on("updatefindcontrolstate", ({ state }: { state: number }) => {
-      useWorkspace.getState().set({ searchPending: state === 3 });
+      this.findPending = state === 3;
+      useWorkspace.getState().set({
+        searchPending: this.findPending,
+        ...(this.findPending ? { searchResultsKey: "" } : {}),
+      });
       this.queueResults();
     });
     container.addEventListener(
@@ -1020,8 +1029,9 @@ export class ViewerController {
     try {
       let bytes = await this.pdf.saveDocument();
       let added = 0;
-      for (const comment of pending) {
-        const updated = await importCommentGeometry(bytes, comment);
+      for await (const updated of mapInOrder(pending, (comment) =>
+        importCommentGeometry(bytes, comment),
+      )) {
         if (!updated) continue;
         bytes = updated as Uint8Array<ArrayBuffer>;
         added++;
@@ -1292,8 +1302,11 @@ export class ViewerController {
   }
   search(again = false, backward = false) {
     const s = useWorkspace.getState();
+    this.searchClosed = false;
     this.searchGeneration++;
-    if (!again) s.set({ searchPending: !!s.searchQuery, results: [], searchCount: 0 });
+    this.activeSearchKey = searchCriteriaKey(s.searchQuery, s.matchCase, s.wholeWord);
+    if (!again)
+      s.set({ searchPending: !!s.searchQuery, results: [], searchCount: 0, searchResultsKey: "" });
     this.bus.dispatch("find", {
       source: this,
       type: again ? "again" : "",
@@ -1312,6 +1325,16 @@ export class ViewerController {
     if (positionSearchCursor(this.find, page, index)) this.search(true);
   }
   closeSearch() {
+    this.searchClosed = true;
+    this.searchGeneration++;
+    this.activeSearchKey = "";
+    clearTimeout(this.searchTimer);
+    useWorkspace.getState().set({
+      results: [],
+      searchResultsKey: "",
+      searchPending: false,
+      searchCount: 0,
+    });
     this.bus.dispatch("findbarclose", { source: this });
   }
   private queueResults() {
@@ -1323,12 +1346,14 @@ export class ViewerController {
     }, 120);
   }
   private async buildResults() {
-    if (!this.pdf) return;
+    // PDF.js keeps previous pageMatches during its debounce. Never label those with new criteria.
+    if (!this.pdf || this.findPending || this.searchClosed) return;
     const generation = this.generation,
       search = this.searchGeneration;
     const pdf = this.pdf;
     const matches = this.find.pageMatches as number[][] | undefined,
       lengths = this.find.pageMatchesLength as number[][] | undefined;
+    const searchResultsKey = this.activeSearchKey;
     const results: SearchResult[] = [];
     for (let p = 0; p < (matches?.length ?? 0) && results.length < 250; p++) {
       const pageMatches = matches?.[p];
@@ -1344,8 +1369,8 @@ export class ViewerController {
       if (!pageResults) return;
       results.push(...pageResults.slice(0, 250 - results.length));
     }
-    if (generation === this.generation && search === this.searchGeneration)
-      useWorkspace.getState().set({ results });
+    if (generation === this.generation && search === this.searchGeneration && !this.findPending)
+      useWorkspace.getState().set({ results, searchResultsKey });
   }
 
   private async buildPageResults(
@@ -1388,7 +1413,7 @@ export class ViewerController {
       // Fallback to PDF.js data only in mock environments
     }
 
-    for (let p = 1; p <= pdf.numPages; p++) {
+    const readCommentsOnPage = async (p: number) => {
       const pageComments = await readPageComments(
         pdf,
         pdfLibDoc,
@@ -1396,9 +1421,13 @@ export class ViewerController {
         generation,
         () => this.generation,
       );
+      if (pageComments && p % 20 === 0)
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      return pageComments;
+    };
+    for await (const pageComments of mapInOrder(allPageNumbers(pdf.numPages), readCommentsOnPage)) {
       if (!pageComments) return;
       comments.push(...pageComments);
-      if (p % 20 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (generation !== this.generation) return;
     const state = useWorkspace.getState();

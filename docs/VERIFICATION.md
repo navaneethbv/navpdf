@@ -1,5 +1,66 @@
 # Verification ledger
 
+## October 14 PR 66 quality corrections
+
+The PR analysis reported 31 unresolved issues on `584a3ff`, and the main-branch analysis listed 49 older unresolved findings.
+The follow-up uses semantic status outputs, explicit control labels, simpler validation and review helpers, and smaller PDF date expressions.
+Archive extraction, document inspection, exports, comparison, OCR and composition use lazy asynchronous sequences so only one PDF operation runs at a time and cancellation prevents later work.
+Native request draining and range reads retain ordering and disposal checks; adapters retain promise-based rejection contracts.
+Reduced-motion rules now use the application root and cascade order instead of important declarations, including pseudo-elements.
+Regression tests cover early termination and rejection without starting the next operation, aborted in-flight range reads and unmount during a pending native-open snapshot.
+Node 24.18.1 and `npm ci` were used on macOS.
+Lint, typecheck, formatting, production build, Rust tests and Clippy with warnings denied pass locally.
+The frontend suite passes 929 tests across 125 files with 86.60% statements, 78.84% branches, 85.92% functions and 89.60% lines.
+The Rust suite has 95 passing tests and the existing constrained-volume test ignored.
+Hosted OCR acceptance exposed missing `.ts` import extensions in the new shared sequence imports; direct Node loading reproduced the error and passes after correction.
+Local native acceptance passes Phase 7 (55/55), Phase 8 (12/12) and Phase 10 (55/55), including independent Poppler, OpenSSL and Quick Look checks.
+The local OCR probe started but had not returned its first recognition result at this checkpoint; hosted OCR remains a merge gate.
+Browser security denied access to the localhost preview after permission was declined, so visual acceptance was not performed.
+Native workflow acceptance and distribution gates remain open.
+Hosted analysis must verify zero unresolved PR issues on the published revision before merge, followed by a fresh main-branch scan for the project-wide result.
+
+## October 13 twenty local workflow features
+
+Source base: `9236011`, plus the changes in this delivery.
+The [implementation plan](IMPLEMENTATION-PLAN-2026-10-13.md) lists all twenty capabilities and their safety contracts.
+
+### Automated gates
+
+Node `24.19.0` and `npm ci` were used, with no dependency or lockfile changes.
+Formatting, lint, typecheck, production build, `git diff --check`, `cmp AGENTS.md CLAUDE.md` and `npm audit --audit-level=high` pass.
+The frontend suite passes 925 tests across 124 files.
+Coverage is 86.61% statements, 78.83% branches, 85.87% functions and 89.60% lines, with existing thresholds unchanged and LCOV retained.
+The production build retains its large-chunk advisory; no performance improvement is claimed.
+Logs and independent-reader artifacts are under ignored `output/local-workflows-20261013/`.
+
+Saved-output tests cover page ordering, ZIP membership, form import/clear behavior, editable dropdown custom values and preservation of unsupported form fields.
+Real PDF.js integration tests cover text counts and mixed page dimensions, CropBox, rotation and UserUnit.
+Dialog tests cover invalid input, cancellation, save failure, stale document replacement, confirmation, keyboard guards and bounded result tables.
+
+### Review corrections
+
+Actual PDF.js event timing reproduced previous matches remaining available during a new query's debounce and after closing the search panel during that debounce.
+Search exports now require results produced for the current query and options, and closing search invalidates pending results.
+The same real-controller probe verifies that reopening leaves export disabled until fresh matching rows publish.
+Regressions also cover shortcut-modal isolation, keyboard access to the page-export stop button, review status ordered by valid saved dates and editable dropdown JSON round trips.
+These checks do not establish native keyboard or rendering acceptance.
+
+### Independent-reader checks
+
+Poppler `pdftotext` reads a reversed synthetic four-page PDF in order 4, 3, 2, 1, including a rotated page.
+It reads the imported form value from the saved appearance and no longer reads that value after clearing the field.
+Python `zipfile` verifies both fixed-size split entries, and Poppler reads the expected page markers in each extracted PDF.
+These four checks pass against the actual document-command, form-data and page-archive services.
+
+### Remaining limits
+
+Both Cargo test and Clippy were attempted and failed to start because `cargo` is not installed in this Linux container.
+No Rust, native IPC or CSP source changed.
+Browser visual acceptance could not run because no browser executable was installed and the attempted browser download returned an invalid archive.
+Native macOS, WebKit, Save dialog, save/close/reopen, Preview and Acrobat acceptance remain open.
+Hosted CI and quality analysis are separate from the passing local frontend checks and must be evaluated on the published commit.
+No historical delivery phase, native acceptance or distribution gate is closed by this delivery.
+
 ## October 6 document review and preparation tools
 
 Source base: the October 6 export formats branch, plus the changes in this delivery.

@@ -202,6 +202,61 @@ describe("ViewerController bus reactions", () => {
 });
 
 describe("ViewerController search results", () => {
+  it("invalidates results when search closes during PDF.js debounce", async () => {
+    vi.useFakeTimers();
+    const pdf = makePdf(1);
+    pdf.getPage = vi.fn(async () => ({
+      getTextContent: vi.fn(async () => ({ items: [{ str: "alpha beta" }] })),
+      getAnnotations: vi.fn(async () => []),
+    }));
+    await controller.attach(pdf as never);
+    const find = controller.find as unknown as {
+      pageMatches: number[][];
+      pageMatchesLength: number[][];
+    };
+    useWorkspace.getState().set({ searchQuery: "beta", matchCase: false, wholeWord: false });
+    controller.search();
+    find.pageMatches = [[0]];
+    find.pageMatchesLength = [[5]];
+    busHandlers.get("updatefindcontrolstate")!({ state: 3 } as never);
+    controller.closeSearch();
+    busHandlers.get("updatefindcontrolstate")!({ state: 0 } as never);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(useWorkspace.getState().results).toEqual([]);
+    expect(useWorkspace.getState().searchResultsKey).toBe("");
+    vi.useRealTimers();
+  });
+
+  it("does not publish previous matches while a new PDF.js search is pending", async () => {
+    vi.useFakeTimers();
+    const pdf = makePdf(1);
+    pdf.getPage = vi.fn(async () => ({
+      getTextContent: vi.fn(async () => ({ items: [{ str: "alpha beta" }] })),
+      getAnnotations: vi.fn(async () => []),
+    }));
+    await controller.attach(pdf as never);
+    const find = controller.find as unknown as {
+      pageMatches: number[][];
+      pageMatchesLength: number[][];
+    };
+    useWorkspace.getState().set({ searchQuery: "beta", matchCase: false, wholeWord: false });
+    controller.search();
+    find.pageMatches = [[0]];
+    find.pageMatchesLength = [[5]];
+    busHandlers.get("updatefindcontrolstate")!({ state: 3 } as never);
+    await vi.advanceTimersByTimeAsync(130);
+    expect(useWorkspace.getState().results).toEqual([]);
+    expect(useWorkspace.getState().searchResultsKey).toBe("");
+    find.pageMatches = [[6]];
+    find.pageMatchesLength = [[4]];
+    busHandlers.get("updatefindcontrolstate")!({ state: 0 } as never);
+    expect(useWorkspace.getState().searchResultsKey).toBe("");
+    await vi.advanceTimersByTimeAsync(130);
+    expect(useWorkspace.getState().results[0].match).toBe("beta");
+    expect(useWorkspace.getState().searchResultsKey).toBe(JSON.stringify(["beta", false, false]));
+    vi.useRealTimers();
+  });
+
   it("builds debounced result contexts from page text", async () => {
     vi.useFakeTimers();
     const pdf = makePdf(2);
@@ -221,12 +276,15 @@ describe("ViewerController search results", () => {
     };
     find.pageMatches = [[16, 44]];
     find.pageMatchesLength = [[5, 5]];
+    useWorkspace.getState().set({ searchQuery: "river", matchCase: true, wholeWord: false });
+    controller.search();
     busHandlers.get("updatefindmatchescount")!({
       matchesCount: { total: 2 },
     } as never);
     await vi.advanceTimersByTimeAsync(300);
     expect(useWorkspace.getState().results).toHaveLength(2);
     expect(useWorkspace.getState().results[0].match).toBe("river");
+    expect(useWorkspace.getState().searchResultsKey).toBe(JSON.stringify(["river", true, false]));
     vi.useRealTimers();
   });
 
