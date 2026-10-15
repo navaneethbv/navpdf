@@ -171,7 +171,7 @@ export function PageWorkspace({
   );
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [localBusy, setBusy] = useState(false);
+  const [localBusy, setLocalBusy] = useState(false);
   const edit = useDocumentEdit(controller);
   const busy = localBusy || edit.busy;
   const workflowBlocked =
@@ -313,7 +313,7 @@ export function PageWorkspace({
     exportCancelled.current = false;
     workflowRunning.current = true;
     setWorkflowError("");
-    setBusy(true);
+    setLocalBusy(true);
     s.set({ busy: true });
     try {
       const groups =
@@ -344,7 +344,7 @@ export function PageWorkspace({
     } finally {
       workflowRunning.current = false;
       if (active.current) {
-        setBusy(false);
+        setLocalBusy(false);
         setArchiveProgress("");
       }
       if (
@@ -361,7 +361,7 @@ export function PageWorkspace({
     options?: { pageMapping?: number[]; warnings?: string[] },
   ) => {
     if (!controller?.pdf) return;
-    setBusy(true);
+    setLocalBusy(true);
     s.set({ busy: true, status: "Updating pages..." });
     try {
       const currentBytes = await controller.pdf.saveDocument();
@@ -373,7 +373,7 @@ export function PageWorkspace({
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(false);
+      setLocalBusy(false);
       s.set({ busy: false });
     }
   };
@@ -446,7 +446,7 @@ export function PageWorkspace({
 
   const handleExtract = async () => {
     if (!controller?.pdf || selected.length === 0) return;
-    setBusy(true);
+    setLocalBusy(true);
     try {
       const currentBytes = await controller.pdf.saveDocument();
       const extractedBytes = await extractPages(currentBytes, selected);
@@ -455,7 +455,7 @@ export function PageWorkspace({
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(false);
+      setLocalBusy(false);
     }
   };
 
@@ -538,7 +538,7 @@ export function PageWorkspace({
 
   const handleSplit = async () => {
     if (!controller?.pdf || busy) return;
-    setBusy(true);
+    setLocalBusy(true);
     s.set({ busy: true, status: "Splitting document..." });
     try {
       const ranges = splitRange.split(",").map((range) => parsePageRange(range, totalPages));
@@ -552,7 +552,7 @@ export function PageWorkspace({
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(false);
+      setLocalBusy(false);
       s.set({ busy: false });
     }
   };
@@ -595,7 +595,7 @@ export function PageWorkspace({
 
         <div className="page-workspace-actions page-selection-controls">
           <label>
-            Select page range
+            <span>Select page range</span>
             <input
               type="text"
               placeholder="1-3, 5"
@@ -646,7 +646,7 @@ export function PageWorkspace({
             Reverse pages
           </button>
           <label>
-            Move before page
+            <span>Move before page</span>
             <input
               type="number"
               min={1}
@@ -965,7 +965,7 @@ export function PageWorkspace({
             Cancel
           </button>
           <label>
-            Pages per file
+            <span>Pages per file</span>
             <input
               type="number"
               min={1}

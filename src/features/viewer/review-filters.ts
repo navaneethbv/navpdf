@@ -20,9 +20,7 @@ export function commentAuthor(comment: Comment): string {
   return comment.author?.trim() ?? "";
 }
 
-/** Find matching annotations, retaining parent context for text found in a reply. */
-export function filterComments(comments: readonly Comment[], filters: CommentFilters): Comment[] {
-  const query = filters.query.trim().toLocaleLowerCase();
+function latestReviewStates(comments: readonly Comment[]) {
   const reviewStates = new Map<
     string,
     { state: NonNullable<Comment["reviewState"]>; modified: number }
@@ -36,6 +34,10 @@ export function filterComments(comments: readonly Comment[], filters: CommentFil
     if (!previous || modified >= previous.modified)
       reviewStates.set(comment.replyTo, { state: comment.reviewState, modified });
   }
+  return reviewStates;
+}
+
+function matchingCommentIds(comments: readonly Comment[], query: string) {
   const matches = new Set<string>();
   if (query) {
     const byId = new Map(comments.map((comment) => [comment.id, comment]));
@@ -48,6 +50,14 @@ export function filterComments(comments: readonly Comment[], filters: CommentFil
       }
     }
   }
+  return matches;
+}
+
+/** Find matching annotations, retaining parent context for text found in a reply. */
+export function filterComments(comments: readonly Comment[], filters: CommentFilters): Comment[] {
+  const query = filters.query.trim().toLocaleLowerCase();
+  const reviewStates = latestReviewStates(comments);
+  const matches = matchingCommentIds(comments, query);
   return comments
     .map((comment) =>
       reviewStates.has(comment.id)

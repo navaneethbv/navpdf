@@ -1,5 +1,19 @@
 # Verification ledger
 
+## October 14 PR 66 quality corrections
+
+The PR analysis reported 31 unresolved issues on `584a3ff`.
+The follow-up uses semantic status outputs, explicit control labels, simpler validation and review helpers, and smaller PDF date expressions.
+Archive extraction and document inspection use a lazy asynchronous sequence so only one PDF operation runs at a time and cancellation prevents later work.
+Regression tests cover early termination and rejection without starting the next operation.
+Node 24.18.1 and `npm ci` were used on macOS.
+Lint, typecheck, formatting, production build, Rust tests and Clippy with warnings denied pass locally.
+The frontend suite passes 927 tests across 125 files with 86.64% statements, 78.85% branches, 85.92% functions and 89.62% lines.
+The Rust suite has 95 passing tests and the existing constrained-volume test ignored.
+Browser security denied access to the localhost preview after permission was declined, so visual acceptance was not performed.
+Native workflow acceptance and distribution gates remain open.
+Hosted analysis must verify zero unresolved PR issues on the published revision before merge.
+
 ## October 13 twenty local workflow features
 
 Source base: `9236011`, plus the changes in this delivery.

@@ -101,13 +101,14 @@ export function FormDataDialog({
 
   const editable = report?.fields.filter((field) => !field.readOnly).length ?? 0;
   const mutation = action === "import" || action === "reset";
-  const blockReason = encrypted
-    ? "Encrypted PDFs are read-only. Form data tools are unavailable."
-    : !editingAllowed
-      ? "Document editing is not allowed. Export and required-field checks are still available."
-      : report?.signed
-        ? "This PDF is digitally signed. Importing or clearing values would invalidate its signatures."
-        : "";
+  let blockReason = "";
+  if (encrypted) blockReason = "Encrypted PDFs are read-only. Form data tools are unavailable.";
+  else if (!editingAllowed)
+    blockReason =
+      "Document editing is not allowed. Export and required-field checks are still available.";
+  else if (report?.signed)
+    blockReason =
+      "This PDF is digitally signed. Importing or clearing values would invalidate its signatures.";
 
   const chooseAction = (value: Action) => {
     setAction(value);
@@ -150,29 +151,32 @@ export function FormDataDialog({
       throw new Error("This document is read-only.");
   };
 
+  const submitMutation = async (token: number) => {
+    if (blockReason || !editable || (action === "reset" ? !confirmed : !preview?.length)) return;
+    const message = action === "reset" ? "Editable form values cleared." : "Form values imported.";
+    const applied = await apply(message, async (bytes) => {
+      assertEditable(token);
+      const changed =
+        action === "reset" ? await resetFormData(bytes) : await importFormData(bytes, payload);
+      assertEditable(token);
+      return changed;
+    });
+    // A successful replacement changes the PDF proxy, so only check document identity here.
+    if (applied && mounted.current && useWorkspace.getState().document?.id === documentId) {
+      setNotice(message);
+      setConfirmed(false);
+      setPreview(null);
+      setRevision((current) => current + 1);
+    }
+  };
+
   const submit = async () => {
     if (!source || !report || working || busy || encrypted) return;
     setNotice("");
     setError("");
     const token = job.current;
     if (mutation) {
-      if (blockReason || !editable || (action === "reset" ? !confirmed : !preview?.length)) return;
-      const message =
-        action === "reset" ? "Editable form values cleared." : "Form values imported.";
-      const applied = await apply(message, async (bytes) => {
-        assertEditable(token);
-        const changed =
-          action === "reset" ? await resetFormData(bytes) : await importFormData(bytes, payload);
-        assertEditable(token);
-        return changed;
-      });
-      // A successful replacement changes the PDF proxy, so only check document identity here.
-      if (applied && mounted.current && useWorkspace.getState().document?.id === documentId) {
-        setNotice(message);
-        setConfirmed(false);
-        setPreview(null);
-        setRevision((current) => current + 1);
-      }
+      await submitMutation(token);
       return;
     }
     setWorking(true);

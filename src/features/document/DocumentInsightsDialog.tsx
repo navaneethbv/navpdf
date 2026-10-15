@@ -212,9 +212,9 @@ export function DocumentInsightsDialog({
                 </p>
                 <p>Textless pages: {report.textlessPages.join(", ") || "None"}</p>
                 {report.failedPages.length > 0 && (
-                  <p role="status">
+                  <output>
                     Unreadable pages: {report.failedPages.join(", ")}. Counts exclude these pages.
-                  </p>
+                  </output>
                 )}
               </section>
               <section aria-label="Page dimensions and rotation">

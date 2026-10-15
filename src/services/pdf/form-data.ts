@@ -119,7 +119,9 @@ export function exportFormDataJson(report: FormDataReport): string {
 function csvCell(value: string) {
   const trimmed = value.trimStart();
   const safe =
-    /^[=+\-@]/u.test(trimmed) || trimmed.charCodeAt(0) < 32 || /^[\t\r\n]/u.test(value)
+    /^[=+\-@]/u.test(trimmed) ||
+    (trimmed.codePointAt(0) ?? Infinity) < 32 ||
+    /^[\t\r\n]/u.test(value)
       ? `'${value}`
       : value;
   return `"${safe.replaceAll('"', '""')}"`;
@@ -220,14 +222,16 @@ function validateValue(field: SupportedField, entry: FormValueEntry) {
     !field.getOptions().includes(entry.value as string)
   )
     throw new Error(`The selected option is not available in field "${entry.name}".`);
-  if (field instanceof PDFDropdown || field instanceof PDFOptionList) {
-    const selected = entry.value as string[];
-    if (!field.isMultiselect() && selected.length > 1)
-      throw new Error(`Field "${entry.name}" allows only one selected option.`);
-    const allowsCustom = field instanceof PDFDropdown && field.isEditable();
-    if (!allowsCustom && selected.some((value) => !field.getOptions().includes(value)))
-      throw new Error(`The selected option is not available in field "${entry.name}".`);
-  }
+  if (field instanceof PDFDropdown || field instanceof PDFOptionList) validateChoices(field, entry);
+}
+
+function validateChoices(field: PDFDropdown | PDFOptionList, entry: FormValueEntry) {
+  const selected = entry.value as string[];
+  if (!field.isMultiselect() && selected.length > 1)
+    throw new Error(`Field "${entry.name}" allows only one selected option.`);
+  const allowsCustom = field instanceof PDFDropdown && field.isEditable();
+  if (!allowsCustom && selected.some((value) => !field.getOptions().includes(value)))
+    throw new Error(`The selected option is not available in field "${entry.name}".`);
 }
 
 async function prepareImport(bytes: Uint8Array, json: string) {
@@ -278,11 +282,9 @@ function writeValue(field: SupportedField, value: FormValue) {
 function validateDrawability(font: PDFFont, changes: { entry: FormValueEntry }[]) {
   // Check drawability before setting any values. Existing non-Latin fields remain untouched.
   for (const { entry } of changes) {
-    const strings = Array.isArray(entry.value)
-      ? entry.value
-      : typeof entry.value === "string"
-        ? [entry.value]
-        : [];
+    let strings: string[] = [];
+    if (Array.isArray(entry.value)) strings = entry.value;
+    else if (typeof entry.value === "string") strings = [entry.value];
     try {
       for (const value of strings) font.encodeText(value.replaceAll(/[\r\n\t]/g, " "));
     } catch {
@@ -322,12 +324,9 @@ export async function resetFormData(bytes: Uint8Array): Promise<Uint8Array> {
   for (const field of fields) {
     const entry = valueOf(field);
     if (!entry || field.isReadOnly()) continue;
-    const value =
-      entry.type === "checkbox"
-        ? false
-        : entry.type === "dropdown" || entry.type === "list"
-          ? []
-          : "";
+    let value: FormValue = "";
+    if (entry.type === "checkbox") value = false;
+    else if (entry.type === "dropdown" || entry.type === "list") value = [];
     changes.push({ field: field as SupportedField, entry: { ...entry, value } });
   }
   return saveChanges(doc, changes);

@@ -1464,6 +1464,7 @@ p {
   font-size: 11px;
 }
 .empty-message {
+  display: block;
   font-size: 11px;
   line-height: 1.8;
   color: var(--muted);

@@ -28,7 +28,7 @@ export function CommentPanel({
     [comments],
   );
   const types = useMemo(
-    () => [...new Set(comments.map((comment) => comment.type))].sort(),
+    () => [...new Set(comments.map((comment) => comment.type))].sort((a, b) => a.localeCompare(b)),
     [comments],
   );
   const change = (patch: Partial<CommentFilters>) =>
@@ -49,7 +49,7 @@ export function CommentPanel({
         />
         <div className="review-filter-grid">
           <label className="setting-title">
-            Comment author
+            <span>Comment author</span>
             <select
               className="text-input"
               value={filters.author === null ? "all" : `author:${filters.author}`}
@@ -68,7 +68,7 @@ export function CommentPanel({
             </select>
           </label>
           <label className="setting-title">
-            Annotation type
+            <span>Annotation type</span>
             <select
               className="text-input"
               value={filters.type}
@@ -81,7 +81,7 @@ export function CommentPanel({
             </select>
           </label>
           <label className="setting-title">
-            Review status
+            <span>Review status</span>
             <select
               className="text-input"
               value={filters.status}
@@ -95,7 +95,7 @@ export function CommentPanel({
             </select>
           </label>
           <label className="setting-title">
-            Sort comments
+            <span>Sort comments</span>
             <select
               className="text-input"
               value={filters.sort}
@@ -122,9 +122,9 @@ export function CommentPanel({
           Clear comment filters
         </button>
       </div>
-      <p className="empty-message" role="status">
+      <output className="empty-message">
         Showing {displayed.length} of {comments.length} comments
-      </p>
+      </output>
       {displayed.map((comment) => (
         <button
           type="button"

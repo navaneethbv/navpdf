@@ -7,6 +7,12 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## October 14 quality follow-up
+
+PR 66 quality corrections preserve sequential PDF work and simplify validation, status markup and labels.
+The verification ledger records local gates and the blocked visual check.
+Zero unresolved PR analysis issues and passing hosted checks gate merge; native acceptance remains separate.
+
 ## October 13 local workflow additions
 
 The [twenty-feature implementation plan](IMPLEMENTATION-PLAN-2026-10-13.md) adds page selection and batch ZIP exports, form-data exchange and required-field checking, review filtering, bookmark search, document statistics, page inventory, search-result CSV and a shortcut guide.

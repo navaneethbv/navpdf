@@ -1,3 +1,4 @@
+import { mapInOrder } from "../../utils/async-sequence";
 import { PDFDocument } from "pdf-lib";
 import { extractPages } from "../../services/document-commands";
 import { createZip } from "../convert/ooxml";
@@ -25,6 +26,32 @@ export async function createPageArchive(
   if (source.byteLength > MAX_ARCHIVE_BYTES) throw new Error("The source exceeds the 1 GB limit.");
   const document = await PDFDocument.load(source);
   const totalPages = document.getPageCount();
+  validateGroups(groups, totalPages);
+  const entries: { name: string; data: Uint8Array }[] = [];
+  let archiveSize = 22;
+  const extractGroup = async (group: number[]) => {
+    checkCancelled();
+    const data = await extractPages(source, group);
+    checkCancelled();
+    const first = group[0] + 1;
+    const last = group.at(-1)! + 1;
+    const name = group.length === 1 ? `page-${first}.pdf` : `pages-${first}-${last}.pdf`;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    return { name, data };
+  };
+  for await (const { name, data } of mapInOrder(groups, extractGroup)) {
+    archiveSize += data.byteLength + 76 + 2 * name.length;
+    if (archiveSize > MAX_ARCHIVE_BYTES) {
+      throw new Error("The ZIP exceeds the 1 GB export limit. Choose fewer pages.");
+    }
+    entries.push({ name, data });
+    progress.onProgress?.(entries.length, groups.length);
+  }
+  checkCancelled();
+  return createZip(entries);
+}
+
+function validateGroups(groups: number[][], totalPages: number) {
   const seen = new Set<number>();
   for (const group of groups) {
     if (!group.length) throw new Error("Each PDF must contain at least one page.");
@@ -38,23 +65,4 @@ export async function createPageArchive(
       seen.add(page);
     }
   }
-  const entries: { name: string; data: Uint8Array }[] = [];
-  let archiveSize = 22;
-  for (const group of groups) {
-    checkCancelled();
-    const data = await extractPages(source, group);
-    checkCancelled();
-    const first = group[0] + 1;
-    const last = group[group.length - 1] + 1;
-    const name = group.length === 1 ? `page-${first}.pdf` : `pages-${first}-${last}.pdf`;
-    archiveSize += data.byteLength + 76 + 2 * name.length;
-    if (archiveSize > MAX_ARCHIVE_BYTES) {
-      throw new Error("The ZIP exceeds the 1 GB export limit. Choose fewer pages.");
-    }
-    entries.push({ name, data });
-    progress.onProgress?.(entries.length, groups.length);
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  }
-  checkCancelled();
-  return createZip(entries);
 }

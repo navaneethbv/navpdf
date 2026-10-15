@@ -61,7 +61,7 @@ export function ShortcutGuide({ onClose }: Readonly<{ onClose: () => void }>) {
         Use Cmd on macOS and Ctrl on Windows or Linux. Page-organizing keys apply only in Organize
         Pages. Editing text keeps normal text-field shortcuts.
       </p>
-      <p role="status">{matches.length} shortcuts</p>
+      <output>{matches.length} shortcuts</output>
       {matches.length ? (
         <table className="workflow-table">
           <caption className="sr-only">Keyboard shortcut reference</caption>

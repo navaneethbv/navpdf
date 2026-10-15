@@ -11,6 +11,7 @@ export function BookmarkPanel({
   const id = useId();
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => filterBookmarks(bookmarks, query), [bookmarks, query]);
+  const matchLabel = filtered.matches === 1 ? "match" : "matches";
   return (
     <>
       <div className="review-filters">
@@ -34,12 +35,10 @@ export function BookmarkPanel({
           Clear bookmark search
         </button>
       </div>
-      <p className="empty-message" role="status">
+      <output className="empty-message">
         Showing {filtered.shown} of {filtered.total} bookmarks
-        {query.trim()
-          ? ` (${filtered.matches} ${filtered.matches === 1 ? "match" : "matches"})`
-          : ""}
-      </p>
+        {query.trim() ? ` (${filtered.matches} ${matchLabel})` : ""}
+      </output>
       {filtered.nodes.length ? (
         <BookmarkTree nodes={filtered.nodes} controller={controller} />
       ) : (
