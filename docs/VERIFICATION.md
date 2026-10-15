@@ -12,6 +12,9 @@ Node 24.18.1 and `npm ci` were used on macOS.
 Lint, typecheck, formatting, production build, Rust tests and Clippy with warnings denied pass locally.
 The frontend suite passes 929 tests across 125 files with 86.60% statements, 78.84% branches, 85.92% functions and 89.60% lines.
 The Rust suite has 95 passing tests and the existing constrained-volume test ignored.
+Hosted OCR acceptance exposed missing `.ts` import extensions in the new shared sequence imports; direct Node loading reproduced the error and passes after correction.
+Local native acceptance passes Phase 7 (55/55), Phase 8 (12/12) and Phase 10 (55/55), including independent Poppler, OpenSSL and Quick Look checks.
+The local OCR probe started but had not returned its first recognition result at this checkpoint; hosted OCR remains a merge gate.
 Browser security denied access to the localhost preview after permission was declined, so visual acceptance was not performed.
 Native workflow acceptance and distribution gates remain open.
 Hosted analysis must verify zero unresolved PR issues on the published revision before merge, followed by a fresh main-branch scan for the project-wide result.

@@ -1,4 +1,4 @@
-import { mapInOrder } from "../utils/async-sequence";
+import { mapInOrder } from "../utils/async-sequence.ts";
 import { OCR_REVIEW_KEY, validateOcrReview } from "./pdf/ocr-review.ts";
 import { decodeBoundedStream } from "./pdf/bounded-stream.ts";
 import {

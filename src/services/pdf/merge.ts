@@ -1,4 +1,4 @@
-import { mapInOrder } from "../../utils/async-sequence";
+import { mapInOrder } from "../../utils/async-sequence.ts";
 import {
   PDFArray,
   PDFDict,
