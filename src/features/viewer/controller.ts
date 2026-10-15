@@ -1,3 +1,5 @@
+import { mapInOrder } from "../../utils/async-sequence";
+import { allPageNumbers } from "../../utils/pdf-pages";
 import {
   AnnotationEditorType,
   AnnotationMode,
@@ -1027,8 +1029,9 @@ export class ViewerController {
     try {
       let bytes = await this.pdf.saveDocument();
       let added = 0;
-      for (const comment of pending) {
-        const updated = await importCommentGeometry(bytes, comment);
+      for await (const updated of mapInOrder(pending, (comment) =>
+        importCommentGeometry(bytes, comment),
+      )) {
         if (!updated) continue;
         bytes = updated as Uint8Array<ArrayBuffer>;
         added++;
@@ -1410,7 +1413,7 @@ export class ViewerController {
       // Fallback to PDF.js data only in mock environments
     }
 
-    for (let p = 1; p <= pdf.numPages; p++) {
+    const readCommentsOnPage = async (p: number) => {
       const pageComments = await readPageComments(
         pdf,
         pdfLibDoc,
@@ -1418,9 +1421,13 @@ export class ViewerController {
         generation,
         () => this.generation,
       );
+      if (pageComments && p % 20 === 0)
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      return pageComments;
+    };
+    for await (const pageComments of mapInOrder(allPageNumbers(pdf.numPages), readCommentsOnPage)) {
       if (!pageComments) return;
       comments.push(...pageComments);
-      if (p % 20 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (generation !== this.generation) return;
     const state = useWorkspace.getState();

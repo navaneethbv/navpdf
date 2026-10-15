@@ -2,7 +2,8 @@
 export function parsePdfDate(value: string): string {
   const parts = /^(\d{4}(?:\d{2}){0,5})(.*)$/.exec(value.trim().replace(/^D:/, ""));
   if (!parts) return "";
-  if (!/^(?:[Zz]|[+-]\d{2}'?(?:\d{2})?'?)?$/.test(parts[2])) return "";
+  if (parts[2] && !/^[Zz]$/.test(parts[2]) && !/^[+-]\d{2}'?(?:\d{2})?'?$/.test(parts[2]))
+    return "";
   const digits = parts[1];
   const field = (start: number, fallback: string) => digits.slice(start, start + 2) || fallback;
   const year = Number(digits.slice(0, 4));

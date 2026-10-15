@@ -1,3 +1,5 @@
+import { mapInOrder } from "../../utils/async-sequence";
+import { allPageNumbers } from "../../utils/pdf-pages";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
 export interface PageSignature {
@@ -37,7 +39,7 @@ export async function pageSignatures(
   if (pdf.numPages > 500) throw new Error("Compare supports up to 500 pages per document.");
   const signatures: PageSignature[] = [];
   let totalCharacters = 0;
-  for (let number = 1; number <= pdf.numPages; number++) {
+  const readSignature = async (number: number): Promise<PageSignature> => {
     if (cancelled()) throw new Error("Comparison cancelled.");
     progress(number, "text");
     const page = await pdf.getPage(number);
@@ -62,11 +64,14 @@ export async function pageSignatures(
         byte.toString(16).padStart(2, "0"),
       ).join("");
       const viewport = page.getViewport({ scale: 1 });
-      signatures.push({ text, key: `${viewport.width}:${viewport.height}:${text}:${visual}` });
+      return { text, key: `${viewport.width}:${viewport.height}:${text}:${visual}` };
     } finally {
       canvas.width = 0;
       canvas.height = 0;
     }
+  };
+  for await (const signature of mapInOrder(allPageNumbers(pdf.numPages), readSignature)) {
+    signatures.push(signature);
   }
   return signatures;
 }

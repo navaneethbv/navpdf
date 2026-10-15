@@ -172,7 +172,7 @@ export function FillAndSign({
     if (!file) return;
     const reader = new FileReader();
     reader.onerror = () => s.set({ error: "The image could not be read." });
-    reader.onload = async () => {
+    reader.onload = () => {
       const img = new Image();
       img.onerror = () => s.set({ error: "The image could not be read." });
       img.onload = async () => {

@@ -24,7 +24,7 @@ export async function openDocument(file?: File): Promise<DocumentDescriptor | nu
 }
 export async function openDocumentFromToken(token: string): Promise<DocumentDescriptor> {
   if (!native) throw new Error("Operating-system open events require the native application.");
-  return invoke<DocumentDescriptor>("open_document_from_token", { token });
+  return await invoke<DocumentDescriptor>("open_document_from_token", { token });
 }
 export async function openExternalUrl(url: string): Promise<void> {
   if (native) {
@@ -34,7 +34,7 @@ export async function openExternalUrl(url: string): Promise<void> {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 export async function openRecent(id: string) {
-  return invoke<DocumentDescriptor>("open_recent", { id });
+  return await invoke<DocumentDescriptor>("open_recent", { id });
 }
 export async function readRange(
   id: string,
@@ -76,7 +76,7 @@ export async function saveDocument(
   return { name, size: bytes.length };
 }
 export async function localState(): Promise<LocalState> {
-  if (native) return invoke("local_state");
+  if (native) return await invoke("local_state");
   const raw = localStorage.getItem("navpdf-preferences");
   let stored: unknown;
   if (raw) {
@@ -122,7 +122,7 @@ export async function writeRecovery(
     });
 }
 export async function openRecovery(id: string) {
-  return invoke<DocumentDescriptor>("open_recovery", { id });
+  return await invoke<DocumentDescriptor>("open_recovery", { id });
 }
 /** Removes one document's recovery copy; other documents' entries are kept. */
 export async function discardRecovery(id: string) {
@@ -130,7 +130,7 @@ export async function discardRecovery(id: string) {
 }
 
 export async function printDocument(bytes: Uint8Array<ArrayBuffer>, pages: number) {
-  return invoke<boolean>("print_document", bytes, {
+  return await invoke<boolean>("print_document", bytes, {
     headers: { "x-page-count": String(pages) },
   });
 }
@@ -264,7 +264,7 @@ export async function commitWorkingRevision(
   pages: number,
 ): Promise<CommitRevisionResult> {
   if (native) {
-    return invoke<CommitRevisionResult>("commit_working_revision", bytes, {
+    return await invoke<CommitRevisionResult>("commit_working_revision", bytes, {
       headers: {
         "x-document-id": id,
         "x-base-revision-id": baseRevisionId,
@@ -281,7 +281,7 @@ export async function commitWorkingRevision(
 
 export async function getRevision(id: string): Promise<RevisionStatus | null> {
   if (native) {
-    return invoke<RevisionStatus>("get_revision", { id });
+    return await invoke<RevisionStatus>("get_revision", { id });
   }
   return null;
 }
@@ -291,7 +291,7 @@ export async function ocrRecognizePage(
   options: OcrOptions,
 ): Promise<OcrPageResult> {
   if (native) {
-    return invoke<OcrPageResult>("ocr_recognize_page", imageBytes, {
+    return await invoke<OcrPageResult>("ocr_recognize_page", imageBytes, {
       headers: { "x-ocr-options": JSON.stringify(options) },
     });
   }
@@ -299,6 +299,6 @@ export async function ocrRecognizePage(
 }
 
 export async function ocrGetEngineInfo(): Promise<OcrEngineInfo> {
-  if (native) return invoke<OcrEngineInfo>("ocr_get_engine_info");
+  if (native) return await invoke<OcrEngineInfo>("ocr_get_engine_info");
   throw new Error("OCR requires the native macOS application.");
 }

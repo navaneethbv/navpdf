@@ -1,3 +1,4 @@
+import { mapInOrder } from "../../utils/async-sequence";
 import { readOcrReview } from "../../services/pdf/ocr-review";
 import { PdfPagePreview } from "../viewer/PdfPagePreview";
 import { useId, useState, useEffect, useRef } from "react";
@@ -96,20 +97,23 @@ async function recognizeOcrPages({
 }: RecognizeOcrPagesOptions): Promise<{ results: OcrPageResult[]; text: string[] }> {
   const results: OcrPageResult[] = [];
   const text: string[] = [];
-  for (let index = 0; index < targetIndices.length; index++) {
-    if (cancelled()) {
-      onCancel();
-      return { results, text };
-    }
-    const pageIndex = targetIndices[index];
+  const recognizePage = async ([index, pageIndex]: [number, number]) => {
+    if (cancelled()) return null;
     const pageNumber = pageIndex + 1;
     onProgress(Math.round((index / targetIndices.length) * 85) + 5);
     onStatus(`Recognizing page ${pageNumber} of ${totalPages}...`);
     const imageBytes = await pageImage(sourcePdf, pageNumber, ensureCurrent);
     const result = await ocrRecognizePage(imageBytes, { pageIndex, language });
     ensureCurrent();
-    results.push(result);
-    text.push(`--- Page ${pageNumber} ---\n${result.fullText}`);
+    return { result, pageNumber };
+  };
+  for await (const page of mapInOrder(targetIndices.entries(), recognizePage)) {
+    if (!page) {
+      onCancel();
+      return { results, text };
+    }
+    results.push(page.result);
+    text.push(`--- Page ${page.pageNumber} ---\n${page.result.fullText}`);
   }
   return { results, text };
 }

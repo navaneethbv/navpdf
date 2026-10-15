@@ -46,6 +46,32 @@ describe("LocalRangeTransport", () => {
     expect(vi.mocked(readRange).mock.calls.some(([, , end]) => end - 0 > 0)).toBe(true);
   });
 
+  it("does not read a second chunk or publish bytes after an in-flight request is aborted", async () => {
+    const { readRange } = await import("../../src/services/native");
+    vi.mocked(readRange).mockClear();
+    let finish!: (bytes: Uint8Array<ArrayBuffer>) => void;
+    vi.mocked(readRange).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const received = vi.fn();
+    const transport = new LocalRangeTransport(
+      { id: "doc", name: "large-synthetic.pdf", size: 3 * 1024 * 1024 },
+      new Uint8Array(),
+      () => {},
+    );
+    transport.onDataRange = received;
+    transport.requestDataRange(0, 3 * 1024 * 1024);
+    expect(readRange).toHaveBeenCalledExactlyOnceWith("doc", 0, 1024 * 1024);
+    transport.abort();
+    finish(new Uint8Array(1024 * 1024));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(readRange).toHaveBeenCalledTimes(1);
+    expect(received).not.toHaveBeenCalled();
+  });
+
   it("reports transport failures and honors abort", async () => {
     const failures: Error[] = [];
     const transport = new LocalRangeTransport(

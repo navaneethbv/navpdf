@@ -29,6 +29,12 @@ export function useNativeOpenRequests(
       }
       await open(request.token);
     };
+    async function* pendingBatches() {
+      while (!isDisposed()) {
+        requested = false;
+        yield invoke<OpenRequest[]>("pending_open_requests");
+      }
+    }
     const drain = async () => {
       requested = true;
       if (running || disposed) return;
@@ -36,9 +42,7 @@ export function useNativeOpenRequests(
       retry = undefined;
       running = true;
       try {
-        while (!isDisposed()) {
-          requested = false;
-          const requests = await invoke<OpenRequest[]>("pending_open_requests");
+        for await (const requests of pendingBatches()) {
           if (isDisposed()) return;
           const request = requests[0];
           if (!request) {

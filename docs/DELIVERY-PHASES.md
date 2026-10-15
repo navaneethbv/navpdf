@@ -9,7 +9,7 @@ Existing controls or passing unit tests do not establish completed native workfl
 
 ## October 14 quality follow-up
 
-PR 66 quality corrections preserve sequential PDF work and simplify validation, status markup and labels.
+PR 66 quality corrections address its 31 initial findings and the 49 older main-branch findings while preserving sequential PDF work, cancellation, validation and accessible labels.
 The verification ledger records local gates and the blocked visual check.
 Zero unresolved PR analysis issues and passing hosted checks gate merge; native acceptance remains separate.
 

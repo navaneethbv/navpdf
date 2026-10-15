@@ -1,3 +1,5 @@
+import { mapInOrder } from "../../utils/async-sequence";
+import { allPageNumbers } from "../../utils/pdf-pages";
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, Info, Search, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
@@ -83,12 +85,16 @@ export function AssistantPanel({
     if (!pdf) return null;
     if (texts.current?.pdf === pdf) return texts.current.pages;
     const pages: { page: number; text: string }[] = [];
-    for (let number = 1; number <= pdf.numPages; number++) {
+    const readText = async (number: number) => {
       if (run.current !== token) return null;
       setProgress(`Reading page ${number} of ${pdf.numPages}…`);
       const content = await (await pdf.getPage(number)).getTextContent();
       const text = (content.items as { str?: string }[]).map((item) => item.str ?? "").join(" ");
-      pages.push({ page: number, text });
+      return { page: number, text };
+    };
+    for await (const page of mapInOrder(allPageNumbers(pdf.numPages), readText)) {
+      if (!page) return null;
+      pages.push(page);
     }
     texts.current = { pdf, pages };
     return pages;

@@ -101,3 +101,22 @@ it("stops deferred requests after unmount and reports subscription failure", asy
   await flush();
   expect(report).toHaveBeenCalledWith(new Error("listener unavailable"));
 });
+
+it("does not open or fetch more requests after unmount during a pending snapshot", async () => {
+  let finish!: (value: { token: string; error: null }[]) => void;
+  vi.mocked(invoke).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const open = vi.fn();
+  const { unmount } = renderHook(() => useNativeOpenRequests(true, () => true, open, report));
+  await flush();
+  expect(invoke).toHaveBeenCalledTimes(1);
+  unmount();
+  await act(async () => finish([{ token: "late", error: null }]));
+  await flush();
+  expect(open).not.toHaveBeenCalled();
+  expect(invoke).toHaveBeenCalledTimes(1);
+});

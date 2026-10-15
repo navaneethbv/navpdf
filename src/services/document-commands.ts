@@ -1,3 +1,4 @@
+import { mapInOrder } from "../utils/async-sequence";
 import { OCR_REVIEW_KEY, validateOcrReview } from "./pdf/ocr-review.ts";
 import { decodeBoundedStream } from "./pdf/bounded-stream.ts";
 import {
@@ -803,9 +804,12 @@ export async function duplicatePages(
     .filter((index) => index >= 0 && index < doc.getPageCount())
     .sort((a, b) => a - b);
   let offset = 0;
-  for (const originalIndex of selected) {
+  const copySelectedPage = async (originalIndex: number) => {
     const sourceIndex = originalIndex + offset;
     const [copy] = await doc.copyPages(doc, [sourceIndex]);
+    return { sourceIndex, copy };
+  };
+  for await (const { sourceIndex, copy } of mapInOrder(selected, copySelectedPage)) {
     doc.insertPage(sourceIndex + 1, copy);
     offset++;
   }
@@ -964,7 +968,7 @@ export async function splitDocumentWithManifest(
 ): Promise<SplitResult[]> {
   const results: SplitResult[] = [];
   let partIndex = 0;
-  for (const range of ranges) {
+  const splitRange = async (range: number[]): Promise<SplitResult | null> => {
     const srcDoc = await PDFDocument.load(pdfBytes);
     const total = srcDoc.getPageCount();
     const valid = range.filter((i) => i >= 0 && i < total);
@@ -977,15 +981,19 @@ export async function splitDocumentWithManifest(
         newDoc.addPage(page);
       }
       const savedBytes = await newDoc.save();
-      results.push({
+      return {
         bytes: savedBytes,
         manifest: {
           filename: `${baseFilename}-${partIndex}.pdf`,
           pageCount: valid.length,
           sourcePages: valid,
         },
-      });
+      };
     }
+    return null;
+  };
+  for await (const result of mapInOrder(ranges, splitRange)) {
+    if (result) results.push(result);
   }
   return results;
 }
@@ -1095,14 +1103,12 @@ export async function inspectStructure(pdfBytes: Uint8Array): Promise<StructureS
 export async function describeStructureLoss(sources: Uint8Array[]): Promise<string> {
   let outlines = 0;
   let formFields = 0;
-  for (const bytes of sources) {
-    try {
-      const summary = await inspectStructure(bytes);
-      if (summary.hasOutline) outlines++;
-      formFields += summary.formFields;
-    } catch {
-      // An unreadable input is reported by the operation itself, not here.
-    }
+  const inspectSource = (bytes: Uint8Array) => inspectStructure(bytes).catch(() => null);
+  for await (const summary of mapInOrder(sources, inspectSource)) {
+    // An unreadable input is reported by the operation itself, not here.
+    if (!summary) continue;
+    if (summary.hasOutline) outlines++;
+    formFields += summary.formFields;
   }
   const lost: string[] = [];
   if (outlines > 0) lost.push("bookmarks (document outline)");
@@ -2626,11 +2632,7 @@ function validateOcrWord(word: OcrPageResult["lines"][number]["words"][number]) 
   if (!valid) throw new Error("OCR returned an invalid text rectangle.");
 }
 
-async function appendOcrPageLayer(
-  doc: PDFDocument,
-  font: PDFFont,
-  pageResult: OcrPageResult,
-): Promise<void> {
+function appendOcrPageLayer(doc: PDFDocument, font: PDFFont, pageResult: OcrPageResult): void {
   const page = doc.getPage(pageResult.pageIndex);
   const { x: cropX, y: cropY, width, height } = page.getCropBox();
   const fontKey = page.node.newFontDictionary(font.name, font.ref);
@@ -2697,7 +2699,7 @@ export async function applyOcrSearchableLayer(
 
   for (const pageRes of results) {
     if (pageRes.pageIndex < 0 || pageRes.pageIndex >= totalPages) continue;
-    await appendOcrPageLayer(doc, font, pageRes);
+    appendOcrPageLayer(doc, font, pageRes);
   }
 
   return doc.save();

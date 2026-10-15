@@ -1,3 +1,4 @@
+import { mapInOrder } from "../../utils/async-sequence";
 import {
   PDFArray,
   PDFDict,
@@ -223,9 +224,11 @@ export async function mergePreservingStructure(
   if (!inputs.length) throw new Error("At least one document is required to merge.");
   const target = await PDFDocument.create();
   const bookmarks: EditableBookmark[] = [];
-  for (const [sourceIndex, input] of inputs.entries()) {
+  const loadSource = async ([sourceIndex, input]: [number, Uint8Array | MergeInputItem]) => {
     const item = input instanceof Uint8Array ? { bytes: input } : input;
-    const source = await PDFDocument.load(item.bytes);
+    return { sourceIndex, item, source: await PDFDocument.load(item.bytes) };
+  };
+  for await (const { sourceIndex, item, source } of mapInOrder(inputs.entries(), loadSource)) {
     const selected = selectedPages(source, item.ranges);
     if (!selected.length) continue;
     const kept = new Set(selected);

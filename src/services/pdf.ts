@@ -42,17 +42,19 @@ export class LocalRangeTransport extends PDFDataRangeTransport {
     // rendering even though every byte is already available.
     super(descriptor.size, initial, initial.length >= descriptor.size, descriptor.name);
   }
+  private async *rangeChunks(begin: number, end: number) {
+    for (let offset = begin; offset < end && !this.cancelled; offset += 1024 * 1024) {
+      yield readRange(this.descriptor.id, offset, Math.min(end, offset + 1024 * 1024)).then(
+        (bytes) => ({ offset, bytes }),
+      );
+    }
+  }
   override requestDataRange(begin: number, end: number) {
     // A coalesced PDF.js range request must receive one contiguous response.
     // Native reads remain bounded even when the library asks for a larger range.
     void (async () => {
       const result = new Uint8Array(end - begin);
-      for (let offset = begin; offset < end && !this.cancelled; offset += 1024 * 1024) {
-        const bytes = await readRange(
-          this.descriptor.id,
-          offset,
-          Math.min(end, offset + 1024 * 1024),
-        );
+      for await (const { offset, bytes } of this.rangeChunks(begin, end)) {
         result.set(bytes, offset - begin);
       }
       if (!this.cancelled) this.onDataRange(begin, result);

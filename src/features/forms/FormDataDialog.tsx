@@ -170,6 +170,17 @@ export function FormDataDialog({
     }
   };
 
+  const exportReport = async (found: FormDataReport, token: number) => {
+    const csv = action === "export-csv";
+    const text = csv ? exportFormDataCsv(found) : exportFormDataJson(found);
+    const base = safeFileName(document?.name ?? "document.pdf").replace(/\.pdf$/i, "");
+    const saved = await downloadBlob(
+      new Blob([text], { type: csv ? "text/csv;charset=utf-8" : "application/json" }),
+      `${base}-form-data.${csv ? "csv" : "json"}`,
+    );
+    if (saved && isCurrent(token)) setNotice(csv ? "Form CSV exported." : "Form JSON exported.");
+  };
+
   const submit = async () => {
     if (!source || !report || working || busy || encrypted) return;
     setNotice("");
@@ -194,14 +205,7 @@ export function FormDataDialog({
         );
         return;
       }
-      const csv = action === "export-csv";
-      const text = csv ? exportFormDataCsv(found) : exportFormDataJson(found);
-      const base = safeFileName(document?.name ?? "document.pdf").replace(/\.pdf$/i, "");
-      const saved = await downloadBlob(
-        new Blob([text], { type: csv ? "text/csv;charset=utf-8" : "application/json" }),
-        `${base}-form-data.${csv ? "csv" : "json"}`,
-      );
-      if (saved && isCurrent(token)) setNotice(csv ? "Form CSV exported." : "Form JSON exported.");
+      await exportReport(found, token);
     } catch (cause) {
       if (isCurrent(token)) setError(errorMessage(cause));
     } finally {

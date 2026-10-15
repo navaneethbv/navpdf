@@ -2,17 +2,19 @@
 
 ## October 14 PR 66 quality corrections
 
-The PR analysis reported 31 unresolved issues on `584a3ff`.
+The PR analysis reported 31 unresolved issues on `584a3ff`, and the main-branch analysis listed 49 older unresolved findings.
 The follow-up uses semantic status outputs, explicit control labels, simpler validation and review helpers, and smaller PDF date expressions.
-Archive extraction and document inspection use a lazy asynchronous sequence so only one PDF operation runs at a time and cancellation prevents later work.
-Regression tests cover early termination and rejection without starting the next operation.
+Archive extraction, document inspection, exports, comparison, OCR and composition use lazy asynchronous sequences so only one PDF operation runs at a time and cancellation prevents later work.
+Native request draining and range reads retain ordering and disposal checks; adapters retain promise-based rejection contracts.
+Reduced-motion rules now use the application root and cascade order instead of important declarations, including pseudo-elements.
+Regression tests cover early termination and rejection without starting the next operation, aborted in-flight range reads and unmount during a pending native-open snapshot.
 Node 24.18.1 and `npm ci` were used on macOS.
 Lint, typecheck, formatting, production build, Rust tests and Clippy with warnings denied pass locally.
-The frontend suite passes 927 tests across 125 files with 86.64% statements, 78.85% branches, 85.92% functions and 89.62% lines.
+The frontend suite passes 929 tests across 125 files with 86.60% statements, 78.84% branches, 85.92% functions and 89.60% lines.
 The Rust suite has 95 passing tests and the existing constrained-volume test ignored.
 Browser security denied access to the localhost preview after permission was declined, so visual acceptance was not performed.
 Native workflow acceptance and distribution gates remain open.
-Hosted analysis must verify zero unresolved PR issues on the published revision before merge.
+Hosted analysis must verify zero unresolved PR issues on the published revision before merge, followed by a fresh main-branch scan for the project-wide result.
 
 ## October 13 twenty local workflow features
 

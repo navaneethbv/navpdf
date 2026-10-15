@@ -916,7 +916,9 @@ p {
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent;
-  outline-offset: -3px !important;
+}
+.pdf-container:focus-visible {
+  outline-offset: -3px;
 }
 .pdfViewer {
   /* PDF.js reserves 5px of vertical space when fitting a page, so the space above the first
@@ -1783,13 +1785,6 @@ p {
   }
   .search-panel {
     padding: 0 7px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
   }
 }
 
@@ -3838,4 +3833,16 @@ p {
 .target-compression-options input {
   margin-left: 8px;
   max-width: 130px;
+}
+
+/* Scope the motion override to the app root, after component and PDF.js rules. */
+@media (prefers-reduced-motion: reduce) {
+  #root,
+  #root *,
+  #root *::before,
+  #root *::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
 }

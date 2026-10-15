@@ -181,8 +181,9 @@ export function useDocumentSession(controller: ViewerController | null) {
     autosave = useRef<Promise<void> | null>(null);
   // Save, open, close and home wait for an in-flight recovery write instead of being dropped,
   // and a closed document's recovery copy is never rewritten after it was discarded.
-  const afterAutosave = useCallback(async () => {
-    while (autosave.current) await autosave.current;
+  const afterAutosave = useCallback(function waitForAutosave(): Promise<void> {
+    const pending = autosave.current;
+    return pending ? pending.then(waitForAutosave) : Promise.resolve();
   }, []);
   const report = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
