@@ -32,7 +32,8 @@ export function useNativeOpenRequests(
     async function* pendingBatches() {
       while (!isDisposed()) {
         requested = false;
-        yield invoke<OpenRequest[]>("pending_open_requests");
+        const pending: Promise<OpenRequest[]> = invoke("pending_open_requests");
+        yield pending;
       }
     }
     const drain = async () => {
