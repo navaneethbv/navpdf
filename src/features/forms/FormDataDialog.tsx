@@ -9,6 +9,8 @@ import {
   findMissingRequiredFields,
   importFormData,
   MAX_FORM_DATA_BYTES,
+  MAX_MERGED_FORMS,
+  mergeFormDataCsv,
   previewFormDataImport,
   readFormData,
   resetFormData,
@@ -26,6 +28,7 @@ const ACTIONS = {
   "export-json": "Export JSON",
   "export-csv": "Export CSV",
   "export-xfdf": "Export XFDF",
+  merge: "Merge to CSV",
   import: "Import Values",
   required: "Check Required Fields",
   reset: "Clear Editable Values",
@@ -56,6 +59,7 @@ export function FormDataDialog({
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
+  const [mergeFiles, setMergeFiles] = useState<File[]>([]);
   const mounted = useRef(true);
   const job = useRef(0);
   const { apply, busy, error, setError } = useDocumentEdit(controller);
@@ -201,6 +205,29 @@ export function FormDataDialog({
     if (saved && isCurrent(token)) setNotice(notice);
   };
 
+  /** One spreadsheet row per chosen filled form; the open document is not changed. */
+  const mergeForms = async (token: number) => {
+    const forms: { file: string; report: FormDataReport }[] = [];
+    for (const file of mergeFiles) {
+      if (file.size > 100 * 1024 * 1024) throw new Error(`${file.name} exceeds the 100 MB limit.`);
+      try {
+        forms.push({
+          file: file.name,
+          report: await readFormData(new Uint8Array(await file.arrayBuffer())),
+        });
+      } catch (cause) {
+        throw new Error(`${file.name}: ${errorMessage(cause)}`, { cause });
+      }
+      if (!isCurrent(token)) return;
+    }
+    const csv = mergeFormDataCsv(forms);
+    const saved = await downloadBlob(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+      "merged-form-data.csv",
+    );
+    if (saved && isCurrent(token)) setNotice(`Merged ${forms.length} form(s) into one CSV.`);
+  };
+
   const submit = async () => {
     if (!source || !report || working || busy || encrypted) return;
     setNotice("");
@@ -212,6 +239,10 @@ export function FormDataDialog({
     }
     setWorking(true);
     try {
+      if (action === "merge") {
+        await mergeForms(token);
+        return;
+      }
       const found = await readFormData(await source.saveDocument());
       if (!isCurrent(token)) return;
       setReport(found);
@@ -239,6 +270,7 @@ export function FormDataDialog({
     (mutation && (Boolean(blockReason) || !editable)) ||
     (action === "import" && !preview?.length) ||
     (action === "reset" && !confirmed) ||
+    (action === "merge" && !mergeFiles.length) ||
     (action.startsWith("export-") && !editable);
 
   return (
@@ -269,6 +301,7 @@ export function FormDataDialog({
           <option value="export-json">Export editable values as JSON</option>
           <option value="export-csv">Export editable values as CSV</option>
           <option value="export-xfdf">Export editable values as XFDF</option>
+          <option value="merge">Merge filled PDF forms into a CSV</option>
           <option value="import">Import JSON or XFDF values</option>
           <option value="required">Check required fields</option>
           <option value="reset">Clear editable values</option>
@@ -298,6 +331,31 @@ export function FormDataDialog({
         <p className="field-hint">
           Required-field checks cannot assess {report?.excluded.length} unsupported field(s).
         </p>
+      )}
+      {action === "merge" && (
+        <div className="setting-group">
+          <label className="setting-title" htmlFor={`${ids}-merge`}>
+            Filled PDF forms
+          </label>
+          <input
+            id={`${ids}-merge`}
+            type="file"
+            multiple
+            accept=".pdf,application/pdf"
+            disabled={working || busy}
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              if (files.length > MAX_MERGED_FORMS)
+                setError(`Choose at most ${MAX_MERGED_FORMS} forms.`);
+              else setError("");
+              setMergeFiles(files.slice(0, MAX_MERGED_FORMS));
+            }}
+          />
+          <p className="field-hint">
+            Each PDF becomes one row, with a column for every editable field found in any of them.
+            The open document is not changed.
+          </p>
+        </div>
       )}
       {action === "import" && (
         <div className="setting-group">

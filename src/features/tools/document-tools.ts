@@ -13,6 +13,9 @@ import { FormDataDialog } from "../forms/FormDataDialog";
 import { DocumentInsightsDialog } from "../document/DocumentInsightsDialog";
 
 import { InitialViewDialog } from "../document/InitialViewDialog";
+import { LinkToolsDialog } from "../editor/LinkToolsDialog";
+import { HeadingBookmarksDialog } from "../bookmarks/HeadingBookmarksDialog";
+import { SpaceAuditDialog } from "../document/SpaceAuditDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -33,4 +36,7 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   measure: MeasureDialog,
   "form-data": FormDataDialog,
   "document-insights": DocumentInsightsDialog,
+  "link-tools": LinkToolsDialog,
+  "heading-bookmarks": HeadingBookmarksDialog,
+  "space-audit": SpaceAuditDialog,
 };

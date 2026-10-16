@@ -4,8 +4,10 @@ import { ToolDialog } from "../../components/ToolDialog";
 import type { ViewerController } from "../viewer/controller";
 import { errorMessage, useDocumentEdit } from "../document/use-document-edit";
 import {
+  arrangeWidgets,
   readWidgets,
   setWidgetGeometry,
+  type ArrangeOperation,
   type WidgetGeometry,
 } from "../../services/pdf/field-geometry";
 
@@ -19,6 +21,20 @@ const DIMENSIONS = [
   ["width", "Width"],
   ["height", "Height"],
 ] as const;
+
+const ARRANGEMENTS: [ArrangeOperation, string][] = [
+  ["left", "Align left edges"],
+  ["right", "Align right edges"],
+  ["top", "Align top edges"],
+  ["bottom", "Align bottom edges"],
+  ["center-horizontal", "Center horizontally"],
+  ["center-vertical", "Center vertically"],
+  ["distribute-horizontal", "Distribute horizontally"],
+  ["distribute-vertical", "Distribute vertically"],
+  ["match-width", "Match width"],
+  ["match-height", "Match height"],
+  ["match-size", "Match width and height"],
+];
 
 type Draft = Record<(typeof DIMENSIONS)[number][0], string>;
 
@@ -40,6 +56,8 @@ export function FieldLayoutDialog({
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [others, setOthers] = useState<Set<string>>(new Set());
+  const [operation, setOperation] = useState<ArrangeOperation>("left");
   const { apply, busy, error } = useDocumentEdit(controller);
 
   useEffect(() => {
@@ -70,7 +88,31 @@ export function FieldLayoutDialog({
     setSelected(key);
     const next = widgets?.find((item) => keyOf(item) === key);
     if (next) setDraft(draftOf(next));
+    setOthers(new Set());
     setNotice("");
+  };
+
+  const samePage = widgets?.filter(
+    (item) => widget && item.page === widget.page && keyOf(item) !== selected,
+  );
+
+  const arrange = async () => {
+    if (!widget || !widgets) return;
+    const chosen = [widget, ...widgets.filter((item) => others.has(keyOf(item)))];
+    let scaled = false;
+    const label = ARRANGEMENTS.find(([value]) => value === operation)?.[1] ?? "Arranged";
+    const applied = await apply(`${label}: ${chosen.length} form fields`, async (bytes) => {
+      const result = await arrangeWidgets(bytes, chosen, operation);
+      scaled = result.scaledAppearance;
+      return result.bytes;
+    });
+    if (!applied) return;
+    setNotice(
+      scaled
+        ? "Fields arranged. Some resized fields keep a stretched look until a reader redraws them."
+        : "Fields arranged.",
+    );
+    setRevision((value) => value + 1);
   };
 
   const submit = async () => {
@@ -148,6 +190,59 @@ export function FieldLayoutDialog({
             </Fragment>
           ))}
         </div>
+      )}
+      {samePage && samePage.length > 0 && (
+        <fieldset className="preset-list">
+          <legend className="setting-title">
+            Arrange with other fields on page {widget?.page}
+          </legend>
+          <p className="field-hint">
+            The field chosen above is the anchor. Distributing needs at least three fields.
+          </p>
+          {samePage.map((item) => (
+            <label key={keyOf(item)} className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={others.has(keyOf(item))}
+                onChange={(event) =>
+                  setOthers((current) => {
+                    const next = new Set(current);
+                    if (event.target.checked) next.add(keyOf(item));
+                    else next.delete(keyOf(item));
+                    return next;
+                  })
+                }
+              />
+              <span>
+                {item.field}
+                {item.widget > 0 ? ` (widget ${item.widget + 1})` : ""}
+              </span>
+            </label>
+          ))}
+          <label className="setting-title" htmlFor={`${ids}-arrange`}>
+            Arrangement
+          </label>
+          <select
+            id={`${ids}-arrange`}
+            className="text-input"
+            value={operation}
+            onChange={(event) => setOperation(event.target.value as ArrangeOperation)}
+          >
+            {ARRANGEMENTS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={busy || others.size < (operation.startsWith("distribute") ? 2 : 1)}
+            onClick={() => void arrange()}
+          >
+            Arrange Fields
+          </button>
+        </fieldset>
       )}
       {notice && (
         <output className="field-hint" aria-live="polite">

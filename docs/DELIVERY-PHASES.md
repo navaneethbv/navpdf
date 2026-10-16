@@ -13,6 +13,8 @@ The user requested the missing capabilities implemented by PDFCraft and delegate
 [ADR 0016](adr/0016-pdfcraft-capability-integration.md) retains NavPDF's architecture and security rules and pins the upstream reference.
 Implementation in progress adds keyboard tool search, poster tiling, saved initial-view preferences, split-by-bookmark and split-by-size ZIP exports, XFDF form data, and additional accessibility structure checks with an HTML report.
 The [family-level source comparison](PDFCRAFT-COMPARISON.md) is not exhaustive: 530 upstream checklist entries are shipped or partial and require individual assessment.
+A second batch adds link tools (web-address linking, broken-link and all-link removal), bookmarks proposed from heading text, form-field alignment, distribution and size matching, measurement CSV export, redaction word lists, a space-usage audit, merging filled forms into one CSV, and a printable comparison report.
+These reuse the existing safe-URL policy, revision transactions, bookmark writer, redaction audit and spreadsheet-cell neutralisation, and add no dependencies or native IPC.
 The broad requested outcome remains open; these additions alone do not establish parity.
 The verification ledger must record current automated, native, independent-reader and hosted results before handoff.
 

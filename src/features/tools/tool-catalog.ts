@@ -37,6 +37,7 @@ import {
   Printer,
   Link as LinkIcon,
   Replace,
+  HardDrive,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 
@@ -245,6 +246,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc,
     },
     {
+      id: "link-tools",
+      label: "Link Tools",
+      description: "Link web addresses in the text, or remove broken or all links",
+      category: "edit",
+      icon: LinkIcon,
+      action: () => s.set({ activeModal: "link-tools" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
       id: "accessibility-check",
       label: "Accessibility Check",
       description: "Check tags, title, language, text and tab order; fix what NavPDF can",
@@ -269,6 +279,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       category: "edit",
       icon: FileText,
       action: () => s.set({ activeModal: "bookmarks-edit" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
+      id: "heading-bookmarks",
+      label: "Bookmarks from Headings",
+      description: "Suggest nested bookmarks from large heading text",
+      category: "edit",
+      icon: Heading,
+      action: () => s.set({ activeModal: "heading-bookmarks" }),
       disabled: !hasDoc || !!s.info?.encrypted,
     },
     // Review
@@ -397,6 +416,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       category: "convert",
       icon: Download,
       action: () => s.set({ activeModal: "compress" }),
+      disabled: !hasDoc,
+    },
+    {
+      id: "space-audit",
+      label: "Space Usage",
+      description: "See how much of the file images, fonts, pages and other content use",
+      category: "convert",
+      icon: HardDrive,
+      action: () => s.set({ activeModal: "space-audit" }),
       disabled: !hasDoc,
     },
     {

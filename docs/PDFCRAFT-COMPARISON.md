@@ -27,9 +27,29 @@ The [delivery tracker](DELIVERY-PHASES.md#october-16-pdfcraft-capability-integra
 | Accessibility | 49 | Upstream `crates/a11y` versus NavPDF accessibility services/dialog. This change adds heading/list/table/nested-alt/formula structure checks and escaped HTML reports. Tag remediation, reading order, autotagging and remaining checker rules are open. Neither checker alone certifies PDF/UA compliance. |
 | Automation/platform | 28 | Upstream automation, command registry, CLI and UI versus NavPDF typed native adapters and React shell. CLI/MCP, batch action workflows, UI control, localization and installer differences are separate unimplemented interfaces or unverified capabilities. No remote service or control channel is introduced. |
 
+## Second batch mapping
+
+The second batch was compared against the upstream checklist at `9e5b70d1c231d7db558e278a2622b519ca063494`, inspected October 16, 2026.
+Each row names the upstream entry, the NavPDF implementation and its scoped limits.
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `edit.links-from-urls` | Link Tools, `services/pdf/link-tools.ts` and `features/editor/url-links.ts` | http, https and www addresses within one text item; addresses split across items or lines are not linked; link areas are estimated from text positions. |
+| `edit.remove-all-links` | Link Tools | Removes link annotations only; bookmarks are unchanged. |
+| `optimize.remove-invalid-links` | Link Tools | Removes internal links whose destination reaches no page and clears dead bookmark destinations while keeping titles and children; unreferenced named destinations are not pruned. |
+| `organize.bookmarks-from-structure` | Bookmarks from Headings | Font-size heuristic over the text layer with up to four levels, reviewed before saving; document tags are not read. |
+| `form.align-distribute-fields` | Move & Resize Fields arrangement | Align, centre, distribute and match sizes for widgets on one page relative to an anchor field; dragging on the page remains open. |
+| `comment.measure-export` | Measure dialog Export CSV | Lists saved Line, PolyLine and Polygon annotations with a /Measure dictionary using their recorded captions. |
+| `protect.redact-word-lists` | Redact PDF word list | Plain-text list of up to 500 entries searched in one pass; every entry is also audited after redaction. Redaction codes are not implemented because overlay text requires native redaction changes. |
+| `optimize.audit-space` | Space Usage | Estimated serialized object sizes by content category with CSV export; not exact byte ranges of the original file. |
+| `form.merge-to-spreadsheet` | Form Data merge action | One CSV row per filled PDF form with the union of editable fields; FDF and XFDF inputs are not merged. |
+| `misc.compare-report` | Compare PDF Versions report | Printable PDF of counts and changed-text excerpts; characters outside the built-in Latin font print as "?". |
+
+Replacing page colours (`a11y.replace-page-colors`) was assessed and deferred because PDF.js accepts page colours only when the viewer is constructed, so it needs viewer lifecycle work with its own acceptance.
+
 ## Acceptance boundary
 
-The six additions are independent implementations using the established PDF engines and a dedicated XML parser, not copied upstream modules.
+The additions are independent implementations using the established PDF engines and a dedicated XML parser, not copied upstream modules.
 Tests cover their current contracts, including malformed input and stale results, but do not prove the entire upstream feature family.
 Before full parity can be claimed, each shipped/partial upstream entry needs a NavPDF source/test mapping, a deliberate policy exclusion, or a completed implementation with native and independent-reader evidence.
 The requested full outcome remains open.

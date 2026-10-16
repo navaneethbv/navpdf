@@ -136,6 +136,40 @@ export function exportFormDataCsv(report: FormDataReport): string {
   return rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
+export const MAX_MERGED_FORMS = 500;
+
+/**
+ * One spreadsheet row per filled form, with a column for every editable field name found in
+ * any of them. Fields a form does not have are left empty.
+ */
+export function mergeFormDataCsv(forms: { file: string; report: FormDataReport }[]): string {
+  if (!forms.length) throw new Error("Choose at least one filled PDF form.");
+  if (forms.length > MAX_MERGED_FORMS)
+    throw new Error(`Merge at most ${MAX_MERGED_FORMS} forms at once.`);
+  const names: string[] = [];
+  const known = new Set<string>();
+  for (const { report } of forms)
+    for (const field of report.fields)
+      if (!field.readOnly && !known.has(field.name)) {
+        known.add(field.name);
+        names.push(field.name);
+      }
+  if (names.length > MAX_FIELDS) throw new Error("The merged forms exceed the 10,000-field limit.");
+  const rows = [["File", ...names]];
+  for (const { file, report } of forms) {
+    const values = new Map(report.fields.map((field) => [field.name, field.value]));
+    rows.push([
+      file,
+      ...names.map((name) => {
+        const value = values.get(name);
+        if (value === undefined) return "";
+        return Array.isArray(value) ? value.join("; ") : String(value);
+      }),
+    ]);
+  }
+  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+
 export function findMissingRequiredFields(report: FormDataReport): FormDataField[] {
   return report.fields.filter((field) => {
     if (!field.required) return false;

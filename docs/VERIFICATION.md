@@ -1,5 +1,37 @@
 # Verification ledger
 
+## October 16 PDFCraft-compatible tools, second batch
+
+Source baseline: `6f575fe6f7df3db2f8b61a689980492d16a83fb2` on `feat/pdfcraft-compatible-tools`.
+The [comparison](PDFCRAFT-COMPARISON.md#second-batch-mapping) maps each addition to its upstream entry and limits.
+Full parity is not complete.
+
+### Local checks
+
+Node 24.22.0 from the checksum-verified official Linux archive and `npm ci` were used, because the container provides Node 22.
+Lint, typecheck, formatting, production build, `git diff --check` and instruction-file comparison pass.
+The frontend suite passes 975 tests across 131 files, with 86.49% statements, 78.71% branches, 85.88% functions and 89.53% lines; the coverage gates pass and LCOV is retained.
+No Rust source changed in this batch, so the Rust suite and Clippy were not rerun.
+Logs are under ignored `output/pdfcraft-batch-two/`.
+
+Integration tests read saved output with PDF.js: created URI links and their rectangles, broken-link and bookmark cleanup, nested heading bookmarks and fit views on rotated pages, field arrangement on real widgets, measurement CSV cell neutralisation, space-usage totals, form merging and report text.
+Dialog tests cover source-revision edits, stale-document rejection for detected headings, disabled arrangement, empty measurement exports and leaving the open document unchanged when merging forms.
+Review of the first draft found a wrapped heading taking its bookmark position from its last line, and word lists searching the document once per entry; both were corrected before testing.
+
+### Independent-reader and browser-preview evidence
+
+Poppler `pdftohtml` independently reads the nested outline (Introduction with Scope, Methods with Data) and the created `https://example.com/docs` link on both pages of `output/pdfcraft-batch-two/links-and-bookmarks.pdf`, SHA-256 `4d21f36d3f4e927808d2b9260aa6118601e0ce090cdb1ab1d1c9a3248a1f57f1`.
+Poppler `pdftotext` reads the counts and changed-text excerpts of `output/pdfcraft-batch-two/compare-report.pdf`, SHA-256 `f7b0d07485beb99420c5b08f78aa3e6abac8e7374299a4f56c49f23dd179907e`.
+In the Chromium browser preview, Link Tools, Bookmarks from Headings, Space Usage and the field arrangement controls rendered without overlap or clipping, and applying link creation to `visual-fixture.pdf` (SHA-256 `b8934b7031ee4818b05a58293cdadfff20781ca4e03da1210d522f2075818c57`) created 12 links, marked the document changed and reported 12 web links on reopening the tool.
+The browser preview does not establish native save, recovery or packaging acceptance.
+
+### Native and hosted gates
+
+This batch was implemented in a Linux container without macOS, so native NavPDF and Preview acceptance were not run.
+Native save, close and reopen in NavPDF and Preview remain open for every second-batch tool.
+The release E0463 packaging blocker recorded below is unchanged.
+Hosted checks and quality analysis must be inspected on the pushed revision separately.
+
 ## October 16 PDFCraft-compatible tools
 
 Source baseline: `d3963457a3bfbe0d85555c0f0e2657e4333e295e`, with the changes on `feat/pdfcraft-compatible-tools`.

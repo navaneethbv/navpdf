@@ -87,6 +87,23 @@ function internalDestination(annotation: PDFDict) {
   return kind?.asString() === "/GoTo" ? action?.lookup(PDFName.of("D")) : undefined;
 }
 
+/**
+ * The zero-based page an internal link or bookmark points to, `null` when its destination does
+ * not resolve to a page, or `undefined` when it has no internal destination.
+ */
+export function internalTargetPage(
+  doc: PDFDocument,
+  node: PDFDict,
+  pages: Map<string, number>,
+): number | null | undefined {
+  const destination = internalDestination(node);
+  if (!destination) return undefined;
+  const target = resolveTargetPage(doc, destination, pages);
+  return target !== null && Number.isInteger(target) && target >= 0 && target < pages.size
+    ? target
+    : null;
+}
+
 function stripLinks(
   doc: PDFDocument,
   annotations: PDFArray,
