@@ -1,5 +1,58 @@
 # Verification ledger
 
+## October 16 PDFCraft-compatible tools
+
+Source baseline: `d3963457a3bfbe0d85555c0f0e2657e4333e295e`, with the changes on `feat/pdfcraft-compatible-tools`.
+The pinned reference, implemented subset and unresolved comparison are in [PDFCRAFT-COMPARISON.md](PDFCRAFT-COMPARISON.md).
+Full parity is not complete.
+
+### Local checks
+
+Node 24.18.1 and `npm ci` were used.
+Lint, typecheck, formatting, production build, `git diff --check` and instruction-file comparison pass.
+The frontend suite passes 954 tests across 129 files, with 86.60% statements, 79.05% branches, 85.64% functions and 89.60% lines; LCOV is retained.
+The Rust suite passes 95 tests with the pre-existing constrained-volume test ignored, and Clippy passes with warnings denied.
+The existing production chunk-size advisory remains.
+Logs are under ignored `output/pdfcraft-*.log`.
+
+The locked Tauri and muda dependencies require Rust 1.90, so the declared minimum and CI MSRV job now use 1.90 instead of 1.89.
+A fresh-target `cargo +1.90.0 check --locked --manifest-path src-tauri/Cargo.toml` passes.
+No dependencies or lockfiles changed.
+
+Regressions cover rotated/cropped poster output and tile limits; initial-view destinations and preserved preferences with independent PDF.js inspection; actual serialized split sizes; bookmark boundaries; strict XFDF parsing and custom checkbox states; malformed structure, role mapping and report escaping; and dialog cancellation, validation, disabled actions and keyboard navigation.
+Review reproduced a malformed structure child being silently skipped and reported as passed; it now reports incomplete inspection while allowing legitimate marked-content references.
+
+### Native and independent-reader evidence
+
+The current debug executable built successfully and ran in an isolated development bundle with identifier `local.navpdf.integration-check`, serving the current frontend from localhost.
+Its SHA-256 is `35303f6fda8c1d06cd62671ada816f95ecca6cf7319f22d00c16460d1b413d52`.
+This is development-mode evidence, not a successful release package.
+Native accessibility-tree interaction confirmed Cmd+K search, disabled-action descriptions, Enter opening the native file picker, loading the synthetic source, editing initial view, Save As, closing and reopening the saved document.
+
+The synthetic source has four cropped pages rotated 0, 90, 180 and 270 degrees.
+The initial-view edit selects opening page 2 and document-title display.
+The saved result is `output/pdfcraft-acceptance/native-initial-view.pdf`, SHA-256 `6ab85c22036da8db1b49461e340a8e2eb5123079cb6962578172dde543d6a591`.
+Independent PDF.js inspection confirms four pages, the saved destination and title preference, and the source canary text.
+Preview reopens all four pages and exposes the four text canaries; it opens on page 1 rather than honoring the saved page preference.
+Reader preference overrides are explicitly disclosed in the dialog.
+
+A separate service-generated poster at `output/pdfcraft-acceptance/poster.pdf` has eight letter-size sheets, SHA-256 `e2fcdec55249dc7f8def1a62b60e30265bab0af1759c1e10b2e8f313f6722ef1`.
+Poppler `pdfinfo`, `pdftotext` and raster output independently confirm readable pages and rotated canary content.
+This does not establish native poster-export acceptance or annotation/form preservation; the tool explicitly exports page content only.
+Native end-to-end XFDF, bookmark/size ZIP splitting, accessibility reporting, compact layout and all poster workflow gates remain open.
+The screenshot capture did not reflect the current modal accessibility tree reliably, so visual rendering, focus appearance and contrast are not accepted from that run.
+Coverage generation reloads the Vite development page; native checks must run after automated coverage finishes.
+
+### Packaging and hosted gates
+
+`npm run package` fails with Rust E0463 loading `cssparser_macros`.
+Fresh release targets on Rust 1.96 and 1.95 also fail loading `time_macros`; the debug build and tests succeed.
+Logs: `output/pdfcraft-package.log`, `output/pdfcraft-package-fresh.log` and `output/pdfcraft-package-195.log`.
+No current DMG was produced or verified; an older installed app was not treated as current-source acceptance.
+The root cause of the release-only macro-loading failure remains unresolved.
+Hosted checks, quality analysis and review policy must be inspected on the published revision separately.
+No merge or distribution is claimed.
+
 ## October 14 PR 66 quality corrections
 
 The PR analysis reported 31 unresolved issues on `584a3ff`, and the main-branch analysis listed 49 older unresolved findings.

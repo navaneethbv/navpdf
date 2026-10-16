@@ -9,6 +9,7 @@ const shortcuts = [
   ["Files", "Save As", "Cmd/Ctrl + Shift + S"],
   ["Files", "Print", "Cmd/Ctrl + P"],
   ["Files", "Close document", "Cmd/Ctrl + W"],
+  ["Workspace", "Search tools", "Cmd/Ctrl + K"],
   ["Workspace", "Settings", "Cmd/Ctrl + ,"],
   ["Editing", "Undo", "Cmd/Ctrl + Z"],
   ["Editing", "Redo", "Cmd/Ctrl + Shift + Z or Ctrl + Y"],

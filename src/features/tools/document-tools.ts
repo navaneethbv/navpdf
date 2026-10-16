@@ -12,6 +12,8 @@ import { MeasureDialog } from "../annotations/MeasureDialog";
 import { FormDataDialog } from "../forms/FormDataDialog";
 import { DocumentInsightsDialog } from "../document/DocumentInsightsDialog";
 
+import { InitialViewDialog } from "../document/InitialViewDialog";
+
 export interface DocumentToolProps {
   controller: ViewerController | null;
   onClose: () => void;
@@ -19,6 +21,7 @@ export interface DocumentToolProps {
 
 /** Document tools opened as modals, keyed by their `activeModal` and menu identifiers. */
 export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<DocumentToolProps>>> = {
+  "initial-view": InitialViewDialog,
   stamp: StampDialog,
   flatten: FlattenDialog,
   "page-labels": PageLabelsDialog,

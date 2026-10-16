@@ -4,6 +4,8 @@
 
 import { PDFArray, PDFBool, PDFDict, PDFDocument, PDFHexString, PDFName, PDFString } from "pdf-lib";
 
+import { checkStructure } from "./structure-checks";
+
 export type CheckStatus = "passed" | "failed" | "warning" | "manual";
 
 export interface AccessibilityCheck {
@@ -243,6 +245,7 @@ export function checkAccessibility(doc: PDFDocument, facts: PageFacts): Accessib
     ...documentChecks(doc),
     ...pageChecks(doc, facts),
     ...securityChecks(doc, facts),
+    ...checkStructure(doc),
   ];
 }
 

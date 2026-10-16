@@ -20,9 +20,12 @@ import {
 import { errorMessage, useDocumentEdit } from "../document/use-document-edit";
 import type { ViewerController } from "../viewer/controller";
 
+import { exportFormXfdf, formXfdfToJson } from "../../services/pdf/form-xfdf";
+
 const ACTIONS = {
   "export-json": "Export JSON",
   "export-csv": "Export CSV",
+  "export-xfdf": "Export XFDF",
   import: "Import Values",
   required: "Check Required Fields",
   reset: "Clear Editable Values",
@@ -129,14 +132,17 @@ export function FormDataDialog({
     const token = ++job.current;
     setWorking(true);
     try {
-      if (file.size > MAX_FORM_DATA_BYTES) throw new Error("Form JSON exceeds the 2 MB limit.");
-      const text = await file.text();
+      if (file.size > MAX_FORM_DATA_BYTES) throw new Error("Form data exceeds the 2 MB limit.");
+      const raw = await file.text();
+      const text = file.name.toLowerCase().endsWith(".xfdf")
+        ? await formXfdfToJson(await source.saveDocument(), raw)
+        : raw;
       if (!isCurrent(token)) return;
       const values = await previewFormDataImport(await source.saveDocument(), text);
       if (!isCurrent(token)) return;
       setPayload(text);
       setPreview(values);
-      if (!values.length) setNotice("This JSON contains no values to import.");
+      if (!values.length) setNotice("This file contains no values to import.");
     } catch (cause) {
       if (isCurrent(token)) setError(errorMessage(cause));
     } finally {
@@ -172,13 +178,27 @@ export function FormDataDialog({
 
   const exportReport = async (found: FormDataReport, token: number) => {
     const csv = action === "export-csv";
-    const text = csv ? exportFormDataCsv(found) : exportFormDataJson(found);
+    const xfdf = action === "export-xfdf";
+    const text =
+      xfdf && source
+        ? await exportFormXfdf(await source.saveDocument())
+        : csv
+          ? exportFormDataCsv(found)
+          : exportFormDataJson(found);
+    if (!isCurrent(token)) return;
     const base = safeFileName(document?.name ?? "document.pdf").replace(/\.pdf$/i, "");
     const saved = await downloadBlob(
-      new Blob([text], { type: csv ? "text/csv;charset=utf-8" : "application/json" }),
-      `${base}-form-data.${csv ? "csv" : "json"}`,
+      new Blob([text], {
+        type: xfdf
+          ? "application/vnd.adobe.xfdf"
+          : csv
+            ? "text/csv;charset=utf-8"
+            : "application/json",
+      }),
+      `${base}-form-data.${xfdf ? "xfdf" : csv ? "csv" : "json"}`,
     );
-    if (saved && isCurrent(token)) setNotice(csv ? "Form CSV exported." : "Form JSON exported.");
+    if (saved && isCurrent(token))
+      setNotice(xfdf ? "Form XFDF exported." : csv ? "Form CSV exported." : "Form JSON exported.");
   };
 
   const submit = async () => {
@@ -219,7 +239,7 @@ export function FormDataDialog({
     (mutation && (Boolean(blockReason) || !editable)) ||
     (action === "import" && !preview?.length) ||
     (action === "reset" && !confirmed) ||
-    ((action === "export-json" || action === "export-csv") && !editable);
+    (action.startsWith("export-") && !editable);
 
   return (
     <ToolDialog
@@ -248,7 +268,8 @@ export function FormDataDialog({
         >
           <option value="export-json">Export editable values as JSON</option>
           <option value="export-csv">Export editable values as CSV</option>
-          <option value="import">Import JSON values</option>
+          <option value="export-xfdf">Export editable values as XFDF</option>
+          <option value="import">Import JSON or XFDF values</option>
           <option value="required">Check required fields</option>
           <option value="reset">Clear editable values</option>
         </select>
@@ -269,9 +290,9 @@ export function FormDataDialog({
       )}
       {blockReason && <p className="field-hint">{blockReason}</p>}
       <p className="field-hint">
-        JSON and CSV include editable text, checkbox, radio and choice values. Read-only, signature,
-        button and unsupported fields are excluded from export, import and clearing. Required-field
-        checks include supported read-only fields.
+        JSON, CSV and XFDF include editable text, checkbox, radio and choice values. Read-only,
+        signature, button and unsupported fields are excluded from export, import and clearing.
+        Required-field checks include supported read-only fields.
       </p>
       {Boolean(report?.excluded.length) && (
         <p className="field-hint">
@@ -281,18 +302,18 @@ export function FormDataDialog({
       {action === "import" && (
         <div className="setting-group">
           <label className="setting-title" htmlFor={`${ids}-file`}>
-            JSON form data file
+            JSON or XFDF form data file
           </label>
           <input
             id={`${ids}-file`}
             type="file"
-            accept=".json,application/json"
+            accept=".json,.xfdf,application/json,application/vnd.adobe.xfdf"
             disabled={working || busy || Boolean(blockReason) || !report}
             onChange={(event) => void loadImport(event.target.files?.[0])}
           />
           <p className="field-hint">
-            Choose NavPDF form data JSON version 1, up to 2 MB. Review every change before
-            importing. Fields not listed in the JSON keep their values.
+            Choose NavPDF form data JSON version 1 or XFDF, up to 2 MB. Review every change before
+            importing. Fields not listed in the file keep their values.
           </p>
         </div>
       )}

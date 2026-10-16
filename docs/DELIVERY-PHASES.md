@@ -7,6 +7,20 @@ The [original roadmap](IMPLEMENTATION-ROADMAP-2026-09-12.md) remains the detaile
 Each phase now has a separate [implementation plan](phases/README.md) with ordered steps, code areas, dependencies and acceptance criteria.
 Existing controls or passing unit tests do not establish completed native workflows.
 
+## October 16 PDFCraft capability integration
+
+The user requested the missing capabilities implemented by PDFCraft and delegated the architecture decision.
+[ADR 0016](adr/0016-pdfcraft-capability-integration.md) retains NavPDF's architecture and security rules and pins the upstream reference.
+Implementation in progress adds keyboard tool search, poster tiling, saved initial-view preferences, split-by-bookmark and split-by-size ZIP exports, XFDF form data, and additional accessibility structure checks with an HTML report.
+The [family-level source comparison](PDFCRAFT-COMPARISON.md) is not exhaustive: 530 upstream checklist entries are shipped or partial and require individual assessment.
+The broad requested outcome remains open; these additions alone do not establish parity.
+The verification ledger must record current automated, native, independent-reader and hosted results before handoff.
+
+Remaining capability work includes a complete evidence-backed gap matrix, encrypted editing and recovery, preservation differences in page composition, additional annotation/form tools, advanced signature workflows, PDF/A checks and conversion, accessibility remediation, automation interfaces, localization and docking.
+Script execution and automatic external actions remain excluded under the chosen security rules.
+Platform distribution claims require platform-specific testing and signing credentials.
+No historical delivery phase or distribution gate is closed by this integration.
+
 ## October 14 quality follow-up
 
 PR 66 quality corrections address its 31 initial findings and the 49 older main-branch findings while preserving sequential PDF work, cancellation, validation and accessible labels.

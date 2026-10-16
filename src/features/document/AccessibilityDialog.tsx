@@ -12,6 +12,9 @@ import {
 } from "../../services/pdf/accessibility";
 import { allPageNumbers, pagesInOrder } from "../../utils/pdf-pages";
 
+import { accessibilityReport } from "../../services/pdf/structure-checks";
+import { downloadBlob } from "../../utils/download";
+
 const ICONS: Record<CheckStatus, typeof CheckCircle2> = {
   passed: CheckCircle2,
   failed: XCircle,
@@ -103,6 +106,18 @@ export function AccessibilityDialog({
     if (applied) setRevision((value) => value + 1);
   };
 
+  const exportReport = async () => {
+    if (!result) return;
+    try {
+      await downloadBlob(
+        new Blob([accessibilityReport(result.checks, result.title)], { type: "text/html" }),
+        "accessibility-report.html",
+      );
+    } catch (cause) {
+      setLoadError(errorMessage(cause));
+    }
+  };
+
   const failures = result?.checks.filter((item) => item.status === "failed").length ?? 0;
 
   return (
@@ -123,6 +138,14 @@ export function AccessibilityDialog({
           <output className="field-hint" aria-live="polite">
             {failures ? `${failures} check(s) failed.` : "No automatic checks failed."}
           </output>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={busy}
+            onClick={() => void exportReport()}
+          >
+            Save Report
+          </button>
           <ul className="check-list" aria-label="Accessibility checks">
             {result.checks.map((item) => {
               const Icon = ICONS[item.status];

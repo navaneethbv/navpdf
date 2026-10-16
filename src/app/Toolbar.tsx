@@ -90,6 +90,16 @@ export function Toolbar({
         >
           <Plus size={18} /> Create
         </button>
+        <button
+          type="button"
+          className="icon-button"
+          title="Search tools (Cmd/Ctrl+K)"
+          aria-label="Search tools"
+          disabled={s.busy || Boolean(s.activeModal)}
+          onClick={() => s.set({ activeModal: "command-palette" })}
+        >
+          <Search size={18} />
+        </button>
         <div className="toolbar-space" />
         <button
           className="icon-button"

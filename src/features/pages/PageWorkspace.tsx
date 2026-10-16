@@ -46,7 +46,7 @@ import {
   presetSelection,
   reversePageOrder,
 } from "./page-selection";
-import { createPageArchive } from "./page-archives";
+import { bookmarkPageGroups, sizePageGroups, createPageArchive } from "./page-archives";
 
 function isPageWorkspaceInput(target: EventTarget | null): boolean {
   return (
@@ -178,6 +178,8 @@ export function PageWorkspace({
     busy || s.busy || !controller?.pdf || !s.editingAllowed || !!s.info?.encrypted;
   const [selectionRange, setSelectionRange] = useState("");
   const [moveDestination, setMoveDestination] = useState("");
+  const [splitMode, setSplitMode] = useState("count");
+  const [maxFileMb, setMaxFileMb] = useState("1");
   const [pagesPerFile, setPagesPerFile] = useState("1");
   const [workflowError, setWorkflowError] = useState("");
   const [archiveProgress, setArchiveProgress] = useState("");
@@ -316,11 +318,21 @@ export function PageWorkspace({
     setLocalBusy(true);
     s.set({ busy: true });
     try {
-      const groups =
-        mode === "split"
-          ? fixedPageGroups(totalPages, Number(pagesPerFile))
-          : individualPageGroups(totalPages, selected);
+      controller.editor?.commitOrRemove();
       const bytes = await source.saveDocument();
+      const progress = {
+        isCancelled: () => exportCancelled.current || !isCurrent(),
+        onProgress: (completed: number, total: number) =>
+          setArchiveProgress(`Measuring page ${completed} of ${total}`),
+      };
+      const groups =
+        mode === "individual"
+          ? individualPageGroups(totalPages, selected)
+          : splitMode === "bookmarks"
+            ? await bookmarkPageGroups(bytes)
+            : splitMode === "size"
+              ? await sizePageGroups(bytes, Math.floor(Number(maxFileMb) * 1024 ** 2), progress)
+              : fixedPageGroups(totalPages, Number(pagesPerFile));
       const output = await createPageArchive(bytes, groups, {
         isCancelled: () => exportCancelled.current || !isCurrent(),
         onProgress: (completed, total) =>
@@ -965,6 +977,32 @@ export function PageWorkspace({
             Cancel
           </button>
           <label>
+            <span>Split ZIP by</span>
+            <select
+              value={splitMode}
+              disabled={busy}
+              onChange={(event) => setSplitMode(event.target.value)}
+            >
+              <option value="count">Page count</option>
+              <option value="bookmarks">Top-level bookmarks</option>
+              <option value="size">Maximum PDF size</option>
+            </select>
+          </label>
+          {splitMode === "size" && (
+            <label>
+              <span>Maximum size per PDF (MB)</span>
+              <input
+                type="number"
+                min="0.001"
+                max="1024"
+                step="any"
+                value={maxFileMb}
+                disabled={busy}
+                onChange={(event) => setMaxFileMb(event.target.value)}
+              />
+            </label>
+          )}
+          <label>
             <span>Pages per file</span>
             <input
               type="number"
@@ -972,7 +1010,7 @@ export function PageWorkspace({
               max={totalPages}
               step={1}
               value={pagesPerFile}
-              disabled={busy}
+              disabled={busy || splitMode !== "count"}
               onChange={(event) => setPagesPerFile(event.target.value)}
             />
           </label>
