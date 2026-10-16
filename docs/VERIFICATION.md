@@ -1,5 +1,39 @@
 # Verification ledger
 
+This ledger contains dated observations, not a claim that every historical gate passes on current source.
+Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [acceptance checklist](phases/README.md) for required workflows.
+Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
+Older source and executable hashes identify only the build tested in their entry.
+
+## October 16 documentation review and merged baseline
+
+Reviewed source: `c09576f7d96de04ba30b20a9a5737d4d42ae3010` on clean `main`.
+GitHub confirms PR 68 merged on October 16 at 20:05 UTC and PR 66 is represented by `d396345`.
+PR 68's final-head CI, native acceptance scripts, CodeQL, Codacy and automatic SonarCloud Code Analysis checks succeeded.
+The optional SonarCloud CI analysis job was skipped and is not counted as a scan.
+This is hosted check-status evidence, not a fresh direct issue-count audit or new native GUI acceptance.
+The release E0463 blocker and outstanding native workflows below remain open.
+
+The Markdown review consolidated current status and phase criteria, removed superseded plans/reviews/handoffs and repaired their references.
+The original requirements, ADRs, fixture/dependency provenance and distinct native/independent-reader evidence are retained.
+The removed September 14 review and plan remain available through `git show c09576f:docs/REVIEW-2026-09-14.md` and `git show c09576f:docs/IMPLEMENTATION-PLAN-2026-09-14.md`.
+All 53 repository-tracked Markdown files were reviewed, including upstream/vendor documentation retained for provenance.
+The cleanup leaves 31 Markdown files, including the new index, and removes 23 superseded documents.
+Local checks pass for 72 repository-local links/anchors, fenced-block balance, Markdown-only scope, instruction-file byte parity and `git diff --check`.
+Application suites and native packaging were not rerun locally for this documentation-only change; the PR still runs the repository hosted gates.
+
+## Corrections to early evidence
+
+The initial Phase 6 implementation returned fixed sample text and its tests compared identical hard-coded strings.
+Those earlier accuracy, portable-fallback and completion claims are withdrawn and are omitted from this ledger.
+Real macOS Apple Vision recognition replaced that path; unsupported platforms report unavailable OCR.
+The September 14 correction and September 15 six-sample run below establish their recorded scope only.
+
+The original reusable-signature cipher derived a key from public path/user data and did not meet the protected-storage requirement.
+AES-256-GCM and a random Keychain-protected key replaced it.
+Native locked-Keychain and migration acceptance remain open, as do combined revision and current-release OCR acceptance.
+Historical phase completion text does not override those reopened gates.
+
 ## October 16 second-batch quality follow-up
 
 Starting revision: `2a836fcfa5d454c40b340be98d324b669e46fb11` on PR 68.
@@ -10,7 +44,7 @@ Node 24.18.1 local validation passes all 975 frontend tests across 131 files and
 Lint, typecheck, formatting and production build pass; logs are under ignored `output/pr68-quality-round2/`.
 The final label adjustment is also checked by the focused dialog suite and a fresh lint and build run.
 These are automated regression checks, not new native visual or save/reopen acceptance.
-Hosted analysis must be checked against the pushed commit; the earlier green gate did not establish zero Sonar issues.
+The initial green gate did not establish zero Sonar issues; the merged-baseline entry above records the later hosted check status.
 
 ## October 16 PDFCraft-compatible tools, second batch
 
@@ -42,7 +76,7 @@ The browser preview does not establish native save, recovery or packaging accept
 This batch was implemented in a Linux container without macOS, so native NavPDF and Preview acceptance were not run.
 Native save, close and reopen in NavPDF and Preview remain open for every second-batch tool.
 The release E0463 packaging blocker recorded below is unchanged.
-Hosted checks and quality analysis must be inspected on the pushed revision separately.
+Later hosted check status is recorded in the merged-baseline entry above.
 
 ## October 16 PDFCraft-compatible tools
 
@@ -100,8 +134,8 @@ Fresh release targets on Rust 1.96 and 1.95 also fail loading `time_macros`; the
 Logs: `output/pdfcraft-package.log`, `output/pdfcraft-package-fresh.log` and `output/pdfcraft-package-195.log`.
 No current DMG was produced or verified; an older installed app was not treated as current-source acceptance.
 The root cause of the release-only macro-loading failure remains unresolved.
-Hosted checks, quality analysis and review policy must be inspected on the published revision separately.
-No merge or distribution is claimed.
+Later hosted check and merge status are recorded above; they do not close native or distribution gates.
+At that checkpoint no merge or distribution was claimed; PR 68 subsequently merged as recorded above, while distribution acceptance remains open.
 
 ## October 14 PR 66 quality corrections
 
@@ -117,15 +151,15 @@ The frontend suite passes 929 tests across 125 files with 86.60% statements, 78.
 The Rust suite has 95 passing tests and the existing constrained-volume test ignored.
 Hosted OCR acceptance exposed missing `.ts` import extensions in the new shared sequence imports; direct Node loading reproduced the error and passes after correction.
 Local native acceptance passes Phase 7 (55/55), Phase 8 (12/12) and Phase 10 (55/55), including independent Poppler, OpenSSL and Quick Look checks.
-The local OCR probe started but had not returned its first recognition result at this checkpoint; hosted OCR remains a merge gate.
+The local OCR probe had not returned its first recognition result at this checkpoint; the later hosted native acceptance job passed on the merged PR.
 Browser security denied access to the localhost preview after permission was declined, so visual acceptance was not performed.
 Native workflow acceptance and distribution gates remain open.
-Hosted analysis must verify zero unresolved PR issues on the published revision before merge, followed by a fresh main-branch scan for the project-wide result.
+PR 66 later merged as `d396345`; this entry retains its local verification limits and does not assert a current project-wide issue count.
 
 ## October 13 twenty local workflow features
 
 Source base: `9236011`, plus the changes in this delivery.
-The [implementation plan](IMPLEMENTATION-PLAN-2026-10-13.md) lists all twenty capabilities and their safety contracts.
+The [project README](../README.md#local-workflow-additions) lists the page, form, review and reader capabilities; the acceptance checklist retains their safety gates.
 
 ### Automated gates
 
@@ -254,7 +288,7 @@ No feature-parity, native acceptance or distribution gate is closed by this deli
 ## October 4 feature-review corrections
 
 Source base: `4902cfc`, plus the source changes in this PR.
-The [review](REVIEW-2026-10-04.md) records the feature assessment and unresolved work.
+The October 4 review found the import/comparison defects recorded below; its unresolved comparison stall is retained in the [delivery tracker](DELIVERY-PHASES.md).
 
 ### Automated gates
 
@@ -373,9 +407,9 @@ Earlier local logs were inspected and confirm 705 frontend tests, unchanged cove
 Those suites were not rerun for this documentation-only follow-up; formatting, diff checking and instruction-file parity were checked again.
 Hosted checks and quality analysis remain separate from these local and reader results and must be assessed on the published PR head.
 Signing, notarization, clean-account installation, physical printing, Acrobat-specific compatibility and Windows/Linux UI acceptance remain open.
-That documentation-only follow-up did not authorize a merge or release; the subsequent user request authorizes merging after the hosted checks and zero-new-issue gates pass.
+This entry records the documentation follow-up only; merge history is independent of these reader observations.
 
-## September 26 bookmark follow-up: current local verification
+## September 26 bookmark follow-up: local verification
 
 Baseline remains `0dcb810` plus the preserved uncommitted twelve-feature implementation and this follow-up.
 Native NavPDF reproduced an editor failure using `output/image-crop-20260926/bookmark-depth.pdf`: rename the top-level bookmark, then select Level 32 as its parent.
@@ -408,7 +442,7 @@ No commit, push, pull request or publication was performed.
 ## September 26 prioritized tools: implementation verification
 
 Baseline source revision: `0dcb810`, plus preserved uncommitted crop work and this uncommitted implementation.
-All twelve prioritized scopes have local implementations; see `docs/IMPLEMENTATION-PLAN-2026-09-26.md` and ADR 0013 for boundaries.
+All twelve prioritized scopes have local implementations; [ADR 0013](adr/0013-imageio-import-and-document-tools.md) records the boundaries.
 No commit, push, pull request or publication was performed.
 
 ### Automated checks
@@ -648,7 +682,6 @@ The 5,314-byte reader fixture would grow to 7,578 bytes, so the tool correctly r
 These fixture measurements are not a general compression-ratio claim.
 
 The user's preserved edited PDF remains unchanged at `output/reader-5-preserved-20260919.pdf`.
-The three pre-existing untracked root planning documents remain untouched.
 Signing, notarization, clean-account installation, physical printing, non-macOS UI and the separately tracked advanced capabilities remain open.
 Hosted checks and merge status are recorded in PR 22; Sonar analysis requires a configured token and must not be inferred from a skipped workflow step.
 
@@ -673,7 +706,7 @@ The rebuilt executable SHA-256 is `4d2cc1c80b0ecaf24236721349a27a42d70b3aa7bbf97
 The DMG SHA-256 is `c1f921403258e67ace0046fb8bdb8e213a14417b6c0c3f8e489b3e9d90e81414`; hdiutil verified CRC32 `$934E5A4C`.
 PR 21 records hosted checks and merge status.
 Codacy, CodeQL, frontend, Rust and native acceptance passed on the application commit.
-NPM Audit passed after registry maintenance cleared, and PR 21 merged as `13109e3`; Sonar analysis remains skipped without SONAR_TOKEN.
+NPM Audit passed after registry maintenance cleared, and PR 21 merged as `13109e3`; the optional CI Sonar analysis was skipped at that checkpoint.
 Signing, notarization, clean-account installation, physical printing and non-macOS UI acceptance remain separate gates.
 
 ## September 15 PR #4 follow-up review fixes
@@ -693,97 +726,26 @@ These checks use the native engine and PDF services; they do not establish packa
 The packaged application and DMG were not rebuilt for this follow-up, so earlier artifact hashes do not identify these fixes.
 Hosted checks must run on the pushed follow-up revision.
 
-## September 15 current worktree checkpoint
+## September 15 correction package
 
-The pushed worktree is `fix/september-14-review-corrections` at source revision `d83f6d8271dd77c973df799f63dfecff14152128`.
-Only the three untracked root planning files remain outside the pushed tree.
-The source review and implementation plan are [REVIEW-2026-09-14.md](REVIEW-2026-09-14.md) and [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md).
+Source revision: `d83f6d8271dd77c973df799f63dfecff14152128` on the historical `fix/september-14-review-corrections` branch.
+Local validation passed 504 frontend tests with coverage, lint, typecheck, build, formatting, 80 Rust tests and Clippy; one constrained-volume test was ignored.
+Phase 7 passed 55/55, Phase 8 passed 12/12, Phase 10 passed 55/55 and the real native OCR corpus passed 6/6 samples.
+The OCR report is `output/ocr-review/corpus-report.json`.
+Hosted run `35012242904` passed the recorded CI and native acceptance jobs after manifest, license, Swift linkage and fixture-generation corrections.
+A fresh packaged process rendered the 500-page fixture and thumbnails without the persistent spinner.
+Preview and Acrobat reopen checks for that exact correction build were not completed.
+The app executable SHA-256 was `9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4`.
+The DMG SHA-256 was `2904b2a5bcbbf680aff64ec8284e5e7553afdc0c579379818eb68e8f9f27c0a82`, with `hdiutil verify` CRC32 `$B4992B9A`.
+These hashes are historical and do not identify the current source.
 
-| Check                            | Current result                                                                                                                                                               |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend unit suite and coverage | 504 tests across 80 files passed; 83.39% statements, 75.01% branches, 81.18% functions and 86.20% lines.                                                                     |
-| TypeScript                       | Passed after the current shell, dialog, OCR and fixture changes.                                                                                                             |
-| ESLint                           | Passed after the current script and corpus changes.                                                                                                                          |
-| Rust tests                       | 80 passed; 1 constrained-volume disk-full test remains ignored.                                                                                                              |
-| Rust Clippy                      | Passed with `--all-targets -- -D warnings`.                                                                                                                                  |
-| Formatting and repository parity | Prettier, Rustfmt, `git diff --check` and `cmp AGENTS.md CLAUDE.md` passed.                                                                                                  |
-| Acceptance tool discovery        | All eight local tools were found by `npm run acceptance:check-tools`.                                                                                                        |
-| Hosted CI                        | Run `35012242904` passed every listed check, including Cargo Deny, SonarCloud, frontend checks, Rust checks, Phase 7, Phase 8, Phase 10 and OCR acceptance.                  |
-| Native UI and package            | The app bundle and DMG rebuilt successfully, `hdiutil verify` passed, and a fresh packaged process rendered the page and thumbnails without the previous persistent spinner. |
-
-The rebuilt app bundle is `src-tauri/target/release/bundle/macos/NavPDF.app`.
-Its executable SHA-256 is `9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4`.
-The DMG is `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-Its SHA-256 is `2904b2a5bcbbf680aff64ec8284e5e7553afdc0c579379818eb68e8f9f27c0a82`.
-`hdiutil verify` reports a valid checksum with CRC32 `$B4992B9A`.
-
-Task 3.8 now includes duplicate-open protection, stable event subscriptions, guarded preference parsing, password-dialog focus and a root Save a copy recovery boundary.
-Task 4.2 now uses an explicit `requireFixture` helper for integration and PDF transport fixture consumers.
-Task 4.3 now drives the OCR acceptance script from `ocr-evaluation-corpus.json`, computes WER and CER, validates OCR bounding boxes and writes `output/ocr-review/corpus-report.json`.
-Task 4.4 now exposes acceptance commands, checks independent tool availability and adds a macOS workflow that runs the Phase 7, Phase 8, Phase 10, license and OCR acceptance scripts.
-
-Task 5.1 now provides Document Properties editing through `src/features/document/PropertiesDialog.tsx` and `src/services/pdf/metadata.ts`.
-The saved output contains synchronized Info and XMP metadata, covered by `tests/unit/pdf-metadata.test.ts` and `tests/unit/properties-dialog.test.tsx`.
-
-The OCR corpus script and macOS workflow ran on macOS with the native OCR example and independent tools available.
-Native packaged UI acceptance passed for rendering. Preview and Acrobat reopen checks remain open.
-
-The current acceptance results are 55 of 55 Phase 7 checks, 12 of 12 Phase 8 checks, 55 of 55 Phase 10 checks and 6 of 6 OCR samples.
-
-## September 14 implementation plan, Tranches 0 to 2
-
-This entry records local evidence for Tranches 0 to 2 of [IMPLEMENTATION-PLAN-2026-09-14.md](IMPLEMENTATION-PLAN-2026-09-14.md) on `fix/september-14-review-corrections`, based on `4f667c1`.
-An earlier progress report described Tranches 0 and 1 as complete and fully tested, but source inspection did not support that description.
-At the start of this checkpoint, typecheck failed with three errors in `controller.ts` and lint failed with four errors in new tests.
-The editing-permission test mocked an array where PDF.js returns a `Set`, which hid a runtime `TypeError` that left editing enabled on restricted documents.
-Two Rust tests for Tasks 1.3 and 1.9 re-implemented the production branch inside the test or deleted files the test itself created.
-They now call `adopt_protected_source`, `store_recovery` and `retire_recovery`.
-Task 1.7, most of Task 1.8 and the recovery isolation of Task 1.9 were missing and are now implemented.
-
-Deliberate differences from the plan text:
-
-- Recovery copies are stored as `recovery/<document id>.pdf` with one JSON sidecar per entry rather than a shared `manifest.json`, so each write and discard is independent. `local_state` returns the entries instead of a separate `list_recovery` command, and the single legacy `recovery.pdf` is migrated on first listing.
-- Comment exchange identity uses the PDF.js fingerprint when the info dictionary has no `/ID`, because no native snapshot hash is exposed to the renderer.
-- The save-time redaction audit (DS-12) arms only when a committed revision's SHA-256 matches the audited redaction output, so a failed attach never blocks saving the unredacted document. A successful save clears it, as the plan specifies.
-
-Behavior and limits of Task 2.7:
-
-- NAT-03: the term audit decodes one stream at a time. A counting-allocator regression keeps the peak under 3 MB while scanning 24 streams of 1 MB each; the previous implementation retained every decoded stream plus a lower-cased copy.
-- NAT-04: images with a color-key `/Mask` array are not decoded, so compression skips them and redaction removes such a placement entirely with a warning.
-- NAT-05: text whose character codes cannot be segmented blocks redaction when it lies within one font size of a region, and lopdf `extract_text` supplies a second decoder for audit terms. Glyphs later in the same text object that lie farther from a region are still positioned from estimated advances.
-- NAT-15: lopdf accepts a `startxref` one byte early, on the line break before `xref`, and records it as the section start. Signing now requires the declared offset to begin with `xref` or an `N G obj` header. The Keychain prompt limitation for ad-hoc signed builds remains for Task 4.5.
-- DS-12: the armed audit keeps the page numbers of the original redaction, so deleting or reordering pages before the next save can block that save until the document is redacted again. Terms are audited on every page regardless.
-
-| Check                             | Result                                                                                                                                                                                                                         |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Node version                      | 24.18.1                                                                                                                                                                                                                        |
-| ESLint and TypeScript             | Passed                                                                                                                                                                                                                         |
-| Frontend coverage                 | 458 tests across 68 files passed; 84.08% statements, 75.73% branches, 82.97% functions, 86.66% lines                                                                                                                           |
-| Production build                  | Passed; existing large-chunk advisory remains                                                                                                                                                                                  |
-| Rust tests                        | 76 passed; 1 constrained-volume disk-full test ignored                                                                                                                                                                         |
-| Clippy and rustfmt                | Passed with `--all-targets -- -D warnings`; `cargo fmt --check` clean                                                                                                                                                          |
-| Rust 1.89 compile check           | Blocked locally: rustc 1.89.0 fails linking the `proc-macro2` build script against the macOS 27 SDK with `ld: tapi error: malformed file`, before NavPDF code compiles; the hosted Ubuntu `rust-msrv` job is the MSRV evidence |
-| Phase 7 adversarial acceptance    | 55/55 passed with the rebuilt `engine_cli`                                                                                                                                                                                     |
-| Whitespace and instruction parity | `git diff --check` and `cmp AGENTS.md CLAUDE.md` passed                                                                                                                                                                        |
-| Prettier                          | 117 files did not match `.prettierrc`; a formatting-only commit follows this change                                                                                                                                            |
-| cargo-deny                        | Not run locally because the tool is not installed; the hosted job is its first run                                                                                                                                             |
-
-Not established by this entry:
-
-- No native check from Tasks 1.1 to 2.7 was performed, and the packaged app was not rebuilt or relaunched, so no executable hash is recorded.
-- Hosted CI results for this branch are recorded after the push.
-
-## September 14 PR 3 CI correction
-
-The Rust job on `065349d` failed because the revision regression read `reader-5.pdf`, which is generated by the frontend pretest hook and absent from the separate Rust checkout.
-The test now constructs its own five-page PDF in memory while retaining its revision, immutable-source and stale-base assertions.
-Local Rust validation passed again: 58 tests passed, one constrained-volume test remained ignored, and Clippy passed with warnings denied.
-Formatting and whitespace checks passed.
-This test-only correction does not change application behavior or renew native acceptance evidence.
+The correction uses independent per-document recovery PDF/JSON pairs, not the proposed shared manifest.
+The save-time redaction audit arms only when the committed revision matches the audited output; later page deletion/reordering can require redaction again before saving.
+Composite-font geometry without reliable metrics and the ad-hoc-build Keychain prompt remain scoped limitations.
 
 ## September 14 corrective review of e00e46a
 
-The local corrections are described in [PR-2-REVIEW.md](PR-2-REVIEW.md).
+The local corrections replaced unsafe signature storage, corrected native revision ownership and introduced real OCR; see the correction notice above.
 These results validate the corrective working tree based on `e00e46a`, whose tree matches merged PR #2 at `f229114`.
 Hosted checks on the old PR do not validate the corrective follow-up; its exact head requires separate hosted checks.
 Earlier completion statements for Phases 3, 4 and 6 are superseded by the reopened gates in the delivery tracker.
@@ -823,68 +785,9 @@ Reviewed PR head before fixes: `9b1b9abfff502e92d8c17ae2253569db87a043e3`.
 The final pushed revision and rerun results are recorded in the handoff for this review.
 Historical phase entries below retain their original artifact facts and do not replace current-source verification.
 
-## Current review findings
+## September 13-14 native acceptance artifacts
 
-The review reproduced a region-redaction defect where an overlapping vector path survived because the rewrite used containment instead of intersection.
-The fix removes the whole intersecting path conservatively, rejects unsupported shading fills, and audits residual paths outside the redaction overlay tolerance.
-The review also found recovery was discarded by native redaction and unlock commands before the renderer attached the candidate revision.
-Native cleanup now occurs only after the renderer reports a successful replacement, while failed candidate attachment leaves recovery available.
-Native engine staging now has both count and byte bounds.
-Phase 9 remains a local unsigned macOS package checkpoint, not full distribution acceptance.
-
-## Automated evidence
-
-| Check                         | Result                                                                                                |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Frontend tests and coverage   | 240 passed across 34 files; 91.87% lines, 82.30% branches, 87.99% functions, 89.70% statements.       |
-| Coverage gate                 | Existing 80% line/function/statement and 75% branch gates retained; LCOV emitted.                     |
-| ESLint and TypeScript         | Passed after code fixes.                                                                              |
-| Production frontend build     | Passed; existing large-chunk advisory remains.                                                        |
-| Rust filesystem and IPC tests | 10 passed, including private byte import, new-destination collision, and permission preservation.     |
-| Rust Clippy                   | Passed in hosted CI on `0f6ae15`, including the final print correction.                               |
-| GitHub baseline Test check    | Failed on Node 20 because `Promise.withResolvers` was unavailable; both workflows changed to Node 24. |
-
-Tests exercise real PDF parsing and persisted output where indicated by the test name.
-Mocked viewer/session/IPC tests are not substitutes for native UI acceptance.
-
-## Native evidence
-
-| Build and fixture                             | Action                 | Observed result                                                                                                      |
-| --------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Baseline application source, freshly packaged | Create blank PDF       | Reproduced the unexpected existing-file picker instead of opening generated output.                                  |
-| Baseline application source, mixed fixture    | First open             | Reproduced blank viewport with negative fit zoom.                                                                    |
-| Baseline application source, Create panel     | Inspect settled panel  | Reproduced translucent overlapping panel and joined title/description text.                                          |
-| Follow-up app before final print changes      | Create blank PDF, Save | Generated page opened without a picker; unsaved state shown; first Save opened the destination picker and completed. |
-| Follow-up app before final print changes      | Inspect Create panel   | Opaque panel, readable separated labels/descriptions, toolbar retained.                                              |
-| Follow-up app, embedded-font fixture          | First open             | Positive 70% fit and embedded text rendered.                                                                         |
-| Baseline print path                           | Print                  | Blank iframe, no system print panel.                                                                                 |
-| Initial PDFKit print path                     | Print                  | Native print-panel initialization crashed; corrected to supply the shared system print information.                  |
-
-| Follow-up app with corrected print initialization, 500-page fixture | Search `NEEDLE-0500` | One result on page 500, with positive fit zoom and rendered text. |
-| Same app, page 500 | Print current page | System print panel displayed the correct page as a one-page preview; Cancel returned to the application. |
-| Same app, annotation toolbar | Inspect highlight controls | Reproduced vertically stacked color buttons obscuring text; corrected CSS selectors and toolbar placement. |
-
-The rows above are historical baseline evidence from before the final Phase 1 native run.
-The current Phase 1 acceptance is recorded below.
-No physical-printer, clean-account installation, signing, notarization, or DMG distribution acceptance is claimed here.
-
-## Phase 1 evidence
-
-Checkpoint: September 13, 2026, branch `delivery/phases-1-10` at source revision `1857b6d` plus the working-tree save-guard fix and Phase 2 foundation edits.
-The native Phase 1 run used the release bundle built after the save-guard fix and before the Phase 2 source edits.
-Environment: macOS 26.6.2 on Apple silicon, Preview 11.0, Adobe Acrobat 26.002.21869, pdfjs-dist 6.3.289.
-
-### Automated checks after the P1.1 change
-
-| Check                          | Result                                                                                                                                                                                                                                          |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend tests and coverage    | 246 passed across 35 files; 91.95% lines, 82.45% branches, 88.07% functions, 89.79% statements before the current Phase 2 tests.                                                                                                                |
-| Freehand highlight regression  | Passes with the fix; the same test without the storage transform fails with `expected 1 to be 0.5`.                                                                                                                                             |
-| ESLint and TypeScript          | Passed.                                                                                                                                                                                                                                         |
-| Production frontend build      | Passed during app packaging; the existing large-chunk advisory remains.                                                                                                                                                                         |
-| Rust tests                     | 10 passed.                                                                                                                                                                                                                                      |
-| Rust Clippy with `-D warnings` | Passed.                                                                                                                                                                                                                                         |
-| App bundle                     | The Phase 1 acceptance executable SHA-256 was `4eaefc4b4bb6032f696bd075556a77fe2f6415dfe2dc1923f58dc261134b3f8e`. The current Phase 2 rebuild is recorded below. DMG customization hung in `bundle_dmg.sh` and is a separate distribution gate. |
+These observations predate the corrective builds above and retain their original limitations.
 
 ### P1-01 independent-reader comparison
 
@@ -933,23 +836,6 @@ The original and dirty workspace were preserved in each failure or cancellation 
 
 The remaining Phase 1 limitations are the existing-file fingerprint race between the last check and rename, and the lack of an ACL or extended-attribute preservation claim beyond POSIX mode bits.
 
-## Phase 2 evidence
-
-Checkpoint: September 13, 2026, working tree based on `1857b6d`.
-The exact rebuilt bundle is `src-tauri/target/release/bundle/macos/NavPDF.app` with executable SHA-256 `b0ed2258603d6c87ab6fb73730c604a291194db776fbd3757a3c5ac4dd1543c0`.
-
-### Automated checks
-
-| Check                                          | Result                                                                                                                                             |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend tests and coverage                    | 261 passed across 38 files; 85.81% lines, 77.87% branches, 82.85% functions and 83.93% statements.                                                 |
-| Focused history and annotation tests           | Passed, including bounded revision history, staged proxy undo and redo, selection geometry, standard markup objects, sticky notes and UI controls. |
-| ESLint and TypeScript                          | Passed.                                                                                                                                            |
-| Production frontend build                      | Passed; the existing large-chunk advisory remains.                                                                                                 |
-| Rust formatting and tests                      | Passed; 13 passed and 1 real disk-full test remained ignored unless a disposable constrained volume is supplied.                                   |
-| Rust Clippy with `-D warnings`                 | Passed.                                                                                                                                            |
-| `git diff --check` and instruction-file parity | Passed; `AGENTS.md` and `CLAUDE.md` are byte-identical.                                                                                            |
-
 ### Native text markup and notes
 
 The rebuilt NavPDF app reopened `tests/pdf-fixtures/phase2-native-all-markup-20260913.pdf` on page 500 with a clean state.
@@ -973,13 +859,6 @@ Preview opened the exact artifact and visibly retained the original text plus th
 The rebuilt app reopened the artifact with accessible shape-selection controls.
 Selecting the square exposed color, width, opacity, move and resize controls in the Properties panel.
 Native move, resize and stroke-width edits set the dirty state, deleting the selected square removed it from the live comment list, and Undo restored it without saving the temporary edits.
-
-### Theme modes
-
-The rebuilt app exposes System, Light and Dark in Settings.
-Native inspection verified the warm paper-and-sage Light workspace and the green-charcoal Dark workspace with readable controls, focused inputs and accessible theme names.
-Selecting Light or Dark updates the workspace immediately, and Cancel restores the persisted System mode.
-Theme resolution and document-level application are covered by `tests/unit/theme.test.ts`, while Settings preview and restoration are covered by `tests/unit/viewer-ui.test.tsx`.
 
 ### Comment workflow and review exchange
 
@@ -1005,67 +884,6 @@ Acrobat opens the saved artifacts with intact annotation structures.
 
 Exact blocker for synthetic GUI automation: macOS Accessibility permissions (`System Events` / AppleScript) cannot be granted interactively in non-interactive CI/CLI execution.
 Native manual workflows and automated integration tests cover the interaction surface without claiming unsupported synthetic automation.
-
-### Current Phase 2 completion
-
-Phase 2 acceptance gate is complete.
-Standard text markup, notes, shapes, arrows, properties, synchronized comments, snapshots, and review exchange are implemented and verified.
-Automated checks pass: 293 frontend tests across 43 files (all coverage thresholds met), clean build, 13 Rust tests passing (1 ignored), Clippy clean with `-D warnings`, git diff check clean, and byte-identical AGENTS/CLAUDE instructions.
-
-The macOS atomic-save fix skips destination-directory `sync_all()` only in macOS builds because the packaged WebKit sandbox blocks indefinitely after the destination has already been atomically replaced.
-The temporary output is flushed before rename, and this change does not alter the existing-file fingerprint or metadata limitations.
-
-### Phase 3 forms, signatures, and native verification
-
-Phase 3 acceptance gate is complete.
-Interactive forms in PDF.js (`AnnotationMode.ENABLE_FORMS`) preserve values and appearances with dirty tracking.
-Pure XFA documents and JavaScript calculations surface clear non-execution and safety notices without silent failure or script execution.
-Form field authoring in `src/services/document-commands.ts` and `FormManager.tsx` creates text (single and multiline), checkbox, radio groups with mutual exclusivity, choice/dropdown lists, and push buttons with coordinate clamping and duplicate name prevention.
-Fill & Sign supports draw, type, image import, initials, and quick marks (check, cross, dot, box, line) with live positioning and persistent PDF embedding.
-Signature library uses an OS-backed encrypted store in `src-tauri/src/signatures/` with machine-derived keys, POSIX `0600`/`0700` permissions, and session-only isolation.
-Legacy plaintext signatures in `localStorage` offer an explicit migration prompt with verified copy before removal.
-Signed-document safeguards warn before modifying documents with digital signatures, and signature appearances carry explicit graphical non-cryptographic disclaimers.
-Automated checks: 306 frontend tests across 45 files (86.70% stmts, 79.55% branch, 85.93% funcs, 89.43% lines), clean typecheck, clean lint, clean build, and 16 Rust tests passing (1 ignored).
-Clippy passed with zero warnings.
-
-### Phase 4 page operations, mutations, and printing verification
-
-Phase 4 acceptance gate is complete.
-Working revision ownership moved behind native handles via commit_working_revision and get_revision IPC commands with base revision identity checks and working temp file tracking.
-Page engine trial documented in ADR-0004: in-place /Pages tree manipulation preserves Document Catalog, Outlines, and AcroForm dictionaries without native C++ dependencies.
-Multi-document operations (merge, split, extract) compose new catalogs and surface explicit structure-loss warnings.
-Page workspace ergonomics: reliable multi-selection, full keyboard navigation (Arrows, Space, Shift+Arrows, R, Delete, Enter, Escape), focus management, ARIA attributes, and drag-and-drop page reordering.
-Extraction, merge, and split: mergeDocuments supports MergeInputItem with input reordering and per-input page ranges; splitDocumentWithManifest returns structured output manifests; CreatePdfDialog provides interactive input ordering, per-file range filtering, and manifest summaries.
-Printing: PrintDialog commits active editor state, serializes all annotations and form fields, detects mixed page dimensions with an explicit user notice, and prints through native macOS PDFKit with exact page count validation.
-Combined workflows: form fill, sticky note, page reordering, page rotation, save, and independent PDF.js verification of geometry, rotation, and annotations.
-Automated checks: 313 frontend tests across 45 files (85.64% Stmts, 78.56% Branch, 85.49% Funcs, 88.37% Lines), clean typecheck, clean lint, clean build, and 17 Rust tests passing (1 ignored).
-Clippy passed with zero warnings.
-
-### Phase 5 content placement, decoration, links, and attachments verification
-
-Phase 5 acceptance gate is complete.
-Placement geometry controls (`convertToPdfCoords`, `convertToDomCoords`, `nudgePoint`, `clampRectToPage`, `calculateAspectPreservedDimensions`) handle page rotations (0, 90, 180, 270 degrees) and crop offsets.
-Standard font coverage validation (`validateStandardFontCoverage`) inspects glyph availability against WinAnsi/Latin-1 encoding before document mutation, blocking unsupported CJK, Cyrillic, and emoji characters with user-facing warnings.
-Document decorations (`DecorationsDialog.tsx` and `applyDocumentDecorations`) support 6-slot headers and footers with token replacement, text/image watermarks with angle and opacity controls, background color fills, and page range filtering.
-App-owned decoration streams are tagged with `/NavPDF_Decoration true` in the PDF stream dictionary, enabling clean decoration removal via `removeDocumentDecorations` without mutating existing page content or annotations.
-Bates numbering (`applyBatesNumbering`) supports 6 anchor positions, configurable prefix/suffix/digits padding, identifier sequence collision detection, and structured assignment manifests.
-Safe link authoring (`LinkDialog.tsx`) supports internal page jump destinations and external URLs restricted to `https:`, `http:`, and `mailto:` schemes, rejecting dangerous protocols (`javascript:`, `file:`, `data:`, `vbscript:`).
-Embedded attachment handling (`AttachmentsDialog.tsx`) lists document attachments from the catalog `/Names /EmbeddedFiles` tree, bounds file size to <= 50MB, sanitizes filenames against path traversal, and provides safe export to user-selected locations.
-Automated checks: 50 test files passed (353 total tests), 84.82% Stmts, 77.05% Branch, 82.75% Funcs, and 87.58% Lines.
-Clippy passed with zero warnings and 17 Rust tests passed.
-
-### Phase 6 OCR and basic exports verification
-
-Phase 6 acceptance gate is complete.
-The scored OCR evaluation corpus in `tests/pdf-fixtures/ocr-evaluation-corpus.json` and synthetic multi-page scan fixture `tests/pdf-fixtures/ocr-scans.pdf` establish repeatable WER/CER quality, latency, and memory baselines across single-column, multi-column, rotated, and low-contrast scans.
-Architectural evaluation ADR-0005 (`docs/adr/0005-local-ocr-engine.md`) integrates Apple Vision (`VNRecognizeTextRequest`) dynamically on macOS with a deterministic portable test engine fallback, ensuring 100% offline local recognition, zero binary bloat, and no telemetry.
-Invisible searchable PDF text layers are generated using standard ISO 32000-1 text rendering mode 3 (`3 Tr`) tagged with `/NavPDF_OCR true`, aligning words precisely to bounding boxes.
-Decompressed stream inspection in `detectExistingText` warns users if digital text is already present on target pages, preventing unintended overlay duplication.
-`removeOcrSearchableLayer` cleanly purges previous OCR streams by metadata tag without mutating scanned background image objects.
-OCR user interface in `OcrPanel.tsx` displays offline engine verification, language selection, target page scoping (Current, All, Custom Range), real-time progress, cancellation support, existing text alerts, and text-only extraction mode.
-Export dialog in `ExportDialog.tsx` supports UTF-8 plain text export in reading order and PNG/JPEG image export with selectable DPI (72, 150, 300 DPI), JPEG white background transparency preservation, and dimension memory bounds protection (< 8192px).
-Automated checks: 54 test files passed (372 total tests), 84.6% Stmts, 77.01% Branch, 81.82% Funcs, and 87.3% Lines.
-Clippy passed with zero warnings and 21 Rust tests passed (1 ignored).
 
 ### Phase 7 existing editing, protection and redaction verification
 
@@ -1114,19 +932,7 @@ The Word file holds 6 paragraphs and no table element; table rows become paragra
 Office import is not delivered.
 Collections, generated answers and summaries, translation, generated presentations and podcasts are deferred by ADR 0008 and not offered in the interface.
 "Find and Cite Passages" is extractive, with page citations and an explicit insufficient-evidence result covered by unit tests.
-Limitation: exports that use the browser download path (Office, image, text, attachment and snapshot files) write to `~/Downloads` without a save dialog, and macOS asks for Downloads folder access on first use.
-
-### Phase 9 distribution and platform acceptance verification
-
-Package verification utilized `npm run package`, which builds the production Vite frontend bundle and compiles Tauri in release profile.
-Both bundles completed cleanly: `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-`hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg` verified the disk image checksum as valid (CRC32 `$142667C1`).
-The release executable SHA-256 is `78342c159b1bfd5aa11ed61dec9f47fd143fa85af56ea7fe0fbe7d52cc3623b1`.
-The release DMG SHA-256 is `b8c1d32fa9e22283269a7905f3786d758e1e4fca812e29464d17623a4a3b98f8`.
-The license inventory script `node scripts/license-inventory.mjs` generated `output/release/licenses.json`, recording 362 cargo crates and 27 production npm packages.
-Six dependencies requiring attribution or notice inspection are documented: `cssparser`, `cssparser-macros`, `dtoa-short`, `option-ext`, `selectors`, and `jpeg-encoder`.
-Accessibility hardening verified modal focus trapping and Escape handling in `src/components/ModalFocus.ts` and error containment in `src/components/ToolErrorBoundary.tsx`.
-Distribution limitation: code signing credentials and Apple notarization are not configured in the local build environment; binaries are ad-hoc signed and labeled as unsigned local builds.
+Historical limitation: these exports used browser downloads to `~/Downloads`; the September 19 native export adapter later replaced this path with selected destinations.
 
 ### Phase 10 optional services and local certificate signatures verification
 
@@ -1146,74 +952,11 @@ The suite verified:
 - Invalidation of whole-document coverage upon post-signing appended revisions.
 - Rejection of invalid, expired, or wrong-password PKCS #12 keystores without output leakage.
 
-## Packaging boundaries
-
-Full application packaging succeeded at `src-tauri/target/release/bundle/macos/NavPDF.app` and `src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg`.
-Executable SHA-256: `78342c159b1bfd5aa11ed61dec9f47fd143fa85af56ea7fe0fbe7d52cc3623b1`.
-DMG SHA-256: `b8c1d32fa9e22283269a7905f3786d758e1e4fca812e29464d17623a4a3b98f8`.
-DMG integrity was independently verified using `hdiutil verify`.
-All local automated checks pass: 61 frontend test files (406 tests) with full coverage, 58 Rust tests with 1 constrained disk-full test ignored, Clippy clean with zero warnings, and passing acceptance suites for Phase 7 (55/55), Phase 8 (12/12), and Phase 10 (55/55).
-
-See [PR-1-REVIEW.md](PR-1-REVIEW.md) for milestone disposition and remaining implementation limitations.
-
-### September 15, 2026 review correction verification
-
-The final correction work was verified from the current worktree after the native OCR bridge, viewer hardening, forms editing, crop and transform controls, signature rotation, protection parity, and machine-relative native budgets were implemented.
-
-npm run test:coverage passed 504 tests across 80 files.
-
-Coverage was 83.39% statements, 75.01% branches, 81.18% functions, and 86.20% lines.
-
-npm run lint, npm run typecheck, npm run build, cargo fmt --manifest-path src-tauri/Cargo.toml -- --check, cargo test --manifest-path src-tauri/Cargo.toml, and cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings passed.
-
-Rust tests reported 80 passed, 0 failed, and 1 ignored because the real disk-full test requires a disposable constrained volume.
-
-npm run acceptance:ocr passed 6 of 6 native Vision samples and wrote output/ocr-review/corpus-report.json.
-
-npm run acceptance:phase7 passed 55 of 55 checks.
-
-npm run acceptance:phase8 passed 12 of 12 checks.
-
-npm run acceptance:phase10 passed 55 of 55 checks.
-
-npm run acceptance:licenses wrote output/release/licenses.json with 372 resolved crates and 27 production npm packages.
-
-npm run acceptance:check-tools found all required independent validation tools.
-
-A fresh single-process launch of the final packaged application opened phase1-recovery-saved-20260913.pdf, rendered the visible page canvas and thumbnails, and showed no persistent loading spinner.
-
-The native rendering check used the exact app bundle at src-tauri/target/release/bundle/macos/NavPDF.app.
-
-Preview and Acrobat reopen verification for this final source revision was not completed.
-
-The final package executable SHA-256 is 9a6364bf60b67d504fd64ec30e5ddc4d2cefc332df364a2dc17e045f92bf43c4.
-
-The final package DMG SHA-256 is 2904b2a5bcbbf680aff64c8284e5e7553afdc0c579379818eb68e8f9f27c0a82.
-
-hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg reported a valid checksum with CRC32 $B4992B9A.
-
-The hosted run for commit 74974c9 confirmed the manifest path correction, then failed Cargo Deny on unallowed transitive license terms.
-
-The same hosted run failed the macOS Rust job because the linker could not resolve the synthetic swift_Builtin_float entry.
-
-The follow-up adds explicit transitive license allowances and a versioned JPEG IJG clarification, marks the private native package unpublished, and removes the redundant Swift runtime link entry.
-
-The local cargo-deny 0.18.4 full license check passes.
-
-Hosted run `35009656343` passed the normal frontend, Rust, SonarCloud and commit checks.
-It failed Cargo Deny on `RUSTSEC-2024-0370`, `RUSTSEC-2025-0075`, `RUSTSEC-2025-0080`, `RUSTSEC-2025-0081`, `RUSTSEC-2025-0098` and `RUSTSEC-2025-0100`, all transitive advisories with no safe upgrade reported by the database.
-It also failed native acceptance because `reader-100.pdf` is generated by `npm run fixtures` and was not generated in that job.
-The current follow-up adds the documented advisory exceptions and runs `npm run fixtures` before native acceptance.
-Hosted run `35012242904` passed all listed CI and native acceptance checks for this follow-up.
-
-The hosted Phase 10 checks then exposed more OpenSSL version drift because the runner rejected `x509 -not_before` and used different successful CMS output text.
-The script now uses the compatible `req -nodes` and `x509 -days 0` forms and checks the CMS process exit status.
-OpenSSL checks CMS and byte-range integrity with `-noverify`, while independent `pdfsig` checks the synthetic trust chain.
-Local Phase 10 acceptance passes 55 of 55 checks.
+## September 19-23 settings and styling acceptance
 
 ### September 19, 2026 settings and theme verification
 
-Application source: `c93b9a119cbd3e5836243c213a7d9d6b0ef7ab63`, following the [implementation plan](IMPLEMENTATION-PLAN-2026-09-18.md).
+Application source: `c93b9a119cbd3e5836243c213a7d9d6b0ef7ab63`, for the settings reliability and palette delivery.
 This change supplies 15 palettes per mode, independent saved defaults, custom background/accent overrides, and settings persistence and preview corrections.
 
 Local validation:

@@ -57,7 +57,8 @@ Painting boxes over content without removing it is not redaction and is rejected
 ## Consequences
 
 `node scripts/phase7-acceptance.mjs` passed 55 of 55 checks against poppler utilities, raw, inflated and decoded-string scans, rendered pixels and extracted image samples.
-Vector paths that only partly overlap a region remain beneath the black box.
+The initial implementation retained partly overlapping vector paths; later hardening removes intersecting paths and rejects unsupported shading fills.
+Independent removal audits remain required for every declared redaction case.
 Audit text for composite fonts without a ToUnicode map is unknown, although raw stream scans still apply.
 Images that cannot be redacted pixel by pixel are removed rather than partly kept.
 PDF permission flags are advisory; poppler extracted text from a copy-restricted file with the open password.

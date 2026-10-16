@@ -4,19 +4,21 @@ A local desktop PDF workspace for macOS Apple Silicon, built with Tauri, Rust, R
 Documents stay on your computer.
 There is no account, server backend, upload, analytics, or telemetry.
 
-## Current milestone
+## Current scope
 
-The current implementation covers the approved local scope across Phases 1 through 8 and local certificate signatures in Phase 10.
-Phase 9 has a verified unsigned macOS Apple silicon package, but clean-account installation, distribution signing/notarization, physical printing, and non-macOS acceptance remain open release gates.
+The implementation includes reader, editing, page, form, OCR, export, protection, redaction and local certificate-signature workflows.
+Implementation and native acceptance are tracked separately; Phases 3, 4 and 6 still have reopened gates.
+Earlier unsigned macOS Apple silicon packages passed local checks.
+The latest recorded release package fails with Rust E0463 loading procedural macros; clean-account installation, signing/notarization, physical printing and non-macOS acceptance also remain open.
 Phase 8 model-based generation and translation, Office import, and the hosted and remote integrations considered in Phase 10 are explicitly deferred or declined by their ADRs.
 Follow [the active delivery phases](docs/DELIVERY-PHASES.md) for the ordered scope, evidence, and remaining gates.
-See [the implementation review](docs/PR-1-REVIEW.md) for historical limitations of the initial editing tools.
+Use [the documentation index](docs/README.md) for architecture decisions, acceptance criteria and dated evidence.
 
 Available features:
 
 - A single-document tab, left tool panel, floating markup tools, right navigation rail, and organized native menus.
 - Native Open, Save, Save As, and export dialogs, plus queued Finder Open With and single-file drag-and-drop.
-- Import and combine PDFs, PNGs, and JPEGs, with ordered pages and bounded image validation.
+- Import and combine PDFs, PNGs and JPEGs, plus native macOS HEIC/HEIF and multipage TIFF, with ordered pages and bounded image validation.
 - A first-launch tour, nine startup tips, a saved tip opt-out, and Help access to both.
 - Continuous, single-page, and two-page viewing.
 - Fit page, fit width, 25% to 500% zoom, trackpad zoom, and a hand tool.
@@ -41,7 +43,7 @@ Search results show the first 250 entries, while Next/Previous match can navigat
 Image-only scans display normally and can use local Apple Vision OCR on macOS to add searchable text.
 Browser preview and other platforms report OCR unavailable.
 Searchable export supports standard-font characters; other recognized text can be extracted without modifying the PDF.
-See [the PR 2 corrective review](docs/PR-2-REVIEW.md) for reopened acceptance gates and remaining capability gaps.
+See [the delivery tracker](docs/DELIVERY-PHASES.md) for reopened acceptance gates and remaining capability gaps.
 
 Office, HTML, CSV and XML exports reconstruct editable text from the PDF text layer; PowerPoint can alternatively preserve each page as a picture.
 TIFF, PostScript and EPS exports contain rendered page images, and several exported page images are saved as one ZIP archive.
@@ -51,7 +53,7 @@ Native exports ask for a destination and retain the active document on cancellat
 
 ## Local workflow additions
 
-The October 13 update adds [20 page, form, review and reader features](docs/IMPLEMENTATION-PLAN-2026-10-13.md).
+Page, form, review and reader tools extend the local workspace:
 
 - **Organize Pages:** typed range selection, odd/even/inverted selection, reverse order, move a selection before a page or to the end, fixed-size split ZIPs, and individual-page ZIP exports.
 - **Form Data** in All Tools or Fill & Sign: export editable values as JSON or CSV, preview and import JSON, check missing required fields, and clear editable values after confirmation.
@@ -66,7 +68,9 @@ XFA and encrypted form data are unavailable, signed PDFs cannot import or clear 
 Imported text that the built-in appearance font cannot draw is rejected during preview.
 Clearing form values does not restore defaults or remove field definitions.
 Word counts are approximate text-layer tokens, character counts exclude whitespace, and textless pages are not necessarily blank.
-No document upload, new dependency or remote service is added.
+The October 16 [PDFCraft-compatible additions](docs/PDFCRAFT-COMPARISON.md) also provide Cmd/Ctrl+K tool search, poster tiling, initial-view preferences, bookmark/size splitting, XFDF forms, accessibility reports, link tools, heading bookmarks, form-field arrangement, measurement CSV, redaction word lists, space auditing, merged form CSV and comparison reports.
+Their scoped limits and outstanding native workflows are recorded in the comparison and delivery tracker.
+Full PDFCraft or Acrobat parity is not claimed.
 
 ## Getting started
 
@@ -79,7 +83,7 @@ NavPDF registers as an alternate PDF editor without changing your default reader
 
 ## Run locally
 
-Prerequisites: Node.js 24, Rust 1.89 or newer, and Xcode Command Line Tools.
+Prerequisites: Node.js 24, Rust 1.90 or newer, and Xcode Command Line Tools.
 The application itself does not require Node, Python, or a local server after packaging.
 
 ```sh
@@ -94,7 +98,7 @@ npm run dev
 ```
 
 Open `http://localhost:1420`.
-The browser preview uses file selection and downloads; native atomic saving, recents, and recovery are verified in the desktop build.
+The browser preview uses file selection and downloads; native atomic saving, recents and recovery require desktop acceptance.
 
 ## Build
 
@@ -102,7 +106,7 @@ The browser preview uses file selection and downloads; native atomic saving, rec
 npm run package
 ```
 
-The macOS application is written to `src-tauri/target/release/bundle/macos/NavPDF.app`.
+On a successful build, the macOS application is written to `src-tauri/target/release/bundle/macos/NavPDF.app`.
 The installer is written under `src-tauri/target/release/bundle/dmg/`.
 For an app-only build, use `npx tauri build --bundles app`.
 Local builds are not claimed to be signed with a distribution identity or notarized.
@@ -128,6 +132,7 @@ Network access is disabled by the production content security policy and native 
 
 | Shortcut | Action |
 | --- | --- |
+| Cmd/Ctrl + K | Search tools |
 | Cmd/Ctrl + O | Open |
 | Cmd/Ctrl + S | Save |
 | Cmd/Ctrl + Shift + S | Save As |
@@ -149,20 +154,23 @@ Network access is disabled by the production content security policy and native 
 ## Validation
 
 ```sh
-npm test
+npm run format:check
 npm run lint
 npm run typecheck
+npm run test:coverage
 npm run build
 npm run test:native
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+git diff --check
+cmp AGENTS.md CLAUDE.md
 ```
 
-`npm test` generates the standard 5, 100, 500, and 1,000-page corpus before running tests.
+`npm test` and `npm run test:coverage` generate the standard 5, 100, 500, and 1,000-page corpus before running tests.
 Small special fixtures are checked in for encrypted files, embedded fonts, and image-only scans.
 Their optional regeneration script uses PyMuPDF as a development-only reference engine; it is not part of the product or build.
 See [verification evidence](docs/VERIFICATION.md) for actual UI checks and remaining acceptance work.
 
-## Architecture and next phases
+## Architecture and acceptance
 
 [ARCHITECTURE.md](ARCHITECTURE.md) explains the boundaries, library decisions, licenses, performance model, and OCR strategy.
 [ADR 0001](docs/adr/0001-tauri-pdfjs-foundation.md) records the foundation choice.

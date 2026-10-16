@@ -15,7 +15,7 @@ The September 14 review identified stream ownership and deleted-object risks whe
 Keep pdf-lib for annotation and form writers, page composition, decorations, OCR layers and metadata behind the helpers in `src/services/pdf/`.
 Every persisted candidate remains subject to native validation and independent saved-byte inspection.
 Route destructive object pruning, protection, compression, redaction and certificate signing through the Rust engine under `src-tauri/src/engine/`.
-Evaluate moving decorations and OCR layer generation to the Rust engine in Tranche 6 if the current memory and interoperability measurements require it.
+Evaluate moving decorations and OCR layer generation to the Rust engine if measured memory and interoperability results justify it.
 
 ## Consequences
 

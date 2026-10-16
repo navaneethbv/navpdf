@@ -17,7 +17,8 @@ A fix is considered verified only after relevant regression tests and independen
 ## Security boundaries
 
 PDFs, attachments, extracted text and metadata are untrusted input.
-Embedded scripts are disabled, external links require confirmation, and attachments are never launched automatically.
+Embedded scripts are disabled and attachments are never launched automatically.
+External links require confirmation unless the user has approved that host for the current session; native URL validation still applies.
 Document processing is local; security reports must not include private user documents.
 Encrypted input remains read-only until explicitly unlocked, and decrypted recovery copies must not be written.
 Secure redaction must remove underlying content and pass text, object, image and hidden-data checks.

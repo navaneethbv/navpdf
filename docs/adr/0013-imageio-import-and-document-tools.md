@@ -37,7 +37,8 @@ Visual comparison is an aid to review, not a proof of binary or semantic equival
 The synthetic Swift acceptance program verifies HEIC and two-page TIFF decoding and orientation with an independent ImageIO PNG decode.
 Rust tests cover invalid inputs, oversized dimensions, TIFF page count and orientation.
 Saved PDF checks use PDF.js and Poppler, with native save/close/reopen results recorded in `docs/VERIFICATION.md`.
-macOS Preview acceptance remains unavailable because Computer Use was not approved for Preview.
+Preview access was initially unavailable; the September 26 follow-up inspected six saved outputs.
+The [verification ledger](../VERIFICATION.md#september-26-preview-acceptance-and-delivery-follow-up) records the covered artifacts and remaining OCR/outline navigation limits.
 Windows/Linux codec support and installer acceptance are separate work.
 
 ## Primary references

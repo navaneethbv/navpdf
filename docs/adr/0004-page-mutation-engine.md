@@ -3,7 +3,8 @@
 Date: 2026-09-13
 Status: Accepted for Phase 4.
 
-The PDFium deferral in this record is superseded by ADR 0006 for the native lopdf engine used by protection, compression, existing-object edits and redaction.
+The PDFium deferral in this record is superseded by [ADR 0006](0006-native-pdf-engine.md).
+[ADR 0013](0013-imageio-import-and-document-tools.md) later extends supported merge preservation; extraction and splitting still have explicit structure-loss boundaries.
 
 ## Context
 
@@ -24,7 +25,7 @@ Enforce durable working revision ownership and stale base revision rejection beh
 ## Alternatives
 
 - Bundling `qpdf` via C++ FFI or subprocess:
-  Adds substantial native packaging complexity, dynamic library linking across macOS universal architectures (aarch64 and x86_64), Windows and Linux, and increases binary size by 15-20 MB without providing superior in-document catalog preservation over in-place page tree permutation.
+  Adds substantial native packaging complexity, dynamic library linking across macOS universal architectures (aarch64 and x86_64), Windows and Linux, and requires a measured preservation and distribution trial.
 - Introducing PDFium in Phase 4:
   PDFium adds large binary overhead and is deferred to Phase 7 where existing-object editing and redaction require its rendering and content-stream rewrite capabilities.
 - Pure client-side array manipulation without native revision ownership:
@@ -32,8 +33,8 @@ Enforce durable working revision ownership and stale base revision rejection beh
 
 ## Consequences
 
-- Zero native C++ dependency bloat, preserving fast compilation and clean multi-platform packaging.
-- Complete preservation of bookmarks, forms and page boxes during in-document page operations.
+- No new native C++ PDF engine dependency; platform packaging still requires its own acceptance.
+- In-document page operations retain the existing catalog; page-reference remapping and supported structures still require independent checks.
 - Explicit, predictable user warnings when composing new documents that cannot inherit source catalogs.
 - Stale base revisions are rejected by native handles, preventing concurrent write collisions.
-- Memory usage is bounded by in-memory document size; documents up to several hundred pages operate smoothly within existing memory budgets.
+- Page composition still serializes document bytes; memory and responsiveness require measured acceptance.

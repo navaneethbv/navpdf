@@ -1,7 +1,7 @@
 # ADR 0016: Selective PDFCraft capability integration
 
 Date: October 16, 2026.
-Status: accepted architecture direction; implementation and acceptance remain in progress.
+Status: accepted architecture direction; two scoped tool batches merged in PR 68, with full comparison and native acceptance incomplete.
 
 ## Context
 
@@ -32,11 +32,14 @@ The maintained pure JavaScript parser requires no native runtime or network acce
 Parser errors are fatal; document types, entity declarations, foreign elements and non-plain values remain rejected.
 Round-trip tests verify literal escaped markup, checkbox export states and saved PDF form values.
 The existing Node 24 toolchain satisfies its Node 14.6 minimum.
-They add tool search, poster composition, initial-view editing, bookmark/size ZIP splitting, XFDF form-data exchange, and additional accessibility structure checks and reports.
+The first batch adds tool search, poster composition, initial-view editing, bookmark/size ZIP splitting, XFDF form-data exchange, and additional accessibility structure checks and reports.
 The shared tool catalog keeps panel and palette actions aligned.
 PDF mutations continue through the existing revision transaction, and exports retain native destination selection.
 Poster output explicitly contains page content only, with annotations, fields and links remaining in the source document.
 It is a print composition operation, never a sanitization or redaction operation.
+
+A second batch adds link tools, heading bookmarks, field arrangement, measurement CSV, redaction word lists, space auditing, merged form CSV and comparison reports.
+The [comparison](../PDFCRAFT-COMPARISON.md#second-batch-mapping) records their individual limits.
 
 ## Licensing
 

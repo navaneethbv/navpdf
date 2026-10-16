@@ -5,7 +5,7 @@ Status: Accepted for the requested security remediation.
 
 ## Context
 
-Tauri 2.11.5 resolves GTK 0.18.2 and GLib 0.18.5 on Linux.
+At the September 20 decision baseline, Tauri 2.11.5 resolved GTK 0.18.2 and GLib 0.18.5 on Linux.
 RUSTSEC-2024-0429 affects string iteration because a C output argument writes through a pointer supplied as an immutable Rust reference.
 Upstream fixed the reference mutability in PR 1343, but its 0.18 branch still contains the original code and the advisory lists 0.20.0 as the first fixed release.
 Updating only GLib to 0.20 cannot satisfy the current GTK dependency contracts.
