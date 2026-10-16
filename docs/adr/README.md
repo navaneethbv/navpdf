@@ -12,9 +12,12 @@
 | [0008: Model-based local tools deferred](0008-local-intelligence-deferred.md) | Accepted for Phase 8 (scope decision) |
 | [0009: Local certificate signatures from a PKCS #12 identity](0009-local-certificate-signatures.md) | Accepted for Phase 10 |
 | [0010: Hosted and specialist integrations declined for this release](0010-optional-services-declined.md) | Accepted for Phase 10 (scope decision) |
-| [0011: pdf-lib maintenance boundary and exit path](0011-pdf-lib-maintenance-and-exit.md) | Accepted for the September 14 correction plan |
+| [0011: pdf-lib maintenance boundary and exit path](0011-pdf-lib-maintenance-and-exit.md) | Accepted for the pdf-lib maintenance boundary |
 | [0012: GLib string iterator security backport](0012-glib-security-backport.md) | Accepted for September 20 security remediation |
+| [0013: Local image import and document tool extensions](0013-imageio-import-and-document-tools.md) | Accepted for local macOS import and tools |
+| [0014: Additional local export formats](0014-additional-export-formats.md) | Accepted for scoped text and raster exports |
+| [0015: Document review and preparation tools](0015-document-review-tools.md) | Accepted for local review tools |
+| [0016: Selective PDFCraft capability integration](0016-pdfcraft-capability-integration.md) | Accepted; broader comparison and acceptance remain open |
 
-- [0013: Local image import and document tool extensions](0013-imageio-import-and-document-tools.md).
-- [0014: Additional local export formats](0014-additional-export-formats.md).
-- [0015: Document review and preparation tools](0015-document-review-tools.md).
+Use the [template](template.md) for a new decision.
+Dated context explains the original choice; later ADRs and the [delivery tracker](../DELIVERY-PHASES.md) determine current scope and acceptance.

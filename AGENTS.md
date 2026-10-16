@@ -9,9 +9,9 @@ Both files are maintained source documents, not generated files.
 
 ## Start here
 
-Read `docs/DELIVERY-PHASES.md` for the active phase, acceptance gates, recorded defects and next task.
-Read `docs/PRODUCT-SPEC.txt` for product requirements and `docs/IMPLEMENTATION-ROADMAP-2026-09-12.md` for detailed capability plans.
-Use `docs/PR-1-REVIEW.md`, `docs/PR-2-REVIEW.md`, `REVIEW-2026-09-14.md`, `docs/VERIFICATION.md` and `docs/HANDOFF.md` for dated evidence and limitations.
+Read `docs/README.md` for the documentation map and `docs/DELIVERY-PHASES.md` for current phase status, unresolved work and next tasks.
+Read `docs/PRODUCT-SPEC.txt` for original requirements, `docs/adr/README.md` for accepted decisions, and `docs/phases/README.md` for acceptance criteria.
+Use `ARCHITECTURE.md` for current boundaries and `docs/VERIFICATION.md` for dated evidence and limitations.
 Check current source before relying on historical architecture or completion claims.
 Inspect `git status --short` before editing and preserve all pre-existing work.
 Do not reset, clean, stash or overwrite someone else's changes to simplify the task.

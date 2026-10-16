@@ -1,62 +1,44 @@
-# Phase implementation plans
+# Acceptance checklist
 
-Created: September 13, 2026.
-These plans expand the ordered phases in [the active delivery tracker](../DELIVERY-PHASES.md).
-They describe remaining implementation work; writing a plan does not complete a feature.
-The Current baseline section in each plan records the entry state when the plan was written and is not a substitute for current-source status.
-The tracker owns current phase status and the [verification ledger](../VERIFICATION.md) records acceptance evidence.
-The [original roadmap](../IMPLEMENTATION-ROADMAP-2026-09-12.md) retains the broader screenshot inventory and engine rationale.
+Use these criteria when implementing or revalidating a phase.
+The [delivery tracker](../DELIVERY-PHASES.md) owns current status and next work; this checklist makes no completion claims.
+Detailed historical step plans are available in Git history before the documentation cleanup.
 
-## Plans
+## Shared contract
 
-| Phase | Implementation plan | Original milestone |
-| --- | --- | --- |
-| 1 | [Reader reliability and file safety](01-reader-reliability.md) | M0 |
-| 2 | [Complete local annotations](02-local-annotations.md) | M2 |
-| 3 | [Forms and local Fill & Sign](03-forms-fill-sign.md) | M4 |
-| 4 | [Page operations and mutation foundation](04-pages-mutations.md) | M1 |
-| 5 | [Content placement and decoration](05-content-decoration.md) | M3 |
-| 6 | [OCR and basic exports](06-ocr-exports.md) | M5 |
-| 7 | [Existing editing, protection and redaction](07-editing-protection-redaction.md) | M6 |
-| 8 | [Office conversion and local intelligent tools](08-conversion-intelligent-tools.md) | M7 |
-| 9 | [Distribution and platform acceptance](09-distribution-platforms.md) | Release acceptance |
-| 10 | [Optional services and specialist compatibility](10-optional-integrations.md) | M8 |
+Work in delivery order and establish prerequisite acceptance before claiming a dependent phase complete.
+Use the existing document identity, revision history, cancellation and PDF-point geometry boundaries.
+Start fixes with an end-user reproduction on synthetic input; use native NavPDF for WebKit, dialogs, saving, recovery, printing and lifecycle defects.
+Record an exact blocker when native reproduction is unavailable and distinguish browser/unit substitutes from native evidence.
 
-## Sequence and shared prerequisites
+For persisted changes, exercise edit, undo/redo where supported, Save As, close and reopen in NavPDF and an independent reader.
+Use Preview on macOS and Acrobat for Acrobat-specific compatibility claims.
+Inspect annotation/form objects and visible appearances, including rotated/cropped pages, mixed sizes, non-ASCII text and large documents as relevant.
+Check failed writes, cancellation, stale results, collisions and recovery without personal documents or destructive tests on real data.
+Keep artifacts under ignored `output/` and record source/build identity and output hashes in the [ledger](../VERIFICATION.md).
 
-Execute phases in the tracker order; the tracker records which approved scopes are complete and which release gates remain open.
-The delivery-phase numbers intentionally differ from the historical M0-M8 numbers.
-Phase 2 introduces the minimum revision guards, bounded annotation history and coordinate transforms required for safe annotation extensions.
-Phase 3 extends those same foundations for form and signature placement.
-Phase 4 completes native job ownership, general history and structural preservation; it must extend the earlier contract rather than replace it with a competing implementation.
-Phase 5 completes broader content ergonomics.
-Later phases reuse the same document identity, revision, cancellation, persistence and capability boundaries.
+## Phase criteria
 
-Finish prerequisite acceptance before dependent implementation.
-If a trial fails, keep the dependent feature unavailable, record the failed criterion and revise the plan.
-Do not skip an acceptance gate or silently substitute a weaker capability.
-Future module paths named in a plan are proposed additions, not claims that those modules already exist.
-Refresh the listed source areas before coding because later changes can move ownership.
+| Phase | Required behavior and independent checks |
+| --- | --- |
+| 1: Reader and safety | Open/search/highlight/save/reopen a 500-page file; check text-selection and freehand highlights separately. Dirty Open, cancel/discard, damaged replacement, close/quit, recovery, external modification, destination collision, read-only output and constrained-volume failures must retain the expected data. |
+| 2: Annotations | Each declared annotation type preserves subtype, contents, geometry and appearance across repeated saves. Properties, selection, deletion, replies/status where supported, live comments, undo/redo and saved dirty state agree. Snapshot export leaves the document unchanged; repeated review import does not duplicate comments and validates identity. |
+| 3: Forms and signatures | Supported text, checkbox, radio and choice widgets retain values, flags, appearances, tab order and names. Geometry and signature marks survive rotation/crop/zoom. Test duplicate names, read-only fields, unsupported XFA/scripts, existing signatures, failed saves and mixed edits. Persistent assets require authenticated encryption and OS-backed keys, recoverable migration and locked-store errors; session-only assets stay unpersisted. |
+| 4: Pages and revisions | All operations preserve declared page boxes, rotations, labels, links, outlines, annotations and form references or explicitly warn/reject. Verify ordered inputs, duplicate field names, output manifests, bounded ZIPs, collisions and cancellation. Mixed edits, page mapping, stale revisions, undo/redo and failed attachment preserve ownership. Print the edited revision with the selected pages and declared options. |
+| 5: Content and decoration | Saved text/images and app-owned decorations match supported previews. Repeated apply/update/remove preserves unrelated content. Verify transforms, font coverage, embedding rights, unsupported scripts, image transparency, Bates collisions/manifests, safe links and bounded inert attachment extraction. Cropping and drawing are never secure removal. |
+| 6: OCR and basic exports | Run real recognition on labeled skewed, rotated, low-contrast, multi-column, table and mixed text/scan inputs. Record WER/CER, box alignment, language availability, latency, memory and target hardware. Independent text extraction and rendering verify searchable layers without changing scan pixels. Test existing-layer replacement, correction, cancellation and stale work. Exports honor ranges, dimensions, quality, names and resource bounds. Scanner acquisition needs separate device/permission/error evidence. |
+| 7: Editing and protection | Confirm supported text/image replacement with unrelated resources preserved and unsupported fonts rejected. Independently reopen protected output with correct passwords and reject wrong passwords; check plaintext overwrite/recovery boundaries. Compression savings must match bytes and fidelity. Redaction requires fresh output, no prior revisions and independent text, object, image, metadata, attachment, hidden-content and render audits with canaries. Any surviving canary blocks that acceptance. |
+| 8: Conversion | Validate actual DOCX/XLSX/PPTX/RTF and other declared formats with independent consumers. Separate editable text from page-picture slides and raster exports; check reading order, typed cells and spreadsheet formula neutralization. Extractive citations must reach the correct source and report insufficient evidence. Deferred models, Office import and generation remain unavailable until separately approved and measured. |
+| 9: Distribution | Freeze the advertised OS/architecture/feature matrix and license inventory. Build the exact release app and installer, verify hashes/checksum, install/launch from a clean account without development tools, then verify signing/notarization. Exercise keyboard access, focus, VoiceOver, contrast, minimum window sizes, reduced motion, startup/search/memory budgets and physical printer output per claimed platform. |
+| 10: Optional integrations | Local signatures require byte-range, incremental-update, certificate validity, DocMDP, countersignature and tamper tests against independent validators. Integrity is separate from trust, revocation and timestamps. Each newly approved remote/media package needs its own scope, privacy, licensing, credentials/retention and platform acceptance; declined packages are not completed features. |
 
-## Working and verification contract
+## Validation commands
 
-Start each fix with an end-user reproduction using synthetic data and an output copy.
-Preserve unrelated work and avoid modifying generated fixtures manually.
-Use existing fixture generators, extending their sources when new cases are needed.
-Keep manual acceptance artifacts under ignored `output/`; retain existing evidence at its recorded path.
-
-For each persisted feature, test edit, undo/redo where promised, save a copy, close and reopen in NavPDF and an independent consumer.
-For annotation/form compatibility, include Preview and Acrobat where the plan claims compatibility.
-A missing reader or device is a recorded verification gap, not a passing check.
-Validate structure, extracted content and visible appearance independently when relevant.
-Preserve encrypted-input restrictions, source data, dirty state and recovery on failure.
-Test cancellation, stale results, output collision and unavailable capabilities through their actual user flows.
-Use one document revision/history model and serializable UI stores.
-Do not ship controls that imply unsupported behavior.
-
-For application changes, run the repository's required checks:
+Use Node 24, `npm ci`, and Rust compatible with the native manifest, currently at least 1.90.
+For application changes run:
 
 ```sh
+npm run format:check
 npm run lint
 npm run typecheck
 npm run test:coverage
@@ -64,45 +46,22 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 git diff --check
+cmp AGENTS.md CLAUDE.md
 ```
 
-Use Node 24 and the repository lockfiles.
-Run focused regressions during implementation and the required suite before sign-off.
-Keep existing coverage thresholds and LCOV output.
-Planning-only changes require link, content and whitespace checks, not application test reruns.
+Preserve coverage gates and LCOV output.
+Generate fixtures through their sources rather than manually editing them.
+Use the relevant `acceptance:*` scripts in `package.json` for independent artifact checks; they do not replace native GUI journeys.
+Documentation-only changes require link/content, instruction-parity and whitespace checks without new tests.
 
-Rebuild and relaunch the native app after application changes:
-
-```sh
-npm run package -- --bundles app
-```
-
-When the phase includes installer acceptance, run the full package command and verify the actual versioned DMG:
+For native release acceptance:
 
 ```sh
 npm run package
 hdiutil verify src-tauri/target/release/bundle/dmg/NavPDF_0.2.0_aarch64.dmg
 ```
 
-Adapt the artifact filename to the version actually built.
-App build, DMG creation, clean-account installation, signing, notarization and physical printing are separate evidence categories.
-
-## Evidence and phase completion
-
-Record source revision plus relevant local changes, app executable hash, fixture, action, expected result, actual result and output/screenshot paths.
-Record independent-reader versions and target hardware where results depend on them.
-Use a phase-specific section in `docs/VERIFICATION.md` and update the delivery tracker at each completed step.
-Do not replace newer evidence with a historical baseline or count an unchecked item as completed.
-
-| Field | Required record |
-| --- | --- |
-| Identity | Source revision, local-change description, app/engine version and artifact hash. |
-| Reproduction | Synthetic input, user actions, expected behavior and observed failure. |
-| Validation | Regression command/results, native workflow, independent consumer and saved-output inspection. |
-| Boundaries | Unsupported cases, failed gates, environment blockers and residual risks. |
-| Handoff | Completed step IDs, remaining step IDs and next concrete action. |
-
-Each phase completes only after all required implementation steps and acceptance criteria pass.
-Unresolved engine choices, untested platforms or unavailable credentials remain visible gates.
-Local checks, hosted checks, quality analysis, review approval and publication must be reported separately.
-Do not commit, push, send documents or publish merely because this implementation plan exists.
+Use the actual versioned artifact name.
+An app-only build uses `npm run package -- --bundles app` and does not verify the DMG.
+Relaunch the exact rebuilt `src-tauri/target/release/bundle/macos/NavPDF.app` before testing.
+Record unavailable credentials, hardware, readers or automation as open gates.

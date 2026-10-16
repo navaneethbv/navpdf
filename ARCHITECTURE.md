@@ -1,12 +1,11 @@
 # NavPDF architecture
 
-## Scope and sequencing
+## Scope
 
-The accepted product specification is stored verbatim in [docs/PRODUCT-SPEC.txt](docs/PRODUCT-SPEC.txt).
-The current September 14 implementation status and open acceptance gates are recorded in [docs/DELIVERY-PHASES.md](docs/DELIVERY-PHASES.md) and [docs/VERIFICATION.md](docs/VERIFICATION.md).
-Its final instruction is to implement Phase 1 first, then progress through the remaining phases only after the reader foundation is proven.
-This milestone implements the Tauri reader and the additional persisted-highlight acceptance journey explicitly requested at the end of that specification.
-The earlier Electron/Python prototype is preserved in Git history; it is not the architecture or feature-completion evidence for this implementation.
+NavPDF is a single-document local desktop workspace built with Tauri 2, Rust, React, TypeScript, Zustand and PDF.js.
+The [product specification](docs/PRODUCT-SPEC.txt) records original requirements; [ADRs](docs/adr/README.md) record accepted engines and later scope decisions.
+The [delivery tracker](docs/DELIVERY-PHASES.md) owns current implementation and acceptance status, and the [verification ledger](docs/VERIFICATION.md) records dated results.
+The earlier Electron/Python prototype remains in Git history and is not the production architecture.
 
 ## System architecture
 
@@ -21,13 +20,18 @@ flowchart TB
   Native --> Handles[User-selected file handles and range reads]
   Native --> Save[Validate, temporary file, sync, atomic replacement]
   Native --> Local[Local preferences, recents, recovery and safe logs]
-  Future[Later editing and OCR adapters] -.-> Native
+  Commands --> Writers[pdf-lib domain writers]
+  Writers --> Native
+  Native --> Engine[lopdf mutation engine]
+  Native --> OCR[Apple Vision and ImageIO bridges]
+  Native --> Signatures[Keychain-backed signature asset store]
 ```
 
 There is no production HTTP server, Python interpreter, Electron runtime, cloud account or remote document service.
 Tauri uses the operating system webview.
 The frontend can request bytes only through opaque handles created after a native file selection.
-External URLs, PDF scripting, attachment launching and remote navigation are not enabled.
+External links pass a safe-scheme policy and confirmation before an OS open request, with optional host approval for the session.
+PDF scripting, automatic attachment launching and remote webview navigation are disabled.
 
 ## Rendering and data flow
 
@@ -54,10 +58,12 @@ Search requests are cancelled or superseded when the document changes.
 
 ## PDF editing strategy
 
-Phase 1 uses PDF.js's standard highlight annotation editor and its incremental PDF serialization.
+PDF.js supplies annotation editing and serialization, supplemented by local writers for additional standard annotation types.
 A highlight is written into the PDF, not retained only as an overlay or app database entry.
 The native layer validates serialized output with the permissively licensed Rust `lopdf` parser before any target is replaced.
-Encrypted PDFs can be read after entering the password; annotation saving to encrypted documents is deliberately not enabled until the encryption-preserving editing path is verified in a later phase.
+Encrypted PDFs open read-only after a password prompt.
+Explicit unlock creates a sensitive editing session that writes no decrypted recovery or working-revision file; saving requires an explicit protection choice.
+Transparent encryption-preserving editing and recovery remain outside the accepted lifecycle.
 
 The editing boundary accepts typed commands with explicit capabilities and preserves the current source until a successful save.
 pdf-lib remains behind domain helpers for annotations, forms, page composition, decorations, OCR layers and metadata.
@@ -81,24 +87,30 @@ Save detects an externally changed source rather than overwriting it silently.
 PDF.js reads from an immutable source snapshot during the session, preventing later range reads from mixing original and rewritten data.
 
 Recovery is an encrypted-PDF-aware local service boundary.
-For this milestone, unencrypted highlight edits can be recovered from a private application-data snapshot if recovery is enabled.
+Unencrypted dirty documents use private per-document recovery snapshots with sidecar metadata.
+Recovery writes retain source identity and do not make the workspace inert; document replacement and close account for in-flight writes.
 Recovery never saves a decrypted copy of a password-protected source.
 A successful full save clears the recovery entry.
 The home screen exposes recovery explicitly instead of restoring a document without the user's knowledge.
 
 ## OCR strategy
 
-macOS OCR invokes Apple Vision through the native `AppleVisionEngine` and returns text, bounding boxes, language, orientation and confidence.
+macOS OCR invokes Apple Vision through `src-tauri/src/ocr/vision.rs` and the compiled Swift bridge `vision_helper.swift`.
+The native boundary returns text, normalized line geometry, confidence and language information.
+ImageIO uses a separate Swift bridge for bounded HEIC/HEIF and multipage TIFF import.
 The browser preview and unsupported platforms report that the local engine is unavailable.
 The acceptance corpus measures word error rate, character error rate and box geometry instead of substituting fixed sample text.
 OCR results become invisible PDF text rather than replacing scans with visible recognized text.
-The current environment still has an open native OCR gate because the six generated samples returned no recognized text.
+Six native corpus samples passed in the dated verification record.
+Broader scan quality, latency, memory and current packaged workflows remain acceptance work; no production sample-text fallback exists.
+Saved app-owned OCR layers retain review geometry for correction, and redaction removes this duplicate data.
 
 ## Security and privacy
 
 Production content security policy permits bundled assets, local worker resources and Tauri IPC only.
-No HTTP client plugin, shell plugin, arbitrary file-read command, external opener or remote font/CDN is exposed.
-Network access defaults to off and remains unavailable in this milestone.
+No HTTP client plugin, shell plugin, arbitrary file-read command or remote font/CDN is exposed.
+The native URL-opening command revalidates the allowed scheme after frontend confirmation.
+Document processing has no remote-service dependency; production CSP permits no remote processing endpoints.
 Native navigation handlers reject external destinations and PDF scripting remains disabled.
 Native commands validate identifiers, ranges, size limits, destination selection and document lifecycle.
 Passwords remain in memory and are excluded from logs, preferences, recovery and recent-file metadata.
@@ -106,7 +118,10 @@ The logs record timestamp, severity, component, operation and a native backtrace
 
 Preferences and recent document paths stay in private local application data.
 Users can disable recents and clear their history.
-Signature storage and cryptographic signing have separate future service boundaries and are not represented by fake controls in this milestone.
+Reusable signature appearances use AES-256-GCM with random nonces and a random key stored in macOS Keychain; session-only use is available.
+Other platforms have no persistent signature store until OS-protected storage is implemented.
+Local PKCS #12 certificate signing is a separate Rust engine path with incremental output, DocMDP options and integrity verification.
+Certificate trust, revocation, timestamping and long-term validation are not supplied by the local verifier.
 
 ## Performance model
 
@@ -120,19 +135,24 @@ Performance evidence reports measured time and live canvas counts separately fro
 
 ## Library decisions
 
-| Library | License and maintenance evidence | Role and tradeoff |
+Dependency versions are owned by `package.json`, `package-lock.json`, `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock`.
+This table records roles and licensing boundaries rather than a second version inventory.
+
+| Component | License or platform boundary | Responsibility |
 | --- | --- | --- |
-| Tauri 2 | MIT/Apache-2.0; actively maintained desktop framework | Rust shell using WKWebView on macOS, portable architecture for WebView2 and WebKitGTK. |
-| PDF.js / pdfjs-dist 6.3.289 | Apache-2.0; package updated August 2026 | Adopt for rendering, text, search and verified annotation persistence; all assets bundled locally. |
-| lopdf | MIT; current Rust library | Adopt for structural validation of saved PDFs, not rendering or arbitrary text layout. |
-| qpdf | Apache-2.0; maintained native C++ project | Not selected for the current native engine boundary. |
-| PDFium | BSD-style core with third-party notices; maintained in Chromium ecosystem | Deferred because the lopdf engine now owns the required native mutation paths. |
-| pdf-lib 1.17.1 | MIT; stale release cadence and encryption limitations | Bounded writer for annotations, forms, page composition, decorations, OCR layers and metadata under ADR 0011. |
-| lopdf | MIT; current Rust library | Native structural validation and engine for protection, compression, edits, redaction and signing. |
-| MuPDF / PyMuPDF | AGPL or commercial licensing | Strong editing/redaction engine, but excluded from the new distributable until licensing is deliberately resolved. |
-| Tesseract | Apache-2.0; maintained, cross-platform OCR | Portable OCR candidate requiring language assets and measured scan accuracy. |
-| OCRmyPDF | MPL-2.0 application plus separately licensed dependencies | Mature OCR pipeline reference; distribution and subprocess complexity exceed the Phase 1 need. |
-| Apple Vision | Apple system framework and platform SDK terms | macOS OCR candidate; not portable and not presumed superior without fixture-based evaluation. |
+| Tauri 2 | MIT/Apache-2.0; OS webview dependencies | Native shell, dialogs, typed IPC, navigation restrictions and local filesystem ownership. |
+| PDF.js | Apache-2.0 | Rendering, text/search, forms, annotation editing and serialization; worker/assets bundled locally. |
+| pdf-lib | MIT; limited existing-content/encryption support | Annotation/form writers, page composition, decorations, OCR layers and metadata under ADR 0011. |
+| lopdf | MIT | Structural validation, protection, compression, scoped existing-object edits, redaction and certificate-signature integration under ADR 0006. |
+| Apple Vision and ImageIO | Apple system frameworks | Local macOS OCR and HEIC/TIFF decoding through compiled Swift bridges; unavailable elsewhere. |
+| RustCrypto and security-framework | Component-specific MIT/Apache-2.0 licenses | Authenticated signature-asset encryption, macOS Keychain access and local certificate cryptography under ADRs 0003 and 0009. |
+| @xmldom/xmldom | MIT | Strict form-XFDF parsing under ADR 0016; no DOM execution. |
+| Vendored GLib | MIT | Linux GTK-compatible string-iterator security backport under ADR 0012. |
+
+qpdf and PDFium were considered and not selected for the current engine.
+MuPDF/PyMuPDF is not bundled; optional development fixture generation uses PyMuPDF separately.
+No Tesseract runtime or downloaded recognition model is bundled.
+Use `npm run acceptance:licenses` for the resolved license inventory; do not infer notices from this summary alone.
 
 ## Sources
 
@@ -155,10 +175,15 @@ This addresses the WebKit text-extraction incompatibility described in [PDF.js i
 The local range adapter assembles each coalesced PDF.js request into one response while keeping individual native reads bounded.
 PDF.js is pinned because exact occurrence navigation synchronizes its exposed search cursor, which is covered by an integration test against that version.
 
-## Known milestone limitations
+## Capability and release limits
 
-The September 14 worktree implements Tranches 0 through 3 in source and has started Tranche 5 with metadata editing.
-Native rendering, DMG customization, independent-reader acceptance, hosted CI and the remaining specification, parity and memory tranches remain open.
-Arbitrary existing-text reflow, certified signatures, Acrobat parity and machine-relative memory budgets are not claimed as complete.
-A signed and notarized public installer requires a valid distribution identity; a local macOS app can be built and tested without claiming notarization.
-Cross-platform architecture does not imply Windows or Linux runtime acceptance has been performed.
+Existing text replacement is restricted to supported simple fonts without arbitrary paragraph reflow.
+Composition, poster output, flattening and accessibility checks have explicit preservation and conformance limits recorded in their ADRs.
+Office exports reconstruct text; they do not supply Office import or general layout fidelity.
+Model-generated tools and remote integrations remain deferred or declined.
+Native memory/performance targets require current measurements; bounded resources alone do not prove the product budgets.
+
+Historical unsigned macOS packages were verified, but the latest recorded release build fails with Rust E0463 while loading procedural macros.
+A debug build does not close that packaging gate.
+Clean-account installation, distribution signing/notarization, physical printing and Windows/Linux native acceptance remain open.
+See the [delivery tracker](docs/DELIVERY-PHASES.md) for the exact remaining tasks and acceptance limits.

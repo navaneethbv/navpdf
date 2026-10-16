@@ -5,10 +5,12 @@
 Accepted.
 
 Corrected September 14 after source review found that the earlier implementation returned fixed sample text and never performed recognition.
-The earlier performance, accuracy and hardware-acceleration claims below were not supported by measured evidence.
-The current implementation invokes Vision through `objc2-vision` 0.3.2 (MIT licensed), queries supported languages from the request, and returns measured line rectangles and confidence.
+The earlier performance, accuracy and hardware-acceleration claims were not supported by measured evidence.
+The current recognition path invokes Vision through the compiled `vision_helper.swift` bridge; Rust queries supported languages through `objc2-vision` and reads normalized line rectangles and confidence.
+The Swift bridge replaced the direct recognition path after a native autorelease-pool failure.
 It makes no claim that a particular GPU or Neural Engine path is used.
-Two distinct clean raster sentences were recognized exactly and a blank image returned no text in `scripts/ocr-native-acceptance.mjs`.
+The initial corrective smoke check recognized two clean raster sentences exactly and returned no text for a blank image.
+The September 15 native corpus then passed six samples; see the [verification ledger](../VERIFICATION.md).
 Full corpus quality, latency, memory and packaged native save/reopen acceptance remain open.
 
 ## Context
@@ -29,9 +31,8 @@ Two primary local OCR engine candidates were evaluated:
 - **Candidate B: Tesseract OCR (`libtesseract` / `tesseract-rs`)**
   Open-source (Apache 2.0).
   Cross-platform (Linux, Windows, macOS).
-  Requires bundling dynamic C++ libraries and language training data (`eng.traineddata` ~25-40 MB per language).
+  Requires separately distributed native libraries and language data; packaging size depends on the chosen models.
   A comparative CPU and latency trial remains pending.
-  Lacks native integration with macOS Neural Engine.
 
 ## Decision
 
@@ -42,7 +43,7 @@ Key architectural choices:
 1. **Engine Abstraction**:
    Use typed inputs (`image_bytes`, `options`) and outputs (`OcrPageResult` containing lines, normalized bounding boxes, confidence, and language).
 2. **Apple Vision Implementation**:
-   On macOS, `AppleVisionEngine` uses Apple Vision framework through Objective-C runtime linkage without external C++ or third-party binary dependencies.
+   On macOS, Rust calls the compiled Swift Vision bridge for recognition without a bundled C++ OCR runtime or model.
 3. **Unavailable platforms**:
    Return an error when real recognition is unavailable.
    Frontend unit tests inject an explicit test adapter and establish UI behavior only.
@@ -59,5 +60,5 @@ Key architectural choices:
 
 - No separately downloaded language models are bundled by NavPDF.
 - Recognition performance and the full quality corpus require measured acceptance.
-- Saved searchable output is independently checked with poppler; current packaged NavPDF, Preview and Acrobat acceptance remain open.
+- Saved searchable output has independent Poppler and later native/Preview evidence for the specific artifacts in the ledger; broader corpus and current packaged acceptance remain open.
 - Clean separation between OCR recognition results and document stream manipulation.

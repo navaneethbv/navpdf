@@ -5,13 +5,13 @@ Status: Accepted for Phase 3.
 
 Correction, September 14: the earlier implementation did not satisfy this ADR.
 It derived a key from a path and username and used a custom SHA-256 cipher, not AES/CTR or HMAC.
-The corrective implementation uses RustCrypto `aes-gcm` 0.10.3, a random 256-bit key stored in macOS Keychain through `security-framework` 3.7.0, and a fresh random 96-bit nonce for each asset.
+The corrective implementation uses RustCrypto `aes-gcm`, a random 256-bit key stored in macOS Keychain through `security-framework`, and a fresh random 96-bit nonce for each asset.
 Key creation uses add-only Keychain semantics, so concurrent first launches cannot replace another instance's key.
 The `NAVSIG2` format identifies authenticated ciphertext; legacy files are decoded only for atomic migration and verified before returning their contents.
 Keychain failures preserve existing files and require session-only use.
 Other platforms do not offer persistent storage until an OS-protected implementation is supplied.
 The added crates are MIT/Apache-2.0 licensed.
-Native locked-Keychain and packaged migration acceptance remain open in [the review](../PR-2-REVIEW.md).
+Native locked-Keychain and packaged migration acceptance remain open in the [delivery tracker](../DELIVERY-PHASES.md).
 
 ## Context
 
@@ -24,7 +24,7 @@ The storage must operate locally without network access, cloud accounts, or thir
 
 Implement an OS-protected signature store in the native backend at `src-tauri/src/signatures/`.
 Store persistent signatures in an isolated private directory within the application data root (`$APP_DATA/signatures/`).
-Set strict filesystem permissions (`0600` on Unix/macOS) on signature asset files and their directory.
+Set strict filesystem permissions: `0600` for asset files and `0700` for the signature directory on Unix/macOS.
 Encrypt asset contents using authenticated encryption and random protected key material.
 Provide a dedicated session-only mode where transient signatures reside solely in runtime memory and are discarded when the window or session closes.
 Prompt users with an explicit migration workflow for existing plaintext local storage assets.

@@ -27,5 +27,6 @@ Use standard annotation dictionaries with stable local names, author, contents, 
 
 The three supported types are persisted as standard PDF annotations and can be reopened by NavPDF, Preview and Acrobat.
 The adapter must continue to validate page bounds and geometry, preserve the source bytes on failure, and remain separate from serializable UI state.
-Full property editing, deletion, replies, resolution and additional annotation families remain later Phase 2 work.
+Property editing, deletion, replies, resolution and additional annotation families were later work at the time of this decision.
+Use the [delivery tracker](../DELIVERY-PHASES.md) for their current implementation and acceptance status.
 The output still needs broader rotated, cropped, multi-line, non-ASCII and repeated-edit acceptance before claiming complete annotation parity.

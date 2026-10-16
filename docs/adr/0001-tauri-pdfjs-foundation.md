@@ -13,7 +13,8 @@ The requested sequence starts with a proven reader, including large-document nav
 
 Use Tauri 2 for native dialogs, scoped file handles, range reads, safe saves and local services.
 Use PDF.js's maintained viewer, text layer, worker, search controller and standard highlight editor, rather than reimplementing those PDF behaviors.
-Use lopdf only to validate output at the native save boundary.
+For the Phase 1 foundation, use lopdf only to validate output at the native save boundary.
+[ADR 0006](0006-native-pdf-engine.md) subsequently extends lopdf to the native mutation engine.
 Use React, Zustand and Tailwind for the application shell and serializable UI state.
 
 ## Alternatives
