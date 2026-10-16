@@ -1,6 +1,7 @@
 // Moving and resizing existing form field widgets. Positions are expressed as displayed on the
 // page (origin at the top-left, in points) so rotated pages behave as users expect.
 
+import { mapInOrder } from "../../utils/async-sequence.ts";
 import {
   PDFDocument,
   PDFName,
@@ -256,8 +257,9 @@ export async function arrangeWidgets(
   if (new Set(chosen.map((item) => item.page)).size > 1)
     throw new Error("Arrange fields that are on the same page.");
   let scaled = false;
-  for (const target of arrangedGeometry(chosen, operation)) {
-    const rebuilt = await placeWidget(doc, target);
+  for await (const rebuilt of mapInOrder(arrangedGeometry(chosen, operation), (target) =>
+    placeWidget(doc, target),
+  )) {
     scaled ||= !rebuilt;
   }
   return { bytes: await doc.save(), scaledAppearance: scaled };

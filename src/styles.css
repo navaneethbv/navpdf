@@ -3027,7 +3027,8 @@ p {
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.preset-option > span {
+.preset-option > span,
+.preset-option > label {
   display: flex;
   flex-direction: column;
   gap: 2px;

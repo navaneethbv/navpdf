@@ -58,7 +58,7 @@ function pageLines(page: number, items: TextItem[], rotated: boolean): Line[] {
     const size = roundSize(Math.abs(d) || Math.hypot(c, d));
     if (!size) continue;
     const last = lines.at(-1);
-    if (last && last.size === size && Math.abs(last.baseline - f) <= size * 0.2) {
+    if (last?.size === size && Math.abs(last.baseline - f) <= size * 0.2) {
       last.text += item.str;
     } else if (item.str.trim()) {
       lines.push({ page, text: item.str, size, baseline: f, firstBaseline: f, rotated });
@@ -81,6 +81,26 @@ function bodySize(lines: Line[]) {
 const looksLikeHeading = (text: string) =>
   text.length >= 2 && text.length <= MAX_TITLE && /\p{L}/u.test(text);
 
+function mergeHeadingLines(lines: Line[], body: number): Line[] {
+  const merged: Line[] = [];
+  for (const line of lines) {
+    if (line.size < body * HEADING_RATIO) continue;
+    const last = merged.at(-1);
+    if (
+      last?.page === line.page &&
+      last.size === line.size &&
+      last.baseline - line.baseline > 0 &&
+      last.baseline - line.baseline <= line.size * 1.6
+    ) {
+      last.text = `${last.text} ${line.text}`;
+      last.baseline = line.baseline;
+      continue;
+    }
+    merged.push({ ...line });
+  }
+  return merged;
+}
+
 /**
  * Proposes headings from the text layer of every page, nested up to `maxLevels` deep.
  * Consecutive heading lines of the same size are joined as one wrapped heading.
@@ -101,23 +121,7 @@ export async function detectHeadings(
   }
   const body = bodySize(lines);
   if (!body) return [];
-  const merged: Line[] = [];
-  for (const line of lines) {
-    if (line.size < body * HEADING_RATIO) continue;
-    const last = merged.at(-1);
-    if (
-      last &&
-      last.page === line.page &&
-      last.size === line.size &&
-      last.baseline - line.baseline > 0 &&
-      last.baseline - line.baseline <= line.size * 1.6
-    ) {
-      last.text = `${last.text} ${line.text}`;
-      last.baseline = line.baseline;
-      continue;
-    }
-    merged.push({ ...line });
-  }
+  const merged = mergeHeadingLines(lines, body);
   const headings = merged.filter((line) => looksLikeHeading(line.text));
   const sizes = [...new Set(headings.map((line) => line.size))].sort((a, b) => b - a);
   const levels = new Map(sizes.slice(0, maxLevels).map((size, index) => [size, index + 1]));

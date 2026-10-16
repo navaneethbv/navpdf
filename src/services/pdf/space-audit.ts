@@ -64,8 +64,8 @@ function appearanceRefs(annotation: PDFDict): PDFRef[] {
 function classify(object: PDFObject, known: Map<string, SpaceCategory>, ref: PDFRef) {
   const assigned = known.get(ref.toString());
   if (assigned) return assigned;
-  const dict =
-    object instanceof PDFStream ? object.dict : object instanceof PDFDict ? object : null;
+  const candidate = object instanceof PDFStream ? object.dict : object;
+  const dict = candidate instanceof PDFDict ? candidate : null;
   if (!dict) return "Other";
   const type = name(dict, "Type");
   const subtype = name(dict, "Subtype");
@@ -84,8 +84,15 @@ function classify(object: PDFObject, known: Map<string, SpaceCategory>, ref: PDF
   return "Other";
 }
 
-export async function auditSpace(bytes: Uint8Array): Promise<SpaceAudit> {
-  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+function markFontFiles(doc: PDFDocument, mark: (refs: PDFRef[], category: SpaceCategory) => void) {
+  for (const [, object] of doc.context.enumerateIndirectObjects()) {
+    if (object instanceof PDFDict && name(object, "Type") === "/FontDescriptor")
+      for (const key of ["FontFile", "FontFile2", "FontFile3"])
+        mark(refsIn(object.get(PDFName.of(key))), "Fonts");
+  }
+}
+
+function knownCategories(doc: PDFDocument) {
   const known = new Map<string, SpaceCategory>();
   const mark = (refs: PDFRef[], category: SpaceCategory) =>
     refs.forEach((ref) => known.set(ref.toString(), category));
@@ -99,13 +106,16 @@ export async function auditSpace(bytes: Uint8Array): Promise<SpaceAudit> {
       mark([ref, ...appearanceRefs(annotation)], category);
     }
   }
-  for (const [, object] of doc.context.enumerateIndirectObjects()) {
-    if (object instanceof PDFDict && name(object, "Type") === "/FontDescriptor")
-      for (const key of ["FontFile", "FontFile2", "FontFile3"])
-        mark(refsIn(object.get(PDFName.of(key))), "Fonts");
-  }
+  markFontFiles(doc, mark);
   const info = doc.context.trailerInfo.Info;
   if (info instanceof PDFRef) known.set(info.toString(), "Metadata");
+
+  return known;
+}
+
+export async function auditSpace(bytes: Uint8Array): Promise<SpaceAudit> {
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  const known = knownCategories(doc);
 
   const totals = new Map<SpaceCategory, SpaceRow>(
     SPACE_CATEGORIES.map((category) => [category, { category, objects: 0, bytes: 0 }]),

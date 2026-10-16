@@ -110,18 +110,19 @@ export function LinkToolsDialog({ controller, onClose }: Readonly<DocumentToolPr
       <fieldset className="preset-list">
         <legend className="setting-title">Action</legend>
         {ACTIONS.map(([value, label, hint]) => (
-          <label key={value} className="preset-option">
+          <div key={value} className="preset-option">
             <input
               type="radio"
+              id={`${id}-${value}`}
               name={`${id}-action`}
               checked={action === value}
               onChange={() => setAction(value)}
             />
-            <span>
+            <label htmlFor={`${id}-${value}`}>
               <strong>{label}</strong>
               <span className="field-hint">{hint}</span>
-            </span>
-          </label>
+            </label>
+          </div>
         ))}
       </fieldset>
       {progress && <output aria-live="polite">{progress}</output>}

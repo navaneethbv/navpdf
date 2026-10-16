@@ -61,12 +61,7 @@ function wrap(font: PDFFont, text: string, size: number, width: number) {
   return lines;
 }
 
-export async function compareReportPdf(input: CompareReportInput): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  const regular = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  doc.setTitle("Comparison report");
-  doc.setProducer("NavPDF");
+function reportWriter(doc: PDFDocument, regular: PDFFont) {
   let page: PDFPage = doc.addPage(PAGE);
   let y = PAGE[1] - MARGIN;
   let replaced = false;
@@ -83,6 +78,68 @@ export async function compareReportPdf(input: CompareReportInput): Promise<Uint8
     }
   };
   const gap = (points: number) => (y -= points);
+
+  return { write, gap, hasReplacements: () => replaced };
+}
+
+function pageDescription(row: ComparedPage) {
+  if (row.status === "added") return `Revision page ${row.after} added`;
+  if (row.status === "removed") return `Original page ${row.before} removed`;
+  return `Original page ${row.before} changed in revision page ${row.after}`;
+}
+
+function pageText(signatures: PageSignature[], page: number | null) {
+  return page ? (signatures[page - 1]?.text ?? "") : "";
+}
+
+function writeTextChanges(
+  before: string,
+  after: string,
+  writer: ReturnType<typeof reportWriter>,
+  regular: PDFFont,
+) {
+  const { write } = writer;
+  const red = rgb(0.7, 0.1, 0.1);
+  const green = rgb(0.05, 0.45, 0.15);
+  const diff = changedText(before, after);
+  if (!diff.before.trim() && !diff.after.trim())
+    write("Text is identical; the page looks different.", 10, regular, rgb(0.3, 0.3, 0.3), 12);
+  if (diff.before.trim()) write(`Removed: ${excerpt(diff.before)}`, 10, regular, red, 12);
+  if (diff.after.trim()) write(`Added: ${excerpt(diff.after)}`, 10, regular, green, 12);
+}
+
+function writeChanges(
+  input: CompareReportInput,
+  writer: ReturnType<typeof reportWriter>,
+  regular: PDFFont,
+  bold: PDFFont,
+) {
+  const { write, gap } = writer;
+  const red = rgb(0.7, 0.1, 0.1);
+  const green = rgb(0.05, 0.45, 0.15);
+  for (const row of input.rows) {
+    if (row.status === "unchanged") continue;
+    write(pageDescription(row), 11, bold);
+    const before = pageText(input.signatures[0], row.before);
+    const after = pageText(input.signatures[1], row.after);
+    if (row.status === "changed") {
+      writeTextChanges(before, after, writer, regular);
+    } else {
+      const text = excerpt(row.status === "added" ? after : before);
+      write(text || "No text on this page.", 10, regular, row.status === "added" ? green : red, 12);
+    }
+    gap(8);
+  }
+}
+
+export async function compareReportPdf(input: CompareReportInput): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  doc.setTitle("Comparison report");
+  doc.setProducer("NavPDF");
+  const writer = reportWriter(doc, regular);
+  const { write, gap } = writer;
 
   const counts = { changed: 0, added: 0, removed: 0, unchanged: 0 };
   for (const row of input.rows) counts[row.status]++;
@@ -101,34 +158,10 @@ export async function compareReportPdf(input: CompareReportInput): Promise<Uint8
   );
   gap(10);
 
-  const red = rgb(0.7, 0.1, 0.1);
-  const green = rgb(0.05, 0.45, 0.15);
-  for (const row of input.rows) {
-    if (row.status === "unchanged") continue;
-    const where =
-      row.status === "added"
-        ? `Revision page ${row.after} added`
-        : row.status === "removed"
-          ? `Original page ${row.before} removed`
-          : `Original page ${row.before} changed in revision page ${row.after}`;
-    write(where, 11, bold);
-    const before = row.before ? (input.signatures[0][row.before - 1]?.text ?? "") : "";
-    const after = row.after ? (input.signatures[1][row.after - 1]?.text ?? "") : "";
-    if (row.status === "changed") {
-      const diff = changedText(before, after);
-      if (!diff.before.trim() && !diff.after.trim())
-        write("Text is identical; the page looks different.", 10, regular, rgb(0.3, 0.3, 0.3), 12);
-      if (diff.before.trim()) write(`Removed: ${excerpt(diff.before)}`, 10, regular, red, 12);
-      if (diff.after.trim()) write(`Added: ${excerpt(diff.after)}`, 10, regular, green, 12);
-    } else {
-      const text = excerpt(row.status === "added" ? after : before);
-      write(text || "No text on this page.", 10, regular, row.status === "added" ? green : red, 12);
-    }
-    gap(8);
-  }
+  writeChanges(input, writer, regular, bold);
   if (!counts.changed && !counts.added && !counts.removed)
     write("The documents have the same text and appearance on every page.");
-  if (replaced) {
+  if (writer.hasReplacements()) {
     gap(8);
     write(
       'Characters the report font cannot show are printed as "?".',

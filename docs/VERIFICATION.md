@@ -1,5 +1,17 @@
 # Verification ledger
 
+## October 16 second-batch quality follow-up
+
+Starting revision: `2a836fcfa5d454c40b340be98d324b669e46fb11` on PR 68.
+Sonar reported 11 new issues while Codacy and CodeQL reported no findings.
+The follow-up separates report writing, heading merging, link removal and space categorization into focused helpers, preserves sequential widget appearance updates, and explicitly associates each link-action radio with its visible label.
+The radio label retains the existing stacked title and hint layout.
+Node 24.18.1 local validation passes all 975 frontend tests across 131 files and the existing coverage gates, plus 95 Rust tests with one existing ignored test and Clippy with warnings denied.
+Lint, typecheck, formatting and production build pass; logs are under ignored `output/pr68-quality-round2/`.
+The final label adjustment is also checked by the focused dialog suite and a fresh lint and build run.
+These are automated regression checks, not new native visual or save/reopen acceptance.
+Hosted analysis must be checked against the pushed commit; the earlier green gate did not establish zero Sonar issues.
+
 ## October 16 PDFCraft-compatible tools, second batch
 
 Source baseline: `6f575fe6f7df3db2f8b61a689980492d16a83fb2` on `feat/pdfcraft-compatible-tools`.

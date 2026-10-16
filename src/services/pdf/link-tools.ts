@@ -96,14 +96,11 @@ export interface LinkRemoval {
   clearedBookmarks: number;
 }
 
-/**
- * Removes every link annotation, or only internal links and bookmark destinations that no
- * longer reach a page. Broken bookmarks keep their titles and children; only the dead
- * destination is cleared so no part of the outline disappears.
- */
-export async function removeLinks(bytes: Uint8Array, mode: "all" | "broken"): Promise<LinkRemoval> {
-  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
-  const pages = pageIndexes(doc);
+function removePageLinks(
+  doc: PDFDocument,
+  mode: "all" | "broken",
+  pages: ReturnType<typeof pageIndexes>,
+) {
   let removedLinks = 0;
   for (const page of doc.getPages()) {
     const annotations = page.node.Annots();
@@ -117,6 +114,18 @@ export async function removeLinks(bytes: Uint8Array, mode: "all" | "broken"): Pr
     }
     if (annotations.size() === 0) page.node.delete(PDFName.of("Annots"));
   }
+  return removedLinks;
+}
+
+/**
+ * Removes every link annotation, or only internal links and bookmark destinations that no
+ * longer reach a page. Broken bookmarks keep their titles and children; only the dead
+ * destination is cleared so no part of the outline disappears.
+ */
+export async function removeLinks(bytes: Uint8Array, mode: "all" | "broken"): Promise<LinkRemoval> {
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  const pages = pageIndexes(doc);
+  const removedLinks = removePageLinks(doc, mode, pages);
   let clearedBookmarks = 0;
   if (mode === "broken") {
     for (const node of brokenBookmarks(doc, pages)) {

@@ -12,6 +12,11 @@ const isTextItem = (item: unknown): item is TextItemLike =>
   Array.isArray((item as Partial<TextItemLike>).transform) &&
   typeof (item as Partial<TextItemLike>).width === "number";
 
+function checkLinkLimit(count: number) {
+  if (count > MAX_NEW_LINKS)
+    throw new Error(`More than ${MAX_NEW_LINKS.toLocaleString()} web addresses were found.`);
+}
+
 /**
  * Web addresses written in the text layer, with estimated rectangles. Addresses split across
  * separate text items or lines are not joined, and scanned pages need OCR first.
@@ -25,8 +30,7 @@ export async function findUrlLinks(source: TextSource, signal?: AbortSignal): Pr
       for (const match of findUrls(item.str)) {
         const [rect] = rangeRects([item], () => [[match.start, match.end]]);
         if (rect) result.push({ page, rect, url: match.url });
-        if (result.length > MAX_NEW_LINKS)
-          throw new Error(`More than ${MAX_NEW_LINKS.toLocaleString()} web addresses were found.`);
+        checkLinkLimit(result.length);
       }
     }
   }
