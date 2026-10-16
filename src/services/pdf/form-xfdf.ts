@@ -124,7 +124,7 @@ export async function formXfdfToJson(bytes: Uint8Array, xml: string) {
     },
   }).parseFromString(xml, "application/xml");
   const root = parsed.documentElement;
-  if (!root || root.localName !== "xfdf" || root.namespaceURI !== NAMESPACE)
+  if (root?.localName !== "xfdf" || root.namespaceURI !== NAMESPACE)
     throw new Error("Choose a valid XFDF form data file.");
   const report = await readFormData(bytes);
   const supported = new Map(report.fields.map((field) => [field.name, field]));
