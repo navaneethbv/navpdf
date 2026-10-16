@@ -9,6 +9,8 @@ import {
   findMissingRequiredFields,
   importFormData,
   MAX_FORM_DATA_BYTES,
+  MAX_MERGED_FORMS,
+  mergeFormDataCsv,
   previewFormDataImport,
   readFormData,
   resetFormData,
@@ -20,9 +22,13 @@ import {
 import { errorMessage, useDocumentEdit } from "../document/use-document-edit";
 import type { ViewerController } from "../viewer/controller";
 
+import { exportFormXfdf, formXfdfToJson } from "../../services/pdf/form-xfdf";
+
 const ACTIONS = {
   "export-json": "Export JSON",
   "export-csv": "Export CSV",
+  "export-xfdf": "Export XFDF",
+  merge: "Merge to CSV",
   import: "Import Values",
   required: "Check Required Fields",
   reset: "Clear Editable Values",
@@ -53,6 +59,7 @@ export function FormDataDialog({
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
+  const [mergeFiles, setMergeFiles] = useState<File[]>([]);
   const mounted = useRef(true);
   const job = useRef(0);
   const { apply, busy, error, setError } = useDocumentEdit(controller);
@@ -129,14 +136,17 @@ export function FormDataDialog({
     const token = ++job.current;
     setWorking(true);
     try {
-      if (file.size > MAX_FORM_DATA_BYTES) throw new Error("Form JSON exceeds the 2 MB limit.");
-      const text = await file.text();
+      if (file.size > MAX_FORM_DATA_BYTES) throw new Error("Form data exceeds the 2 MB limit.");
+      const raw = await file.text();
+      const text = file.name.toLowerCase().endsWith(".xfdf")
+        ? await formXfdfToJson(await source.saveDocument(), raw)
+        : raw;
       if (!isCurrent(token)) return;
       const values = await previewFormDataImport(await source.saveDocument(), text);
       if (!isCurrent(token)) return;
       setPayload(text);
       setPreview(values);
-      if (!values.length) setNotice("This JSON contains no values to import.");
+      if (!values.length) setNotice("This file contains no values to import.");
     } catch (cause) {
       if (isCurrent(token)) setError(errorMessage(cause));
     } finally {
@@ -171,14 +181,51 @@ export function FormDataDialog({
   };
 
   const exportReport = async (found: FormDataReport, token: number) => {
-    const csv = action === "export-csv";
-    const text = csv ? exportFormDataCsv(found) : exportFormDataJson(found);
+    let text: string;
+    let extension = "json";
+    let mime = "application/json";
+    let notice = "Form JSON exported.";
+    if (action === "export-csv") {
+      text = exportFormDataCsv(found);
+      extension = "csv";
+      mime = "text/csv;charset=utf-8";
+      notice = "Form CSV exported.";
+    } else if (action === "export-xfdf" && source) {
+      text = await exportFormXfdf(await source.saveDocument());
+      extension = "xfdf";
+      mime = "application/vnd.adobe.xfdf";
+      notice = "Form XFDF exported.";
+    } else text = exportFormDataJson(found);
+    if (!isCurrent(token)) return;
     const base = safeFileName(document?.name ?? "document.pdf").replace(/\.pdf$/i, "");
     const saved = await downloadBlob(
-      new Blob([text], { type: csv ? "text/csv;charset=utf-8" : "application/json" }),
-      `${base}-form-data.${csv ? "csv" : "json"}`,
+      new Blob([text], { type: mime }),
+      `${base}-form-data.${extension}`,
     );
-    if (saved && isCurrent(token)) setNotice(csv ? "Form CSV exported." : "Form JSON exported.");
+    if (saved && isCurrent(token)) setNotice(notice);
+  };
+
+  /** One spreadsheet row per chosen filled form; the open document is not changed. */
+  const mergeForms = async (token: number) => {
+    const forms: { file: string; report: FormDataReport }[] = [];
+    for (const file of mergeFiles) {
+      if (file.size > 100 * 1024 * 1024) throw new Error(`${file.name} exceeds the 100 MB limit.`);
+      try {
+        forms.push({
+          file: file.name,
+          report: await readFormData(new Uint8Array(await file.arrayBuffer())),
+        });
+      } catch (cause) {
+        throw new Error(`${file.name}: ${errorMessage(cause)}`, { cause });
+      }
+      if (!isCurrent(token)) return;
+    }
+    const csv = mergeFormDataCsv(forms);
+    const saved = await downloadBlob(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+      "merged-form-data.csv",
+    );
+    if (saved && isCurrent(token)) setNotice(`Merged ${forms.length} form(s) into one CSV.`);
   };
 
   const submit = async () => {
@@ -192,6 +239,10 @@ export function FormDataDialog({
     }
     setWorking(true);
     try {
+      if (action === "merge") {
+        await mergeForms(token);
+        return;
+      }
       const found = await readFormData(await source.saveDocument());
       if (!isCurrent(token)) return;
       setReport(found);
@@ -219,7 +270,8 @@ export function FormDataDialog({
     (mutation && (Boolean(blockReason) || !editable)) ||
     (action === "import" && !preview?.length) ||
     (action === "reset" && !confirmed) ||
-    ((action === "export-json" || action === "export-csv") && !editable);
+    (action === "merge" && !mergeFiles.length) ||
+    (action.startsWith("export-") && !editable);
 
   return (
     <ToolDialog
@@ -248,7 +300,9 @@ export function FormDataDialog({
         >
           <option value="export-json">Export editable values as JSON</option>
           <option value="export-csv">Export editable values as CSV</option>
-          <option value="import">Import JSON values</option>
+          <option value="export-xfdf">Export editable values as XFDF</option>
+          <option value="merge">Merge filled PDF forms into a CSV</option>
+          <option value="import">Import JSON or XFDF values</option>
           <option value="required">Check required fields</option>
           <option value="reset">Clear editable values</option>
         </select>
@@ -269,30 +323,55 @@ export function FormDataDialog({
       )}
       {blockReason && <p className="field-hint">{blockReason}</p>}
       <p className="field-hint">
-        JSON and CSV include editable text, checkbox, radio and choice values. Read-only, signature,
-        button and unsupported fields are excluded from export, import and clearing. Required-field
-        checks include supported read-only fields.
+        JSON, CSV and XFDF include editable text, checkbox, radio and choice values. Read-only,
+        signature, button and unsupported fields are excluded from export, import and clearing.
+        Required-field checks include supported read-only fields.
       </p>
       {Boolean(report?.excluded.length) && (
         <p className="field-hint">
           Required-field checks cannot assess {report?.excluded.length} unsupported field(s).
         </p>
       )}
+      {action === "merge" && (
+        <div className="setting-group">
+          <label className="setting-title" htmlFor={`${ids}-merge`}>
+            Filled PDF forms
+          </label>
+          <input
+            id={`${ids}-merge`}
+            type="file"
+            multiple
+            accept=".pdf,application/pdf"
+            disabled={working || busy}
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              if (files.length > MAX_MERGED_FORMS)
+                setError(`Choose at most ${MAX_MERGED_FORMS} forms.`);
+              else setError("");
+              setMergeFiles(files.slice(0, MAX_MERGED_FORMS));
+            }}
+          />
+          <p className="field-hint">
+            Each PDF becomes one row, with a column for every editable field found in any of them.
+            The open document is not changed.
+          </p>
+        </div>
+      )}
       {action === "import" && (
         <div className="setting-group">
           <label className="setting-title" htmlFor={`${ids}-file`}>
-            JSON form data file
+            JSON or XFDF form data file
           </label>
           <input
             id={`${ids}-file`}
             type="file"
-            accept=".json,application/json"
+            accept=".json,.xfdf,application/json,application/vnd.adobe.xfdf"
             disabled={working || busy || Boolean(blockReason) || !report}
             onChange={(event) => void loadImport(event.target.files?.[0])}
           />
           <p className="field-hint">
-            Choose NavPDF form data JSON version 1, up to 2 MB. Review every change before
-            importing. Fields not listed in the JSON keep their values.
+            Choose NavPDF form data JSON version 1 or XFDF, up to 2 MB. Review every change before
+            importing. Fields not listed in the file keep their values.
           </p>
         </div>
       )}

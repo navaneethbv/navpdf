@@ -2,7 +2,16 @@ import { CompareDialog } from "../features/compare/CompareDialog";
 import { BookmarkEditor } from "../features/bookmarks/BookmarkEditor";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { AlertCircle, History, Info, LoaderCircle, LockKeyhole, Save, X } from "lucide-react";
+import {
+  AlertCircle,
+  History,
+  Info,
+  LoaderCircle,
+  LockKeyhole,
+  Save,
+  X,
+  FileText,
+} from "lucide-react";
 import { useWorkspace } from "../stores/workspace";
 import { ViewerController } from "../features/viewer/controller";
 import { ViewerHost } from "../features/viewer/ViewerHost";
@@ -17,6 +26,7 @@ import { ToolErrorBoundary } from "../components/ToolErrorBoundary";
 import { native } from "../services/native";
 import { Toolbar, Statusbar, QuickToolRail, NavigationRail } from "./Toolbar";
 import { useDocumentSession } from "./useDocumentSession";
+import { CommandPalette } from "../features/tools/CommandPalette";
 import { ToolPanel } from "../features/tools/ToolPanel";
 import { PageWorkspace } from "../features/pages/PageWorkspace";
 import { PrintDialog } from "../features/pages/PrintDialog";
@@ -188,6 +198,12 @@ function handleShortcut(
   }
   const actions = new Map<string, () => void>([
     ["o", () => open()],
+    [
+      "k",
+      () => {
+        if (!state.activeModal) state.set({ activeModal: "command-palette" });
+      },
+    ],
     ["s", () => void session.save(event.shiftKey)],
     [
       "f",
@@ -404,7 +420,8 @@ function handleMenuAction(
   // a dialog, has focus.
   if ((payload === "undo" || payload === "redo") && isEditableTarget(document.activeElement))
     return;
-  if (["help", "tour", "tips", "shortcuts"].includes(state.activeModal ?? "")) return;
+  if (["help", "tour", "tips", "shortcuts", "command-palette"].includes(state.activeModal ?? ""))
+    return;
   if (state.busy || state.settingsOpen || session.password || session.confirm || state.activeModal)
     return;
   const documentAction =
@@ -461,7 +478,7 @@ export default function App() {
         state.settingsOpen ||
         session.password ||
         session.confirm ||
-        ["help", "tour", "tips", "shortcuts"].includes(state.activeModal ?? "")
+        ["help", "tour", "tips", "shortcuts", "command-palette"].includes(state.activeModal ?? "")
       )
         return;
       if (state.busy) {
@@ -733,6 +750,81 @@ export default function App() {
                 controller?.setTool("select");
               }
             }}
+          />
+        )}
+        {s.activeModal === "command-palette" && (
+          <CommandPalette
+            onClose={() => s.set({ activeModal: null })}
+            commands={[
+              {
+                id: "open",
+                label: "Open PDF",
+                description: "Choose a document",
+                category: "pages",
+                icon: FileText,
+                action: open,
+              },
+              {
+                id: "save",
+                label: "Save",
+                description: "Save the current document",
+                category: "edit",
+                icon: Save,
+                action: () => {
+                  void session.save(false);
+                },
+                disabled: !s.document,
+              },
+              {
+                id: "save-as",
+                label: "Save As",
+                description: "Save a copy to a chosen destination",
+                category: "edit",
+                icon: Save,
+                action: () => {
+                  void session.save(true);
+                },
+                disabled: !s.document,
+              },
+              {
+                id: "undo",
+                label: "Undo",
+                description: "Undo the last document change",
+                category: "edit",
+                icon: History,
+                action: () => {
+                  controller?.undo();
+                },
+                disabled: !s.canUndo,
+              },
+              {
+                id: "redo",
+                label: "Redo",
+                description: "Redo the last undone change",
+                category: "edit",
+                icon: History,
+                action: () => {
+                  controller?.redo();
+                },
+                disabled: !s.canRedo,
+              },
+              {
+                id: "settings",
+                label: "Settings",
+                description: "Change reader preferences",
+                category: "review",
+                icon: FileText,
+                action: () => s.set({ settingsOpen: true }),
+              },
+              {
+                id: "shortcuts",
+                label: "Keyboard Shortcuts",
+                description: "Browse keyboard commands",
+                category: "review",
+                icon: FileText,
+                action: () => s.set({ activeModal: "shortcuts" }),
+              },
+            ]}
           />
         )}
         {s.activeModal === "page-workspace" && (

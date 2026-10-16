@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Ruler } from "lucide-react";
+import { Download, Ruler } from "lucide-react";
 import { ToolDialog } from "../../components/ToolDialog";
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
@@ -10,6 +10,8 @@ import {
   type MeasureScale,
   type MeasureUnit,
 } from "../../services/pdf/measure";
+import { downloadBlob } from "../../utils/download";
+import { measurementsCsv, readMeasurements } from "./measurement-export";
 
 const KINDS: [MeasureKind, string][] = [
   ["distance", "Distance"],
@@ -34,6 +36,30 @@ export function MeasureDialog({
     unit,
   };
   const valid = scale.pageInches > 0 && scale.realValue > 0;
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState("");
+
+  const exportCsv = async () => {
+    const source = controller?.pdf;
+    if (!source) return;
+    setExporting(true);
+    setExportMessage("");
+    try {
+      const rows = await readMeasurements(await source.saveDocument());
+      if (source !== controller?.pdf) return;
+      if (!rows.length) {
+        setExportMessage("This PDF has no saved measurements to export.");
+        return;
+      }
+      const blob = new Blob([measurementsCsv(rows)], { type: "text/csv;charset=utf-8" });
+      if (await downloadBlob(blob, "measurements.csv"))
+        setExportMessage(`Exported ${rows.length} measurement${rows.length === 1 ? "" : "s"}.`);
+    } catch (cause) {
+      setExportMessage(cause instanceof Error ? cause.message : "The export failed.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const start = () => {
     useWorkspace.getState().set({ measureKind: kind, measureScale: scale, activeModal: null });
@@ -46,10 +72,21 @@ export function MeasureDialog({
       title="Measure"
       icon={<Ruler size={18} />}
       onClose={onClose}
+      busy={exporting}
       error={valid ? "" : "Enter positive numbers on both sides of the scale."}
       primaryLabel="Start Measuring"
       primaryDisabled={!valid || !controller?.pdf}
       onPrimary={start}
+      secondary={
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={exporting || !controller?.pdf}
+          onClick={() => void exportCsv()}
+        >
+          <Download size={15} /> Export CSV
+        </button>
+      }
     >
       <fieldset className="preset-list">
         <legend className="setting-title">Measure</legend>
@@ -110,8 +147,13 @@ export function MeasureDialog({
       </fieldset>
       <p className="field-hint">
         Measurements are saved as annotations with their scale, so other PDF readers show the same
-        values. Use 1 inch = 1 inch for actual size.
+        values. Use 1 inch = 1 inch for actual size. Export CSV lists every saved measurement.
       </p>
+      {exportMessage && (
+        <output className="field-hint" aria-live="polite">
+          {exportMessage}
+        </output>
+      )}
     </ToolDialog>
   );
 }

@@ -52,7 +52,7 @@ function choose(action: string) {
   fireEvent.change(screen.getByLabelText("Form data action"), { target: { value: action } });
 }
 function upload(text: string) {
-  fireEvent.change(screen.getByLabelText("JSON form data file"), {
+  fireEvent.change(screen.getByLabelText("JSON or XFDF form data file"), {
     target: { files: [new File([text], "data.json", { type: "application/json" })] },
   });
 }

@@ -1,5 +1,108 @@
 # Verification ledger
 
+## October 16 second-batch quality follow-up
+
+Starting revision: `2a836fcfa5d454c40b340be98d324b669e46fb11` on PR 68.
+Sonar reported 11 new issues while Codacy and CodeQL reported no findings.
+The follow-up separates report writing, heading merging, link removal and space categorization into focused helpers, preserves sequential widget appearance updates, and explicitly associates each link-action radio with its visible label.
+The radio label retains the existing stacked title and hint layout.
+Node 24.18.1 local validation passes all 975 frontend tests across 131 files and the existing coverage gates, plus 95 Rust tests with one existing ignored test and Clippy with warnings denied.
+Lint, typecheck, formatting and production build pass; logs are under ignored `output/pr68-quality-round2/`.
+The final label adjustment is also checked by the focused dialog suite and a fresh lint and build run.
+These are automated regression checks, not new native visual or save/reopen acceptance.
+Hosted analysis must be checked against the pushed commit; the earlier green gate did not establish zero Sonar issues.
+
+## October 16 PDFCraft-compatible tools, second batch
+
+Source baseline: `6f575fe6f7df3db2f8b61a689980492d16a83fb2` on `feat/pdfcraft-compatible-tools`.
+The [comparison](PDFCRAFT-COMPARISON.md#second-batch-mapping) maps each addition to its upstream entry and limits.
+Full parity is not complete.
+
+### Local checks
+
+Node 24.22.0 from the checksum-verified official Linux archive and `npm ci` were used, because the container provides Node 22.
+Lint, typecheck, formatting, production build, `git diff --check` and instruction-file comparison pass.
+The frontend suite passes 975 tests across 131 files, with 86.49% statements, 78.71% branches, 85.88% functions and 89.53% lines; the coverage gates pass and LCOV is retained.
+No Rust source changed in this batch, so the Rust suite and Clippy were not rerun.
+Logs are under ignored `output/pdfcraft-batch-two/`.
+
+Integration tests read saved output with PDF.js: created URI links and their rectangles, broken-link and bookmark cleanup, nested heading bookmarks and fit views on rotated pages, field arrangement on real widgets, measurement CSV cell neutralisation, space-usage totals, form merging and report text.
+Dialog tests cover source-revision edits, stale-document rejection for detected headings, disabled arrangement, empty measurement exports and leaving the open document unchanged when merging forms.
+Review of the first draft found a wrapped heading taking its bookmark position from its last line, and word lists searching the document once per entry; both were corrected before testing.
+
+### Independent-reader and browser-preview evidence
+
+Poppler `pdftohtml` independently reads the nested outline (Introduction with Scope, Methods with Data) and the created `https://example.com/docs` link on both pages of `output/pdfcraft-batch-two/links-and-bookmarks.pdf`, SHA-256 `4d21f36d3f4e927808d2b9260aa6118601e0ce090cdb1ab1d1c9a3248a1f57f1`.
+Poppler `pdftotext` reads the counts and changed-text excerpts of `output/pdfcraft-batch-two/compare-report.pdf`, SHA-256 `f7b0d07485beb99420c5b08f78aa3e6abac8e7374299a4f56c49f23dd179907e`.
+In the Chromium browser preview, Link Tools, Bookmarks from Headings, Space Usage and the field arrangement controls rendered without overlap or clipping, and applying link creation to `visual-fixture.pdf` (SHA-256 `b8934b7031ee4818b05a58293cdadfff20781ca4e03da1210d522f2075818c57`) created 12 links, marked the document changed and reported 12 web links on reopening the tool.
+The browser preview does not establish native save, recovery or packaging acceptance.
+
+### Native and hosted gates
+
+This batch was implemented in a Linux container without macOS, so native NavPDF and Preview acceptance were not run.
+Native save, close and reopen in NavPDF and Preview remain open for every second-batch tool.
+The release E0463 packaging blocker recorded below is unchanged.
+Hosted checks and quality analysis must be inspected on the pushed revision separately.
+
+## October 16 PDFCraft-compatible tools
+
+Source baseline: `d3963457a3bfbe0d85555c0f0e2657e4333e295e`, with the changes on `feat/pdfcraft-compatible-tools`.
+The pinned reference, implemented subset and unresolved comparison are in [PDFCRAFT-COMPARISON.md](PDFCRAFT-COMPARISON.md).
+Full parity is not complete.
+
+### Local checks
+
+Node 24.18.1 and `npm ci` were used.
+Lint, typecheck, formatting, production build, `git diff --check` and instruction-file comparison pass.
+The frontend suite passes 955 tests across 129 files, with 86.64% statements, 79.07% branches, 85.72% functions and 89.64% lines; LCOV is retained.
+The Rust suite passes 95 tests with the pre-existing constrained-volume test ignored, and Clippy passes with warnings denied.
+The existing production chunk-size advisory remains.
+Logs are under ignored `output/pdfcraft-*.log`.
+
+The locked Tauri and muda dependencies require Rust 1.90, so the declared minimum and CI MSRV job now use 1.90 instead of 1.89.
+A fresh-target `cargo +1.90.0 check --locked --manifest-path src-tauri/Cargo.toml` passes.
+The quality follow-up adds pinned `@xmldom/xmldom` 0.9.12 for strict XML parsing outside the browser DOM; ADR 0016 records the dependency decision.
+`npm ci` and the production dependency audit pass with zero vulnerabilities.
+The license inventory includes the new MIT dependency and retains the existing Rust license review entries.
+Quality-refactor logs are under ignored `output/pr68-quality/`.
+Sequential PDF extraction and embedding, cancellation and output limits are preserved.
+Keyboard handlers are attached to command buttons, and complex branching is split into focused helpers.
+The XFDF regression verifies escaped script text remains literal and rejects nested markup, foreign elements and unknown entities.
+
+Regressions cover rotated/cropped poster output and tile limits; initial-view destinations and preserved preferences with independent PDF.js inspection; actual serialized split sizes; bookmark boundaries; strict XFDF parsing and custom checkbox states; malformed structure, role mapping and report escaping; and dialog cancellation, validation, disabled actions and keyboard navigation.
+Review reproduced a malformed structure child being silently skipped and reported as passed; it now reports incomplete inspection while allowing legitimate marked-content references.
+
+### Native and independent-reader evidence
+
+The current debug executable built successfully and ran in an isolated development bundle with identifier `local.navpdf.integration-check`, serving the current frontend from localhost.
+Its SHA-256 is `35303f6fda8c1d06cd62671ada816f95ecca6cf7319f22d00c16460d1b413d52`.
+This is development-mode evidence, not a successful release package.
+Native accessibility-tree interaction confirmed Cmd+K search, disabled-action descriptions, Enter opening the native file picker, loading the synthetic source, editing initial view, Save As, closing and reopening the saved document.
+
+The synthetic source has four cropped pages rotated 0, 90, 180 and 270 degrees.
+The initial-view edit selects opening page 2 and document-title display.
+The saved result is `output/pdfcraft-acceptance/native-initial-view.pdf`, SHA-256 `6ab85c22036da8db1b49461e340a8e2eb5123079cb6962578172dde543d6a591`.
+Independent PDF.js inspection confirms four pages, the saved destination and title preference, and the source canary text.
+Preview reopens all four pages and exposes the four text canaries; it opens on page 1 rather than honoring the saved page preference.
+Reader preference overrides are explicitly disclosed in the dialog.
+
+A separate service-generated poster at `output/pdfcraft-acceptance/poster.pdf` has eight letter-size sheets, SHA-256 `e2fcdec55249dc7f8def1a62b60e30265bab0af1759c1e10b2e8f313f6722ef1`.
+Poppler `pdfinfo`, `pdftotext` and raster output independently confirm readable pages and rotated canary content.
+This does not establish native poster-export acceptance or annotation/form preservation; the tool explicitly exports page content only.
+Native end-to-end XFDF, bookmark/size ZIP splitting, accessibility reporting, compact layout and all poster workflow gates remain open.
+The screenshot capture did not reflect the current modal accessibility tree reliably, so visual rendering, focus appearance and contrast are not accepted from that run.
+Coverage generation reloads the Vite development page; native checks must run after automated coverage finishes.
+
+### Packaging and hosted gates
+
+`npm run package` fails with Rust E0463 loading `cssparser_macros`.
+Fresh release targets on Rust 1.96 and 1.95 also fail loading `time_macros`; the debug build and tests succeed.
+Logs: `output/pdfcraft-package.log`, `output/pdfcraft-package-fresh.log` and `output/pdfcraft-package-195.log`.
+No current DMG was produced or verified; an older installed app was not treated as current-source acceptance.
+The root cause of the release-only macro-loading failure remains unresolved.
+Hosted checks, quality analysis and review policy must be inspected on the published revision separately.
+No merge or distribution is claimed.
+
 ## October 14 PR 66 quality corrections
 
 The PR analysis reported 31 unresolved issues on `584a3ff`, and the main-branch analysis listed 49 older unresolved findings.

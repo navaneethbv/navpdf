@@ -13,6 +13,9 @@ import {
   type ComparedPage,
   type PageSignature,
 } from "./compare-pdf";
+import { compareReportPdf } from "./compare-report";
+import { useWorkspace } from "../../stores/workspace";
+import { downloadBytes, safeFileName } from "../../utils/download";
 
 export function CompareDialog({
   controller,
@@ -27,6 +30,8 @@ export function CompareDialog({
     [selected, setSelected] = useState(0),
     [onlyChanges, setOnlyChanges] = useState(false);
   const [difference, setDifference] = useState("");
+  const [revisedName, setRevisedName] = useState("");
+  const [saving, setSaving] = useState(false);
   const tasks = useRef<PDFDocumentLoadingTask[]>([]),
     generation = useRef(0);
   const destroy = () => {
@@ -89,12 +94,29 @@ export function CompareDialog({
       setRows(alignPages(left, right));
       setDocuments(pair);
       setSelected(0);
+      setRevisedName(file.name);
       setStatus(`Compared with ${file.name}`);
     } catch (cause) {
       if (id === generation.current)
         setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (id === generation.current) setBusy(false);
+    }
+  };
+  const saveReport = async () => {
+    const id = generation.current;
+    setSaving(true);
+    try {
+      const originalName = useWorkspace.getState().document?.name ?? "Open document";
+      const bytes = await compareReportPdf({ originalName, revisedName, rows, signatures });
+      if (id !== generation.current) return;
+      const base = safeFileName(originalName).replace(/\.pdf$/i, "");
+      await downloadBytes(bytes, `${base}-comparison-report.pdf`);
+    } catch (cause) {
+      if (id === generation.current)
+        setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
     }
   };
   const visible = onlyChanges ? rows.filter((row) => row.status !== "unchanged") : rows;
@@ -162,6 +184,14 @@ export function CompareDialog({
                 {rows.filter((r) => r.status === "removed").length} removed,{" "}
                 {rows.filter((r) => r.status === "unchanged").length} unchanged pages.
               </p>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={saving || busy}
+                onClick={() => void saveReport()}
+              >
+                {saving ? "Saving report…" : "Save Report PDF"}
+              </button>
               <label>
                 <input
                   type="checkbox"

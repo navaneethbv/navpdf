@@ -1,5 +1,17 @@
 # NavPDF handoff
 
+## October 16 PDFCraft integration checkpoint
+
+Branch `feat/pdfcraft-compatible-tools` contains the first six compatible additions described in [ADR 0016](adr/0016-pdfcraft-capability-integration.md).
+The user delegated the engine decision; retain NavPDF's current architecture and prohibition on embedded-script execution.
+The [comparison](PDFCRAFT-COMPARISON.md) records all upstream feature families and outstanding work without claiming full parity.
+The [verification ledger](VERIFICATION.md#october-16-pdfcraft-compatible-tools) records local gates, native save/reopen evidence, independent readers and the release E0463 blocker.
+The full request remains incomplete, and the implementation PR must remain draft until its declared scope and acceptance gates are satisfied.
+A second batch adds ten mapped upstream entries; see the [second batch mapping](PDFCRAFT-COMPARISON.md#second-batch-mapping) and its [verification](VERIFICATION.md#october-16-pdfcraft-compatible-tools-second-batch).
+Its native NavPDF and Preview acceptance was not run because the work was done in a Linux container.
+Next: native acceptance of both batches, resolve release macro loading, finish the per-entry comparison and implement the remaining compatible gaps in delivery order.
+Do not merge; only opening a PR is authorized.
+
 ## October 14 PR 66 follow-up
 
 The user authorized fixing and merging PR 66 with zero Sonar issues.

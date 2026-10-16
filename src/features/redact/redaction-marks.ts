@@ -172,19 +172,21 @@ function createMeasuringContext(): CanvasRenderingContext2D | null {
   }
 }
 
+/** Marks every occurrence of each term, reading each page's text once. */
 export async function findTermMarks(
   pdf: TextSource,
-  term: string,
+  terms: string | string[],
   signal?: AbortSignal,
 ): Promise<RedactionRegion[]> {
+  const list = typeof terms === "string" ? [terms] : terms;
   const marks: RedactionRegion[] = [];
   for await (const [page, source] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
     if (signal?.aborted) break;
     const content = await source.getTextContent();
     const measure = canvasMeasure(content.styles);
-    for (const rect of termRects(content.items.filter(isTextItem), term, measure)) {
-      marks.push({ page, rect });
-    }
+    const items = content.items.filter(isTextItem);
+    for (const term of list)
+      for (const rect of termRects(items, term, measure)) marks.push({ page, rect });
   }
   return marks;
 }

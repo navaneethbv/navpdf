@@ -18,6 +18,7 @@ import {
   type PatternMark,
 } from "./redaction-marks";
 import { PatternFinder, patternSummary } from "./PatternFinder";
+import { MAX_WORD_LIST_TERMS, parseWordList } from "./word-list";
 
 interface Mark {
   id: string;
@@ -152,33 +153,54 @@ export function RedactionTool({
     };
   }, [drawing, viewer]);
 
-  const markTerm = async () => {
-    const value = term.trim();
-    if (!value || !controller?.pdf) return;
+  const markTerms = async (values: string[]) => {
+    if (!values.length || !controller?.pdf) return;
     try {
-      const found = await findTermMarks(controller.pdf, value);
+      const found = await findTermMarks(controller.pdf, values);
       setMarks((current) => [
         ...current,
         ...found.map((match) => ({ id: crypto.randomUUID(), ...match, source: "search" as const })),
       ]);
-      setTerms((current) =>
-        current.some((existing) => existing.toLowerCase() === value.toLowerCase())
-          ? current
-          : [...current, value],
-      );
+      setTerms((current) => {
+        const known = new Set(current.map((existing) => existing.toLowerCase()));
+        const added = values.filter((value) => {
+          const key = value.toLowerCase();
+          if (known.has(key)) return false;
+          known.add(key);
+          return true;
+        });
+        return [...current, ...added];
+      });
       const pages = new Set(found.map((match) => match.page)).size;
+      const termWord = values.length === 1 ? "The term is" : `All ${values.length} terms are`;
       if (found.length) {
         const matchWord = found.length === 1 ? "match" : "matches";
         const pageWord = pages === 1 ? "page" : "pages";
         setNotice(
-          `Marked ${found.length} ${matchWord} on ${pages} ${pageWord}. The term is also audited after redaction.`,
+          `Marked ${found.length} ${matchWord} on ${pages} ${pageWord}. ${termWord} also audited after redaction.`,
         );
       } else {
         setNotice(
-          "No text matches were found. The term will still be audited in the redacted output.",
+          `No text matches were found. ${values.length === 1 ? "The term" : "The terms"} will still be audited in the redacted output.`,
         );
       }
       setTerm("");
+    } catch (error) {
+      s.set({ error: errorText(error) });
+    }
+  };
+
+  const markTerm = () => {
+    const value = term.trim();
+    return value ? markTerms([value]) : Promise.resolve();
+  };
+
+  /** A plain-text word list: one word or phrase per line, blank lines and duplicates ignored. */
+  const markWordList = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const values = parseWordList(await file.text(), file.size);
+      await markTerms(values);
     } catch (error) {
       s.set({ error: errorText(error) });
     }
@@ -357,6 +379,25 @@ export function RedactionTool({
                 </button>
               </div>
             </form>
+            <div className="setting-group">
+              <label className="setting-title" htmlFor={`${ids}-word-list`}>
+                Mark a word list
+              </label>
+              <input
+                id={`${ids}-word-list`}
+                type="file"
+                accept=".txt,text/plain"
+                disabled={!controller?.pdf}
+                onChange={(event) => {
+                  void markWordList(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
+              <p className="field-hint">
+                A plain-text file with one word or phrase per line, up to {MAX_WORD_LIST_TERMS}{" "}
+                entries. Every entry is also audited after redaction.
+              </p>
+            </div>
             <PatternFinder
               controller={controller}
               onFound={markPatterns}
