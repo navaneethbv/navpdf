@@ -10,14 +10,20 @@ Full parity is not complete.
 
 Node 24.18.1 and `npm ci` were used.
 Lint, typecheck, formatting, production build, `git diff --check` and instruction-file comparison pass.
-The frontend suite passes 954 tests across 129 files, with 86.60% statements, 79.05% branches, 85.64% functions and 89.60% lines; LCOV is retained.
+The frontend suite passes 955 tests across 129 files, with 86.64% statements, 79.07% branches, 85.72% functions and 89.64% lines; LCOV is retained.
 The Rust suite passes 95 tests with the pre-existing constrained-volume test ignored, and Clippy passes with warnings denied.
 The existing production chunk-size advisory remains.
 Logs are under ignored `output/pdfcraft-*.log`.
 
 The locked Tauri and muda dependencies require Rust 1.90, so the declared minimum and CI MSRV job now use 1.90 instead of 1.89.
 A fresh-target `cargo +1.90.0 check --locked --manifest-path src-tauri/Cargo.toml` passes.
-No dependencies or lockfiles changed.
+The quality follow-up adds pinned `@xmldom/xmldom` 0.9.12 for strict XML parsing outside the browser DOM; ADR 0016 records the dependency decision.
+`npm ci` and the production dependency audit pass with zero vulnerabilities.
+The license inventory includes the new MIT dependency and retains the existing Rust license review entries.
+Quality-refactor logs are under ignored `output/pr68-quality/`.
+Sequential PDF extraction and embedding, cancellation and output limits are preserved.
+Keyboard handlers are attached to command buttons, and complex branching is split into focused helpers.
+The XFDF regression verifies escaped script text remains literal and rejects nested markup, foreign elements and unknown entities.
 
 Regressions cover rotated/cropped poster output and tile limits; initial-view destinations and preserved preferences with independent PDF.js inspection; actual serialized split sizes; bookmark boundaries; strict XFDF parsing and custom checkbox states; malformed structure, role mapping and report escaping; and dialog cancellation, validation, disabled actions and keyboard navigation.
 Review reproduced a malformed structure child being silently skipped and reported as passed; it now reports incomplete inspection while allowing legitimate marked-content references.

@@ -302,6 +302,21 @@ export function PageWorkspace({
     }
   };
 
+  const archiveGroups = async (
+    mode: "split" | "individual",
+    bytes: Uint8Array,
+    progress: {
+      isCancelled: () => boolean;
+      onProgress: (completed: number, total: number) => void;
+    },
+  ) => {
+    if (mode === "individual") return individualPageGroups(totalPages, selected);
+    if (splitMode === "bookmarks") return bookmarkPageGroups(bytes);
+    if (splitMode === "size")
+      return sizePageGroups(bytes, Math.floor(Number(maxFileMb) * 1024 ** 2), progress);
+    return fixedPageGroups(totalPages, Number(pagesPerFile));
+  };
+
   const exportArchive = async (mode: "split" | "individual") => {
     const source = controller?.pdf;
     if (!source || workflowBlocked || workflowRunning.current) return;
@@ -325,14 +340,7 @@ export function PageWorkspace({
         onProgress: (completed: number, total: number) =>
           setArchiveProgress(`Measuring page ${completed} of ${total}`),
       };
-      const groups =
-        mode === "individual"
-          ? individualPageGroups(totalPages, selected)
-          : splitMode === "bookmarks"
-            ? await bookmarkPageGroups(bytes)
-            : splitMode === "size"
-              ? await sizePageGroups(bytes, Math.floor(Number(maxFileMb) * 1024 ** 2), progress)
-              : fixedPageGroups(totalPages, Number(pagesPerFile));
+      const groups = await archiveGroups(mode, bytes, progress);
       const output = await createPageArchive(bytes, groups, {
         isCancelled: () => exportCancelled.current || !isCurrent(),
         onProgress: (completed, total) =>

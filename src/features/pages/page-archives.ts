@@ -104,32 +104,43 @@ export async function sizePageGroups(
   const cancelled = () => {
     if (progress.isCancelled?.()) throw new DOMException("Export cancelled.", "AbortError");
   };
-  for (let first = 0; first < count;) {
-    cancelled();
+  let nextPage = 0;
+  function* starts() {
+    while (nextPage < count) yield nextPage;
+  }
+  const measureGroup = async (first: number) => {
     let low = first + 1;
     let high = count;
     let chosen: number[] | null = null;
-    // Sizes need not be perfectly monotonic. Binary search may choose more parts than optimal,
-    // but only an explicitly measured, fitting range is ever accepted.
-    while (low <= high) {
+    function* candidates() {
+      while (low <= high) yield Math.floor((low + high) / 2);
+    }
+    const measure = async (end: number) => {
       cancelled();
-      const end = Math.floor((low + high) / 2);
       const group = Array.from({ length: end - first }, (_, offset) => first + offset);
       const bytes = await extractPages(source, group);
       cancelled();
-      if (bytes.byteLength <= maxBytes) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      return { end, group, size: bytes.byteLength };
+    };
+    // Only explicitly measured ranges are accepted; nonmonotonic sizes may produce extra parts.
+    for await (const { end, group, size } of mapInOrder(candidates(), measure)) {
+      if (size <= maxBytes) {
         chosen = group;
         low = end + 1;
       } else high = end - 1;
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (!chosen)
       throw new Error(
         `Page ${first + 1} cannot fit the chosen size without compression. Increase the limit.`,
       );
-    groups.push(chosen);
-    first += chosen.length;
-    progress.onProgress?.(first, count);
+    return chosen;
+  };
+  for await (const group of mapInOrder(starts(), measureGroup)) {
+    cancelled();
+    groups.push(group);
+    nextPage += group.length;
+    progress.onProgress?.(nextPage, count);
   }
   return groups;
 }

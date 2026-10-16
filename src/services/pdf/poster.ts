@@ -1,3 +1,4 @@
+import { mapInOrder } from "../../utils/async-sequence.ts";
 import { PDFDocument, PDFName, PDFNumber, degrees } from "pdf-lib";
 import { visibleBox, fromTopLeftVisual } from "./page-box.ts";
 import { SHEETS, type SheetSize } from "./impose.ts";
@@ -77,42 +78,53 @@ export async function posterPages(bytes: Uint8Array, options: PosterOptions) {
       "A poster export is limited to 500 sheets. Choose fewer pages or reduce scale.",
     );
   const output = await PDFDocument.create();
-  for (const { page, box, unit, width, height, grid } of plans) {
-    if (!page.node.Contents())
-      page.node.set(PDFName.of("Contents"), source.context.register(source.context.stream("")));
-    const scale = options.scale * unit;
-    for (let row = 0; row < grid.rows; row++) {
-      for (let col = 0; col < grid.columns; col++) {
-        const x = (col * (grid.tileWidth - options.overlap)) / options.scale;
-        const y = (row * (grid.tileHeight - options.overlap)) / options.scale;
-        const shownW = Math.min(grid.tileWidth / options.scale, width - x);
-        const shownH = Math.min(grid.tileHeight / options.scale, height - y);
-        const rect = fromTopLeftVisual(page, x / unit, y / unit, shownW / unit, shownH / unit);
-        const embedded = await output.embedPage(page, {
-          left: rect.x,
-          bottom: rect.y,
-          right: rect.x + rect.width,
-          top: rect.y + rect.height,
-        });
-        const sheet = output.addPage([grid.sheetWidth, grid.sheetHeight]);
-        const left = options.margin;
-        const bottom = grid.sheetHeight - options.margin - shownH * options.scale;
-        const origins = {
-          0: [left, bottom],
-          90: [left, bottom + rect.width * scale],
-          180: [left + rect.width * scale, bottom + rect.height * scale],
-          270: [left + rect.height * scale, bottom],
-        };
-        const [drawX, drawY] = origins[box.rotation];
-        sheet.drawPage(embedded, {
-          x: drawX,
-          y: drawY,
-          xScale: scale,
-          yScale: scale,
-          rotate: degrees(-box.rotation),
-        });
+  function* tiles() {
+    for (const { page, box, unit, width, height, grid } of plans) {
+      if (!page.node.Contents())
+        page.node.set(PDFName.of("Contents"), source.context.register(source.context.stream("")));
+      const scale = options.scale * unit;
+      for (let row = 0; row < grid.rows; row++) {
+        for (let col = 0; col < grid.columns; col++) {
+          const x = (col * (grid.tileWidth - options.overlap)) / options.scale;
+          const y = (row * (grid.tileHeight - options.overlap)) / options.scale;
+          const shownW = Math.min(grid.tileWidth / options.scale, width - x);
+          const shownH = Math.min(grid.tileHeight / options.scale, height - y);
+          const rect = fromTopLeftVisual(page, x / unit, y / unit, shownW / unit, shownH / unit);
+          yield { page, box, grid, scale, shownH, rect };
+        }
       }
     }
+  }
+  const embedTile = async (
+    tile: ReturnType<typeof tiles> extends Generator<infer T> ? T : never,
+  ) => {
+    const { page, rect } = tile;
+    const embedded = await output.embedPage(page, {
+      left: rect.x,
+      bottom: rect.y,
+      right: rect.x + rect.width,
+      top: rect.y + rect.height,
+    });
+    return { ...tile, embedded };
+  };
+  for await (const { box, grid, scale, shownH, rect, embedded } of mapInOrder(tiles(), embedTile)) {
+    const sheet = output.addPage([grid.sheetWidth, grid.sheetHeight]);
+    const left = options.margin;
+    const bottom = grid.sheetHeight - options.margin - shownH * options.scale;
+    const origins = {
+      0: [left, bottom],
+      90: [left, bottom + rect.width * scale],
+      180: [left + rect.width * scale, bottom + rect.height * scale],
+      270: [left + rect.height * scale, bottom],
+    };
+    const [drawX, drawY] = origins[box.rotation];
+    sheet.drawPage(embedded, {
+      x: drawX,
+      y: drawY,
+      xScale: scale,
+      yScale: scale,
+      rotate: degrees(-box.rotation),
+    });
   }
   output.setProducer("NavPDF");
   return { bytes: await output.save(), sheets };

@@ -15,6 +15,31 @@ function string(dict: PDFDict, key: string) {
     : "";
 }
 
+function resolveRole(dict: PDFDict, map: unknown) {
+  const name = dict.lookup(PDFName.of("S"));
+  let role = name instanceof PDFName ? name.decodeText() : "";
+  const seen = new Set<string>();
+  while (role && map instanceof PDFDict && map.has(PDFName.of(role))) {
+    if (seen.has(role)) return { role, incomplete: true };
+    seen.add(role);
+    const mapped = map.lookup(PDFName.of(role));
+    if (!(mapped instanceof PDFName)) return { role, incomplete: true };
+    role = mapped.decodeText();
+  }
+  return { role, incomplete: false };
+}
+
+function structureChildren(doc: PDFDocument, dict: PDFDict) {
+  const children = dict.lookup(PDFName.of("K"));
+  const kids = children instanceof PDFArray ? children.asArray() : [children];
+  return kids.flatMap((ref) => {
+    const kid = ref ? doc.context.lookup(ref) : undefined;
+    if (!(kid instanceof PDFDict)) return [];
+    const type = kid.lookup(PDFName.of("Type"));
+    return type === PDFName.of("MCR") || type === PDFName.of("OBJR") ? [] : [kid];
+  });
+}
+
 /** Walk only structure children, never parent links; reject cycles and truncated trees. */
 function structure(doc: PDFDocument) {
   const root = doc.catalog.lookup(PDFName.of("StructTreeRoot"));
@@ -26,48 +51,44 @@ function structure(doc: PDFDocument) {
   const pending: { dict: PDFDict; parent: Element | null; depth: number }[] = [
     { dict: root, parent: null, depth: 0 },
   ];
-  while (pending.length) {
+  while (pending.length && elements.length < 20000) {
     const item = pending.pop()!;
-    if (item.depth > 128 || seen.has(item.dict) || elements.length >= 20000) {
+    if (item.depth > 128 || seen.has(item.dict)) {
       incomplete = true;
-      if (elements.length >= 20000) break;
       continue;
     }
     seen.add(item.dict);
-    const name = item.dict.lookup(PDFName.of("S"));
-    let role = name instanceof PDFName ? name.decodeText() : "";
-    if (item.dict !== root && !role) incomplete = true;
-    const roles = new Set<string>();
-    while (role && map instanceof PDFDict && map.has(PDFName.of(role))) {
-      if (roles.has(role)) {
-        incomplete = true;
-        break;
-      }
-      roles.add(role);
-      const mapped = map.lookup(PDFName.of(role));
-      if (!(mapped instanceof PDFName)) {
-        incomplete = true;
-        break;
-      }
-      role = mapped.decodeText();
-    }
+    const resolved = resolveRole(item.dict, map);
+    const { role } = resolved;
+    incomplete ||= resolved.incomplete || (item.dict !== root && !role);
     const element: Element = { dict: item.dict, role, parent: item.parent, children: [] };
     if (role) {
       elements.push(element);
       item.parent?.children.push(element);
     }
-    const children = item.dict.lookup(PDFName.of("K"));
-    const kids = children instanceof PDFArray ? children.asArray() : [children];
-    for (const ref of kids.reverse()) {
-      const kid = ref ? doc.context.lookup(ref) : undefined;
-      if (kid instanceof PDFDict) {
-        const type = kid.lookup(PDFName.of("Type"));
-        if (type === PDFName.of("MCR") || type === PDFName.of("OBJR")) continue;
-        pending.push({ dict: kid, parent: role ? element : item.parent, depth: item.depth + 1 });
-      }
-    }
+    const parent = role ? element : item.parent;
+    for (const dict of structureChildren(doc, item.dict).reverse())
+      pending.push({ dict, parent, depth: item.depth + 1 });
   }
-  return { elements, incomplete };
+  return { elements, incomplete: incomplete || pending.length > 0 };
+}
+
+function structureResult(
+  id: string,
+  label: string,
+  bad: number,
+  detail: string,
+  incomplete: boolean,
+): AccessibilityCheck {
+  if (bad) return { id, label, status: "failed", detail: `${bad} issue(s). ${detail}` };
+  if (incomplete)
+    return {
+      id,
+      label,
+      status: "warning",
+      detail: "The structure tree is incomplete or malformed; this check could not finish.",
+    };
+  return { id, label, status: "passed", detail };
 }
 
 export function checkStructure(doc: PDFDocument): AccessibilityCheck[] {
@@ -76,16 +97,7 @@ export function checkStructure(doc: PDFDocument): AccessibilityCheck[] {
   const { elements, incomplete } = tree;
   const checks: AccessibilityCheck[] = [];
   const result = (id: string, label: string, bad: number, detail: string) =>
-    checks.push({
-      id,
-      label,
-      status: bad ? "failed" : incomplete ? "warning" : "passed",
-      detail: bad
-        ? `${bad} issue(s). ${detail}`
-        : incomplete
-          ? "The structure tree is incomplete or malformed; this check could not finish."
-          : detail,
-    });
+    checks.push(structureResult(id, label, bad, detail, incomplete));
   result(
     "structure-integrity",
     "Structure tree can be inspected",
@@ -206,5 +218,11 @@ export function accessibilityReport(checks: AccessibilityCheck[], title: string)
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Accessibility report</title><body><h1>${escape(title || "Accessibility report")}</h1><p>Automatic checks do not establish accessibility or PDF/UA compliance. Manual review is required.</p><table><caption>Accessibility checks</caption><thead><tr><th scope="col">Check</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead><tbody>${checks.map((check) => `<tr><th scope="row">${escape(check.label)}</th><td>${escape(check.status)}</td><td>${escape(check.detail)}</td></tr>`).join("")}</tbody></table></body></html>`;
+  const rows = checks
+    .map(
+      (check) =>
+        `<tr><th scope="row">${escape(check.label)}</th><td>${escape(check.status)}</td><td>${escape(check.detail)}</td></tr>`,
+    )
+    .join("");
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Accessibility report</title><body><h1>${escape(title || "Accessibility report")}</h1><p>Automatic checks do not establish accessibility or PDF/UA compliance. Manual review is required.</p><table><caption>Accessibility checks</caption><thead><tr><th scope="col">Check</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
 }

@@ -177,28 +177,28 @@ export function FormDataDialog({
   };
 
   const exportReport = async (found: FormDataReport, token: number) => {
-    const csv = action === "export-csv";
-    const xfdf = action === "export-xfdf";
-    const text =
-      xfdf && source
-        ? await exportFormXfdf(await source.saveDocument())
-        : csv
-          ? exportFormDataCsv(found)
-          : exportFormDataJson(found);
+    let text: string;
+    let extension = "json";
+    let mime = "application/json";
+    let notice = "Form JSON exported.";
+    if (action === "export-csv") {
+      text = exportFormDataCsv(found);
+      extension = "csv";
+      mime = "text/csv;charset=utf-8";
+      notice = "Form CSV exported.";
+    } else if (action === "export-xfdf" && source) {
+      text = await exportFormXfdf(await source.saveDocument());
+      extension = "xfdf";
+      mime = "application/vnd.adobe.xfdf";
+      notice = "Form XFDF exported.";
+    } else text = exportFormDataJson(found);
     if (!isCurrent(token)) return;
     const base = safeFileName(document?.name ?? "document.pdf").replace(/\.pdf$/i, "");
     const saved = await downloadBlob(
-      new Blob([text], {
-        type: xfdf
-          ? "application/vnd.adobe.xfdf"
-          : csv
-            ? "text/csv;charset=utf-8"
-            : "application/json",
-      }),
-      `${base}-form-data.${xfdf ? "xfdf" : csv ? "csv" : "json"}`,
+      new Blob([text], { type: mime }),
+      `${base}-form-data.${extension}`,
     );
-    if (saved && isCurrent(token))
-      setNotice(xfdf ? "Form XFDF exported." : csv ? "Form CSV exported." : "Form JSON exported.");
+    if (saved && isCurrent(token)) setNotice(notice);
   };
 
   const submit = async () => {

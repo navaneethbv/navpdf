@@ -26,7 +26,12 @@ Consider narrowly scoped upstream code reuse only after reviewing the dependency
 Do not import the entire upstream engine as a shortcut to parity.
 Do not add embedded-script execution, automatic attachment launching, external services or model downloads as implicit consequences of this request.
 
-The current changes introduce no new package dependencies and copy no upstream source or branding.
+The changes copy no upstream source or branding.
+XFDF imports use the pinned MIT-licensed `@xmldom/xmldom` 0.9.12 package to parse XML outside the browser DOM.
+The maintained pure JavaScript parser requires no native runtime or network access and bundles through Vite.
+Parser errors are fatal; document types, entity declarations, foreign elements and non-plain values remain rejected.
+Round-trip tests verify literal escaped markup, checkbox export states and saved PDF form values.
+The existing Node 24 toolchain satisfies its Node 14.6 minimum.
 They add tool search, poster composition, initial-view editing, bookmark/size ZIP splitting, XFDF form-data exchange, and additional accessibility structure checks and reports.
 The shared tool catalog keeps panel and palette actions aligned.
 PDF mutations continue through the existing revision transaction, and exports retain native destination selection.

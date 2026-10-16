@@ -70,3 +70,27 @@ it("rejects DTDs, malformed XML, annotations, duplicates, unknown fields and unk
   ])
     await expect(formXfdfToJson(bytes, invalid)).rejects.toThrow();
 });
+
+it("preserves escaped markup as literal form text and rejects active or foreign XML elements", async () => {
+  const bytes = await form();
+  const xml = await exportFormXfdf(bytes);
+  const escaped = "&lt;script&gt;alert(1)&lt;/script&gt;";
+  const result = await readFormData(
+    await importFormData(
+      bytes,
+      await formXfdfToJson(bytes, xml.replace("A &amp; B &lt;C&gt;", escaped)),
+    ),
+  );
+  expect(result.fields.find((field) => field.name === "person.name")?.value).toBe(
+    "<script>alert(1)</script>",
+  );
+  for (const value of [
+    "<script>alert(1)</script>",
+    '<x xmlns="urn:foreign">text</x>',
+    "&unknown;",
+  ]) {
+    await expect(
+      formXfdfToJson(bytes, xml.replace("A &amp; B &lt;C&gt;", value)),
+    ).rejects.toThrow();
+  }
+});

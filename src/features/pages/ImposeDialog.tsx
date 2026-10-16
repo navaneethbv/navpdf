@@ -34,6 +34,14 @@ const SHEET_LABELS: [SheetSize, string][] = [
   ["a3", "A3"],
 ];
 
+function layoutHint(layout: Layout) {
+  if (layout === "poster")
+    return "Sheets run left to right, top to bottom. Print at actual size (100%) and join overlapping edges. Automatic orientation uses portrait sheets. Blank margins are 18 points.";
+  if (layout === "booklet")
+    return "Print the booklet on both sides, flipping on the short edge, then fold the stack in half. Blank pages are added to reach a multiple of four.";
+  return "Pages are scaled to fit and keep their orientation.";
+}
+
 export function ImposeDialog({
   controller,
   onClose,
@@ -98,8 +106,7 @@ export function ImposeDialog({
             });
       if (!mounted.current || controller.pdf !== source) return;
       const base = safeFileName(documentName.replace(/\.pdf$/i, ""), "document");
-      const suffix =
-        layout === "poster" ? "poster" : layout === "booklet" ? "booklet" : `${layout}-up`;
+      const suffix = ["poster", "booklet"].includes(layout) ? layout : `${layout}-up`;
       if (await downloadBytes(result.bytes, `${base}-${suffix}.pdf`)) {
         set({ status: `Saved a ${result.sheets}-sheet ${suffix} PDF` });
         onClose();
@@ -226,13 +233,8 @@ export function ImposeDialog({
         />
       </div>
       <p className="field-hint">
-        {layout === "poster"
-          ? "Sheets run left to right, top to bottom. Print at actual size (100%) and join overlapping edges. Automatic orientation uses portrait sheets. Blank margins are 18 points."
-          : layout === "booklet"
-            ? "Print the booklet on both sides, flipping on the short edge, then fold the stack in half. Blank pages are added to reach a multiple of four."
-            : "Pages are scaled to fit and keep their orientation."}{" "}
-        The new PDF contains page content only; comments, form fields and links stay in this
-        document, which is not changed.
+        {layoutHint(layout)} The new PDF contains page content only; comments, form fields and links
+        stay in this document, which is not changed.
       </p>
     </ToolDialog>
   );

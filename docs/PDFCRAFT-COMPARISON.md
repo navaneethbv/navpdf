@@ -29,7 +29,7 @@ The [delivery tracker](DELIVERY-PHASES.md#october-16-pdfcraft-capability-integra
 
 ## Acceptance boundary
 
-The six additions are independent implementations using existing dependencies, not copied upstream modules.
+The six additions are independent implementations using the established PDF engines and a dedicated XML parser, not copied upstream modules.
 Tests cover their current contracts, including malformed input and stale results, but do not prove the entire upstream feature family.
 Before full parity can be claimed, each shipped/partial upstream entry needs a NavPDF source/test mapping, a deliberate policy exclusion, or a completed implementation with native and independent-reader evidence.
 The requested full outcome remains open.

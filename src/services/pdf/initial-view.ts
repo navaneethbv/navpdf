@@ -73,12 +73,9 @@ export async function writeInitialView(bytes: Uint8Array, view: InitialView) {
   doc.catalog.set(PDFName.of("PageLayout"), PDFName.of(view.layout));
   doc.catalog.set(PDFName.of("PageMode"), PDFName.of(view.panel));
   const page = doc.getPage(view.page - 1).ref;
-  const destination =
-    view.fit === "XYZ"
-      ? [page, "XYZ", null, null, view.zoom / 100]
-      : view.fit === "FitH"
-        ? [page, "FitH", null]
-        : [page, "Fit"];
+  let destination: (typeof page | string | number | null)[] = [page, "Fit"];
+  if (view.fit === "XYZ") destination = [page, "XYZ", null, null, view.zoom / 100];
+  else if (view.fit === "FitH") destination = [page, "FitH", null];
   doc.catalog.set(PDFName.of("OpenAction"), doc.context.obj(destination));
   const old = doc.catalog.lookup(PDFName.of("ViewerPreferences"));
   const prefs = old instanceof PDFDict ? old : doc.context.obj({});

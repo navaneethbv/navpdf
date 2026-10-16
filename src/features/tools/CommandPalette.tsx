@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { Search, X } from "lucide-react";
 import { FeatureDialog } from "../../components/FeatureDialog";
 import { useWorkspace } from "../../stores/workspace";
@@ -23,6 +23,23 @@ export function CommandPalette({
     if (state.busy || tool.disabled) return;
     onClose();
     tool.action();
+  };
+
+  const navigateResults = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const buttons = [
+      ...(list.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []),
+    ];
+    const index = buttons.indexOf(event.target as HTMLButtonElement);
+    if (index < 0) return;
+    event.preventDefault();
+    if (event.key === "ArrowUp" && index === 0) input.current?.focus();
+    else {
+      let next = Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1));
+      if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = buttons.length - 1;
+      buttons[next]?.focus();
+    }
   };
 
   return (
@@ -62,37 +79,14 @@ export function CommandPalette({
             />
           </label>
           <output aria-live="polite">{matches.length} tools</output>
-          <ul
-            ref={list}
-            className="command-results"
-            aria-label="Matching tools"
-            onKeyDown={(event) => {
-              if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-              const buttons = [
-                ...(list.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ??
-                  []),
-              ];
-              const index = buttons.indexOf(event.target as HTMLButtonElement);
-              if (index < 0) return;
-              event.preventDefault();
-              if (event.key === "ArrowUp" && index === 0) input.current?.focus();
-              else {
-                const next =
-                  event.key === "Home"
-                    ? 0
-                    : event.key === "End"
-                      ? buttons.length - 1
-                      : Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1));
-                buttons[next]?.focus();
-              }
-            }}
-          >
+          <ul ref={list} className="command-results" aria-label="Matching tools">
             {matches.map((tool) => (
               <li key={tool.id}>
                 <button
                   type="button"
                   disabled={state.busy || tool.disabled}
                   onClick={() => run(tool)}
+                  onKeyDown={navigateResults}
                 >
                   <tool.icon size={18} aria-hidden="true" />
                   <span>

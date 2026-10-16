@@ -112,7 +112,7 @@ export function InitialViewDialog({ controller, onClose }: Readonly<DocumentTool
           </select>
           {view.fit === "XYZ" && (
             <label>
-              Opening zoom (%)
+              Opening zoom (%){" "}
               <input
                 className="text-input"
                 type="number"
