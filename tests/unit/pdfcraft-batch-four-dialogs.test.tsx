@@ -113,8 +113,15 @@ it("offers new field types and the preview in Prepare Form", async () => {
 
 it("swaps date fields to a native picker and writes the field's format", () => {
   const layer = document.createElement("div");
-  layer.innerHTML =
-    '<input data-element-id="7R" value="04/03/2026"><input data-element-id="8R" value="soon">';
+  for (const [id, value] of [
+    ["7R", "04/03/2026"],
+    ["8R", "soon"],
+  ]) {
+    const input = document.createElement("input");
+    input.dataset.elementId = id;
+    input.value = value;
+    layer.append(input);
+  }
   enhanceDateFields(layer, [
     { id: "7R", datetimeFormat: "dd/mm/yyyy" },
     { id: "8R", datetimeFormat: "dd/mm/yyyy" },

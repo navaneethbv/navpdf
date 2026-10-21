@@ -299,6 +299,9 @@ describe("date picker formatting", () => {
   it("rejects impossible or mismatched dates", () => {
     expect(parseDate("31/02/2026", "dd/mm/yyyy")).toBeNull();
     expect(parseDate("tomorrow", "yyyy-mm-dd")).toBeNull();
+    // Formats come from the document, so regular-expression syntax in them is literal text.
+    expect(parseDate("(04).*03+2026", "(dd).*mm+yyyy")).toBe("2026-03-04");
+    expect(parseDate("04x03x2026", "dd.mm.yyyy")).toBeNull();
     expect(formatDate("not a date", "yyyy")).toBe("");
   });
 });

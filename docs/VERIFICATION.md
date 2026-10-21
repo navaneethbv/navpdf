@@ -61,6 +61,7 @@ Logs are under ignored `output/batch-four/`.
 Integration tests read saved output with PDF.js: list box multiple selection, the date format PDF.js derives from the saved actions, push-button image fields, tooltips, comb and maximum length, shared values across duplicated widgets, tab order, atomic renaming, detection of labelled underscore lines that skips covered areas, label-based name suggestions, and date formatting and parsing for every offered format.
 Testing found that PDF.js reads a field's tooltip only from its widget, so tooltips are now written to the field and each widget.
 Dialog tests cover property saving, duplication, tab-order changes, invalid ranges, detected-field creation, new field types and the preview action; a DOM test covers the date input swap and preserved non-date text.
+Date parsing no longer builds a regular expression from the document's format string; a token walker treats every non-token character literally, with a regression test using regular-expression syntax in the format.
 
 In the Chromium browser preview with `output/batch-four/form-fixture.pdf`, the date field became a native date input on focus and wrote `25/12/2026` in its `dd/mm/yyyy` format on blur; Detect & Name Fields found and created the labelled "Full name" field; Preview focused the first field.
 Native NavPDF, Preview and Acrobat acceptance were not run; Acrobat is the relevant reader for the saved date-format actions.

@@ -36,40 +36,55 @@ export function formatDate(iso: string, format: string): string {
   return format.replaceAll(TOKENS, (token) => parts[token]);
 }
 
-const escape = (text: string) => text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+/** Splits an AFDate format into tokens and literal text. */
+function tokenize(format: string) {
+  const parts: { token?: string; text?: string }[] = [];
+  let last = 0;
+  for (const match of format.matchAll(TOKENS)) {
+    if (match.index > last) parts.push({ text: format.slice(last, match.index) });
+    parts.push({ token: match[0] });
+    last = match.index + match[0].length;
+  }
+  if (last < format.length) parts.push({ text: format.slice(last) });
+  return parts;
+}
+
+const isDigit = (char: string | undefined) => char !== undefined && char >= "0" && char <= "9";
+const isLetter = (char: string | undefined) => char !== undefined && /[A-Za-z]/.test(char);
 
 /** Reads a value written in `format` back to an ISO date, or null when it does not match. */
 export function parseDate(value: string, format: string): string | null {
-  const order: string[] = [];
-  let pattern = "";
-  let last = 0;
-  for (const match of format.matchAll(TOKENS)) {
-    pattern += escape(format.slice(last, match.index));
-    order.push(match[0]);
-    pattern += match[0].startsWith("mmm")
-      ? "([A-Za-z]+)"
-      : match[0].length === 4
-        ? "(\\d{4})"
-        : "(\\d{1,2})";
-    last = match.index + match[0].length;
-  }
-  pattern += escape(format.slice(last));
-  const found = new RegExp(`^${pattern}$`, "i").exec(value.trim());
-  if (!found) return null;
+  const text = value.trim();
+  let at = 0;
   let year = 0;
   let month = 0;
   let day = 0;
-  order.forEach((token, index) => {
-    const text = found[index + 1];
-    if (token === "yyyy") year = Number(text);
-    else if (token === "yy") year = 2000 + Number(text);
-    else if (token.startsWith("mmm"))
+  for (const { token, text: literal } of tokenize(format)) {
+    if (literal !== undefined) {
+      if (text.slice(at, at + literal.length).toLowerCase() !== literal.toLowerCase()) return null;
+      at += literal.length;
+      continue;
+    }
+    const start = at;
+    if (token!.startsWith("mmm")) {
+      while (isLetter(text[at])) at++;
+      const name = text.slice(start, at).toLowerCase();
       month =
-        MONTHS.findIndex((name) => name.toLowerCase().startsWith(text.toLowerCase().slice(0, 3))) +
-        1;
-    else if (token.startsWith("m")) month = Number(text);
-    else day = Number(text);
-  });
+        name.length >= 3
+          ? MONTHS.findIndex((month) => month.toLowerCase().startsWith(name.slice(0, 3))) + 1
+          : 0;
+      continue;
+    }
+    const width = token!.length === 4 ? 4 : 2;
+    while (at - start < width && isDigit(text[at])) at++;
+    if (at === start || (width === 4 && at - start !== 4)) return null;
+    const number = Number(text.slice(start, at));
+    if (token === "yyyy") year = number;
+    else if (token === "yy") year = 2000 + number;
+    else if (token!.startsWith("m")) month = number;
+    else day = number;
+  }
+  if (at !== text.length) return null;
   const date = new Date(Date.UTC(year, month - 1, day));
   if (!year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
