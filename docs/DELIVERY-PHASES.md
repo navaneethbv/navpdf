@@ -22,7 +22,7 @@ The [remaining gap programme](PDFCRAFT-COMPARISON.md#remaining-gap-programme) li
 Batch 3 adds page clipboard operations, thumbnail sizing, print boxes, page transitions, custom properties, a fonts list and six comment types.
 Batch 4 adds list box, date and image fields, a script-free date picker, field properties, duplication across pages, tab order, field detection, label-based naming and form preview.
 Batch 5 adds RC4 and AES-128 encryption choices, unencrypted metadata, password strength, whole-page redaction, redaction colours, labels and code sets, and faux-redaction detection under [ADR 0017](adr/0017-protection-options-and-redaction-labels.md).
-Batch 6 so far adds print subsets, reverse order, content choices, grayscale and image printing with a preview, and optimizer discards with form flattening.
+Batch 6 adds print subsets, reverse order, content choices, grayscale and image printing with a preview, optimizer discards with form flattening, GIF, BMP, WebP and JPEG 2000 input, text and clipboard creation, separate-file conversion, multi-file OCR, skipping pages with text and OCR image cleanup.
 
 ## Phase status and remaining gates
 

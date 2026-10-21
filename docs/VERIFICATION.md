@@ -5,6 +5,22 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 21 PDFCraft gap batch 6, creation and OCR
+
+The [sixth batch mapping](PDFCRAFT-COMPARISON.md#sixth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,044 tests across 140 files, with 85.83% statements, 77.85% branches, 84.77% functions and 88.90% lines; the coverage gates pass.
+No Rust source changed; the only native change adds JPEG 2000 to the Swift ImageIO import list, which cannot be compiled or run in this Linux container.
+
+Integration tests read text-created PDFs with PDF.js across page continuation and form feeds, check word and character wrapping, font-coverage rejection, image routing between the web view and the native decoder, Otsu thresholding, contrast stretching and speck removal.
+Testing found that a word's trailing space counted toward the line width, so a word that fitted exactly wrapped early; the width check now ignores trailing spaces.
+Dialog tests cover text creation, coverage errors, clipboard reading and its failure message, separate-file ZIP conversion with numbered duplicate names, multi-file OCR that skips a page with text and reports an unreadable file, and the OCR panel skipping text pages with black-and-white cleanup.
+The existing OCR warning test now selects its checkbox by name because the panel has more checkboxes.
+
+In the Chromium browser preview, generated GIF, BMP and WebP samples in `output/batch-six/` imported as a three-page PDF, typed text with accented and curly-quote characters opened as a PDF, and the multi-file OCR dialog showed its desktop-only notice.
+The Create PDF tabs wrapped onto two rows with the first label, so the new tab is named Text & Paste.
+Native OCR, clipboard permission prompts in WebKit, JPEG 2000 decoding and Preview acceptance were not run.
+
 ## October 21 PDFCraft gap batch 6, printing and optimizer
 
 The [sixth batch mapping](PDFCRAFT-COMPARISON.md#sixth-batch-mapping) lists each addition and its limits.

@@ -1,4 +1,5 @@
 import {
+  ClipboardPaste,
   FileText,
   Files as FilesIcon,
   Image as ImageIcon,
@@ -411,6 +412,14 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc,
     },
     {
+      id: "ocr-batch",
+      label: "OCR Multiple Files",
+      description: "Add searchable text to several PDFs at once and save them as a ZIP archive",
+      category: "convert",
+      icon: Scan,
+      action: () => s.set({ activeModal: "ocr-batch" }),
+    },
+    {
       id: "export-images",
       label: "Export to Images",
       description: "Export pages as PNG, JPEG, TIFF, PostScript or EPS",
@@ -556,6 +565,14 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       action: () => s.set({ activeModal: "create-pdf" }),
     },
     {
+      id: "create-text",
+      label: "Create PDF from Text or Clipboard",
+      description: "Make a PDF from typed or pasted text, a text file or a clipboard image",
+      category: "pages",
+      icon: ClipboardPaste,
+      action: () => s.set({ activeModal: "create-text" }),
+    },
+    {
       id: "design-cover",
       label: "Design Cover Page",
       description: "Generate stylish modern cover pages and title templates",
@@ -579,7 +596,8 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
     {
       id: "import-pdf",
       label: "Import / Convert to PDF",
-      description: "Create a PDF from PDFs, PNG, JPEG, HEIC or TIFF images",
+      description:
+        "Create a PDF from PDFs and PNG, JPEG, GIF, BMP, WebP, HEIC, TIFF or JPEG 2000 images",
       category: "pages",
       icon: FilePlus,
       action: () => s.set({ activeModal: "import-pdf" }),

@@ -244,7 +244,17 @@ function handleShortcut(
   return true;
 }
 
-const creationMenuActions = new Set(["create-pdf", "import-pdf", "combine-pdf", "open-recent"]);
+const CREATE_TABS: Record<string, "blank" | "text"> = {
+  "create-pdf": "blank",
+  "create-text": "text",
+};
+const creationMenuActions = new Set([
+  "create-pdf",
+  "import-pdf",
+  "combine-pdf",
+  "create-text",
+  "open-recent",
+]);
 const documentMenuActions = new Set([
   "edit-objects",
   "page-workspace",
@@ -833,9 +843,11 @@ export default function App() {
         {s.activeModal === "print" && (
           <PrintDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
-        {["create-pdf", "import-pdf", "combine-pdf"].includes(s.activeModal ?? "") && (
+        {["create-pdf", "import-pdf", "combine-pdf", "create-text"].includes(
+          s.activeModal ?? "",
+        ) && (
           <CreatePdfDialog
-            initialTab={s.activeModal === "create-pdf" ? "blank" : "combine"}
+            initialTab={CREATE_TABS[s.activeModal ?? ""] ?? "combine"}
             onLoad={(file) => session.open(file)}
             onClose={() => s.set({ activeModal: null })}
           />

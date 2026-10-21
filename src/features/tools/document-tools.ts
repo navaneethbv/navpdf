@@ -19,6 +19,7 @@ import { SpaceAuditDialog } from "../document/SpaceAuditDialog";
 import { PagePropertiesDialog } from "../pages/PagePropertiesDialog";
 import { FileCommentDialog, TextEditProposalDialog } from "../annotations/CommentDialogs";
 import { FieldPropertiesDialog, FormAssistDialog } from "../forms/FormToolsDialogs";
+import { OcrBatchDialog } from "../ocr/OcrBatchDialog";
 import { CoverUpDialog } from "../redact/CoverUpDialog";
 
 export interface DocumentToolProps {
@@ -49,4 +50,5 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   "field-properties": FieldPropertiesDialog,
   "form-assist": FormAssistDialog,
   "cover-ups": CoverUpDialog,
+  "ocr-batch": OcrBatchDialog,
 };

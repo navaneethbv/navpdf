@@ -3942,3 +3942,10 @@ p {
   padding: 8px 0 0;
   border: 0;
 }
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
