@@ -6,6 +6,7 @@ import {
   AnnotationEditorParamsType,
   PermissionFlag,
   type PDFDocumentProxy,
+  type PDFPageProxy,
   type PDFDocumentLoadingTask,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { AnnotationEditorUIManager } from "pdfjs-dist/types/src/display/editor/tools";
@@ -43,6 +44,7 @@ import {
   updateAnnotation,
   type TextMarkupKind,
 } from "../../services/document-commands";
+import { enhanceDateFields } from "./date-fields";
 import {
   addCallout,
   addCloud,
@@ -396,6 +398,17 @@ export class ViewerController {
     });
     on("scalechanging", ({ scale }: { scale: number }) =>
       useWorkspace.getState().set({ zoom: Math.round(scale * 100) }),
+    );
+    on(
+      "annotationlayerrendered",
+      ({ source }: { source: { div: HTMLElement; pdfPage?: PDFPageProxy | null } }) => {
+        void source.pdfPage
+          ?.getAnnotations()
+          .then((annotations) => enhanceDateFields(source.div, annotations))
+          .catch(() => {
+            // Fields stay usable as plain text when annotations cannot be read again.
+          });
+      },
     );
     on("textlayerrendered", ({ error }: { error?: unknown }) => {
       if (error)
@@ -1303,6 +1316,33 @@ export class ViewerController {
   zoom(value: number | string) {
     if (typeof value === "string") this.viewer.currentScaleValue = value;
     else this.viewer.currentScale = boundedZoom(value);
+  }
+  /**
+   * Moves to the first page with a form field and focuses that field, so the form can be tried
+   * out with Tab as a person filling it would.
+   */
+  async previewForm() {
+    const pdf = this.pdf;
+    if (!pdf) return;
+    for (let page = 1; page <= Math.min(pdf.numPages, 500); page++) {
+      const annotations = await (await pdf.getPage(page)).getAnnotations();
+      if (pdf !== this.pdf) return;
+      if (!annotations.some((annotation) => annotation.subtype === "Widget")) continue;
+      this.goTo(page);
+      useWorkspace.getState().set({
+        status: "Form preview: fill the fields and press Tab to move between them",
+      });
+      const focus = (attempt: number) => {
+        const field = this.container.querySelector<HTMLElement>(
+          `.page[data-page-number="${page}"] .annotationLayer :is(input, select, textarea, button)`,
+        );
+        if (field) field.focus();
+        else if (attempt < 20) setTimeout(() => focus(attempt + 1), 100);
+      };
+      focus(0);
+      return;
+    }
+    useWorkspace.getState().set({ status: "This PDF has no form fields to preview" });
   }
   goTo(page: number) {
     if (!this.pdf) return;

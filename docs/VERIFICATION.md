@@ -5,6 +5,21 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 21 PDFCraft gap batch 4
+
+The [fourth batch mapping](PDFCRAFT-COMPARISON.md#fourth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,012 tests across 135 files, with 86.14% statements, 78.07% branches, 85.16% functions and 89.27% lines; the coverage gates pass.
+No Rust source changed.
+Logs are under ignored `output/batch-four/`.
+
+Integration tests read saved output with PDF.js: list box multiple selection, the date format PDF.js derives from the saved actions, push-button image fields, tooltips, comb and maximum length, shared values across duplicated widgets, tab order, atomic renaming, detection of labelled underscore lines that skips covered areas, label-based name suggestions, and date formatting and parsing for every offered format.
+Testing found that PDF.js reads a field's tooltip only from its widget, so tooltips are now written to the field and each widget.
+Dialog tests cover property saving, duplication, tab-order changes, invalid ranges, detected-field creation, new field types and the preview action; a DOM test covers the date input swap and preserved non-date text.
+
+In the Chromium browser preview with `output/batch-four/form-fixture.pdf`, the date field became a native date input on focus and wrote `25/12/2026` in its `dd/mm/yyyy` format on blur; Detect & Name Fields found and created the labelled "Full name" field; Preview focused the first field.
+Native NavPDF, Preview and Acrobat acceptance were not run; Acrobat is the relevant reader for the saved date-format actions.
+
 ## October 21 PDFCraft gap batch 3
 
 Source baseline: `8e9b310` on `main`, with the batch on `feat/pdfcraft-remaining-gaps`.

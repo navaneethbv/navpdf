@@ -8,6 +8,12 @@ import {
   PenTool,
   Plus,
   X,
+  ListChecks,
+  CalendarDays,
+  ImageIcon,
+  SlidersHorizontal,
+  ScanSearch,
+  Eye,
 } from "lucide-react";
 import {
   PDFButton,
@@ -23,8 +29,32 @@ import {
   addFormField,
   deleteFormField,
   updateFormField,
+  DATE_FORMATS,
   type FormFieldDefinition,
 } from "../../services/document-commands";
+
+type FieldType = FormFieldDefinition["type"];
+
+const FIELD_TYPES: [FieldType, string, typeof Type][] = [
+  ["text", "Text Input", Type],
+  ["checkbox", "Checkbox", CheckSquare],
+  ["radio", "Radio", CircleDot],
+  ["dropdown", "Dropdown", List],
+  ["listbox", "List Box", ListChecks],
+  ["date", "Date", CalendarDays],
+  ["image", "Image", ImageIcon],
+  ["button", "Button", MousePointerClick],
+  ["signature", "Signature", PenTool],
+];
+
+const SIZES: Partial<Record<FieldType, [number, number]>> = {
+  checkbox: [20, 20],
+  radio: [20, 20],
+  button: [90, 28],
+  listbox: [160, 72],
+  image: [120, 90],
+  date: [110, 24],
+};
 import { fromTopLeftVisual } from "../../services/pdf/page-box";
 import { PageNumberInput } from "../../components/PageNumberInput";
 import { FeatureDialog } from "../../components/FeatureDialog";
@@ -49,9 +79,10 @@ export function FormManager({
   const fieldIds = useId();
   const sourcePdf = controller?.pdf;
   const s = useWorkspace();
-  const [fieldType, setFieldType] = useState<
-    "text" | "checkbox" | "radio" | "dropdown" | "button" | "signature"
-  >("text");
+  const [fieldType, setFieldType] = useState<FieldType>("text");
+  const [multiSelect, setMultiSelect] = useState(false);
+  const [dateFormat, setDateFormat] = useState<string>(DATE_FORMATS[0]);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [fieldName, setFieldName] = useState("");
   const [defaultValue, setDefaultValue] = useState("");
   const [optionsText, setOptionsText] = useState("Option 1, Option 2, Option 3");
@@ -214,17 +245,14 @@ export function FormManager({
       const currentBytes = await controller.pdf.saveDocument();
       const page = Math.max(1, Math.min(targetPage, s.info?.pages || 1));
 
-      let width = 200;
-      let height = 24;
-      if (fieldType === "checkbox" || fieldType === "radio") {
-        width = 20;
-        height = 20;
-      } else if (fieldType === "button") {
-        width = 90;
-        height = 28;
-      } else if (fieldType === "text" && multiline) {
-        height = 60;
-      }
+      const [width, defaultHeight] = SIZES[fieldType] ?? [200, 24];
+      const height = fieldType === "text" && multiline ? 60 : defaultHeight;
+      const image = imageFile
+        ? {
+            bytes: new Uint8Array(await imageFile.arrayBuffer()),
+            type: /png$/i.test(imageFile.type) ? ("png" as const) : ("jpg" as const),
+          }
+        : undefined;
 
       let mappedX = posX;
       let mappedY = posY;
@@ -256,8 +284,11 @@ export function FormManager({
         readOnly,
         multiline: fieldType === "text" ? multiline : undefined,
         group: fieldType === "radio" ? groupName.trim() || fieldName.trim() : undefined,
+        multiSelect: fieldType === "listbox" ? multiSelect : undefined,
+        dateFormat: fieldType === "date" ? dateFormat : undefined,
+        image: fieldType === "image" ? image : undefined,
         options:
-          fieldType === "dropdown"
+          fieldType === "dropdown" || fieldType === "listbox"
             ? optionsText
                 .split(",")
                 .map((o) => o.trim())
@@ -405,54 +436,17 @@ export function FormManager({
           <fieldset className="setting-group">
             <legend className="setting-title">Field Type</legend>
             <div className="tab-buttons-bar">
-              <button
-                type="button"
-                className={fieldType === "text" ? "active" : ""}
-                aria-pressed={fieldType === "text"}
-                onClick={() => setFieldType("text")}
-              >
-                <Type size={15} /> Text Input
-              </button>
-              <button
-                type="button"
-                className={fieldType === "checkbox" ? "active" : ""}
-                aria-pressed={fieldType === "checkbox"}
-                onClick={() => setFieldType("checkbox")}
-              >
-                <CheckSquare size={15} /> Checkbox
-              </button>
-              <button
-                type="button"
-                className={fieldType === "radio" ? "active" : ""}
-                aria-pressed={fieldType === "radio"}
-                onClick={() => setFieldType("radio")}
-              >
-                <CircleDot size={15} /> Radio
-              </button>
-              <button
-                type="button"
-                className={fieldType === "dropdown" ? "active" : ""}
-                aria-pressed={fieldType === "dropdown"}
-                onClick={() => setFieldType("dropdown")}
-              >
-                <List size={15} /> Dropdown
-              </button>
-              <button
-                type="button"
-                className={fieldType === "button" ? "active" : ""}
-                aria-pressed={fieldType === "button"}
-                onClick={() => setFieldType("button")}
-              >
-                <MousePointerClick size={15} /> Button
-              </button>
-              <button
-                type="button"
-                className={fieldType === "signature" ? "active" : ""}
-                aria-pressed={fieldType === "signature"}
-                onClick={() => setFieldType("signature")}
-              >
-                <PenTool size={15} /> Signature
-              </button>
+              {FIELD_TYPES.map(([value, label, Icon]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={fieldType === value ? "active" : ""}
+                  aria-pressed={fieldType === value}
+                  onClick={() => setFieldType(value)}
+                >
+                  <Icon size={15} /> {label}
+                </button>
+              ))}
             </div>
           </fieldset>
 
@@ -489,10 +483,10 @@ export function FormManager({
             </div>
           )}
 
-          {fieldType === "dropdown" && (
+          {(fieldType === "dropdown" || fieldType === "listbox") && (
             <div className="setting-group">
               <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
-                Dropdown Options
+                {fieldType === "listbox" ? "List Options" : "Dropdown Options"}
               </label>
               <input
                 id={`${fieldIds}-field-3`}
@@ -501,6 +495,55 @@ export function FormManager({
                 value={optionsText}
                 onChange={(e) => setOptionsText(e.target.value)}
                 className="text-input"
+              />
+            </div>
+          )}
+
+          {fieldType === "listbox" && (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={multiSelect}
+                onChange={(event) => setMultiSelect(event.target.checked)}
+              />
+              <span>Allow several selections</span>
+            </label>
+          )}
+
+          {fieldType === "date" && (
+            <div className="setting-group">
+              <label htmlFor={`${fieldIds}-date-format`} className="setting-title">
+                Date Format
+              </label>
+              <select
+                id={`${fieldIds}-date-format`}
+                className="select-input"
+                value={dateFormat}
+                onChange={(event) => setDateFormat(event.target.value)}
+              >
+                {DATE_FORMATS.map((format) => (
+                  <option key={format} value={format}>
+                    {format}
+                  </option>
+                ))}
+              </select>
+              <span className="setting-desc">
+                NavPDF offers a date picker for this field. The PDF also carries Acrobat&apos;s date
+                format action for other readers; NavPDF never runs it.
+              </span>
+            </div>
+          )}
+
+          {fieldType === "image" && (
+            <div className="setting-group">
+              <label htmlFor={`${fieldIds}-image`} className="setting-title">
+                Image (PNG or JPEG)
+              </label>
+              <input
+                id={`${fieldIds}-image`}
+                type="file"
+                accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
               />
             </div>
           )}
@@ -597,6 +640,33 @@ export function FormManager({
         </div>
 
         <div className="modal-footer">
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => s.set({ activeModal: "field-properties" })}
+            disabled={saving || existingFields.length === 0}
+          >
+            <SlidersHorizontal size={16} /> Field Properties
+          </button>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => s.set({ activeModal: "form-assist" })}
+            disabled={saving}
+          >
+            <ScanSearch size={16} /> Detect & Name
+          </button>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => {
+              onClose();
+              controller?.previewForm();
+            }}
+            disabled={saving || existingFields.length === 0}
+          >
+            <Eye size={16} /> Preview
+          </button>
           <button type="button" onClick={onClose} className="button-secondary">
             Cancel
           </button>
@@ -605,7 +675,7 @@ export function FormManager({
             onClick={() => {
               void handleAddField();
             }}
-            disabled={saving || !fieldName.trim()}
+            disabled={saving || !fieldName.trim() || (fieldType === "image" && !imageFile)}
             className="button-primary"
           >
             <Plus size={16} /> Add Field

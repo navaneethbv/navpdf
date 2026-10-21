@@ -20,6 +20,7 @@ The upstream checklist's 530 shipped or partial entries have not all received an
 On October 21 the user asked for every remaining PDFCraft gap, including items that need safety-rule decisions, on one draft PR in batches.
 The [remaining gap programme](PDFCRAFT-COMPARISON.md#remaining-gap-programme) lists the batches and their status.
 Batch 3 adds page clipboard operations, thumbnail sizing, print boxes, page transitions, custom properties, a fonts list and six comment types.
+Batch 4 adds list box, date and image fields, a script-free date picker, field properties, duplication across pages, tab order, field detection, label-based naming and form preview.
 
 ## Phase status and remaining gates
 

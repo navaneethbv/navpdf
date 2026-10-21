@@ -58,7 +58,7 @@ The user asked for every gap, including the decision items, delivered in batches
 | Batch | Gaps | Status |
 | --- | --- | --- |
 | 3 | Cut, copy and paste pages; thumbnail size; trim, bleed and art boxes; page transitions; custom document properties; fonts list; polygon, connected-line, cloud and callout comments; insert and replace proposals; file attachment comments | Implemented; see the third batch mapping |
-| 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Planned |
+| 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Implemented; see the fourth batch mapping |
 | 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Planned |
 | 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Planned |
 | 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Planned |
@@ -82,6 +82,20 @@ The user asked for every gap, including the decision items, delivered in batches
 | `comment.attach-file-comment` | Attach File as Comment | Embedded file up to 50 MB at a corner or centre of the page; NavPDF never opens it automatically. |
 
 Showing or hiding all comments moved to batch 7 because PDF.js fixes its annotation mode when the viewer is constructed, the same lifecycle work as high-contrast page colours.
+
+## Fourth batch mapping
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `form.add-listbox` | Prepare Form, List Box | Options, default selection and optional multiple selection. |
+| `form.add-date-field`, `form.date-picker` | Prepare Form, Date; viewer date picker | A text field carrying Acrobat's `AFDate_FormatEx` and `AFDate_KeystrokeEx` actions for readers that run form scripts. NavPDF reads the format name, never runs the actions, and swaps the field to a native date input while focused; text that is not a date in the field's format stays editable as text. |
+| `form.add-image-field` | Prepare Form, Image | A push button showing a chosen PNG or JPEG; choosing a new image while filling needs form scripts and is not provided. |
+| `form.props-general`, `form.props-appearance`, `form.rename-lock-fields` | Form Field Properties | Name (last segment), tooltip on the field and its widgets, font size, alignment, maximum length, comb, border and fill colours, the Locked and Hidden flags. Actions, format and validation properties belong to the script batch. |
+| `form.duplicate-fields` | Form Field Properties, Duplicate across pages | Widgets sharing one value at the first widget's position; radio groups and signature fields are rejected. |
+| `form.tab-order` | Form Field Properties, Tab order | Row, column or structure order for every page; manual per-field ordering is not provided. |
+| `form.auto-detect-fields` | Detect & Name Fields | Underscore runs and box characters in horizontal text, skipping places already covered by a field. Drawn boxes and scanned forms without OCR are not detected. |
+| `form.auto-name-fields` | Detect & Name Fields | The nearest label to the left on the same line, or just above, renamed as one edit. |
+| `form.preview-form` | Prepare Form, Preview | Moves to the first field and focuses it for Tab-driven testing; forms are always fillable in NavPDF, so no separate mode is needed. |
 
 ## Acceptance boundary
 
