@@ -5,6 +5,35 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 21 PDFCraft gap batch 5
+
+The [fifth batch mapping](PDFCRAFT-COMPARISON.md#fifth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,019 tests across 136 files, with 86.15% statements, 78.11% branches, 85.11% functions and 89.28% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass.
+`cargo test --locked` passes 101 library tests and fails 2: `unwritable_destination_directory_keeps_the_original` and `legacy_assets_stay_listed_when_the_upgrade_cannot_be_written`.
+Both depend on a directory being unwritable, which does not hold when the container runs as root; neither touches batch 5 code, and they are expected to pass on hosted CI.
+Logs are under ignored `output/batch-five/`.
+
+Engine tests open every encryption level only with its password, keep metadata readable only for AES, reject legacy passwords that would be truncated, show labels in the chosen colour while passing the audit, fail the audit for label text in another font or a changed label, and find covered text, unapplied Redact annotations and filled covering annotations.
+Testing found that legacy security handlers truncate passwords to 32 bytes and lopdf drops control characters, which made the wrong-password check accept some wrong passwords; legacy passwords are now limited and the check uses a printable prefix.
+Dialog tests cover the encryption request, the legacy password limit, strength labels, labelled regions and fill colours, whole-page marks and marking findings for redaction.
+
+Poppler 24 `pdfinfo` and `pdftotext` open each sample in `output/batch-five/` with the user password and refuse a wrong one.
+They report AES-256 (V5 R6, `/EncryptMetadata false`), AES (V4 R4), RC4 128-bit (V2 R3) and RC4 40-bit (V1 R2).
+The labelled redaction sample extracts only `(b)(6)`, and its Poppler raster shows white label text on the chosen blue fill.
+
+| Sample | SHA-256 |
+| --- | --- |
+| `aes256.pdf` | `10c4dc743ea71a7126abcdb35cfb3bc76416791bf59228ad104d788aeea69741` |
+| `aes128.pdf` | `3e10fbd425ffbab6b168f9057d9f084f515ba1b2729e69c88e7564f90ad39814` |
+| `rc4128.pdf` | `bb71b5904fa13fd57a0f7a922234ad6439d0ed4d6ac4661e91df8bba910890f6` |
+| `rc440.pdf` | `997ae818be4c80269d3e5d1d7fcc62482d889bcac2370f3dba0f53631422a673` |
+| `labelled.pdf` | `0a95a90e3ee9bd92273524a2a570d216990cafd0f1815cbd79d91cd559b7a746` |
+
+The Chromium browser preview shows the new protection, redaction and Find Fake Redactions controls with the desktop-only notice; the engine does not run there.
+Native NavPDF, Preview and Acrobat acceptance were not run.
+
 ## October 21 PDFCraft gap batch 4
 
 The [fourth batch mapping](PDFCRAFT-COMPARISON.md#fourth-batch-mapping) lists each addition and its limits.

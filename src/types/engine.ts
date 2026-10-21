@@ -5,6 +5,8 @@ export type PdfRect = [number, number, number, number];
 export interface RedactionRegion {
   page: number;
   rect: PdfRect;
+  /** Overlay text such as a redaction code, centred on the region. */
+  label?: string;
 }
 
 export interface SanitizeOptions {
@@ -21,6 +23,25 @@ export interface RedactionRequest {
   terms: string[];
   options: SanitizeOptions;
   acknowledgeSignatures: boolean;
+  /** Overlay colour as RGB channels from 0 to 1; black when absent. */
+  fill?: [number, number, number];
+}
+
+export type CoverUpKind = "coveredText" | "unappliedRedaction" | "coveringAnnotation";
+
+export interface CoverUp {
+  page: number;
+  kind: CoverUpKind;
+  rect: PdfRect;
+  characters: number;
+  /** Start of the text under the cover, for the reviewer only. */
+  sample: string;
+}
+
+export interface CoverUpReport {
+  findings: CoverUp[];
+  pagesChecked: number;
+  truncated: boolean;
 }
 
 export interface AuditReport {
@@ -80,10 +101,16 @@ export interface PermissionRequest {
   accessibility: boolean;
 }
 
+/** Cipher for a protected copy; only AES-256 is recommended. */
+export type EncryptionLevel = "aes256" | "aes128" | "rc4128" | "rc440";
+
 export interface ProtectionRequest {
   userPassword: string;
   ownerPassword: string;
   permissions: PermissionRequest;
+  encryption?: EncryptionLevel;
+  /** False keeps the XMP metadata readable; AES levels only. */
+  encryptMetadata?: boolean;
 }
 
 export interface ProtectedSave {

@@ -19,6 +19,7 @@ import { SpaceAuditDialog } from "../document/SpaceAuditDialog";
 import { PagePropertiesDialog } from "../pages/PagePropertiesDialog";
 import { FileCommentDialog, TextEditProposalDialog } from "../annotations/CommentDialogs";
 import { FieldPropertiesDialog, FormAssistDialog } from "../forms/FormToolsDialogs";
+import { CoverUpDialog } from "../redact/CoverUpDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -47,4 +48,5 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   "file-comment": FileCommentDialog,
   "field-properties": FieldPropertiesDialog,
   "form-assist": FormAssistDialog,
+  "cover-ups": CoverUpDialog,
 };

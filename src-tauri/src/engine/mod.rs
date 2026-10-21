@@ -3,6 +3,7 @@
 
 pub mod compress;
 pub mod content;
+pub mod coverup;
 pub mod edit;
 pub mod fonts;
 pub mod geometry;

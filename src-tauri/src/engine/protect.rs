@@ -1,6 +1,6 @@
 //! AES-256 password protection, password-aware validation and unlocking for editing.
 
-use lopdf::encryption::crypt_filters::{Aes256CryptFilter, CryptFilter};
+use lopdf::encryption::crypt_filters::{Aes128CryptFilter, Aes256CryptFilter, CryptFilter};
 use lopdf::{Document, EncryptionState, EncryptionVersion, Object, Permissions, StringFormat};
 use serde::Deserialize;
 use std::{collections::BTreeMap, sync::Arc};
@@ -74,6 +74,22 @@ impl PermissionRequest {
     }
 }
 
+/// The cipher for a protected copy. AES-256 is the default; the others exist only for
+/// compatibility with old readers and are much weaker.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EncryptionLevel {
+    #[default]
+    Aes256,
+    Aes128,
+    Rc4128,
+    Rc440,
+}
+
+fn yes() -> bool {
+    true
+}
+
 /// Deliberately has no `Debug` implementation so passwords cannot be formatted into logs.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,6 +97,12 @@ pub struct ProtectionRequest {
     pub user_password: Zeroizing<String>,
     pub owner_password: Zeroizing<String>,
     pub permissions: PermissionRequest,
+    #[serde(default)]
+    pub encryption: EncryptionLevel,
+    /// When false the XMP metadata stream stays readable for search and cataloguing tools.
+    /// Only AES levels can leave metadata unencrypted.
+    #[serde(default = "yes")]
+    pub encrypt_metadata: bool,
 }
 
 impl ProtectionRequest {
@@ -89,11 +111,14 @@ impl ProtectionRequest {
             user_password: password.into().into(),
             owner_password: String::new().into(),
             permissions: PermissionRequest::all(),
+            encryption: EncryptionLevel::Aes256,
+            encrypt_metadata: true,
         }
     }
 }
 
-/// Encrypts an unprotected document with AES-256 (security handler revision 6).
+/// Encrypts an unprotected document with the requested cipher, AES-256 (security handler
+/// revision 6) unless an older level is chosen for compatibility.
 pub fn protect(
     bytes: &[u8],
     request: &ProtectionRequest,
@@ -105,33 +130,80 @@ pub fn protect(
         return Err("The document changed before protection was applied. Try again.".into());
     }
     ensure_file_id(&mut doc)?;
+    let level = request.encryption;
+    if !request.encrypt_metadata
+        && matches!(level, EncryptionLevel::Rc4128 | EncryptionLevel::Rc440)
+    {
+        return Err("Leaving metadata unencrypted needs AES encryption.".into());
+    }
+    // Revisions 2 to 4 use only the first 32 bytes of a password, so longer passwords would
+    // silently accept other passwords that share that prefix.
+    if level != EncryptionLevel::Aes256
+        && [request.user_password.as_str(), owner.as_str()]
+            .iter()
+            .any(|password| password.len() > 32 || !password.is_ascii())
+    {
+        return Err(
+            "Older encryption levels need passwords of at most 32 plain ASCII characters.".into(),
+        );
+    }
+    let user = request.user_password.as_str();
+    let permissions = request.permissions.flags();
     let mut key = [0_u8; 32];
     getrandom::fill(&mut key).map_err(|_| "Secure key generation is unavailable.")?;
-    let filter: Arc<dyn CryptFilter> = Arc::new(Aes256CryptFilter);
-    let state = EncryptionState::try_from(EncryptionVersion::V5 {
-        encrypt_metadata: true,
-        crypt_filters: BTreeMap::from([(b"StdCF".to_vec(), filter)]),
-        file_encryption_key: &key,
-        stream_filter: b"StdCF".to_vec(),
-        string_filter: b"StdCF".to_vec(),
-        owner_password: &owner,
-        user_password: &request.user_password,
-        permissions: request.permissions.flags(),
-    });
+    let filters = |filter: Arc<dyn CryptFilter>| BTreeMap::from([(b"StdCF".to_vec(), filter)]);
+    let version = match level {
+        EncryptionLevel::Aes256 => EncryptionVersion::V5 {
+            encrypt_metadata: request.encrypt_metadata,
+            crypt_filters: filters(Arc::new(Aes256CryptFilter)),
+            file_encryption_key: &key,
+            stream_filter: b"StdCF".to_vec(),
+            string_filter: b"StdCF".to_vec(),
+            owner_password: &owner,
+            user_password: user,
+            permissions,
+        },
+        EncryptionLevel::Aes128 => EncryptionVersion::V4 {
+            document: &doc,
+            encrypt_metadata: request.encrypt_metadata,
+            crypt_filters: filters(Arc::new(Aes128CryptFilter)),
+            stream_filter: b"StdCF".to_vec(),
+            string_filter: b"StdCF".to_vec(),
+            owner_password: &owner,
+            user_password: user,
+            permissions,
+        },
+        EncryptionLevel::Rc4128 => EncryptionVersion::V2 {
+            document: &doc,
+            owner_password: &owner,
+            user_password: user,
+            key_length: 128,
+            permissions,
+        },
+        EncryptionLevel::Rc440 => EncryptionVersion::V1 {
+            document: &doc,
+            owner_password: &owner,
+            user_password: user,
+            permissions,
+        },
+    };
+    let state = EncryptionState::try_from(version);
     key.fill(0);
-    let state = state.map_err(|_| "These passwords cannot be used for AES-256 protection.")?;
+    let state = state.map_err(|_| "These passwords cannot be used for this encryption level.")?;
     doc.encrypt(&state)
         .map_err(|_| "The document could not be encrypted.")?;
-    declare_key_lengths(&mut doc)?;
+    if matches!(level, EncryptionLevel::Aes256 | EncryptionLevel::Aes128) {
+        declare_key_lengths(&mut doc, level == EncryptionLevel::Aes256)?;
+    }
     let output = super::save(&mut doc)?;
     validate_protected(&output, &request.user_password, &owner, expected_pages)?;
     Ok(output)
 }
 
-/// Readers such as poppler fall back to a 40-bit key when `/Length` is absent, so the
-/// AES-256 key size is declared on the security handler and its crypt filter. These entries
-/// do not feed revision 6 key derivation, so the passwords remain valid.
-fn declare_key_lengths(doc: &mut Document) -> Result<(), String> {
+/// Readers such as poppler fall back to a 40-bit key when `/Length` is absent, so the AES key
+/// size is declared on the security handler and its crypt filter. For AES-256 these entries do
+/// not feed revision 6 key derivation; for AES-128 they restate the 128-bit key lopdf derives.
+fn declare_key_lengths(doc: &mut Document, aes_256: bool) -> Result<(), String> {
     const UNAVAILABLE: &str = "The encryption dictionary could not be completed.";
     let id = doc
         .trailer
@@ -139,14 +211,14 @@ fn declare_key_lengths(doc: &mut Document) -> Result<(), String> {
         .and_then(Object::as_reference)
         .map_err(|_| UNAVAILABLE)?;
     let encrypt = doc.get_dictionary_mut(id).map_err(|_| UNAVAILABLE)?;
-    encrypt.set("Length", 256);
+    encrypt.set("Length", if aes_256 { 256 } else { 128 });
     let filter = encrypt
         .get_mut(b"CF")
         .and_then(Object::as_dict_mut)
         .and_then(|filters| filters.get_mut(b"StdCF"))
         .and_then(Object::as_dict_mut)
         .map_err(|_| UNAVAILABLE)?;
-    filter.set("Length", 32);
+    filter.set("Length", if aes_256 { 32 } else { 16 });
     filter.set("AuthEvent", "DocOpen");
     Ok(())
 }
@@ -167,9 +239,12 @@ mod key_length_tests {
             user_password: user_password.into(),
             owner_password: String::new().into(),
             permissions: PermissionRequest::all(),
+            encryption: EncryptionLevel::Aes256,
+            encrypt_metadata: true,
         };
         let output = protect(&source, &request, 1).unwrap();
         let locked = Document::load_mem(&output).unwrap();
+        assert_eq!(request.encryption, EncryptionLevel::Aes256);
         let encrypt = locked.get_encrypted().unwrap();
         assert_eq!(encrypt.get(b"Length").unwrap().as_i64().unwrap(), 256);
         let filter = encrypt
@@ -252,7 +327,11 @@ pub fn validate_protected(
     if opened.get_pages().len() != expected_pages as usize {
         return Err(VALIDATION_FAILED.into());
     }
-    let wrong = format!("{user}\u{1}wrong");
+    // A different printable first character changes the password in every security revision:
+    // legacy ones read only the first 32 bytes, and password preparation drops control
+    // characters.
+    let prefix = if user.starts_with('x') { 'y' } else { 'x' };
+    let wrong = format!("{prefix}{user}");
     if open_with_password(bytes, &wrong).is_ok() {
         return Err(VALIDATION_FAILED.into());
     }
@@ -339,7 +418,92 @@ mod tests {
             user_password: user.to_string().into(),
             owner_password: owner.to_string().into(),
             permissions,
+            encryption: EncryptionLevel::Aes256,
+            encrypt_metadata: true,
         }
+    }
+
+    #[test]
+    fn every_encryption_level_opens_only_with_its_password() {
+        for level in [
+            EncryptionLevel::Aes256,
+            EncryptionLevel::Aes128,
+            EncryptionLevel::Rc4128,
+            EncryptionLevel::Rc440,
+        ] {
+            let user = password()[..20].to_string();
+            let mut chosen = request(&user, "", PermissionRequest::all());
+            chosen.encryption = level;
+            let output = protect(&fixture(), &chosen, 1).unwrap();
+            assert!(
+                !output.windows(15).any(|w| w == b"Protected canar"),
+                "{level:?} left plaintext"
+            );
+            let opened = open_with_password(&output, &user).unwrap();
+            assert_eq!(
+                opened.extract_text(&[1]).unwrap().trim(),
+                "Protected canary",
+                "{level:?}"
+            );
+            assert!(
+                open_with_password(&output, &password()).is_err(),
+                "{level:?}"
+            );
+            let encrypt = Document::load_mem(&output)
+                .unwrap()
+                .get_encrypted()
+                .unwrap()
+                .clone();
+            let expected = match level {
+                EncryptionLevel::Aes256 => (5, 6),
+                EncryptionLevel::Aes128 => (4, 4),
+                EncryptionLevel::Rc4128 => (2, 3),
+                EncryptionLevel::Rc440 => (1, 2),
+            };
+            assert_eq!(
+                (
+                    encrypt.get(b"V").unwrap().as_i64().unwrap(),
+                    encrypt.get(b"R").unwrap().as_i64().unwrap()
+                ),
+                expected,
+                "{level:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn metadata_can_stay_readable_only_with_aes() {
+        let user = password();
+        let mut chosen = request(&user, "", PermissionRequest::all());
+        chosen.encrypt_metadata = false;
+        let output = protect(&fixture(), &chosen, 1).unwrap();
+        let encrypt = Document::load_mem(&output)
+            .unwrap()
+            .get_encrypted()
+            .unwrap()
+            .clone();
+        assert!(!encrypt.get(b"EncryptMetadata").unwrap().as_bool().unwrap());
+        chosen.encryption = EncryptionLevel::Rc4128;
+        assert!(protect(&fixture(), &chosen, 1).unwrap_err().contains("AES"));
+    }
+
+    #[test]
+    fn legacy_levels_reject_passwords_they_would_truncate() {
+        let mut chosen = request(&"x".repeat(33), "", PermissionRequest::all());
+        chosen.encryption = EncryptionLevel::Aes128;
+        assert!(protect(&fixture(), &chosen, 1).unwrap_err().contains("32"));
+        let mut accented = request("p\u{e4}ssword", "", PermissionRequest::all());
+        accented.encryption = EncryptionLevel::Rc440;
+        assert!(protect(&fixture(), &accented, 1)
+            .unwrap_err()
+            .contains("ASCII"));
+        // AES-256 keeps accepting long Unicode passwords.
+        let unicode = request(
+            &format!("{}\u{e4}", "y".repeat(40)),
+            "",
+            PermissionRequest::all(),
+        );
+        assert!(protect(&fixture(), &unicode, 1).is_ok());
     }
 
     #[test]

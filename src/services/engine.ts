@@ -10,6 +10,7 @@ import type {
   PageObjects,
   ProtectedSave,
   ProtectionRequest,
+  CoverUpReport,
   RedactionReport,
   RedactionRequest,
   SignatureInfo,
@@ -113,6 +114,13 @@ export async function editPage(
 }
 
 /** Opens the native Save As picker; resolves to null when the picker is cancelled. */
+/** Text still extractable under covers, and unapplied redaction marks; read-only. */
+export async function findCoverUps(bytes: Uint8Array): Promise<CoverUpReport> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return invoke<CoverUpReport>("engine_find_cover_ups", { inputId });
+}
+
 export async function saveProtectedCopy(
   documentId: string,
   bytes: Uint8Array,

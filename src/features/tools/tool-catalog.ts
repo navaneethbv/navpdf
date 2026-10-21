@@ -529,6 +529,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc,
     },
     {
+      id: "cover-ups",
+      label: "Find Fake Redactions",
+      description: "Find text left under black boxes and redaction marks that were never applied",
+      category: "protect",
+      icon: EyeOff,
+      action: () => s.set({ activeModal: "cover-ups" }),
+      disabled: !hasDoc,
+    },
+    {
       id: "certificate-sign",
       label: "Certificate Signature",
       description: "Sign a copy with a .p12 certificate and check existing signatures",

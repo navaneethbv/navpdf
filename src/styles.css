@@ -3902,3 +3902,23 @@ p {
   max-width: calc(100px * var(--page-card-scale, 1));
   max-height: calc(140px * var(--page-card-scale, 1));
 }
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.password-strength meter {
+  width: 96px;
+  flex: none;
+}
+.link-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}

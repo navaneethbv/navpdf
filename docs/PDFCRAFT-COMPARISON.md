@@ -59,7 +59,7 @@ The user asked for every gap, including the decision items, delivered in batches
 | --- | --- | --- |
 | 3 | Cut, copy and paste pages; thumbnail size; trim, bleed and art boxes; page transitions; custom document properties; fonts list; polygon, connected-line, cloud and callout comments; insert and replace proposals; file attachment comments | Implemented; see the third batch mapping |
 | 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Implemented; see the fourth batch mapping |
-| 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Planned |
+| 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Implemented; see the fifth batch mapping |
 | 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Planned |
 | 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Planned |
 | 8 to 10 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance; tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
@@ -96,6 +96,19 @@ Showing or hiding all comments moved to batch 7 because PDF.js fixes its annotat
 | `form.auto-detect-fields` | Detect & Name Fields | Underscore runs and box characters in horizontal text, skipping places already covered by a field. Drawn boxes and scanned forms without OCR are not detected. |
 | `form.auto-name-fields` | Detect & Name Fields | The nearest label to the left on the same line, or just above, renamed as one edit. |
 | `form.preview-form` | Prepare Form, Preview | Moves to the first field and focuses it for Tab-driven testing; forms are always fillable in NavPDF, so no separate mode is needed. |
+
+## Fifth batch mapping
+
+[ADR 0017](adr/0017-protection-options-and-redaction-labels.md) records the decisions.
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `protect.encryption-level` | Password Protect PDF, Encryption | AES-256 (default), AES-128, RC4 128-bit and RC4 40-bit; legacy levels accept passwords of at most 32 ASCII characters. |
+| `protect.encrypt-except-metadata`, `core.unencrypted-metadata` | Password Protect PDF metadata option | AES levels only; the metadata stream stays readable to anyone holding the file. |
+| `protect.password-strength` | Strength meter on both passwords | A local estimate from length, character variety and common patterns, not a guarantee. |
+| `protect.redact-pages` | Redact PDF, Mark whole pages | Marks the displayed page bounds for each page in a range. |
+| `protect.redaction-properties`, `protect.redaction-codes` | Redact PDF appearance | Fill colour and overlay text of up to 60 printable ASCII characters in Helvetica; US FOIA, Privacy Act and general code sets. The audit accepts only the exact label in its own font inside its region. |
+| `protect.audit-faux-redactions` | Find Fake Redactions | Filled paths over text, unapplied Redact annotations and filled Square or Circle annotations; findings can be marked for redaction. Images, clipping and transparency are not analysed. |
 
 ## Acceptance boundary
 

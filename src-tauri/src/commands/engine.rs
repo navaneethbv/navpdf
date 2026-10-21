@@ -2,7 +2,7 @@
 //! while small typed command metadata stays in JSON and passwords never travel in headers.
 
 use super::{document, payload, AppState};
-use crate::engine::{compress, edit, protect, prune, redact, sign};
+use crate::engine::{compress, coverup, edit, protect, prune, redact, sign};
 use crate::{filesystem, logging};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -271,6 +271,22 @@ pub async fn engine_prune(app: AppHandle, input_id: String) -> Result<String, St
     logging::record(&state.root, "engine_prune", result.is_err());
     let output = result?;
     state.engine.stage(output)
+}
+
+/// Reports text left under opaque covers and unapplied redaction marks, without changing the
+/// document. Findings include short text samples for the reviewer and are never logged.
+#[tauri::command]
+pub async fn engine_find_cover_ups(
+    app: AppHandle,
+    input_id: String,
+) -> Result<coverup::CoverUpReport, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || coverup::find_cover_ups(&bytes))
+        .await
+        .map_err(|_| "The cover-up check failed.".to_string())?;
+    logging::record(&state.root, "engine_find_cover_ups", result.is_err());
+    result
 }
 
 #[tauri::command]

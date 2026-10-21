@@ -142,6 +142,8 @@ describe("password protection", () => {
       userPassword: "synthetic-open",
       ownerPassword: "synthetic-owner",
       permissions: { ...ALL, print: false },
+      encryption: "aes256",
+      encryptMetadata: true,
     });
     expect(useWorkspace.getState().status).toMatch(/not password protected/);
   });
