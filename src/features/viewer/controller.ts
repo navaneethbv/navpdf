@@ -43,6 +43,13 @@ import {
   updateAnnotation,
   type TextMarkupKind,
 } from "../../services/document-commands";
+import {
+  addCallout,
+  addCloud,
+  addFileAttachmentComment,
+  addPolyShape,
+  addTextEditProposal,
+} from "../../services/pdf/comment-types";
 import { addMeasurement, type MeasurementInput } from "../../services/pdf/measure";
 import { PDFDocument } from "pdf-lib";
 import { readComment } from "../../services/pdf/read-comment";
@@ -931,6 +938,84 @@ export class ViewerController {
       });
       await this.replaceWithBytes(shaped, status, { preMutationBytes: bytes });
     });
+  }
+  /** Applies one comment edit to the current revision with the current markup style. */
+  private async addComment(
+    status: string,
+    edit: (
+      bytes: Uint8Array,
+      style: { color: [number, number, number]; width: number; opacity: number },
+    ) => Promise<Uint8Array>,
+  ) {
+    if (!this.pdf) throw new Error("Open a PDF before adding a comment.");
+    return this.mutate(status, async () => {
+      const state = useWorkspace.getState();
+      const bytes = await this.pdf!.saveDocument();
+      const changed = await edit(bytes, {
+        color: rgbFromHex(state.inkColor),
+        width: state.inkWidth,
+        opacity: state.inkOpacity,
+      });
+      await this.replaceWithBytes(changed, status, { preMutationBytes: bytes });
+    });
+  }
+  addPolyShape(kind: "Polygon" | "PolyLine", vertices: [number, number][], page: number) {
+    return this.addComment(
+      kind === "Polygon" ? "Polygon added to document" : "Connected lines added to document",
+      (bytes, style) => addPolyShape(bytes, { ...style, page, kind, vertices }),
+    );
+  }
+  addCloud(start: [number, number], end: [number, number], page: number) {
+    return this.addComment("Cloud added to document", (bytes, style) =>
+      addCloud(bytes, { ...style, page, start, end }),
+    );
+  }
+  addCallout(tip: [number, number], box: [number, number], text: string, page: number) {
+    return this.addComment("Callout added to document", (bytes, style) =>
+      addCallout(bytes, { ...style, page, tip, box, text }),
+    );
+  }
+  async addTextEditProposal(
+    kind: "insert" | "replace",
+    selection: SelectedTextGeometry[],
+    text: string,
+  ) {
+    if (!selection.length) throw new Error("Select text on the page first.");
+    const [first] = selection;
+    const hex = useWorkspace.getState().highlightColor;
+    await this.addComment(
+      kind === "insert" ? "Insertion proposed" : "Replacement proposed",
+      (bytes, style) =>
+        addTextEditProposal(bytes, {
+          ...style,
+          color: rgbFromHex(hex),
+          page: first.page,
+          kind,
+          quads: first.quads,
+          text,
+          selected: first.text,
+        }),
+    );
+    window.getSelection()?.removeAllRanges();
+  }
+  addFileComment(
+    file: { name: string; type: string; data: Uint8Array },
+    description: string,
+    page: number,
+    at: [number, number],
+  ) {
+    return this.addComment("File attachment comment added", (bytes, style) =>
+      addFileAttachmentComment(bytes, {
+        ...style,
+        color: undefined,
+        page,
+        at,
+        fileName: file.name,
+        mimeType: file.type,
+        data: file.data,
+        description,
+      }),
+    );
   }
   /** Saves a measurement drawn on `input.page` with the current markup color. */
   async addMeasurement(input: Omit<MeasurementInput, "color">) {

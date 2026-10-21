@@ -17,6 +17,9 @@ These results do not close the outstanding native UI, parity or distribution gat
 The latest additions are tool search, poster tiling, saved initial-view preferences, bookmark/size splitting, form XFDF, expanded accessibility checks and HTML reports, link cleanup and creation, heading-based bookmarks, form-field arrangement, measurement CSV, redaction word lists, space auditing, merged form CSV and comparison reports.
 [PDFCraft comparison](PDFCRAFT-COMPARISON.md) records their scope and remaining gaps.
 The upstream checklist's 530 shipped or partial entries have not all received an individual NavPDF assessment.
+On October 21 the user asked for every remaining PDFCraft gap, including items that need safety-rule decisions, on one draft PR in batches.
+The [remaining gap programme](PDFCRAFT-COMPARISON.md#remaining-gap-programme) lists the batches and their status.
+Batch 3 adds page clipboard operations, thumbnail sizing, print boxes, page transitions, custom properties, a fonts list and six comment types.
 
 ## Phase status and remaining gates
 

@@ -10,6 +10,12 @@ import {
   MessageSquarePlus,
   Type,
   X,
+  Cloud,
+  MessageSquareQuote,
+  Hexagon,
+  Spline,
+  TextCursorInput,
+  Paperclip,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -44,6 +50,17 @@ export function AnnotationToolbar({
     void controller?.addTextMarkup(kind).catch((error: unknown) => {
       s.set({ error: error instanceof Error ? error.message : String(error) });
     });
+  };
+
+  /** Keeps the current text selection for the proposal dialog, which takes focus. */
+  const proposeTextEdit = async () => {
+    try {
+      const selection = (await controller?.readSelectedTextGeometry()) ?? [];
+      if (!selection.length) throw new Error("Select text on the page before proposing an edit.");
+      s.set({ textEditSelection: selection, activeModal: "text-edit-proposal" });
+    } catch (error) {
+      s.set({ error: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   const selectShape = (shapeKind: ShapeKind) => {
@@ -107,6 +124,20 @@ export function AnnotationToolbar({
           <Type size={16} />
         </button>
         <button
+          title="Propose Insert or Replace Text (select text first)"
+          disabled={isBlocked}
+          onClick={() => void proposeTextEdit()}
+        >
+          <TextCursorInput size={16} />
+        </button>
+        <button
+          title="Attach File as Comment"
+          disabled={isBlocked}
+          onClick={() => s.set({ activeModal: "file-comment" })}
+        >
+          <Paperclip size={16} />
+        </button>
+        <button
           title="Sticky Note / Comment"
           disabled={isBlocked}
           onClick={() => s.set({ activeModal: "sticky-note" })}
@@ -149,6 +180,38 @@ export function AnnotationToolbar({
           aria-pressed={s.tool === "shape" && s.shapeKind === "Arrow"}
         >
           <ArrowRight size={16} />
+        </button>
+        <button
+          title="Polygon"
+          disabled={isBlocked}
+          onClick={() => selectShape("Polygon")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "Polygon"}
+        >
+          <Hexagon size={16} />
+        </button>
+        <button
+          title="Connected Lines"
+          disabled={isBlocked}
+          onClick={() => selectShape("PolyLine")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "PolyLine"}
+        >
+          <Spline size={16} />
+        </button>
+        <button
+          title="Cloud"
+          disabled={isBlocked}
+          onClick={() => selectShape("Cloud")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "Cloud"}
+        >
+          <Cloud size={16} />
+        </button>
+        <button
+          title="Callout"
+          disabled={isBlocked}
+          onClick={() => selectShape("Callout")}
+          aria-pressed={s.tool === "shape" && s.shapeKind === "Callout"}
+        >
+          <MessageSquareQuote size={16} />
         </button>
       </div>
 

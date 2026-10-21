@@ -25,8 +25,25 @@ function liveLabel(kind: MeasureKind, marks: Mark[], hover: Mark | null) {
   return measurementText(kind, points, scale);
 }
 
-export function MeasureTool({ controller }: Readonly<{ controller: ViewerController }>) {
-  const kind = useWorkspace((state) => state.measureKind);
+const SHAPE_INSTRUCTIONS = {
+  Polygon: "Click each corner, then double-click or press Enter to finish.",
+  PolyLine: "Click each point, then double-click or press Enter to finish.",
+} as const;
+const SHAPE_NAMES = { Polygon: "polygon", PolyLine: "connected lines" } as const;
+
+/**
+ * Collects clicked points on one page. Without `shape` it saves a measurement of the current
+ * measure kind; with `shape` it saves a polygon or connected-lines comment.
+ */
+export function MeasureTool({
+  controller,
+  shape,
+}: Readonly<{ controller: ViewerController; shape?: "Polygon" | "PolyLine" }>) {
+  const measureKind = useWorkspace((state) => state.measureKind);
+  // A polygon closes like an area and connected lines run like a perimeter.
+  const kind: MeasureKind = shape ? (shape === "Polygon" ? "area" : "perimeter") : measureKind;
+  const instructions = shape ? SHAPE_INSTRUCTIONS[shape] : INSTRUCTIONS[kind];
+  const name = shape ? SHAPE_NAMES[shape] : kind;
   const overlay = useRef<HTMLDivElement>(null);
   const target = useRef<HTMLButtonElement>(null);
   const page = useRef<HTMLElement | null>(null);
@@ -39,7 +56,7 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     setMarks(next);
   };
   const [hover, setHover] = useState<Mark | null>(null);
-  const [message, setMessage] = useState(INSTRUCTIONS[kind]);
+  const [message, setMessage] = useState<string>(instructions);
 
   useEffect(() => {
     target.current?.focus({ preventScroll: true });
@@ -61,7 +78,20 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
     const pageElement = page.current;
     reset();
     if (!pageElement || points.length < MINIMUM[kind]) {
-      setMessage(INSTRUCTIONS[kind]);
+      setMessage(instructions);
+      return;
+    }
+    if (shape) {
+      try {
+        await controller.addPolyShape(
+          shape,
+          points.map((mark) => mark.pdf),
+          Number(pageElement.dataset.pageNumber),
+        );
+        setMessage(`Added ${name}. ${instructions}`);
+      } catch (cause) {
+        setMessage(cause instanceof Error ? cause.message : "The shape could not be saved.");
+      }
       return;
     }
     try {
@@ -71,7 +101,7 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
         points: points.map((mark) => mark.pdf),
         scale: useWorkspace.getState().measureScale,
       });
-      setMessage(`Measured ${label}. ${INSTRUCTIONS[kind]}`);
+      setMessage(`Measured ${label}. ${instructions}`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "The measurement could not be saved.");
     }
@@ -152,20 +182,20 @@ export function MeasureTool({ controller }: Readonly<{ controller: ViewerControl
   const local = (point: Point) =>
     `${point[0] - (origin?.left ?? 0)},${point[1] - (origin?.top ?? 0)}`;
   const path = [...marks, ...(hover ? [hover] : [])].map((mark) => local(mark.client)).join(" ");
-  const label = liveLabel(kind, marks, hover);
+  const label = shape ? "" : liveLabel(kind, marks, hover);
 
   return (
     <div
       ref={overlay}
       className="shape-tool-overlay measure-tool-overlay"
       role="application"
-      aria-label={`Measure ${kind}`}
+      aria-label={shape ? `Draw ${name}` : `Measure ${kind}`}
     >
       <button
         ref={target}
         type="button"
         className="shape-tool-keyboard-target"
-        aria-label={`Measuring ${kind}. Press Escape to stop.`}
+        aria-label={`${shape ? "Drawing" : "Measuring"} ${name}. Press Escape to stop.`}
         onKeyDown={onKey}
       />
       {path && (

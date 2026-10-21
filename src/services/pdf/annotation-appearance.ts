@@ -234,6 +234,121 @@ function lines(dict: PDFDict, subtype: string, color: [number, number, number]) 
   return [...common, ...polyline(vertices, subtype === "Polygon"), stroke()];
 }
 
+/** Cloud radius in points for a border effect intensity, as readers draw cloudy borders. */
+export function cloudRadius(intensity: number) {
+  return 4 + Math.min(2, Math.max(0, intensity)) * 2;
+}
+
+/** Signed area of a closed polygon; positive when the vertices run counterclockwise. */
+function signedArea(points: Point[]) {
+  let area = 0;
+  points.forEach((point, index) => {
+    const next = points[(index + 1) % points.length];
+    area += point[0] * next[1] - next[0] * point[1];
+  });
+  return area / 2;
+}
+
+/**
+ * A cloudy outline around a closed polygon: each edge becomes a run of outward semicircular
+ * scallops of roughly the given radius.
+ */
+export function cloudPath(vertices: Point[], radius: number): PDFOperator[] {
+  if (vertices.length < 3) return [];
+  const points = signedArea(vertices) < 0 ? [...vertices].reverse() : vertices;
+  const ops: PDFOperator[] = [moveTo(...points[0])];
+  const k = 0.5523;
+  points.forEach((start, index) => {
+    const end = points[(index + 1) % points.length];
+    const length = distance(start, end);
+    if (length === 0) return;
+    const along: Point = [(end[0] - start[0]) / length, (end[1] - start[1]) / length];
+    // Counterclockwise vertices put the outside on the right of each edge.
+    const out: Point = [along[1], -along[0]];
+    const count = Math.max(1, Math.round(length / (radius * 2)));
+    const r = length / count / 2;
+    for (let part = 0; part < count; part++) {
+      const p0 = between(start, end, part / count);
+      const p1 = between(start, end, (part + 1) / count);
+      const mid = between(p0, p1, 0.5);
+      const top: Point = [mid[0] + out[0] * r, mid[1] + out[1] * r];
+      ops.push(
+        appendBezierCurve(
+          p0[0] + out[0] * k * r,
+          p0[1] + out[1] * k * r,
+          top[0] - along[0] * k * r,
+          top[1] - along[1] * k * r,
+          top[0],
+          top[1],
+        ),
+        appendBezierCurve(
+          top[0] + along[0] * k * r,
+          top[1] + along[1] * k * r,
+          p1[0] + out[0] * k * r,
+          p1[1] + out[1] * k * r,
+          p1[0],
+          p1[1],
+        ),
+      );
+    }
+  });
+  ops.push(closePath());
+  return ops;
+}
+
+function cloudy(dict: PDFDict) {
+  const effect = dict.lookup(PDFName.of("BE"));
+  if (!(effect instanceof PDFDict) || effect.get(PDFName.of("S")) !== PDFName.of("C")) return null;
+  return cloudRadius(numberOf(effect, "I", 1));
+}
+
+/** An upward caret marking where text is inserted. */
+function caret(rect: Rect, color: [number, number, number]) {
+  const [x1, y1, x2, y2] = rect;
+  return [
+    setFillingRgbColor(...color),
+    moveTo(x1, y1),
+    lineTo((x1 + x2) / 2, y2),
+    lineTo(x2, y1),
+    lineTo((x1 + x2) / 2, y1 + (y2 - y1) * 0.35),
+    closePath(),
+    fill(),
+  ];
+}
+
+/** A page with a folded corner and a clip, the usual attachment icon. */
+function attachmentIcon(rect: Rect, color: [number, number, number]) {
+  const [x1, y1] = rect;
+  const size = Math.min(20, rect[2] - x1, rect[3] - y1);
+  const w = size * 0.7;
+  const fold = size * 0.25;
+  const left = x1 + (size - w) / 2;
+  return [
+    setLineWidth(0.8),
+    setStrokingRgbColor(0.2, 0.2, 0.2),
+    setFillingRgbColor(...color),
+    ...polyline(
+      [
+        [left, y1],
+        [left + w, y1],
+        [left + w, y1 + size - fold],
+        [left + w - fold, y1 + size],
+        [left, y1 + size],
+      ],
+      true,
+    ),
+    fillAndStroke(),
+    setLineWidth(1.2),
+    ...polyline([
+      [left + w * 0.35, y1 + size * 0.85],
+      [left + w * 0.35, y1 + size * 0.25],
+      [left + w * 0.65, y1 + size * 0.25],
+      [left + w * 0.65, y1 + size * 0.7],
+    ]),
+    stroke(),
+  ];
+}
+
 /** A plain note icon in the annotation rectangle, as readers show for collapsed comments. */
 function noteIcon(rect: Rect, color: [number, number, number]) {
   const [x1, y1] = rect;
@@ -276,6 +391,8 @@ const SUPPORTED = new Set([
   "Polygon",
   "PolyLine",
   "Text",
+  "Caret",
+  "FileAttachment",
 ]);
 
 function drawing(dict: PDFDict, subtype: string, rect: Rect): PDFOperator[] | null {
@@ -285,6 +402,23 @@ function drawing(dict: PDFDict, subtype: string, rect: Rect): PDFOperator[] | nu
     return textMarkup(dict, subtype, color);
   if (subtype === "Square" || subtype === "Circle") return shape(dict, subtype, rect, color);
   if (subtype === "Text") return noteIcon(rect, color);
+  if (subtype === "Caret") return caret(rect, color);
+  if (subtype === "FileAttachment") return attachmentIcon(rect, color);
+  const radius = subtype === "Polygon" ? cloudy(dict) : null;
+  if (radius !== null) {
+    const vertices = pairs(numbersOf(dict, "Vertices"));
+    const path = cloudPath(vertices, radius);
+    if (!path.length) return null;
+    const interior = annotationColor(dict, "IC");
+    return [
+      setLineWidth(borderWidth(dict)),
+      setLineJoin(1),
+      setStrokingRgbColor(...color),
+      ...(interior ? [setFillingRgbColor(...interior)] : []),
+      ...path,
+      interior ? fillAndStroke() : stroke(),
+    ];
+  }
   return lines(dict, subtype, color);
 }
 

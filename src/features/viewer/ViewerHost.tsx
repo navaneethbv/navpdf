@@ -19,7 +19,10 @@ export function ViewerHost({
     pages = useRef<HTMLDivElement>(null);
   const tool = useWorkspace((s) => s.tool),
     busy = useWorkspace((s) => s.busy),
-    hasDocument = useWorkspace((s) => !!s.document);
+    hasDocument = useWorkspace((s) => !!s.document),
+    pointShape = useWorkspace((s) =>
+      s.shapeKind === "Polygon" || s.shapeKind === "PolyLine" ? s.shapeKind : null,
+    );
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [externalLink, setExternalLink] = useState<{ url: string; reason?: string } | null>(null);
   const allowedHosts = useRef(new Set<string>());
@@ -210,7 +213,12 @@ export function ViewerHost({
           }}
         />
       )}
-      {hasDocument && tool === "shape" && controller && <ShapeTool controller={controller} />}
+      {hasDocument && tool === "shape" && controller && pointShape === null && (
+        <ShapeTool controller={controller} />
+      )}
+      {hasDocument && tool === "shape" && controller && pointShape !== null && (
+        <MeasureTool controller={controller} shape={pointShape} />
+      )}
       {hasDocument && tool === "measure" && controller && <MeasureTool controller={controller} />}
       {hasDocument && tool === "select" && controller && (
         <AnnotationSelectionLayer controller={controller} />

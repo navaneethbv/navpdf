@@ -1,7 +1,14 @@
 import { useEffect, useId, useState } from "react";
-import { FileText, X } from "lucide-react";
+import { FileText, Plus, Trash2, X } from "lucide-react";
 import { FeatureDialog } from "../../components/FeatureDialog";
-import { readMetadata, writeMetadata, type DocumentMetadata } from "../../services/pdf/metadata";
+import {
+  listFonts,
+  readMetadata,
+  writeMetadata,
+  type CustomProperty,
+  type DocumentMetadata,
+  type FontInfo,
+} from "../../services/pdf/metadata";
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 
@@ -24,6 +31,8 @@ export function PropertiesDialog({
   const sourcePdf = controller?.pdf;
   const [metadata, setMetadata] = useState<DocumentMetadata>(emptyMetadata);
   const [keywords, setKeywords] = useState("");
+  const [custom, setCustom] = useState<CustomProperty[]>([]);
+  const [fonts, setFonts] = useState<FontInfo[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -38,11 +47,15 @@ export function PropertiesDialog({
         return;
       }
       try {
-        const values = await readMetadata(await controller.pdf.saveDocument());
+        const bytes = await controller.pdf.saveDocument();
+        const values = await readMetadata(bytes);
         if (!cancelled) {
           setMetadata(values);
           setKeywords(values.keywords.join(", "));
+          setCustom(values.custom ?? []);
         }
+        const found = await listFonts(bytes);
+        if (!cancelled) setFonts(found);
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
       } finally {
@@ -68,6 +81,9 @@ export function PropertiesDialog({
           .split(",")
           .map((keyword) => keyword.trim())
           .filter(Boolean),
+        custom: custom
+          .map(({ name, value }) => ({ name: name.trim(), value }))
+          .filter(({ name, value }) => name || value),
       };
       const bytes = await controller.pdf.saveDocument();
       const changed = await writeMetadata(bytes, next);
@@ -186,6 +202,83 @@ export function PropertiesDialog({
                   }}
                 />
               </div>
+              <fieldset className="preset-list">
+                <legend className="setting-title">Custom properties</legend>
+                {custom.map((entry, index) => (
+                  <div key={index} className="inline-field">
+                    <input
+                      className="text-input"
+                      aria-label={`Custom property ${index + 1} name`}
+                      placeholder="Name"
+                      value={entry.name}
+                      onChange={(event) =>
+                        setCustom((list) =>
+                          list.map((item, at) =>
+                            at === index ? { ...item, name: event.target.value } : item,
+                          ),
+                        )
+                      }
+                    />
+                    <input
+                      className="text-input"
+                      aria-label={`Custom property ${index + 1} value`}
+                      placeholder="Value"
+                      value={entry.value}
+                      onChange={(event) =>
+                        setCustom((list) =>
+                          list.map((item, at) =>
+                            at === index ? { ...item, value: event.target.value } : item,
+                          ),
+                        )
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Remove custom property ${index + 1}`}
+                      onClick={() => setCustom((list) => list.filter((_, at) => at !== index))}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setCustom((list) => [...list, { name: "", value: "" }])}
+                >
+                  <Plus size={15} /> Add Property
+                </button>
+              </fieldset>
+              <details>
+                <summary>Fonts{fonts ? ` (${fonts.length})` : ""}</summary>
+                {!fonts && <output className="field-hint">Reading fonts…</output>}
+                {fonts && fonts.length === 0 && <p className="field-hint">No fonts are used.</p>}
+                {fonts && fonts.length > 0 && (
+                  <table className="workflow-table" aria-label="Fonts used in this PDF">
+                    <thead>
+                      <tr>
+                        <th scope="col">Font</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Encoding</th>
+                        <th scope="col">Embedded</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fonts.map((font, index) => (
+                        <tr key={`${font.name}-${index}`}>
+                          <th scope="row">{font.name}</th>
+                          <td>{font.type}</td>
+                          <td>{font.encoding}</td>
+                          <td>
+                            {font.embedded ? (font.subset ? "Embedded subset" : "Embedded") : "No"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </details>
               {error && (
                 <p className="error-text" role="alert">
                   {error}

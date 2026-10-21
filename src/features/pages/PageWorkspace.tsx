@@ -12,6 +12,9 @@ import {
   Crop,
   Check,
   X,
+  Copy,
+  Scissors,
+  ClipboardPaste,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import {
@@ -47,6 +50,9 @@ import {
   reversePageOrder,
 } from "./page-selection";
 import { bookmarkPageGroups, sizePageGroups, createPageArchive } from "./page-archives";
+import { getPageClipboard, setPageClipboard } from "./page-clipboard";
+
+export const THUMBNAIL_SCALES = [0.75, 1, 1.5, 2] as const;
 
 function isPageWorkspaceInput(target: EventTarget | null): boolean {
   return (
@@ -55,6 +61,19 @@ function isPageWorkspaceInput(target: EventTarget | null): boolean {
     target instanceof HTMLSelectElement ||
     target instanceof HTMLTextAreaElement
   );
+}
+
+/** Cmd/Ctrl+C, X and V copy, cut and paste the selected pages. */
+function handleClipboardKey(
+  e: React.KeyboardEvent,
+  actions: { copy: () => Promise<void>; cut: () => Promise<void>; paste: () => Promise<void> },
+): boolean {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return false;
+  const action = { c: actions.copy, x: actions.cut, v: actions.paste }[e.key.toLowerCase()];
+  if (!action) return false;
+  e.preventDefault();
+  void action();
+  return true;
 }
 
 function handlePageArrowKey(
@@ -198,6 +217,8 @@ export function PageWorkspace({
   const replacePdfInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDialogElement>(null);
   const [structureLoss, setStructureLoss] = useState("");
+  const [thumbnailScale, setThumbnailScale] = useState(1);
+  const [clipboardPages, setClipboardPages] = useState(() => getPageClipboard()?.pages ?? 0);
 
   const onClose = () => {
     exportCancelled.current = true;
@@ -479,6 +500,52 @@ export function PageWorkspace({
     }
   };
 
+  /** Keeps the selected pages, in document order, as a PDF ready to paste. */
+  const copySelection = async () => {
+    if (!controller?.pdf || selected.length === 0) return false;
+    const ordered = [...selected].sort((a, b) => a - b);
+    const bytes = await extractPages(await controller.pdf.saveDocument(), ordered);
+    setPageClipboard(bytes, ordered.length);
+    setClipboardPages(ordered.length);
+    return true;
+  };
+
+  const handleCopy = async () => {
+    if (busy) return;
+    try {
+      if (await copySelection()) s.set({ status: `Copied ${selected.length} page(s)` });
+    } catch (err) {
+      s.set({ error: errorMessage(err) });
+    }
+  };
+
+  const handleCut = async () => {
+    if (busy || workflowBlocked || selected.length === 0) return;
+    if (selected.length >= totalPages) {
+      s.set({ error: "Cannot cut all pages. At least one page must remain." });
+      return;
+    }
+    try {
+      if (await copySelection()) await handleDelete();
+    } catch (err) {
+      s.set({ error: errorMessage(err) });
+    }
+  };
+
+  const handlePaste = async () => {
+    const pasted = getPageClipboard();
+    if (!pasted || busy || workflowBlocked) return;
+    const at = selected.length > 0 ? Math.max(...selected) + 1 : totalPages;
+    await mutate(
+      (bytes) => insertDocumentPages(bytes, pasted.bytes, at),
+      `Pasted ${pasted.pages} page(s)`,
+      { pageMapping: computeInsertMapping(totalPages, at, pasted.pages) },
+    );
+    const inserted = Array.from({ length: pasted.pages }, (_, index) => at + index);
+    setSelected(inserted);
+    setFocusedIndex(at);
+  };
+
   const handleInsertBlank = async () => {
     const at = selected.length > 0 ? selected[0] + 1 : totalPages;
     await mutate((bytes) => insertBlankPage(bytes, at), "Blank page inserted", {
@@ -582,6 +649,7 @@ export function PageWorkspace({
     if (handleEscapeKey(e, showCrop, showSplit, setShowCrop, setShowSplit, onClose)) return;
     if (isPageWorkspaceInput(e.target)) return;
     if (handleSelectAllKey(e, selectAll)) return;
+    if (handleClipboardKey(e, { copy: handleCopy, cut: handleCut, paste: handlePaste })) return;
     if (handlePageArrowKey(e, focusedIndex, totalPages, selected, setFocusedIndex, setSelected))
       return;
     if (handleSpaceKey(e, focusedIndex, selected, setSelected)) return;
@@ -790,6 +858,37 @@ export function PageWorkspace({
           >
             <Download size={17} />
             <span>Extract</span>
+          </button>
+          <button
+            type="button"
+            title="Copy selected pages (Cmd/Ctrl+C)"
+            onClick={() => void handleCopy()}
+            disabled={selected.length === 0 || busy}
+          >
+            <Copy size={17} />
+            <span>Copy</span>
+          </button>
+          <button
+            type="button"
+            title="Cut selected pages (Cmd/Ctrl+X)"
+            onClick={() => void handleCut()}
+            disabled={selected.length === 0 || selected.length >= totalPages || workflowBlocked}
+          >
+            <Scissors size={17} />
+            <span>Cut</span>
+          </button>
+          <button
+            type="button"
+            title={
+              clipboardPages
+                ? `Paste ${clipboardPages} page(s) after the selection (Cmd/Ctrl+V)`
+                : "Copy or cut pages first"
+            }
+            onClick={() => void handlePaste()}
+            disabled={!clipboardPages || workflowBlocked}
+          >
+            <ClipboardPaste size={17} />
+            <span>Paste</span>
           </button>
           <button
             type="button"
@@ -1032,7 +1131,26 @@ export function PageWorkspace({
         </div>
       )}
 
-      <div className="page-workspace-grid" role="grid" aria-label="Pages grid">
+      <div className="page-workspace-actions page-thumbnail-size">
+        <label>
+          <span>Thumbnail size</span>
+          <input
+            type="range"
+            min={0}
+            max={THUMBNAIL_SCALES.length - 1}
+            step={1}
+            value={THUMBNAIL_SCALES.indexOf(thumbnailScale as (typeof THUMBNAIL_SCALES)[number])}
+            aria-valuetext={`${Math.round(thumbnailScale * 100)}%`}
+            onChange={(event) => setThumbnailScale(THUMBNAIL_SCALES[Number(event.target.value)])}
+          />
+        </label>
+      </div>
+      <div
+        className="page-workspace-grid"
+        role="grid"
+        aria-label="Pages grid"
+        style={{ "--page-card-scale": thumbnailScale } as React.CSSProperties}
+      >
         {pagesList.map((pageNum) => {
           const isSelected = selected.includes(pageNum);
           const isFocused = focusedIndex === pageNum;
@@ -1081,7 +1199,12 @@ export function PageWorkspace({
               }}
             >
               <div className="page-card-preview">
-                <ThumbCanvas pdf={controller?.pdf} page={pageNum + 1} revision={s.revision} />
+                <ThumbCanvas
+                  pdf={controller?.pdf}
+                  page={pageNum + 1}
+                  revision={s.revision}
+                  resolution={1.5 * thumbnailScale}
+                />
                 {isSelected && (
                   <div className="page-selected-badge">
                     <Check size={14} />

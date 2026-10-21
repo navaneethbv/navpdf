@@ -48,6 +48,41 @@ Each row names the upstream entry, the NavPDF implementation and its scoped limi
 
 Replacing page colours (`a11y.replace-page-colors`) was assessed and deferred because PDF.js accepts page colours only when the viewer is constructed, so it needs viewer lifecycle work with its own acceptance.
 
+## Remaining gap programme
+
+On October 21, 2026 the upstream checklist at `416495145354828a9efefc39df381ba3ee8f864f` listed 438 shipped and 94 partial entries.
+Since the previous reference it adds `organize.reverse-pages`, which NavPDF already provides, and `organize.custom-properties`.
+A source review of `main` at `8e9b310` found the gaps below; items marked "decision" conflict with the repository's safety rules and proceed only with an accepted ADR, disabled by default.
+The user asked for every gap, including the decision items, delivered in batches on one draft PR.
+
+| Batch | Gaps | Status |
+| --- | --- | --- |
+| 3 | Cut, copy and paste pages; thumbnail size; trim, bleed and art boxes; page transitions; custom document properties; fonts list; polygon, connected-line, cloud and callout comments; insert and replace proposals; file attachment comments | Implemented; see the third batch mapping |
+| 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Planned |
+| 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Planned |
+| 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Planned |
+| 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Planned |
+| 8 to 10 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance; tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
+| 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
+
+## Third batch mapping
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `organize.cut-copy-paste-pages` | Organize Pages Copy, Cut and Paste with Cmd/Ctrl+C, X and V | Copied pages are held in memory as a small PDF and can be pasted into another open document; extraction carries the same form and outline limits as Extract. |
+| `organize.thumbnail-size` | Organize Pages thumbnail slider | 75% to 200%, with matching render resolution; not persisted between sessions. |
+| `organize.page-boxes` (trim, bleed, art) | Page Boxes & Transitions | Margins are measured on the displayed page and mapped through rotation; boxes describe print production and never hide content. |
+| `organize.page-transitions` | Page Boxes & Transitions | Standard /Trans dictionaries and /Dur advance times; NavPDF stores but does not animate transitions. |
+| `organize.custom-properties` | Document Properties | Text entries in the information dictionary with names limited to letters, digits, `-`, `_` and `.`; XMP mirrors only standard fields. |
+| `organize.fonts-list` | Document Properties fonts table | Fonts referenced by page and form XObject resources, with type, encoding and embedding; annotation appearance fonts are not listed. |
+| `comment.polygon`, `comment.polyline` | Annotation toolbar point tools | Click points and finish with double-click or Enter; appearances are generated. |
+| `comment.cloud` | Annotation toolbar cloud | Dragged rectangles saved as polygons with a cloudy border effect and generated scalloped appearance. |
+| `comment.callout` | Annotation toolbar callout | FreeText callout with leader, knee and arrow; text uses the built-in Latin font, so other scripts are rejected. |
+| `comment.insert-text`, `comment.replace-text` | Propose Text Edit | Caret for insertions; replacements group a strikeout with a caret carrying the new text. A selection across pages uses its first page. |
+| `comment.attach-file-comment` | Attach File as Comment | Embedded file up to 50 MB at a corner or centre of the page; NavPDF never opens it automatically. |
+
+Showing or hiding all comments moved to batch 7 because PDF.js fixes its annotation mode when the viewer is constructed, the same lifecycle work as high-contrast page colours.
+
 ## Acceptance boundary
 
 The additions are independent implementations using the established PDF engines and a dedicated XML parser, not copied upstream modules.

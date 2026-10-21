@@ -5,6 +5,30 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 21 PDFCraft gap batch 3
+
+Source baseline: `8e9b310` on `main`, with the batch on `feat/pdfcraft-remaining-gaps`.
+The [third batch mapping](PDFCRAFT-COMPARISON.md#third-batch-mapping) lists each addition and its limits.
+
+### Local checks
+
+Node 24.22.0 and `npm ci` were used.
+Lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 990 tests across 133 files, with 86.41% statements, 78.43% branches, 85.59% functions and 89.49% lines; the coverage gates pass and LCOV is retained.
+No Rust source changed, so the Rust suite and Clippy were not rerun locally.
+Logs are under ignored `output/batch-three/`.
+
+Integration tests read saved output with PDF.js and pdf-lib: pasted page order, displayed-margin mapping for every rotation, trim and bleed preservation, transition dictionaries, custom-property round trips and validation, font listing, polygon, connected-line, cloud and callout annotations with appearances, grouped replacement proposals, and embedded attachment content.
+Dialog tests cover keyboard and button page clipboard use, thumbnail scaling, page-property application and range errors, custom-property editing, proposal submission and attachment placement.
+Testing found that PDF.js 5 no longer returns attachment content with annotation data; the test reads it through `getAttachmentContent` instead.
+
+### Independent-reader and browser-preview evidence
+
+Poppler `pdfinfo -box` reads the trim and bleed boxes, `pdfdetach -list` finds the comment attachment, and a Poppler raster shows the polygon, cloud, callout, replacement strikeout with caret, and attachment icon in `output/batch-three/batch-three-evidence.pdf`, SHA-256 `8c8b8cad2f06dd99185d118b26f57e880d6f06290fb76c4bc3bdabb6dee26aea`.
+In the Chromium browser preview, drawing a cloud and a polygon from the annotation toolbar saved both with visible appearances.
+The preview showed enlarged thumbnails not scaling their page image, uneven margin fields, and the point-tool status hidden behind the annotation toolbar; all three were fixed and recaptured.
+Native NavPDF and Preview acceptance were not run because the work was done in a Linux container.
+
 ## October 16 documentation review and merged baseline
 
 Reviewed source: `c09576f7d96de04ba30b20a9a5737d4d42ae3010` on clean `main`.

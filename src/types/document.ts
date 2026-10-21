@@ -11,7 +11,10 @@ export type Tool =
   | "measure"
   | "signature"
   | "snapshot";
-export type ShapeKind = "Square" | "Circle" | "Line" | "Arrow";
+export type ShapeKind =
+  "Square" | "Circle" | "Line" | "Arrow" | "Cloud" | "Callout" | "Polygon" | "PolyLine";
+/** Shapes drawn by clicking their points rather than dragging. */
+export const POINT_SHAPES = ["Polygon", "PolyLine"] as const;
 export type SidebarTab = "pages" | "bookmarks" | "search" | "comments" | "layers" | "tools";
 /** An optional content group the reader can show or hide. */
 export interface DocumentLayer {

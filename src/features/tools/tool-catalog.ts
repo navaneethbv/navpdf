@@ -38,6 +38,7 @@ import {
   Link as LinkIcon,
   Replace,
   HardDrive,
+  Frame,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 
@@ -136,6 +137,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: ListOrdered,
       action: () => s.set({ activeModal: "page-labels" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "page-properties",
+      label: "Page Boxes & Transitions",
+      description: "Set trim, bleed and art boxes or full-screen page transitions",
+      category: "pages",
+      icon: Frame,
+      action: () => s.set({ activeModal: "page-properties" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
     },
     {
       id: "split-pdf",
@@ -335,6 +345,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: Stamp,
       action: () => s.set({ activeModal: "stamp" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "file-comment",
+      label: "Attach File as Comment",
+      description: "Embed a file in a paperclip comment on a page",
+      category: "review",
+      icon: Paperclip,
+      action: () => s.set({ activeModal: "file-comment" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
     },
     {
       id: "snapshot-tool",
