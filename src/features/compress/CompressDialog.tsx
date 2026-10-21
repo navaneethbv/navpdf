@@ -1,4 +1,5 @@
 import { compressToTarget } from "./target-size";
+import { DISCARD_LABELS, NO_DISCARDS, optimize } from "./discard";
 import { loadPdfFromBytes } from "../../services/pdf";
 import { PdfPagePreview } from "../viewer/PdfPagePreview";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -13,7 +14,12 @@ import {
   ENGINE_UNAVAILABLE,
   newJobId,
 } from "../../services/engine";
-import type { CompressionPreset, CompressionReport, EngineResult } from "../../types/engine";
+import type {
+  CompressionPreset,
+  CompressionReport,
+  DiscardOptions,
+  EngineResult,
+} from "../../types/engine";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
 const PRESETS: { id: CompressionPreset; label: string; description: string }[] = [
@@ -56,6 +62,9 @@ export function CompressDialog({
   const [targetMode, setTargetMode] = useState(false);
   const [targetMb, setTargetMb] = useState(2);
   const [measuredTarget, setMeasuredTarget] = useState<number | null>(null);
+  const [discard, setDiscard] = useState<DiscardOptions>(NO_DISCARDS);
+  const [flattenForms, setFlattenForms] = useState(false);
+  const chosen = Object.values(discard).filter(Boolean).length + (flattenForms ? 1 : 0);
   const [preview, setPreview] = useState<PDFDocumentProxy | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [previewPage, setPreviewPage] = useState(1);
@@ -111,14 +120,17 @@ export function CompressDialog({
       const target = Math.round(targetMb * 1_000_000);
       if (targetMode && (!Number.isFinite(targetMb) || targetMb < 0.001024 || targetMb > 1000))
         throw new Error("Enter a target between 0.001024 and 1,000 MB.");
-      const outcome = targetMode
-        ? await compressToTarget(
-            bytes,
-            target,
-            (original, candidate) => compressDocument(original, candidate, jobId),
-            () => job.current !== jobId,
-          )
-        : await compressDocument(bytes, preset, jobId);
+      const discards = chosen ? discard : undefined;
+      const outcome = await optimize(bytes, flattenForms, (input) =>
+        targetMode
+          ? compressToTarget(
+              input,
+              target,
+              (original, candidate) => compressDocument(original, candidate, jobId, discards),
+              () => job.current !== jobId,
+            )
+          : compressDocument(input, preset, jobId, discards),
+      );
       if (job.current === jobId) {
         resultSource.current = pdf;
         setMeasuredTarget(targetMode ? target : null);
@@ -298,6 +310,40 @@ export function CompressDialog({
             </fieldset>
           )}
 
+          <details className="discard-options">
+            <summary>Discard objects{chosen ? ` (${chosen} chosen)` : ""}</summary>
+            <fieldset disabled={running || applying}>
+              <legend className="field-hint">
+                Removed before compressing. Fidelity checks then compare against the document
+                without these items.
+              </legend>
+              {(Object.keys(DISCARD_LABELS) as (keyof DiscardOptions)[]).map((key) => (
+                <label key={key} className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={discard[key]}
+                    onChange={(event) => {
+                      setDiscard({ ...discard, [key]: event.target.checked });
+                      setResult(null);
+                    }}
+                  />
+                  <span>{DISCARD_LABELS[key]}</span>
+                </label>
+              ))}
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={flattenForms}
+                  onChange={(event) => {
+                    setFlattenForms(event.target.checked);
+                    setResult(null);
+                  }}
+                />
+                <span>Flatten form fields (fields can no longer be edited)</span>
+              </label>
+            </fieldset>
+          </details>
+
           {running && (
             <p className="field-hint" aria-live="polite">
               Measuring a compressed copy and checking text, forms, fonts, links and images…
@@ -362,6 +408,13 @@ export function CompressDialog({
                 {report.duplicateStreamsMerged}. Unused objects removed:{" "}
                 {report.unusedObjectsRemoved}.
               </p>
+              {report.discarded && report.discarded.length > 0 && (
+                <ul className="field-hint" aria-label="Discarded items">
+                  {report.discarded.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              )}
               <ul className="check-list" aria-label="Fidelity checks">
                 {report.checks.map((check) => (
                   <li key={check.name} className={check.passed ? "passed" : "failed"}>

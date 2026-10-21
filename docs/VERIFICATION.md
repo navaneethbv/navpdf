@@ -5,6 +5,22 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 21 PDFCraft gap batch 6, printing and optimizer
+
+The [sixth batch mapping](PDFCRAFT-COMPARISON.md#sixth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,030 tests across 138 files, with 86.00% statements, 78.07% branches, 85.00% functions and 89.11% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass; `cargo test --locked` passes 105 and fails the same 2 root-only permission tests recorded for batch 5.
+Logs are under ignored `output/batch-six/`.
+
+Engine tests show that nothing is discarded by default, that each discard removes only its own structures (a URI link keeps its action but loses a chained script), that comment discards keep links and multimedia, and that a discard is kept even when compression saves no space.
+Integration tests read prepared print copies with PDF.js to check parity selection and order, the annotations kept for each content choice, the empty page content for form fields only, grayscale conversion, raster bounds and full-page image rebuilding, plus the optimizer's handling of form flattening.
+Dialog tests cover odd pages in reverse order through the native print call, the grayscale preview and its reset when an option changes, and the discard request.
+
+Poppler `pdfinfo` reports the synthetic `output/batch-six/discard-source.pdf` (SHA-256 `735b566d549ce378cc8a412de228129c5311b6f89df2712766b1d2d2b366b4dc`) as tagged with a title, and `discard-output.pdf` (SHA-256 `0845036ec804900b6cd4dc7ef1ec58f4c36dcf0f98bd6d17702e0db61a1159b1`), made with every discard, as untagged without a title; `pdftotext` still extracts the body text.
+In the Chromium browser preview, a grayscale, form-fields-only preview of `output/batch-six/form-fixture.pdf` showed only the field on a white page; the two print selects were misaligned by a shared spacing rule, which now exempts two-column rows.
+Native printing, Preview and Acrobat acceptance were not run, and no physical printer was used.
+
 ## October 21 PDFCraft gap batch 5
 
 The [fifth batch mapping](PDFCRAFT-COMPARISON.md#fifth-batch-mapping) lists each addition and its limits.

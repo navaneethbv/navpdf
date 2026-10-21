@@ -60,7 +60,7 @@ The user asked for every gap, including the decision items, delivered in batches
 | 3 | Cut, copy and paste pages; thumbnail size; trim, bleed and art boxes; page transitions; custom document properties; fonts list; polygon, connected-line, cloud and callout comments; insert and replace proposals; file attachment comments | Implemented; see the third batch mapping |
 | 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Implemented; see the fourth batch mapping |
 | 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Implemented; see the fifth batch mapping |
-| 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Planned |
+| 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Printing and optimizer discards implemented; see the sixth batch mapping. Creation and OCR are next |
 | 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Planned |
 | 8 to 10 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance; tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
 | 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
@@ -109,6 +109,17 @@ Showing or hiding all comments moved to batch 7 because PDF.js fixes its annotat
 | `protect.redact-pages` | Redact PDF, Mark whole pages | Marks the displayed page bounds for each page in a range. |
 | `protect.redaction-properties`, `protect.redaction-codes` | Redact PDF appearance | Fill colour and overlay text of up to 60 printable ASCII characters in Helvetica; US FOIA, Privacy Act and general code sets. The audit accepts only the exact label in its own font inside its region. |
 | `protect.audit-faux-redactions` | Find Fake Redactions | Filled paths over text, unapplied Redact annotations and filled Square or Circle annotations; findings can be marked for redaction. Images, clipping and transparency are not analysed. |
+
+## Sixth batch mapping
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `print.odd-even-reverse` | Print, Subset and Reverse page order | Parity follows page numbers within the chosen range. |
+| `print.comments-and-forms` | Print, Comments and forms | Document and markups, document only, document and stamps, or form fields only; links stay because they draw nothing. Form fields only replaces page content with an empty stream in the printed copy. |
+| `print.print-preview` | Print, Preview | Renders the prepared print copy, with the same pages, order, content and raster options that will be sent. |
+| `print.grayscale`, `print.print-as-image` | Print, grayscale and Print as image | Pages are rendered with PDF.js at 150 or 300 dpi (limited to 16 megapixels and 8,192 pixels per edge) and rebuilt as JPEG pages; grayscale always uses this raster path, so printed text is not selectable. |
+| `optimize.discard-javascript`, `discard-thumbnails`, `discard-tags`, `discard-bookmarks`, `discard-print-settings`, `discard-alternate-images`, `discard-comments`, `discard-metadata`, `discard-attachments`, `discard-private-data` | Compress PDF, Discard objects | Native discards before compression, each off by default and reported with a count. Fidelity checks compare against the document after the chosen discards. Multimedia covers Screen, Movie, Sound, RichMedia and 3D annotations. |
+| `optimize.flatten-form-fields` | Compress PDF, Flatten form fields | Uses the existing flattener before compression; a flattening is kept even when compression saves no space. Signed documents are refused. |
 
 ## Acceptance boundary
 

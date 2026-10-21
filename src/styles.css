@@ -2216,7 +2216,10 @@ p {
   border-color: var(--accent);
 }
 /* The modal body's flex gap separates its direct fields; nested wrappers need their own. */
-.modal-body > div:not(.setting-group, .settings-row) > .setting-group + .setting-group {
+.modal-body
+  > div:not(.setting-group, .settings-row, .form-columns)
+  > .setting-group
+  + .setting-group {
   margin-top: 14px;
 }
 /* A legend is not a flex item, so the group's gap does not separate it from its controls. */
@@ -3921,4 +3924,21 @@ p {
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
+}
+
+.discard-options {
+  margin: 12px 0;
+}
+
+.discard-options summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.discard-options fieldset {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 0 0;
+  border: 0;
 }

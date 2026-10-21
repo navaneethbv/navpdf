@@ -1027,7 +1027,7 @@ pub(super) fn rewrite_text(op: &Operation, glyphs: &[Glyph], remove: &[bool]) ->
     }
 }
 
-fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
+pub(super) fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
     doc.trailer
         .get(b"Root")
         .and_then(Object::as_reference)
@@ -1177,13 +1177,13 @@ fn annotation_rect(annotation: &Dictionary) -> Option<Rect> {
         .and_then(|values| Rect::from_objects(values))
 }
 
-struct RemovedAnnotations {
-    count: usize,
-    ids: HashSet<ObjectId>,
+pub(super) struct RemovedAnnotations {
+    pub(super) count: usize,
+    pub(super) ids: HashSet<ObjectId>,
 }
 
 /// Removes matching annotations, and popups belonging to removed annotations, from a page.
-fn filter_annotations(
+pub(super) fn filter_annotations(
     doc: &mut Document,
     page_id: ObjectId,
     should_remove: impl Fn(&Document, &Dictionary) -> bool,
@@ -1414,7 +1414,7 @@ fn strip_actions(object: &mut Object, unsafe_ids: &HashSet<ObjectId>) {
     }
 }
 
-fn names_dictionary(doc: &mut Document, catalog: ObjectId) -> Option<&mut Dictionary> {
+pub(super) fn names_dictionary(doc: &mut Document, catalog: ObjectId) -> Option<&mut Dictionary> {
     let reference = doc
         .get_dictionary(catalog)
         .ok()

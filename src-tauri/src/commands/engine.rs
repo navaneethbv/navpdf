@@ -2,7 +2,7 @@
 //! while small typed command metadata stays in JSON and passwords never travel in headers.
 
 use super::{document, payload, AppState};
-use crate::engine::{compress, coverup, edit, protect, prune, redact, sign};
+use crate::engine::{compress, coverup, discard, edit, protect, prune, redact, sign};
 use crate::{filesystem, logging};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -248,11 +248,13 @@ pub async fn engine_compress(
     input_id: String,
     job_id: String,
     preset: compress::CompressionPreset,
+    discard: Option<discard::DiscardOptions>,
 ) -> Result<EngineOutcome<compress::CompressionReport>, String> {
     let state = app.state::<AppState>();
     let bytes = state.engine.take(&input_id)?;
+    let discard = discard.unwrap_or_default();
     let result = run_job(&app, &job_id, move |cancel| {
-        compress::compress(&bytes, preset, cancel)
+        compress::compress_with(&bytes, preset, &discard, cancel)
     })
     .await;
     logging::record(&state.root, "engine_compress", result.is_err());

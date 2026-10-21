@@ -4,6 +4,7 @@ import type {
   CertificateSummary,
   CompressionPreset,
   CompressionReport,
+  DiscardOptions,
   EditReport,
   EditRequest,
   EngineResult,
@@ -76,6 +77,7 @@ export async function compressDocument(
   bytes: Uint8Array,
   preset: CompressionPreset,
   jobId: string,
+  discard?: DiscardOptions,
 ): Promise<EngineResult<CompressionReport>> {
   requireEngine();
   const inputId = await stage(bytes);
@@ -84,6 +86,7 @@ export async function compressDocument(
       inputId,
       jobId,
       preset,
+      ...(discard && { discard }),
     }),
   );
 }

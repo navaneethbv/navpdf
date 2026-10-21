@@ -87,7 +87,24 @@ export interface CompressionReport {
   imagesRecompressed: number;
   imagesSkipped: number;
   checks: FidelityCheck[];
+  /** One entry per chosen discard that changed the document. */
+  discarded?: string[];
   message: string;
+}
+
+/** Structures the optimizer removes before compressing; every option defaults to off. */
+export interface DiscardOptions {
+  javascript: boolean;
+  thumbnails: boolean;
+  tags: boolean;
+  bookmarks: boolean;
+  printSettings: boolean;
+  alternateImages: boolean;
+  comments: boolean;
+  multimedia: boolean;
+  metadata: boolean;
+  attachments: boolean;
+  privateData: boolean;
 }
 
 export interface PermissionRequest {
