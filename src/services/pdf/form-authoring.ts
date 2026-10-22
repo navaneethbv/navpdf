@@ -21,6 +21,7 @@ import {
   type PDFForm,
   type PDFWidgetAnnotation,
 } from "pdf-lib";
+import { parseHexColor } from "../../utils/color.ts";
 import { pdfText } from "./text-string.ts";
 import { listWidgets } from "./field-geometry.ts";
 
@@ -317,10 +318,7 @@ export async function renameFields(bytes: Uint8Array, renames: { from: string; t
 
 /** Parses "#rrggbb" into PDF color channels. */
 export function colorFromHex(hex: string): Color | null {
-  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
-  return match
-    ? ([1, 2, 3].map((index) => Number.parseInt(match[index], 16) / 255) as Color)
-    : null;
+  return parseHexColor(hex);
 }
 
 export function hexFromColor(color: Color | null) {

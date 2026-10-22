@@ -25,12 +25,12 @@ export function selectPrintPages(pages: number[], subset: PageSubset, reverse: b
   return reverse ? kept.reverse() : kept;
 }
 
-const KEEP: Record<PrintContent, (subtype: string) => boolean> = {
-  "document-markups": () => true,
-  document: (subtype) => subtype === "Widget" || subtype === "Link",
-  "document-stamps": (subtype) => subtype === "Widget" || subtype === "Link" || subtype === "Stamp",
-  "form-fields": (subtype) => subtype === "Widget",
-};
+/** Annotation subtypes kept for each content choice other than "Document and markups". */
+const KEPT_SUBTYPES = new Map<PrintContent, Set<string>>([
+  ["document", new Set(["Widget", "Link"])],
+  ["document-stamps", new Set(["Widget", "Link", "Stamp"])],
+  ["form-fields", new Set(["Widget"])],
+]);
 
 /**
  * Removes the annotations the chosen content excludes. "Form fields only" also replaces each
@@ -39,7 +39,7 @@ const KEEP: Record<PrintContent, (subtype: string) => boolean> = {
 export async function preparePrintContent(bytes: Uint8Array, content: PrintContent) {
   if (content === "document-markups") return bytes;
   const doc = await PDFDocument.load(bytes);
-  const keep = KEEP[content];
+  const keepSubtypes = KEPT_SUBTYPES.get(content) ?? new Set<string>();
   for (const page of doc.getPages()) {
     const annots = page.node.lookup(PDFName.of("Annots"));
     if (annots instanceof PDFArray) {
@@ -47,7 +47,7 @@ export async function preparePrintContent(bytes: Uint8Array, content: PrintConte
         const annotation = entry instanceof PDFRef ? doc.context.lookup(entry) : entry;
         if (!(annotation instanceof PDFDict)) return false;
         const subtype = annotation.lookup(PDFName.of("Subtype"));
-        return keep(subtype instanceof PDFName ? subtype.decodeText() : "");
+        return keepSubtypes.has(subtype instanceof PDFName ? subtype.decodeText() : "");
       });
       if (kept.length) page.node.set(PDFName.of("Annots"), doc.context.obj(kept));
       else page.node.delete(PDFName.of("Annots"));
@@ -138,11 +138,13 @@ async function renderPrintPage(
 /** Builds a PDF with one full-page image per page. */
 export async function imagesToPdf(pages: RasterPage[]) {
   const doc = await PDFDocument.create();
-  const images = await Promise.all(pages.map((page) => doc.embedJpg(page.jpeg)));
-  for (const [index, page] of pages.entries())
+  const embedded = await Promise.all(
+    pages.map(async (page) => ({ page, image: await doc.embedJpg(page.jpeg) })),
+  );
+  for (const { page, image } of embedded)
     doc
       .addPage([page.width, page.height])
-      .drawImage(images[index], { x: 0, y: 0, width: page.width, height: page.height });
+      .drawImage(image, { x: 0, y: 0, width: page.width, height: page.height });
   return doc.save();
 }
 

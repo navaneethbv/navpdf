@@ -55,14 +55,12 @@ describe("page clipboard", () => {
     expect(getPageClipboard()?.pages).toBe(2);
     const pasted = await insertDocumentPages(await blank(2), getPageClipboard()!.bytes, 1);
     const text = await withPdf(pasted, async (pdf) => {
-      const pages: string[] = [];
-      for (let n = 1; n <= pdf.numPages; n++)
-        pages.push(
-          (await (await pdf.getPage(n)).getTextContent()).items
-            .map((item) => ("str" in item ? item.str : ""))
-            .join(""),
-        );
-      return pages;
+      const numbers = Array.from({ length: pdf.numPages }, (_, index) => index + 1);
+      const pages = await Promise.all(numbers.map((n) => pdf.getPage(n)));
+      const contents = await Promise.all(pages.map((page) => page.getTextContent()));
+      return contents.map((content) =>
+        content.items.map((item) => ("str" in item ? item.str : "")).join(""),
+      );
     });
     expect(text).toEqual(["", "ONE", "THREE", ""]);
     clearPageClipboard();
@@ -147,10 +145,11 @@ describe("document properties", () => {
       custom: [{ name: "Client", value: "New" }],
     });
     expect((await readMetadata(replaced)).custom).toEqual([{ name: "Client", value: "New" }]);
-    for (const name of ["Title", "bad name", "a/b", ""])
-      await expect(
-        writeMetadata(bytes, { ...base, custom: [{ name, value: "x" }] }),
-      ).rejects.toThrow();
+    await Promise.all(
+      ["Title", "bad name", "a/b", ""].map((name) =>
+        expect(writeMetadata(bytes, { ...base, custom: [{ name, value: "x" }] })).rejects.toThrow(),
+      ),
+    );
     await expect(
       writeMetadata(bytes, {
         ...base,

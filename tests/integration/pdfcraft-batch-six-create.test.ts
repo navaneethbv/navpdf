@@ -22,12 +22,12 @@ async function pageTexts(bytes: Uint8Array) {
   const task = getDocument({ data: new Uint8Array(bytes), standardFontDataUrl });
   const pdf = await task.promise;
   try {
-    const pages: string[] = [];
-    for (let number = 1; number <= pdf.numPages; number++) {
-      const content = await (await pdf.getPage(number)).getTextContent();
-      pages.push(content.items.map((item) => ("str" in item ? item.str : "")).join("\n"));
-    }
-    return pages;
+    const numbers = Array.from({ length: pdf.numPages }, (_, index) => index + 1);
+    const pages = await Promise.all(numbers.map((number) => pdf.getPage(number)));
+    const contents = await Promise.all(pages.map((page) => page.getTextContent()));
+    return contents.map((content) =>
+      content.items.map((item) => ("str" in item ? item.str : "")).join("\n"),
+    );
   } finally {
     await task.destroy();
   }
@@ -86,12 +86,12 @@ describe("image input routing", () => {
   });
 });
 
-describe("OCR preprocessing", () => {
-  const rgba = (values: number[]) =>
-    new Uint8ClampedArray(values.flatMap((value) => [value, value, value, 255]));
+const rgba = (values: number[]) =>
+  new Uint8ClampedArray(values.flatMap((value) => [value, value, value, 255]));
 
+describe("OCR preprocessing", () => {
   it("finds a threshold between two populations", () => {
-    const histogram = new Array<number>(256).fill(0);
+    const histogram = Array.from({ length: 256 }, () => 0);
     histogram[40] = 50;
     histogram[210] = 50;
     const level = otsuThreshold(histogram, 100);

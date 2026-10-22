@@ -16,6 +16,11 @@ CSS checks for duplicate properties, unknown properties and selectors, and empty
 The CodeQL alerts came from literal test passwords and the literal first character of the wrong-password probe used to validate protected output; tests now derive passwords at run time and the probe uses a random prefix.
 With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass, and 1,044 frontend tests pass across 140 files with the coverage gates; `cargo fmt --check`, Clippy with `-D warnings` and every Rust test except the 2 root-only permission tests pass.
 Hosted SonarCloud, CodeQL and Codacy results must be read on the pushed commit; this local run is not a substitute for them.
+On `8ef7a93` the SonarCloud gate passed with 8 new issues and Codacy reported 5 critical security findings, still without readable details.
+Codacy's JavaScript security profile was reproduced with `eslint-plugin-security` 3 under ESLint 9: its function-call and variable-assignment object-injection findings and two timing-attack matches on a variable named `token` tracked Codacy's critical counts across the PR's commits.
+These now use `Map` lookups, `.at()`, destructured regular-expression groups in one shared `parseHexColor` helper, and a renamed date-format field.
+The Sonar rule set was also run on the PR's test files; awaits inside loops, helpers nested in `describe` blocks, `charCodeAt` and an `Array` constructor there are replaced.
+Semgrep's public JavaScript, TypeScript and Rust rules report no error-severity findings on the changed files.
 
 ## October 21 PDFCraft gap batch 6, creation and OCR
 

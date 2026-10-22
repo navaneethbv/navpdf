@@ -107,9 +107,12 @@ export function PagePropertiesDialog({ controller, onClose }: Readonly<DocumentT
           setPageTransition(bytes, chosen, remove ? null : { ...transition, advanceAfter }),
       );
     } else {
-      const values = Object.fromEntries(
-        SIDES.map((side) => [side, Number(margins[side])]),
-      ) as unknown as BoxMargins;
+      const values: BoxMargins = {
+        top: Number(margins.top),
+        right: Number(margins.right),
+        bottom: Number(margins.bottom),
+        left: Number(margins.left),
+      };
       applied = await apply(
         remove ? `Removed ${setting} from ${count}` : `Set ${setting} on ${count}`,
         (bytes) => setPrintBox(bytes, chosen, setting, remove ? null : values),

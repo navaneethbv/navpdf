@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { parsePageRange } from "../pages/page-range";
+import { parseHexColor } from "../../utils/color";
 import { mapInOrder } from "../../utils/async-sequence";
 import type { PdfRect } from "../../types/engine";
 
@@ -34,13 +35,7 @@ export const CODE_SETS: Record<string, string[]> = {
 };
 
 export function hexToRgb(hex: string): [number, number, number] {
-  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
-  if (!match) return [0, 0, 0];
-  return [1, 2, 3].map((index) => Number.parseInt(match[index], 16) / 255) as [
-    number,
-    number,
-    number,
-  ];
+  return parseHexColor(hex) ?? [0, 0, 0];
 }
 
 /** Overlay colour and the text drawn on every marked area. */

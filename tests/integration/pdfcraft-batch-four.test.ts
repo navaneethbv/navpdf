@@ -45,7 +45,7 @@ const TINY_PNG = Uint8Array.from(
   atob(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   ),
-  (char) => char.charCodeAt(0),
+  (char) => char.codePointAt(0) ?? 0,
 );
 
 const geometry = { page: 1, x: 50, y: 600, width: 150, height: 60 };
@@ -105,21 +105,21 @@ describe("new field types", () => {
   });
 });
 
-describe("field properties", () => {
-  async function form() {
-    const doc = await PDFDocument.create();
-    const page = doc.addPage([600, 800]);
-    doc.addPage([600, 800]);
-    doc.addPage([600, 800]);
-    const form = doc.getForm();
-    form.createTextField("first").addToPage(page, { x: 50, y: 700, width: 200, height: 24 });
-    form.createTextField("second").addToPage(page, { x: 50, y: 650, width: 200, height: 24 });
-    form
-      .createRadioGroup("choice")
-      .addOptionToPage("A", page, { x: 50, y: 600, width: 20, height: 20 });
-    return doc.save();
-  }
+async function form() {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([600, 800]);
+  doc.addPage([600, 800]);
+  doc.addPage([600, 800]);
+  const form = doc.getForm();
+  form.createTextField("first").addToPage(page, { x: 50, y: 700, width: 200, height: 24 });
+  form.createTextField("second").addToPage(page, { x: 50, y: 650, width: 200, height: 24 });
+  form
+    .createRadioGroup("choice")
+    .addOptionToPage("A", page, { x: 50, y: 600, width: 20, height: 20 });
+  return doc.save();
+}
 
+describe("field properties", () => {
   it("renames, sets tooltips, colours, lengths, combing, locking and hiding", async () => {
     const result = await updateFieldProperties(await form(), "first", {
       newName: "Given name",
@@ -192,11 +192,13 @@ describe("field properties", () => {
     expect(field.acroField.getWidgets()).toHaveLength(3);
     field.setText("shared");
     const values = await withPdf(await doc.save(), async (pdf) => {
-      const found: string[] = [];
-      for (let page = 1; page <= 3; page++)
-        for (const item of await (await pdf.getPage(page)).getAnnotations())
-          if (item.fieldName === "first") found.push(`${page}:${item.fieldValue}`);
-      return found;
+      const pages = await Promise.all([1, 2, 3].map((page) => pdf.getPage(page)));
+      const annotations = await Promise.all(pages.map((page) => page.getAnnotations()));
+      return annotations.flatMap((items, index) =>
+        items
+          .filter((item) => item.fieldName === "first")
+          .map((item) => `${index + 1}:${item.fieldValue}`),
+      );
     });
     expect(values).toEqual(["1:shared", "2:shared", "3:shared"]);
     await expect(duplicateFieldToPages(bytes, "choice", [1])).rejects.toThrow("Radio groups");
@@ -238,22 +240,22 @@ describe("field properties", () => {
   });
 });
 
-describe("field detection and naming", () => {
-  async function paperForm() {
-    const doc = await PDFDocument.create();
-    const font = await doc.embedFont(StandardFonts.Helvetica);
-    const page = doc.addPage([600, 800]);
-    page.drawText("Full name: ____________________", { x: 50, y: 700, size: 12, font });
-    page.drawText("Email:", { x: 50, y: 650, size: 12, font });
-    page.drawText("____________________", { x: 120, y: 650, size: 12, font });
-    page.drawText("Phone", { x: 50, y: 560, size: 12, font });
-    doc
-      .getForm()
-      .createTextField("Text1")
-      .addToPage(page, { x: 100, y: 553, width: 150, height: 20 });
-    return doc.save();
-  }
+async function paperForm() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage([600, 800]);
+  page.drawText("Full name: ____________________", { x: 50, y: 700, size: 12, font });
+  page.drawText("Email:", { x: 50, y: 650, size: 12, font });
+  page.drawText("____________________", { x: 120, y: 650, size: 12, font });
+  page.drawText("Phone", { x: 50, y: 560, size: 12, font });
+  doc
+    .getForm()
+    .createTextField("Text1")
+    .addToPage(page, { x: 100, y: 553, width: 150, height: 20 });
+  return doc.save();
+}
 
+describe("field detection and naming", () => {
   it("names fields from labels and keeps names unique", () => {
     expect(nameFromLabel("Full name: ")).toBe("Full name");
     expect(nameFromLabel("Date of birth (dd.mm.yyyy)*:")).toBe("Date of birth (dd mm yyyy)");

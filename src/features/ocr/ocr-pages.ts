@@ -75,8 +75,9 @@ function stretchContrast(gray: Uint8ClampedArray) {
   const cut = gray.length * 0.01;
   let low = 0;
   let high = 255;
-  for (let seen = histogram[low]; low < 255 && seen <= cut; seen += histogram[low]) low++;
-  for (let seen = histogram[high]; high > 0 && seen <= cut; seen += histogram[high]) high--;
+  const count = (level: number) => histogram.at(level) ?? 0;
+  for (let seen = count(low); low < 255 && seen <= cut; seen += count(low)) low++;
+  for (let seen = count(high); high > 0 && seen <= cut; seen += count(high)) high--;
   if (high <= low) return;
   for (let pixel = 0; pixel < gray.length; pixel++)
     gray[pixel] = ((gray[pixel] - low) * 255) / (high - low);
@@ -103,7 +104,7 @@ export function preprocessPixels(
     if (options.despeckle) despeckle(gray, width, height);
   }
   for (let pixel = 0; pixel < gray.length; pixel++)
-    pixels.fill(gray[pixel], pixel * 4, pixel * 4 + 3);
+    pixels.fill(gray.at(pixel) ?? 0, pixel * 4, pixel * 4 + 3);
   return pixels;
 }
 

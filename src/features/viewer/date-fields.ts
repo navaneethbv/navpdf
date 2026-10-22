@@ -68,20 +68,20 @@ const monthFromName = (name: string) =>
  * Reads one token's value at `at`, storing it in `parts`. Returns the position after it, or -1
  * when the text there does not fit the token.
  */
-function readToken(text: string, at: number, token: string, parts: DateParts) {
+function readToken(text: string, at: number, field: string, parts: DateParts) {
   let end = at;
-  if (token.startsWith("mmm")) {
-    while (isLetter(text[end])) end++;
+  if (field.startsWith("mmm")) {
+    while (isLetter(text.charAt(end))) end++;
     parts.month = monthFromName(text.slice(at, end));
     return end;
   }
-  const width = token.length === 4 ? 4 : 2;
-  while (end - at < width && isDigit(text[end])) end++;
+  const width = field.length === 4 ? 4 : 2;
+  while (end - at < width && isDigit(text.charAt(end))) end++;
   if (end === at || (width === 4 && end - at !== 4)) return -1;
   const number = Number(text.slice(at, end));
-  if (token === "yyyy") parts.year = number;
-  else if (token === "yy") parts.year = 2000 + number;
-  else if (token.startsWith("m")) parts.month = number;
+  if (field === "yyyy") parts.year = number;
+  else if (field === "yy") parts.year = 2000 + number;
+  else if (field.startsWith("m")) parts.month = number;
   else parts.day = number;
   return end;
 }
