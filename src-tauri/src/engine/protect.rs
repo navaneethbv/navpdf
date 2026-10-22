@@ -423,9 +423,8 @@ mod tests {
     fn non_ascii_letter() -> char {
         loop {
             let bytes = *uuid::Uuid::new_v4().as_bytes();
-            let units = bytes
-                .chunks_exact(std::mem::size_of::<u16>())
-                .map(|pair| u16::from_le_bytes(pair.try_into().unwrap_or_default()));
+            let (pairs, _) = bytes.as_chunks::<{ std::mem::size_of::<u16>() }>();
+            let units = pairs.iter().map(|pair| u16::from_le_bytes(*pair));
             if let Some(letter) = char::decode_utf16(units)
                 .filter_map(Result::ok)
                 .find(|c| !c.is_ascii() && c.is_lowercase() && prepared_unchanged(*c))
