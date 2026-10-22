@@ -69,8 +69,20 @@ function handleClipboardKey(
   actions: { copy: () => Promise<void>; cut: () => Promise<void>; paste: () => Promise<void> },
 ): boolean {
   if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return false;
-  const action = { c: actions.copy, x: actions.cut, v: actions.paste }[e.key.toLowerCase()];
-  if (!action) return false;
+  let action: () => Promise<void>;
+  switch (e.key.toLowerCase()) {
+    case "c":
+      action = actions.copy;
+      break;
+    case "x":
+      action = actions.cut;
+      break;
+    case "v":
+      action = actions.paste;
+      break;
+    default:
+      return false;
+  }
   e.preventDefault();
   void action();
   return true;
