@@ -417,6 +417,29 @@ mod tests {
         uuid::Uuid::new_v4().simple().to_string()
     }
 
+    /// A random lowercase letter outside ASCII, decoded from random data so no fixed value is
+    /// used. SASLprep, which AES-256 applies, must keep it unchanged rather than reject it or
+    /// map it to ASCII; lowercase letters are left-to-right, so they can sit next to ASCII.
+    fn non_ascii_letter() -> char {
+        loop {
+            let bytes = *uuid::Uuid::new_v4().as_bytes();
+            let units = bytes
+                .chunks_exact(std::mem::size_of::<u16>())
+                .map(|pair| u16::from_le_bytes(pair.try_into().unwrap_or_default()));
+            if let Some(letter) = char::decode_utf16(units)
+                .filter_map(Result::ok)
+                .find(|c| !c.is_ascii() && c.is_lowercase() && prepared_unchanged(*c))
+            {
+                return letter;
+            }
+        }
+    }
+
+    fn prepared_unchanged(letter: char) -> bool {
+        let text = letter.to_string();
+        stringprep::saslprep(&text).is_ok_and(|prepared| prepared == text)
+    }
+
     fn request(user: &str, owner: &str, permissions: PermissionRequest) -> ProtectionRequest {
         ProtectionRequest {
             user_password: user.to_string().into(),
@@ -502,8 +525,8 @@ mod tests {
         let mut chosen = request(&long, &owner, PermissionRequest::all());
         chosen.encryption = EncryptionLevel::Aes128;
         assert!(protect(&fixture(), &chosen, 1).unwrap_err().contains("32"));
-        // A short password ending in "ÿ" (U+00FF), outside ASCII.
-        let accented_password = format!("{}{}", &password()[..8], char::from(u8::MAX));
+        // A short password ending in a letter outside ASCII.
+        let accented_password = format!("{}{}", &password()[..8], non_ascii_letter());
         let mut accented = request(&accented_password, &owner, PermissionRequest::all());
         accented.encryption = EncryptionLevel::Rc440;
         assert!(protect(&fixture(), &accented, 1)
@@ -511,7 +534,7 @@ mod tests {
             .contains("ASCII"));
         // AES-256 keeps accepting long Unicode passwords.
         let unicode = request(
-            &format!("{long}{}", char::from(u8::MAX)),
+            &format!("{long}{}", non_ascii_letter()),
             &owner,
             PermissionRequest::all(),
         );
