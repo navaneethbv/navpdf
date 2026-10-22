@@ -21,6 +21,9 @@ Codacy's JavaScript security profile was reproduced with `eslint-plugin-security
 These now use `Map` lookups, `.at()`, destructured regular-expression groups in one shared `parseHexColor` helper, and a renamed date-format field.
 The Sonar rule set was also run on the PR's test files; awaits inside loops, helpers nested in `describe` blocks, `charCodeAt` and an `Array` constructor there are replaced.
 Semgrep's public JavaScript, TypeScript and Rust rules report no error-severity findings on the changed files.
+On `2f5ceb6` Codacy fell from 5 to 2 critical findings; Semgrep's dynamic-method rule matched the page clipboard shortcut handler, which now uses a `switch`.
+CodeQL's remaining alerts were empty owner passwords in the legacy-encryption test, which now uses a generated owner password.
+SonarCloud still reported 8 issues after the test-file changes, so the new Rust was checked against Sonar's cognitive-complexity limit of 15 with a local estimate: the faux-redaction scan (about 38) is split into per-page helpers, and the optimizer discards (about 18) run from a table.
 
 ## October 21 PDFCraft gap batch 6, creation and OCR
 

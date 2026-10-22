@@ -59,97 +59,107 @@ const PRINT_PREFERENCES: &[&[u8]] = &[
     b"PrintClip",
 ];
 
+type Discard = fn(&mut Document, ObjectId, &[ObjectId]) -> usize;
+
 /// Applies the chosen discards and returns a description of each one that changed something.
 pub fn apply(doc: &mut Document, options: &DiscardOptions) -> Result<Vec<String>, String> {
     let catalog = catalog_id(doc)?;
     let pages: Vec<ObjectId> = doc.get_pages().into_values().collect();
-    let mut done = Vec::new();
-    let mut note = |count: usize, what: &str| {
-        if count > 0 {
-            done.push(format!("{what}: {count}"));
-        }
-    };
-    if options.javascript {
-        note(
-            discard_javascript(doc, catalog),
+    let steps: [(bool, &str, Discard); 11] = [
+        (
+            options.javascript,
             "JavaScript actions removed",
-        );
-    }
-    if options.thumbnails {
-        note(
-            remove_from_objects(doc, |dict| is_type(dict, b"Page"), &[b"Thumb"]),
+            |doc, catalog, _| discard_javascript(doc, catalog),
+        ),
+        (
+            options.thumbnails,
             "Page thumbnails removed",
-        );
-    }
-    if options.tags {
-        let root = remove_catalog_keys(doc, catalog, &[b"StructTreeRoot", b"MarkInfo"]);
-        let links = remove_from_objects(doc, |_| true, &[b"StructParents", b"StructParent"]);
-        note(root.min(1) + links, "Tag structure entries removed");
-    }
-    if options.bookmarks {
-        let removed = remove_catalog_keys(doc, catalog, &[b"Outlines"]);
-        if let Ok(catalog) = doc.get_dictionary_mut(catalog) {
-            if catalog
-                .get(b"PageMode")
-                .and_then(Object::as_name)
-                .is_ok_and(|mode| mode == b"UseOutlines")
-            {
-                catalog.set("PageMode", "UseNone");
-            }
-        }
-        note(removed, "Bookmark trees removed");
-    }
-    if options.print_settings {
-        note(
-            discard_print_settings(doc, catalog),
+            |doc, _, _| remove_from_objects(doc, |dict| is_type(dict, b"Page"), &[b"Thumb"]),
+        ),
+        (options.tags, "Tag structure entries removed", discard_tags),
+        (
+            options.bookmarks,
+            "Bookmark trees removed",
+            discard_bookmarks,
+        ),
+        (
+            options.print_settings,
             "Print settings removed",
-        );
-    }
-    if options.alternate_images {
-        note(
-            remove_from_objects(doc, |dict| is_subtype(dict, b"Image"), &[b"Alternates"]),
+            |doc, catalog, _| discard_print_settings(doc, catalog),
+        ),
+        (
+            options.alternate_images,
             "Alternate image lists removed",
-        );
-    }
-    if options.comments {
-        note(
-            remove_annotations(doc, &pages, COMMENT_SUBTYPES),
-            "Comments removed",
-        );
-    }
-    if options.multimedia {
-        note(
-            remove_annotations(doc, &pages, MULTIMEDIA_SUBTYPES),
+            |doc, _, _| {
+                remove_from_objects(doc, |dict| is_subtype(dict, b"Image"), &[b"Alternates"])
+            },
+        ),
+        (options.comments, "Comments removed", |doc, _, pages| {
+            remove_annotations(doc, pages, COMMENT_SUBTYPES)
+        }),
+        (
+            options.multimedia,
             "Multimedia annotations removed",
-        );
-    }
-    if options.metadata {
-        let info = usize::from(doc.trailer.remove(b"Info").is_some());
-        let xmp = remove_from_objects(doc, |_| true, &[b"Metadata"]);
-        note(
-            info + xmp,
+            |doc, _, pages| remove_annotations(doc, pages, MULTIMEDIA_SUBTYPES),
+        ),
+        (
+            options.metadata,
             "Document information and metadata entries removed",
-        );
-    }
-    if options.attachments {
-        let tree = names_dictionary(doc, catalog)
-            .and_then(|names| names.remove(b"EmbeddedFiles"))
-            .is_some();
-        let collection = remove_catalog_keys(doc, catalog, &[b"Collection"]);
-        let associated = remove_from_objects(doc, |_| true, &[b"AF"]);
-        let annotations = remove_annotations(doc, &pages, &[b"FileAttachment"]);
-        note(
-            usize::from(tree) + collection + associated + annotations,
+            |doc, _, _| {
+                let info = usize::from(doc.trailer.remove(b"Info").is_some());
+                info + remove_from_objects(doc, |_| true, &[b"Metadata"])
+            },
+        ),
+        (
+            options.attachments,
             "Attachment entries removed",
-        );
-    }
-    if options.private_data {
-        note(
-            remove_from_objects(doc, |_| true, &[b"PieceInfo"]),
+            discard_attachments,
+        ),
+        (
+            options.private_data,
             "Private application data entries removed",
-        );
+            |doc, _, _| remove_from_objects(doc, |_| true, &[b"PieceInfo"]),
+        ),
+    ];
+    Ok(steps
+        .into_iter()
+        .filter(|(enabled, _, _)| *enabled)
+        .filter_map(|(_, what, discard)| {
+            let count = discard(doc, catalog, &pages);
+            (count > 0).then(|| format!("{what}: {count}"))
+        })
+        .collect())
+}
+
+fn discard_tags(doc: &mut Document, catalog: ObjectId, _: &[ObjectId]) -> usize {
+    let root = remove_catalog_keys(doc, catalog, &[b"StructTreeRoot", b"MarkInfo"]);
+    let links = remove_from_objects(doc, |_| true, &[b"StructParents", b"StructParent"]);
+    root.min(1) + links
+}
+
+fn discard_bookmarks(doc: &mut Document, catalog: ObjectId, _: &[ObjectId]) -> usize {
+    let removed = remove_catalog_keys(doc, catalog, &[b"Outlines"]);
+    let Ok(catalog) = doc.get_dictionary_mut(catalog) else {
+        return removed;
+    };
+    let outline_mode = catalog
+        .get(b"PageMode")
+        .and_then(Object::as_name)
+        .is_ok_and(|mode| mode == b"UseOutlines");
+    if outline_mode {
+        catalog.set("PageMode", "UseNone");
     }
-    Ok(done)
+    removed
+}
+
+fn discard_attachments(doc: &mut Document, catalog: ObjectId, pages: &[ObjectId]) -> usize {
+    let tree = names_dictionary(doc, catalog)
+        .and_then(|names| names.remove(b"EmbeddedFiles"))
+        .is_some();
+    let collection = remove_catalog_keys(doc, catalog, &[b"Collection"]);
+    let associated = remove_from_objects(doc, |_| true, &[b"AF"]);
+    let annotations = remove_annotations(doc, pages, &[b"FileAttachment"]);
+    usize::from(tree) + collection + associated + annotations
 }
 
 fn is_type(dict: &Dictionary, kind: &[u8]) -> bool {

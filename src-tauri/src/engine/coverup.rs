@@ -4,7 +4,8 @@
 
 use super::content::{self, ItemKind, Resources};
 use super::geometry::{Matrix, Rect};
-use lopdf::{Dictionary, Object};
+use lopdf::content::Operation;
+use lopdf::{Dictionary, Document, Object, ObjectId};
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -75,87 +76,117 @@ fn covered(glyphs: &[Glyph], cover: &Rect, before: Option<usize>) -> (usize, Str
     (characters, sample.chars().take(MAX_SAMPLE_CHARS).collect())
 }
 
+/// Visible glyphs and filled, unclipped paths on one page, each with its painting order.
+fn page_marks(
+    doc: &Document,
+    page_id: ObjectId,
+) -> Result<(Vec<Glyph>, Vec<(usize, Rect)>), String> {
+    let ops = super::page_operations(doc, page_id)?;
+    let resources = Resources::for_page(doc, page_id);
+    let nothing_hidden = HashSet::new();
+    let mut glyphs = Vec::new();
+    let mut fills = Vec::new();
+    let mut order = 0;
+    content::walk_with_ops(
+        doc,
+        &ops,
+        &resources,
+        Matrix::IDENTITY,
+        &nothing_hidden,
+        0,
+        &mut |item, stream| {
+            order += 1;
+            if item.hidden {
+                return;
+            }
+            match &item.kind {
+                ItemKind::Text {
+                    glyphs: run,
+                    invisible: false,
+                    ..
+                } => glyphs.extend(run.iter().map(|glyph| Glyph {
+                    order,
+                    bbox: glyph.bbox,
+                    text: glyph.text.clone(),
+                })),
+                ItemKind::Path { clip: false, .. } if is_fill(stream, item.op) => {
+                    fills.push((order, item.bbox));
+                }
+                _ => {}
+            }
+        },
+    )?;
+    Ok((glyphs, fills))
+}
+
+fn is_fill(stream: &[Operation], index: usize) -> bool {
+    stream
+        .get(index)
+        .is_some_and(|op| FILL_OPERATORS.contains(&op.operator.as_str()))
+}
+
+/// Filled shapes painted after text they cover.
+fn painted_findings(page: u32, glyphs: &[Glyph], fills: Vec<(usize, Rect)>) -> Vec<CoverUp> {
+    fills
+        .into_iter()
+        .filter_map(|(painted, bbox)| {
+            let (characters, sample) = covered(glyphs, &bbox, Some(painted));
+            (characters > 0).then(|| CoverUp {
+                page,
+                kind: CoverUpKind::CoveredText,
+                rect: bbox.to_array(),
+                characters,
+                sample,
+            })
+        })
+        .collect()
+}
+
+fn annotation_kind(annotation: &Dictionary) -> Option<CoverUpKind> {
+    match name_of(annotation, b"Subtype") {
+        b"Redact" => Some(CoverUpKind::UnappliedRedaction),
+        b"Square" | b"Circle" if annotation.has(b"IC") => Some(CoverUpKind::CoveringAnnotation),
+        _ => None,
+    }
+}
+
+/// Unapplied Redact annotations, and filled Square or Circle annotations over text.
+fn annotation_findings(
+    doc: &Document,
+    page: u32,
+    page_id: ObjectId,
+    glyphs: &[Glyph],
+) -> Vec<CoverUp> {
+    let annotations = doc.get_page_annotations(page_id).unwrap_or_default();
+    annotations
+        .into_iter()
+        .filter_map(|annotation| {
+            let rect = rect_of(annotation)?;
+            let kind = annotation_kind(annotation)?;
+            let (characters, sample) = covered(glyphs, &rect, None);
+            (kind == CoverUpKind::UnappliedRedaction || characters > 0).then(|| CoverUp {
+                page,
+                kind,
+                rect: rect.to_array(),
+                characters,
+                sample,
+            })
+        })
+        .collect()
+}
+
 pub fn find_cover_ups(bytes: &[u8]) -> Result<CoverUpReport, String> {
     let doc = super::load(bytes)?;
     let mut report = CoverUpReport::default();
-    let nothing_hidden = HashSet::new();
     for (number, page_id) in doc.get_pages() {
         report.pages_checked += 1;
-        let ops = super::page_operations(&doc, page_id)?;
-        let resources = Resources::for_page(&doc, page_id);
-        let mut glyphs = Vec::new();
-        let mut fills = Vec::new();
-        let mut order = 0;
-        content::walk_with_ops(
-            &doc,
-            &ops,
-            &resources,
-            Matrix::IDENTITY,
-            &nothing_hidden,
-            0,
-            &mut |item, stream| {
-                order += 1;
-                if item.hidden {
-                    return;
-                }
-                match &item.kind {
-                    ItemKind::Text {
-                        glyphs: run,
-                        invisible: false,
-                        ..
-                    } => glyphs.extend(run.iter().map(|glyph| Glyph {
-                        order,
-                        bbox: glyph.bbox,
-                        text: glyph.text.clone(),
-                    })),
-                    ItemKind::Path { clip: false, .. }
-                        if stream
-                            .get(item.op)
-                            .is_some_and(|op| FILL_OPERATORS.contains(&op.operator.as_str())) =>
-                    {
-                        fills.push((order, item.bbox));
-                    }
-                    _ => {}
-                }
-            },
-        )?;
-        for (painted, bbox) in fills {
-            let (characters, sample) = covered(&glyphs, &bbox, Some(painted));
-            if characters > 0 {
-                report.findings.push(CoverUp {
-                    page: number,
-                    kind: CoverUpKind::CoveredText,
-                    rect: bbox.to_array(),
-                    characters,
-                    sample,
-                });
-            }
-        }
-        if let Ok(annotations) = doc.get_page_annotations(page_id) {
-            for annotation in annotations {
-                let Some(rect) = rect_of(annotation) else {
-                    continue;
-                };
-                let subtype = name_of(annotation, b"Subtype");
-                let kind = match subtype {
-                    b"Redact" => CoverUpKind::UnappliedRedaction,
-                    b"Square" | b"Circle" if annotation.has(b"IC") => {
-                        CoverUpKind::CoveringAnnotation
-                    }
-                    _ => continue,
-                };
-                let (characters, sample) = covered(&glyphs, &rect, None);
-                if kind == CoverUpKind::UnappliedRedaction || characters > 0 {
-                    report.findings.push(CoverUp {
-                        page: number,
-                        kind,
-                        rect: rect.to_array(),
-                        characters,
-                        sample,
-                    });
-                }
-            }
-        }
+        let (glyphs, fills) = page_marks(&doc, page_id)?;
+        report
+            .findings
+            .extend(painted_findings(number, &glyphs, fills));
+        report
+            .findings
+            .extend(annotation_findings(&doc, number, page_id, &glyphs));
         if report.findings.len() > MAX_FINDINGS {
             report.findings.truncate(MAX_FINDINGS);
             report.truncated = true;
