@@ -76,11 +76,11 @@ fn covered(glyphs: &[Glyph], cover: &Rect, before: Option<usize>) -> (usize, Str
     (characters, sample.chars().take(MAX_SAMPLE_CHARS).collect())
 }
 
+/// Filled, unclipped paths as (painting order, bounds).
+type Fills = Vec<(usize, Rect)>;
+
 /// Visible glyphs and filled, unclipped paths on one page, each with its painting order.
-fn page_marks(
-    doc: &Document,
-    page_id: ObjectId,
-) -> Result<(Vec<Glyph>, Vec<(usize, Rect)>), String> {
+fn page_marks(doc: &Document, page_id: ObjectId) -> Result<(Vec<Glyph>, Fills), String> {
     let ops = super::page_operations(doc, page_id)?;
     let resources = Resources::for_page(doc, page_id);
     let nothing_hidden = HashSet::new();
@@ -126,7 +126,7 @@ fn is_fill(stream: &[Operation], index: usize) -> bool {
 }
 
 /// Filled shapes painted after text they cover.
-fn painted_findings(page: u32, glyphs: &[Glyph], fills: Vec<(usize, Rect)>) -> Vec<CoverUp> {
+fn painted_findings(page: u32, glyphs: &[Glyph], fills: Fills) -> Vec<CoverUp> {
     fills
         .into_iter()
         .filter_map(|(painted, bbox)| {
