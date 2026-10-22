@@ -19,6 +19,7 @@ import {
   TextAlignment,
   type PDFField,
   type PDFForm,
+  type PDFWidgetAnnotation,
 } from "pdf-lib";
 import { pdfText } from "./text-string.ts";
 import { listWidgets } from "./field-geometry.ts";
@@ -44,7 +45,7 @@ export type FieldPropertyChange = Partial<Omit<FieldProperties, "kind">> & {
   newName?: string;
 };
 
-const MAX_TOOLTIP = 1_000;
+const MAX_TOOLTIP = 1000;
 
 function kindOf(field: PDFField): FieldProperties["kind"] {
   if (field instanceof PDFTextField) return "text";
@@ -57,7 +58,7 @@ function kindOf(field: PDFField): FieldProperties["kind"] {
 }
 
 function colorOf(value: number[] | undefined): Color | null {
-  return value && value.length === 3 ? [value[0], value[1], value[2]] : null;
+  return value?.length === 3 ? [value[0], value[1], value[2]] : null;
 }
 
 function textOf(dict: PDFDict, key: string) {
@@ -67,9 +68,10 @@ function textOf(dict: PDFDict, key: string) {
 
 /** Font size from the field's default appearance string, if one is set. */
 function fontSizeOf(field: PDFField): number | null {
-  const da = textOf(field.acroField.dict, "DA");
-  const match = /([\d.]+)\s+Tf/.exec(da);
-  return match ? Number(match[1]) : null;
+  const tokens = textOf(field.acroField.dict, "DA").trim().split(/\s+/);
+  const operator = tokens.lastIndexOf("Tf");
+  const size = operator > 0 ? Number(tokens[operator - 1]) : Number.NaN;
+  return Number.isFinite(size) ? size : null;
 }
 
 export function describeField(field: PDFField): FieldProperties {
@@ -86,7 +88,7 @@ export function describeField(field: PDFField): FieldProperties {
     alignment:
       alignment === undefined
         ? null
-        : ((["left", "center", "right"] as const)[alignment as number] ?? "left"),
+        : ((["left", "center", "right"] as const)[alignment] ?? "left"),
     maxLength: text?.getMaxLength() ?? null,
     comb: !!text?.isCombed(),
     borderColor: colorOf(characteristics?.getBorderColor()),
@@ -131,20 +133,25 @@ function rename(form: PDFForm, field: PDFField, newName: string) {
 function applyAppearanceProperties(field: PDFField, change: FieldPropertyChange) {
   for (const widget of field.acroField.getWidgets()) {
     const mk = widget.getOrCreateAppearanceCharacteristics();
-    if (change.borderColor !== undefined) {
-      if (change.borderColor) mk.setBorderColor(change.borderColor);
-      else mk.dict.delete(PDFName.of("BC"));
-    }
-    if (change.fillColor !== undefined) {
-      if (change.fillColor) mk.setBackgroundColor(change.fillColor);
-      else mk.dict.delete(PDFName.of("BG"));
-    }
+    if (change.borderColor !== undefined) setColor(mk, "BC", change.borderColor);
+    if (change.fillColor !== undefined) setColor(mk, "BG", change.fillColor);
     if (change.locked !== undefined) widget.setFlagTo(AnnotationFlags.Locked, change.locked);
     if (change.hidden !== undefined) {
       widget.setFlagTo(AnnotationFlags.Hidden, change.hidden);
       widget.setFlagTo(AnnotationFlags.Print, !change.hidden);
     }
   }
+}
+
+/** Sets or, with null, removes a border (BC) or background (BG) colour. */
+function setColor(
+  mk: ReturnType<PDFWidgetAnnotation["getOrCreateAppearanceCharacteristics"]>,
+  key: "BC" | "BG",
+  color: Color | null,
+) {
+  if (!color) mk.dict.delete(PDFName.of(key));
+  else if (key === "BC") mk.setBorderColor(color);
+  else mk.setBackgroundColor(color);
 }
 
 function applyTextProperties(field: PDFField, change: FieldPropertyChange) {
@@ -157,22 +164,56 @@ function applyTextProperties(field: PDFField, change: FieldPropertyChange) {
     };
     field.setAlignment(value[change.alignment]);
   }
-  if (change.comb !== undefined) {
-    if (change.comb) {
-      const max = change.maxLength ?? field.getMaxLength();
-      if (!max) throw new Error("Set a maximum length before spacing characters into boxes.");
-      field.setMaxLength(max);
-      field.enableCombing();
-    } else field.disableCombing();
+  if (change.comb !== undefined) applyComb(field, change.comb, change.maxLength);
+  if (change.maxLength !== undefined) applyMaxLength(field, change.maxLength);
+}
+
+function applyComb(field: PDFTextField, comb: boolean, maxLength: number | null | undefined) {
+  if (!comb) {
+    field.disableCombing();
+    return;
   }
-  if (change.maxLength !== undefined) {
-    if (change.maxLength !== null && (!Number.isInteger(change.maxLength) || change.maxLength < 1))
-      throw new Error("The maximum length must be a whole number of at least 1.");
-    if ((field.getText()?.length ?? 0) > (change.maxLength ?? Infinity))
-      throw new Error("The current value is longer than the new maximum length.");
-    field.setMaxLength(change.maxLength ?? undefined);
+  const max = maxLength ?? field.getMaxLength();
+  if (!max) throw new Error("Set a maximum length before spacing characters into boxes.");
+  field.setMaxLength(max);
+  field.enableCombing();
+}
+
+function applyMaxLength(field: PDFTextField, maxLength: number | null) {
+  if (maxLength !== null && (!Number.isInteger(maxLength) || maxLength < 1))
+    throw new Error("The maximum length must be a whole number of at least 1.");
+  if ((field.getText()?.length ?? 0) > (maxLength ?? Infinity))
+    throw new Error("The current value is longer than the new maximum length.");
+  field.setMaxLength(maxLength ?? undefined);
+}
+
+function validateChange(change: FieldPropertyChange) {
+  if (change.tooltip !== undefined && change.tooltip.length > MAX_TOOLTIP)
+    throw new Error("The tooltip is too long.");
+  if (!validColor(change.borderColor) || !validColor(change.fillColor))
+    throw new Error("Colors must use channels from 0 to 1.");
+  const size = change.fontSize;
+  if (size !== undefined && size !== null && (!Number.isFinite(size) || size < 0 || size > 144))
+    throw new Error("Font size must be from 0 (automatic) to 144 points.");
+}
+
+/** TU belongs to the field, but some readers only look at the widget, so set both. */
+function applyTooltip(field: PDFField, tooltip: string) {
+  const dicts = [
+    field.acroField.dict,
+    ...field.acroField.getWidgets().map((widget) => widget.dict),
+  ];
+  for (const dict of new Set(dicts)) {
+    if (tooltip) dict.set(PDFName.of("TU"), pdfText(tooltip));
+    else dict.delete(PDFName.of("TU"));
   }
 }
+
+const hasFontSize = (field: PDFField) =>
+  field instanceof PDFTextField ||
+  field instanceof PDFDropdown ||
+  field instanceof PDFOptionList ||
+  field instanceof PDFButton;
 
 /** Updates one field's name, tooltip, appearance and behaviour flags as a single edit. */
 export async function updateFieldProperties(
@@ -183,40 +224,14 @@ export async function updateFieldProperties(
   const doc = await PDFDocument.load(bytes);
   const form = doc.getForm();
   const field = requireField(form, name);
-  if (change.tooltip !== undefined && change.tooltip.length > MAX_TOOLTIP)
-    throw new Error("The tooltip is too long.");
-  if (!validColor(change.borderColor) || !validColor(change.fillColor))
-    throw new Error("Colors must use channels from 0 to 1.");
-  if (
-    change.fontSize !== undefined &&
-    change.fontSize !== null &&
-    (!Number.isFinite(change.fontSize) || change.fontSize < 0 || change.fontSize > 144)
-  )
-    throw new Error("Font size must be from 0 (automatic) to 144 points.");
+  validateChange(change);
   if (change.newName !== undefined && change.newName !== field.getName())
     rename(form, field, change.newName.trim());
-  if (change.tooltip !== undefined) {
-    // TU belongs to the field, but some readers only look at the widget, so set both.
-    const dicts = [
-      field.acroField.dict,
-      ...field.acroField.getWidgets().map((widget) => widget.dict),
-    ];
-    for (const dict of new Set(dicts)) {
-      if (change.tooltip) dict.set(PDFName.of("TU"), pdfText(change.tooltip));
-      else dict.delete(PDFName.of("TU"));
-    }
-  }
+  if (change.tooltip !== undefined) applyTooltip(field, change.tooltip);
   applyAppearanceProperties(field, change);
   applyTextProperties(field, change);
-  if (change.fontSize !== undefined && change.fontSize !== null) {
-    if (
-      field instanceof PDFTextField ||
-      field instanceof PDFDropdown ||
-      field instanceof PDFOptionList ||
-      field instanceof PDFButton
-    )
-      field.setFontSize(change.fontSize);
-  }
+  if (change.fontSize !== undefined && change.fontSize !== null && hasFontSize(field))
+    field.setFontSize(change.fontSize);
   let appearanceRebuilt = true;
   try {
     field.defaultUpdateAppearances(await doc.embedFont(StandardFonts.Helvetica));

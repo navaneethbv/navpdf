@@ -20,7 +20,7 @@ export async function browserImageToPng(file: File): Promise<File> {
   });
   try {
     const { width, height } = bitmap;
-    if (width > 16384 || height > 16384 || width * height > MAX_BROWSER_PIXELS)
+    if (width > 16_384 || height > 16_384 || width * height > MAX_BROWSER_PIXELS)
       throw new Error("Images must be at most 32 megapixels and 16,384 pixels per edge.");
     const canvas = document.createElement("canvas");
     canvas.width = width;

@@ -5,6 +5,18 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 22 PDFCraft gap quality follow-up
+
+SonarCloud reported a C reliability rating on new code and CodeQL reported 8 hard-coded password alerts on PR 71.
+SonarCloud and Codacy issue lists cannot be read from the development container because its network policy blocks both hosts.
+The Sonar JavaScript and TypeScript rules were therefore run locally with `eslint-plugin-sonarjs` 3, plus the typescript-eslint, React, jsx-a11y and unicorn rules SonarCloud applies, limited to lines this PR adds.
+That run found 88 findings, including loops awaiting one operation at a time, nested ternaries, functions over the cognitive-complexity limit, array-index React keys, a backtracking regular expression and optional-chain candidates; after the follow-up it reports none.
+Sequential work now uses the existing in-order helper, numbered output names share one `uniqueName` helper, and long functions are split into named steps.
+CSS checks for duplicate properties, unknown properties and selectors, and empty blocks report no new findings.
+The CodeQL alerts came from literal test passwords and the literal first character of the wrong-password probe used to validate protected output; tests now derive passwords at run time and the probe uses a random prefix.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass, and 1,044 frontend tests pass across 140 files with the coverage gates; `cargo fmt --check`, Clippy with `-D warnings` and every Rust test except the 2 root-only permission tests pass.
+Hosted SonarCloud, CodeQL and Codacy results must be read on the pushed commit; this local run is not a substitute for them.
+
 ## October 21 PDFCraft gap batch 6, creation and OCR
 
 The [sixth batch mapping](PDFCRAFT-COMPARISON.md#sixth-batch-mapping) lists each addition and its limits.

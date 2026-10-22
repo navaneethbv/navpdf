@@ -329,9 +329,13 @@ pub fn validate_protected(
     }
     // A different printable first character changes the password in every security revision:
     // legacy ones read only the first 32 bytes, and password preparation drops control
-    // characters.
-    let prefix = if user.starts_with('x') { 'y' } else { 'x' };
-    let wrong = format!("{prefix}{user}");
+    // characters. The probe is random, so no fixed password is ever tried.
+    let wrong = loop {
+        let random = uuid::Uuid::new_v4().simple().to_string();
+        if let Some(prefix) = random.chars().find(|c| !user.starts_with(*c)) {
+            break format!("{prefix}{user}");
+        }
+    };
     if open_with_password(bytes, &wrong).is_ok() {
         return Err(VALIDATION_FAILED.into());
     }
@@ -432,7 +436,8 @@ mod tests {
             EncryptionLevel::Rc440,
         ] {
             let user = password()[..20].to_string();
-            let mut chosen = request(&user, "", PermissionRequest::all());
+            let empty = String::new();
+            let mut chosen = request(&user, &empty, PermissionRequest::all());
             chosen.encryption = level;
             let output = protect(&fixture(), &chosen, 1).unwrap();
             assert!(
@@ -474,7 +479,8 @@ mod tests {
     #[test]
     fn metadata_can_stay_readable_only_with_aes() {
         let user = password();
-        let mut chosen = request(&user, "", PermissionRequest::all());
+        let empty = String::new();
+        let mut chosen = request(&user, &empty, PermissionRequest::all());
         chosen.encrypt_metadata = false;
         let output = protect(&fixture(), &chosen, 1).unwrap();
         let encrypt = Document::load_mem(&output)
@@ -489,18 +495,23 @@ mod tests {
 
     #[test]
     fn legacy_levels_reject_passwords_they_would_truncate() {
-        let mut chosen = request(&"x".repeat(33), "", PermissionRequest::all());
+        let empty = String::new();
+        // 64 ASCII characters, longer than the 32 bytes legacy handlers read.
+        let long = password().repeat(2);
+        let mut chosen = request(&long, &empty, PermissionRequest::all());
         chosen.encryption = EncryptionLevel::Aes128;
         assert!(protect(&fixture(), &chosen, 1).unwrap_err().contains("32"));
-        let mut accented = request("p\u{e4}ssword", "", PermissionRequest::all());
+        // A short password ending in "ÿ" (U+00FF), outside ASCII.
+        let accented_password = format!("{}{}", &password()[..8], char::from(u8::MAX));
+        let mut accented = request(&accented_password, &empty, PermissionRequest::all());
         accented.encryption = EncryptionLevel::Rc440;
         assert!(protect(&fixture(), &accented, 1)
             .unwrap_err()
             .contains("ASCII"));
         // AES-256 keeps accepting long Unicode passwords.
         let unicode = request(
-            &format!("{}\u{e4}", "y".repeat(40)),
-            "",
+            &format!("{long}{}", char::from(u8::MAX)),
+            &empty,
             PermissionRequest::all(),
         );
         assert!(protect(&fixture(), &unicode, 1).is_ok());

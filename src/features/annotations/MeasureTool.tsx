@@ -41,7 +41,8 @@ export function MeasureTool({
 }: Readonly<{ controller: ViewerController; shape?: "Polygon" | "PolyLine" }>) {
   const measureKind = useWorkspace((state) => state.measureKind);
   // A polygon closes like an area and connected lines run like a perimeter.
-  const kind: MeasureKind = shape ? (shape === "Polygon" ? "area" : "perimeter") : measureKind;
+  let kind: MeasureKind = measureKind;
+  if (shape) kind = shape === "Polygon" ? "area" : "perimeter";
   const instructions = shape ? SHAPE_INSTRUCTIONS[shape] : INSTRUCTIONS[kind];
   const name = shape ? SHAPE_NAMES[shape] : kind;
   const overlay = useRef<HTMLDivElement>(null);

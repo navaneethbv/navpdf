@@ -63,6 +63,30 @@ export function otsuThreshold(histogram: number[], total: number) {
   return threshold;
 }
 
+const histogramOf = (values: Uint8ClampedArray) => {
+  const histogram = Array.from({ length: 256 }, () => 0);
+  for (const value of values) histogram[value]++;
+  return histogram;
+};
+
+/** Stretches values between the 1st and 99th percentiles, so stray pixels do not set the range. */
+function stretchContrast(gray: Uint8ClampedArray) {
+  const histogram = histogramOf(gray);
+  const cut = gray.length * 0.01;
+  let low = 0;
+  let high = 255;
+  for (let seen = histogram[low]; low < 255 && seen <= cut; seen += histogram[low]) low++;
+  for (let seen = histogram[high]; high > 0 && seen <= cut; seen += histogram[high]) high--;
+  if (high <= low) return;
+  for (let pixel = 0; pixel < gray.length; pixel++)
+    gray[pixel] = ((gray[pixel] - low) * 255) / (high - low);
+}
+
+function binarize(gray: Uint8ClampedArray) {
+  const level = otsuThreshold(histogramOf(gray), gray.length);
+  for (let pixel = 0; pixel < gray.length; pixel++) gray[pixel] = gray[pixel] > level ? 255 : 0;
+}
+
 /** Applies the chosen preprocessing to RGBA pixels in place. */
 export function preprocessPixels(
   pixels: Uint8ClampedArray,
@@ -70,57 +94,40 @@ export function preprocessPixels(
   height: number,
   options: OcrPreprocessing,
 ) {
-  const count = width * height;
   if (!options.grayscale && !options.contrast && !options.threshold) return pixels;
-  const gray = new Uint8ClampedArray(count);
-  const histogram = new Array<number>(256).fill(0);
-  for (let pixel = 0; pixel < count; pixel++) {
-    gray[pixel] = luminance(pixels, pixel * 4);
-    histogram[gray[pixel]]++;
-  }
-  if (options.contrast) {
-    // Stretch between the 1st and 99th percentiles so a stray pixel does not set the range.
-    const cut = count * 0.01;
-    let low = 0;
-    let high = 255;
-    for (let seen = 0; low < 255 && seen + histogram[low] <= cut; low++) seen += histogram[low];
-    for (let seen = 0; high > 0 && seen + histogram[high] <= cut; high--) seen += histogram[high];
-    if (high > low)
-      for (let pixel = 0; pixel < count; pixel++)
-        gray[pixel] = ((gray[pixel] - low) * 255) / (high - low);
-  }
+  const gray = new Uint8ClampedArray(width * height);
+  for (let pixel = 0; pixel < gray.length; pixel++) gray[pixel] = luminance(pixels, pixel * 4);
+  if (options.contrast) stretchContrast(gray);
   if (options.threshold) {
-    const stretched = new Array<number>(256).fill(0);
-    for (const value of gray) stretched[value]++;
-    const level = otsuThreshold(stretched, count);
-    for (let pixel = 0; pixel < count; pixel++) gray[pixel] = gray[pixel] > level ? 255 : 0;
+    binarize(gray);
     if (options.despeckle) despeckle(gray, width, height);
   }
-  for (let pixel = 0; pixel < count; pixel++) {
-    const index = pixel * 4;
-    pixels[index] = gray[pixel];
-    pixels[index + 1] = gray[pixel];
-    pixels[index + 2] = gray[pixel];
-  }
+  for (let pixel = 0; pixel < gray.length; pixel++)
+    pixels.fill(gray[pixel], pixel * 4, pixel * 4 + 3);
   return pixels;
+}
+
+/** Whether the black pixel at (x, y) has a black 8-neighbour. */
+function hasBlackNeighbour(
+  source: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+) {
+  for (let ny = Math.max(0, y - 1); ny <= Math.min(height - 1, y + 1); ny++)
+    for (let nx = Math.max(0, x - 1); nx <= Math.min(width - 1, x + 1); nx++)
+      if ((nx !== x || ny !== y) && source[ny * width + nx] === 0) return true;
+  return false;
 }
 
 /** Whitens black pixels with no black 8-neighbour, the isolated noise left after scanning. */
 export function despeckle(binary: Uint8ClampedArray, width: number, height: number) {
-  const source = binary.slice();
+  const source = Uint8ClampedArray.from(binary);
   for (let y = 0; y < height; y++)
-    for (let x = 0; x < width; x++) {
-      if (source[y * width + x] !== 0) continue;
-      let neighbours = 0;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if ((dx || dy) && nx >= 0 && ny >= 0 && nx < width && ny < height)
-            if (source[ny * width + nx] === 0) neighbours++;
-        }
-      if (neighbours === 0) binary[y * width + x] = 255;
-    }
+    for (let x = 0; x < width; x++)
+      if (source[y * width + x] === 0 && !hasBlackNeighbour(source, width, height, x, y))
+        binary[y * width + x] = 255;
 }
 
 /** Renders a page at twice its size as PNG for recognition, with optional preprocessing. */
@@ -131,7 +138,7 @@ export async function pageImage(
   preprocessing: OcrPreprocessing = NO_PREPROCESSING,
 ): Promise<Uint8Array> {
   const page = await sourcePdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: 2.0, rotation: 0 });
+  const viewport = page.getViewport({ scale: 2, rotation: 0 });
   if (!pageWithinOcrLimit(viewport.width, viewport.height)) {
     throw new Error("This page exceeds the OCR image size limit.");
   }

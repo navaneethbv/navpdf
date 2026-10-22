@@ -1,6 +1,7 @@
 // Print preparation: page subsets and order, which annotations print, and an optional raster
 // path for grayscale or print-as-image output. Everything runs on a copy of the document.
 
+import { mapInOrder } from "../../utils/async-sequence";
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef } from "pdf-lib";
 import { AnnotationMode, type PDFDocumentProxy } from "pdfjs-dist";
 import { loadPdfFromBytes } from "../../services/pdf";
@@ -137,12 +138,11 @@ async function renderPrintPage(
 /** Builds a PDF with one full-page image per page. */
 export async function imagesToPdf(pages: RasterPage[]) {
   const doc = await PDFDocument.create();
-  for (const page of pages) {
-    const image = await doc.embedJpg(page.jpeg);
+  const images = await Promise.all(pages.map((page) => doc.embedJpg(page.jpeg)));
+  for (const [index, page] of pages.entries())
     doc
       .addPage([page.width, page.height])
-      .drawImage(image, { x: 0, y: 0, width: page.width, height: page.height });
-  }
+      .drawImage(images[index], { x: 0, y: 0, width: page.width, height: page.height });
   return doc.save();
 }
 
@@ -156,11 +156,14 @@ export async function rasterizeForPrint(
   const task = loadPdfFromBytes(new Uint8Array(bytes));
   try {
     const pdf = await task.promise;
-    const pages: RasterPage[] = [];
-    for (let number = 1; number <= pdf.numPages; number++) {
+    const renderPage = (number: number) => {
       if (cancelled()) throw new Error("Printing was cancelled.");
-      pages.push(await render(pdf, number, options.dpi, options.grayscale));
-    }
+      return render(pdf, number, options.dpi, options.grayscale);
+    };
+    const numbers = Array.from({ length: pdf.numPages }, (_, index) => index + 1);
+    // Pages render one at a time so only one large canvas exists at once.
+    const pages: RasterPage[] = [];
+    for await (const page of mapInOrder(numbers, renderPage)) pages.push(page);
     return imagesToPdf(pages);
   } finally {
     await task.destroy();

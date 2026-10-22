@@ -38,6 +38,9 @@ const DEFAULT_TRANSITION: PageTransition = {
   advanceAfter: null,
 };
 
+const describe = (value: number[] | null | undefined) =>
+  value ? `${value[0]}, ${value[1]} to ${value[2]}, ${value[3]}` : "not set";
+
 export function PagePropertiesDialog({ controller, onClose }: Readonly<DocumentToolProps>) {
   const id = useId();
   const page = useWorkspace((state) => state.page);
@@ -117,9 +120,6 @@ export function PagePropertiesDialog({ controller, onClose }: Readonly<DocumentT
 
   const current = boxes?.[page - 1];
   const currentTransition = transitions?.[page - 1];
-  const describe = (value: number[] | null | undefined) =>
-    value ? `${value[0]}, ${value[1]} to ${value[2]}, ${value[3]}` : "not set";
-
   return (
     <ToolDialog
       title="Page Boxes & Transitions"

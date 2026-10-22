@@ -2,7 +2,15 @@
 // Box margins are given for the page as displayed, then mapped to unrotated user space, so a
 // "top" margin trims the edge the reader sees at the top of a rotated page.
 
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, type PDFPage } from "pdf-lib";
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFNumber,
+  type PDFPage,
+  type PDFPageLeaf,
+} from "pdf-lib";
 import { visibleBox } from "./page-box.ts";
 
 export const PRINT_BOXES = ["TrimBox", "BleedBox", "ArtBox"] as const;
@@ -35,7 +43,7 @@ function explicitBox(page: PDFPage, name: PrintBox) {
   if (!(value instanceof PDFArray) || value.size() !== 4) return null;
   const numbers = value
     .asArray()
-    .map((item) => (item instanceof PDFNumber ? item.asNumber() : NaN));
+    .map((item) => (item instanceof PDFNumber ? item.asNumber() : Number.NaN));
   return numbers.every(Number.isFinite) ? numbers.map((n) => Math.round(n * 100) / 100) : null;
 }
 
@@ -175,40 +183,39 @@ export async function setPageTransition(
   const doc = await PDFDocument.load(bytes, { updateMetadata: false });
   const targets = [...new Set(pages)].filter((index) => index >= 0 && index < doc.getPageCount());
   if (!targets.length) throw new Error("Choose at least one page.");
-  if (transition) {
-    if (!TRANSITION_STYLES.includes(transition.style)) throw new Error("Choose a transition.");
-    if (
-      !Number.isFinite(transition.duration) ||
-      transition.duration <= 0 ||
-      transition.duration > 10
-    )
-      throw new Error("Transition length must be more than 0 and at most 10 seconds.");
-    if (
-      transition.advanceAfter !== null &&
-      (!Number.isFinite(transition.advanceAfter) ||
-        transition.advanceAfter < 0 ||
-        transition.advanceAfter > 3600)
-    )
-      throw new Error("Advance time must be from 0 to 3,600 seconds.");
-  }
+  if (transition) validateTransition(transition);
   for (const index of targets) {
     const node = doc.getPage(index).node;
-    if (!transition) {
+    if (transition) writeTransition(doc, node, transition);
+    else {
       node.delete(PDFName.of("Trans"));
       node.delete(PDFName.of("Dur"));
-      continue;
     }
-    const entries: Record<string, unknown> = {
-      Type: "Trans",
-      S: transition.style,
-      D: transition.duration,
-    };
-    if (DIRECTIONAL.has(transition.style)) entries.Di = transition.direction;
-    if (DIMENSIONAL.has(transition.style)) entries.Dm = transition.dimension;
-    if (MOTION.has(transition.style)) entries.M = transition.motion;
-    node.set(PDFName.of("Trans"), doc.context.obj(entries as never));
-    if (transition.advanceAfter === null) node.delete(PDFName.of("Dur"));
-    else node.set(PDFName.of("Dur"), PDFNumber.of(transition.advanceAfter));
   }
   return doc.save();
+}
+
+const inRange = (value: number, low: number, high: number) =>
+  Number.isFinite(value) && value >= low && value <= high;
+
+function validateTransition(transition: PageTransition) {
+  if (!TRANSITION_STYLES.includes(transition.style)) throw new Error("Choose a transition.");
+  if (!inRange(transition.duration, 0, 10) || transition.duration === 0)
+    throw new Error("Transition length must be more than 0 and at most 10 seconds.");
+  if (transition.advanceAfter !== null && !inRange(transition.advanceAfter, 0, 3600))
+    throw new Error("Advance time must be from 0 to 3,600 seconds.");
+}
+
+function writeTransition(doc: PDFDocument, node: PDFPageLeaf, transition: PageTransition) {
+  const entries: Record<string, unknown> = {
+    Type: "Trans",
+    S: transition.style,
+    D: transition.duration,
+  };
+  if (DIRECTIONAL.has(transition.style)) entries.Di = transition.direction;
+  if (DIMENSIONAL.has(transition.style)) entries.Dm = transition.dimension;
+  if (MOTION.has(transition.style)) entries.M = transition.motion;
+  node.set(PDFName.of("Trans"), doc.context.obj(entries as never));
+  if (transition.advanceAfter === null) node.delete(PDFName.of("Dur"));
+  else node.set(PDFName.of("Dur"), PDFNumber.of(transition.advanceAfter));
 }

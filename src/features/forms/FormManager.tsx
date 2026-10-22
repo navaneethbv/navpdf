@@ -661,7 +661,7 @@ export function FormManager({
             className="button-secondary"
             onClick={() => {
               onClose();
-              controller?.previewForm();
+              void controller?.previewForm();
             }}
             disabled={saving || existingFields.length === 0}
           >

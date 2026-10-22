@@ -1009,7 +1009,7 @@ export class ViewerController {
           selected: first.text,
         }),
     );
-    window.getSelection()?.removeAllRanges();
+    globalThis.getSelection()?.removeAllRanges();
   }
   addFileComment(
     file: { name: string; type: string; data: Uint8Array },
@@ -1324,10 +1324,15 @@ export class ViewerController {
   async previewForm() {
     const pdf = this.pdf;
     if (!pdf) return;
-    for (let page = 1; page <= Math.min(pdf.numPages, 500); page++) {
-      const annotations = await (await pdf.getPage(page)).getAnnotations();
+    const hasField = async (page: number) => {
+      const proxy = await pdf.getPage(page);
+      const annotations = await proxy.getAnnotations();
+      return { page, found: annotations.some((annotation) => annotation.subtype === "Widget") };
+    };
+    const pages = Array.from({ length: Math.min(pdf.numPages, 500) }, (_, index) => index + 1);
+    for await (const { page, found } of mapInOrder(pages, hasField)) {
       if (pdf !== this.pdf) return;
-      if (!annotations.some((annotation) => annotation.subtype === "Widget")) continue;
+      if (!found) continue;
       this.goTo(page);
       useWorkspace.getState().set({
         status: "Form preview: fill the fields and press Tab to move between them",

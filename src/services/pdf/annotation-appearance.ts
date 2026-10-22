@@ -242,11 +242,49 @@ export function cloudRadius(intensity: number) {
 /** Signed area of a closed polygon; positive when the vertices run counterclockwise. */
 function signedArea(points: Point[]) {
   let area = 0;
-  points.forEach((point, index) => {
+  for (const [index, point] of points.entries()) {
     const next = points[(index + 1) % points.length];
     area += point[0] * next[1] - next[0] * point[1];
-  });
+  }
   return area / 2;
+}
+
+/** Outward bulging arcs along one edge, about `radius` each, as Bézier curves. */
+function scallops(start: Point, end: Point, radius: number): PDFOperator[] {
+  const length = distance(start, end);
+  if (length === 0) return [];
+  const k = 0.5523;
+  const along: Point = [(end[0] - start[0]) / length, (end[1] - start[1]) / length];
+  // Counterclockwise vertices put the outside on the right of each edge.
+  const out: Point = [along[1], -along[0]];
+  const count = Math.max(1, Math.round(length / (radius * 2)));
+  const r = length / count / 2;
+  const ops: PDFOperator[] = [];
+  for (let part = 0; part < count; part++) {
+    const p0 = between(start, end, part / count);
+    const p1 = between(start, end, (part + 1) / count);
+    const mid = between(p0, p1, 0.5);
+    const top: Point = [mid[0] + out[0] * r, mid[1] + out[1] * r];
+    ops.push(
+      appendBezierCurve(
+        p0[0] + out[0] * k * r,
+        p0[1] + out[1] * k * r,
+        top[0] - along[0] * k * r,
+        top[1] - along[1] * k * r,
+        top[0],
+        top[1],
+      ),
+      appendBezierCurve(
+        top[0] + along[0] * k * r,
+        top[1] + along[1] * k * r,
+        p1[0] + out[0] * k * r,
+        p1[1] + out[1] * k * r,
+        p1[0],
+        p1[1],
+      ),
+    );
+  }
+  return ops;
 }
 
 /**
@@ -257,41 +295,8 @@ export function cloudPath(vertices: Point[], radius: number): PDFOperator[] {
   if (vertices.length < 3) return [];
   const points = signedArea(vertices) < 0 ? [...vertices].reverse() : vertices;
   const ops: PDFOperator[] = [moveTo(...points[0])];
-  const k = 0.5523;
-  points.forEach((start, index) => {
-    const end = points[(index + 1) % points.length];
-    const length = distance(start, end);
-    if (length === 0) return;
-    const along: Point = [(end[0] - start[0]) / length, (end[1] - start[1]) / length];
-    // Counterclockwise vertices put the outside on the right of each edge.
-    const out: Point = [along[1], -along[0]];
-    const count = Math.max(1, Math.round(length / (radius * 2)));
-    const r = length / count / 2;
-    for (let part = 0; part < count; part++) {
-      const p0 = between(start, end, part / count);
-      const p1 = between(start, end, (part + 1) / count);
-      const mid = between(p0, p1, 0.5);
-      const top: Point = [mid[0] + out[0] * r, mid[1] + out[1] * r];
-      ops.push(
-        appendBezierCurve(
-          p0[0] + out[0] * k * r,
-          p0[1] + out[1] * k * r,
-          top[0] - along[0] * k * r,
-          top[1] - along[1] * k * r,
-          top[0],
-          top[1],
-        ),
-        appendBezierCurve(
-          top[0] + along[0] * k * r,
-          top[1] + along[1] * k * r,
-          p1[0] + out[0] * k * r,
-          p1[1] + out[1] * k * r,
-          p1[0],
-          p1[1],
-        ),
-      );
-    }
-  });
+  for (const [index, start] of points.entries())
+    ops.push(...scallops(start, points[(index + 1) % points.length], radius));
   ops.push(closePath());
   return ops;
 }

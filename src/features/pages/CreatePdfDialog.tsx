@@ -12,6 +12,7 @@ import {
 import { textToPdf } from "./text-to-pdf";
 import { createZip } from "../convert/ooxml";
 import { downloadBlob } from "../../utils/download";
+import { uniqueName } from "../../utils/unique-name";
 import { parsePageRange } from "./page-range";
 import type { MergeInputItem } from "../../types/operations";
 import { imageFileToPdf, isImageFile } from "./image-import";
@@ -27,6 +28,8 @@ export interface CombineEntry {
   cropSelected?: boolean;
   cropStatus?: string;
 }
+
+const isPastedImage = (type: string) => type === "image/png" || type === "image/jpeg";
 
 export function CreatePdfDialog({
   onLoad,
@@ -174,18 +177,18 @@ export function CreatePdfDialog({
     try {
       const clipboard = navigator.clipboard;
       if (clipboard?.read) {
-        for (const item of await clipboard.read()) {
-          const type = item.types.find((kind) => kind === "image/png" || kind === "image/jpeg");
-          if (type) {
-            await createFromImage(await item.getType(type), type);
-            return;
-          }
-          if (item.types.includes("text/plain")) {
-            setText(await (await item.getType("text/plain")).text());
-            return;
-          }
+        const items = await clipboard.read();
+        const image = items.find((item) => item.types.some(isPastedImage));
+        const type = image?.types.find(isPastedImage);
+        if (image && type) {
+          await createFromImage(await image.getType(type), type);
+          return;
         }
-        throw new Error("The clipboard has no text or PNG or JPEG image.");
+        const plain = items.find((item) => item.types.includes("text/plain"));
+        if (!plain) throw new Error("The clipboard has no text or PNG or JPEG image.");
+        const blob = await plain.getType("text/plain");
+        setText(await blob.text());
+        return;
       }
       if (!clipboard?.readText) throw new Error("Clipboard reading is unavailable.");
       setText(await clipboard.readText());
@@ -198,9 +201,7 @@ export function CreatePdfDialog({
   };
 
   const handlePaste = (event: React.ClipboardEvent) => {
-    const image = [...event.clipboardData.files].find(
-      (file) => file.type === "image/png" || file.type === "image/jpeg",
-    );
+    const image = [...event.clipboardData.files].find((file) => isPastedImage(file.type));
     if (!image) return;
     event.preventDefault();
     setError("");
@@ -235,15 +236,16 @@ export function CreatePdfDialog({
         const bytes = new Uint8Array(await item.file.arrayBuffer());
         const range = item.range.trim();
         if (!range) return bytes;
-        const total = (await PDFDocument.load(bytes)).getPageCount();
-        return extractPages(bytes, parsePageRange("custom", range, 1, total));
+        const source = await PDFDocument.load(bytes);
+        return extractPages(bytes, parsePageRange("custom", range, 1, source.getPageCount()));
       };
       const convert = async (item: (typeof items)[number]) => ({ item, data: await toPdf(item) });
       for await (const { item, data } of mapInOrder(items, convert)) {
         const base = item.file.name.replace(/\.[^.]+$/, "") || "Document";
-        let name = `${base}.pdf`;
-        for (let copy = 2; used.has(name.toLowerCase()); copy++) name = `${base} (${copy}).pdf`;
-        used.add(name.toLowerCase());
+        const name = uniqueName(
+          (copy) => (copy === 1 ? `${base}.pdf` : `${base} (${copy}).pdf`),
+          used,
+        );
         entries.push({ name, data });
       }
       const saved = await downloadBlob(
@@ -413,7 +415,7 @@ export function CreatePdfDialog({
               {error}
             </p>
           )}
-          {tab === "blank" ? (
+          {tab === "blank" && (
             <div key="blank-section">
               <div className="setting-group">
                 <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
@@ -446,7 +448,8 @@ export function CreatePdfDialog({
                 </select>
               </div>
             </div>
-          ) : tab === "text" ? (
+          )}
+          {tab === "text" && (
             <div key="text-section" onPaste={handlePaste}>
               <p className="field-hint">
                 Type or paste text, open a plain text file, or paste a PNG or JPEG image to create a
@@ -529,7 +532,8 @@ export function CreatePdfDialog({
                 <span>Monospaced font</span>
               </label>
             </div>
-          ) : (
+          )}
+          {tab === "combine" && (
             <div key="combine-section" className="combine-files-section">
               <p>
                 Import PDFs and PNG, JPEG, GIF, BMP, WebP, HEIC, TIFF or JPEG 2000 images in the

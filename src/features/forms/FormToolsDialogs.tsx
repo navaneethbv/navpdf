@@ -59,12 +59,15 @@ const TAB_ORDERS: [TabOrder, string][] = [
 ];
 
 /** Name, tooltip, appearance, locking, duplication and page tab order for form fields. */
+/** A number from a text box, or null when it is blank. */
+const optionalNumber = (text: string) => (text.trim() ? Number(text) : null);
+
 export function FieldPropertiesDialog({ controller, onClose }: Readonly<DocumentToolProps>) {
   const id = useId();
   const [fields, setFields] = useState<FieldProperties[] | null>(null);
   const [selected, setSelected] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [tabOrder, setTabOrderValue] = useState<TabOrder | "mixed">(null);
+  const [tabOrderValue, setTabOrderValue] = useState<TabOrder | "mixed">(null);
   const [duplicatePages, setDuplicatePages] = useState("");
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -113,14 +116,9 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
       const result = await updateFieldProperties(bytes, field.name, {
         newName: draft.newName.trim(),
         tooltip: draft.tooltip,
-        fontSize: draft.fontSize.trim() === "" ? null : Number(draft.fontSize),
+        fontSize: optionalNumber(draft.fontSize),
         alignment: field.kind === "text" ? draft.alignment : undefined,
-        maxLength:
-          field.kind === "text"
-            ? draft.maxLength.trim()
-              ? Number(draft.maxLength)
-              : null
-            : undefined,
+        maxLength: field.kind === "text" ? optionalNumber(draft.maxLength) : undefined,
         comb: field.kind === "text" ? draft.comb : undefined,
         borderColor: draft.border ? colorFromHex(draft.border) : null,
         fillColor: draft.fill ? colorFromHex(draft.fill) : null,
@@ -346,11 +344,11 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
             <select
               aria-label="Tab order"
               className="text-input"
-              value={tabOrder ?? ""}
+              value={tabOrderValue ?? ""}
               disabled={busy}
               onChange={(event) => void saveTabOrder((event.target.value || null) as TabOrder)}
             >
-              {tabOrder === "mixed" && <option value="mixed">Mixed (pages differ)</option>}
+              {tabOrderValue === "mixed" && <option value="mixed">Mixed (pages differ)</option>}
               {TAB_ORDERS.map(([value, label]) => (
                 <option key={label} value={value ?? ""}>
                   {label}
@@ -482,7 +480,7 @@ export function FormAssistDialog({ controller, onClose }: Readonly<DocumentToolP
         </label>
       </fieldset>
       {working && <output className="field-hint">Reading the text layer…</output>}
-      {!working && rows.length === 0 && (candidates || suggestions) && (
+      {!working && rows.length === 0 && (candidates ?? suggestions) && (
         <p className="field-hint">
           {mode === "detect" ? "No new fields were found." : "No better names were found."}
         </p>

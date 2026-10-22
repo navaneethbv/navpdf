@@ -21,6 +21,18 @@ const emptyMetadata: DocumentMetadata = {
   producer: "",
 };
 
+type CustomRow = CustomProperty & { id: string };
+
+const withId = (property: CustomProperty): CustomRow => ({ ...property, id: crypto.randomUUID() });
+
+const fontKey = (font: FontInfo) =>
+  [font.name, font.type, font.encoding, font.embedded, font.pages.join(" ")].join("|");
+
+function embeddingLabel(font: FontInfo) {
+  if (!font.embedded) return "No";
+  return font.subset ? "Embedded subset" : "Embedded";
+}
+
 export function PropertiesDialog({
   controller,
   onClose,
@@ -31,7 +43,7 @@ export function PropertiesDialog({
   const sourcePdf = controller?.pdf;
   const [metadata, setMetadata] = useState<DocumentMetadata>(emptyMetadata);
   const [keywords, setKeywords] = useState("");
-  const [custom, setCustom] = useState<CustomProperty[]>([]);
+  const [custom, setCustom] = useState<CustomRow[]>([]);
   const [fonts, setFonts] = useState<FontInfo[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,7 +64,7 @@ export function PropertiesDialog({
         if (!cancelled) {
           setMetadata(values);
           setKeywords(values.keywords.join(", "));
-          setCustom(values.custom ?? []);
+          setCustom((values.custom ?? []).map(withId));
         }
         const found = await listFonts(bytes);
         if (!cancelled) setFonts(found);
@@ -69,6 +81,9 @@ export function PropertiesDialog({
 
   const update = (field: keyof DocumentMetadata, value: string) =>
     setMetadata((current) => ({ ...current, [field]: value }));
+  const updateRow = (id: string, change: Partial<CustomProperty>) =>
+    setCustom((rows) => rows.map((row) => (row.id === id ? { ...row, ...change } : row)));
+  const removeRow = (id: string) => setCustom((rows) => rows.filter((row) => row.id !== id));
 
   const save = async () => {
     if (!controller?.pdf) return;
@@ -205,38 +220,26 @@ export function PropertiesDialog({
               <fieldset className="preset-list">
                 <legend className="setting-title">Custom properties</legend>
                 {custom.map((entry, index) => (
-                  <div key={index} className="inline-field">
+                  <div key={entry.id} className="inline-field">
                     <input
                       className="text-input"
                       aria-label={`Custom property ${index + 1} name`}
                       placeholder="Name"
                       value={entry.name}
-                      onChange={(event) =>
-                        setCustom((list) =>
-                          list.map((item, at) =>
-                            at === index ? { ...item, name: event.target.value } : item,
-                          ),
-                        )
-                      }
+                      onChange={(event) => updateRow(entry.id, { name: event.target.value })}
                     />
                     <input
                       className="text-input"
                       aria-label={`Custom property ${index + 1} value`}
                       placeholder="Value"
                       value={entry.value}
-                      onChange={(event) =>
-                        setCustom((list) =>
-                          list.map((item, at) =>
-                            at === index ? { ...item, value: event.target.value } : item,
-                          ),
-                        )
-                      }
+                      onChange={(event) => updateRow(entry.id, { value: event.target.value })}
                     />
                     <button
                       type="button"
                       className="icon-button"
                       aria-label={`Remove custom property ${index + 1}`}
-                      onClick={() => setCustom((list) => list.filter((_, at) => at !== index))}
+                      onClick={() => removeRow(entry.id)}
                     >
                       <Trash2 size={15} />
                     </button>
@@ -245,7 +248,7 @@ export function PropertiesDialog({
                 <button
                   type="button"
                   className="button-secondary"
-                  onClick={() => setCustom((list) => [...list, { name: "", value: "" }])}
+                  onClick={() => setCustom((rows) => [...rows, withId({ name: "", value: "" })])}
                 >
                   <Plus size={15} /> Add Property
                 </button>
@@ -253,8 +256,8 @@ export function PropertiesDialog({
               <details>
                 <summary>Fonts{fonts ? ` (${fonts.length})` : ""}</summary>
                 {!fonts && <output className="field-hint">Reading fonts…</output>}
-                {fonts && fonts.length === 0 && <p className="field-hint">No fonts are used.</p>}
-                {fonts && fonts.length > 0 && (
+                {fonts?.length === 0 && <p className="field-hint">No fonts are used.</p>}
+                {!!fonts?.length && (
                   <table className="workflow-table" aria-label="Fonts used in this PDF">
                     <thead>
                       <tr>
@@ -265,14 +268,12 @@ export function PropertiesDialog({
                       </tr>
                     </thead>
                     <tbody>
-                      {fonts.map((font, index) => (
-                        <tr key={`${font.name}-${index}`}>
+                      {fonts.map((font) => (
+                        <tr key={fontKey(font)}>
                           <th scope="row">{font.name}</th>
                           <td>{font.type}</td>
                           <td>{font.encoding}</td>
-                          <td>
-                            {font.embedded ? (font.subset ? "Embedded subset" : "Embedded") : "No"}
-                          </td>
+                          <td>{embeddingLabel(font)}</td>
                         </tr>
                       ))}
                     </tbody>

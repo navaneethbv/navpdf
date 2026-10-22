@@ -98,6 +98,20 @@ const POSITION_LABELS: Record<(typeof STAMP_POSITIONS)[number], string> = {
 };
 
 /** Places a paperclip comment that carries an embedded file. */
+const ICON_MARGIN = 24;
+const ICON_SIZE = 20;
+
+/** The lower-left corner of a 20-point icon at a corner or the centre of the page. */
+function iconPosition(position: string, [x1, y1, x2, y2]: number[]): [number, number] {
+  let x = (x1 + x2 - ICON_SIZE) / 2;
+  if (position.endsWith("left")) x = x1 + ICON_MARGIN;
+  else if (position.endsWith("right")) x = x2 - ICON_MARGIN - ICON_SIZE;
+  let y = (y1 + y2 - ICON_SIZE) / 2;
+  if (position.startsWith("top")) y = y2 - ICON_MARGIN - ICON_SIZE;
+  else if (position.startsWith("bottom")) y = y1 + ICON_MARGIN;
+  return [x, y];
+}
+
 export function FileCommentDialog({ controller, onClose }: Readonly<DocumentToolProps>) {
   const id = useId();
   const current = useWorkspace((state) => state.page);
@@ -119,19 +133,8 @@ export function FileCommentDialog({ controller, onClose }: Readonly<DocumentTool
     setBusy(true);
     setError("");
     try {
-      const view = (await pdf.getPage(page)).view;
-      const [x1, y1, x2, y2] = view;
-      const margin = 24;
-      const horizontal = position.endsWith("left")
-        ? x1 + margin
-        : position.endsWith("right")
-          ? x2 - margin - 20
-          : (x1 + x2) / 2 - 10;
-      const vertical = position.startsWith("top")
-        ? y2 - margin - 20
-        : position.startsWith("bottom")
-          ? y1 + margin
-          : (y1 + y2) / 2 - 10;
+      const proxy = await pdf.getPage(page);
+      const [horizontal, vertical] = iconPosition(position, proxy.view);
       const data = new Uint8Array(await file.arrayBuffer());
       await controller.addFileComment(
         { name: file.name, type: file.type, data },

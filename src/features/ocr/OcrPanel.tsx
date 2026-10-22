@@ -503,9 +503,14 @@ export function OcrPanel({
       ensureCurrent();
 
       if (skipTextPages) {
+        // One page at a time: each check parses the document.
+        const checkPage = async (idx: number) => ({
+          idx,
+          hasText: await detectExistingText(pdfBytes, idx),
+        });
         const withoutText: number[] = [];
-        for (const idx of targetIndices)
-          if (!(await detectExistingText(pdfBytes, idx))) withoutText.push(idx);
+        for await (const page of mapInOrder(targetIndices, checkPage))
+          if (!page.hasText) withoutText.push(page.idx);
         ensureCurrent();
         if (!withoutText.length) throw new Error("Every target page already has text.");
         if (withoutText.length < targetIndices.length)

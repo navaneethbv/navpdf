@@ -18,6 +18,12 @@ const KIND_LABELS: Record<CoverUp["kind"], string> = {
  * Finds redactions that only look applied. Every finding can be sent to Redact PDF as a mark,
  * which removes the content for real.
  */
+function sampleText(finding: CoverUp) {
+  if (!finding.characters) return "None found";
+  const more = finding.characters > finding.sample.length ? "…" : "";
+  return finding.sample + more;
+}
+
 export function CoverUpDialog({ controller, onClose }: Readonly<DocumentToolProps>) {
   const [report, setReport] = useState<CoverUpReport | null>(null);
   const [error, setError] = useState(native ? "" : ENGINE_UNAVAILABLE);
@@ -25,16 +31,16 @@ export function CoverUpDialog({ controller, onClose }: Readonly<DocumentToolProp
   useEffect(() => {
     let current = true;
     const source = controller?.pdf;
-    if (!native || !source) return;
-    void source
-      .saveDocument()
-      .then(findCoverUps)
-      .then((found) => {
-        if (current && source === controller?.pdf) setReport(found);
-      })
-      .catch((cause: unknown) => {
-        if (current) setError(errorMessage(cause));
-      });
+    if (native && source)
+      void source
+        .saveDocument()
+        .then(findCoverUps)
+        .then((found) => {
+          if (current && source === controller?.pdf) setReport(found);
+        })
+        .catch((cause: unknown) => {
+          if (current) setError(errorMessage(cause));
+        });
     return () => {
       current = false;
     };
@@ -88,8 +94,8 @@ export function CoverUpDialog({ controller, onClose }: Readonly<DocumentToolProp
               </tr>
             </thead>
             <tbody>
-              {report.findings.map((finding, index) => (
-                <tr key={`${finding.page}-${index}`}>
+              {report.findings.map((finding) => (
+                <tr key={`${finding.page}-${finding.kind}-${finding.rect.join(",")}`}>
                   <td>
                     <button
                       type="button"
@@ -100,11 +106,7 @@ export function CoverUpDialog({ controller, onClose }: Readonly<DocumentToolProp
                     </button>
                   </td>
                   <td>{KIND_LABELS[finding.kind]}</td>
-                  <td>
-                    {finding.characters
-                      ? `${finding.sample}${finding.characters > finding.sample.length ? "…" : ""}`
-                      : "None found"}
-                  </td>
+                  <td>{sampleText(finding)}</td>
                 </tr>
               ))}
             </tbody>

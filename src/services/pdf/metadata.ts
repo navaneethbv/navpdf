@@ -192,9 +192,8 @@ export async function listFonts(bytes: Uint8Array): Promise<FontInfo[]> {
         visit(xobject.dict.lookup(PDFName.of("Resources")), page, depth + 1, seen);
     }
   };
-  doc.getPages().forEach((page, index) => {
+  for (const [index, page] of doc.getPages().entries())
     visit(page.node.Resources(), index + 1, 0, new Set());
-  });
   return [...fonts.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -216,11 +215,13 @@ function describeFont(font: PDFDict, page: number): FontInfo {
     subtype === "Type3" ||
     ["FontFile", "FontFile2", "FontFile3"].some((key) => descriptor?.has(PDFName.of(key)));
   const encoding = font.lookup(PDFName.of("Encoding"));
+  let encodingName = "Built-in";
+  if (encoding instanceof PDFName) encodingName = encoding.decodeText();
+  else if (encoding) encodingName = "Custom";
   return {
     name: base.replace(/^[A-Z]{6}\+/, ""),
     type: type || "Unknown",
-    encoding:
-      encoding instanceof PDFName ? encoding.decodeText() : encoding ? "Custom" : "Built-in",
+    encoding: encodingName,
     embedded,
     subset: /^[A-Z]{6}\+/.test(base),
     pages: [page],

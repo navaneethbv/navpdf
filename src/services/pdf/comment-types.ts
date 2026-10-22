@@ -355,11 +355,17 @@ export interface FileCommentInput extends CommonInput {
   description?: string;
 }
 
+/** `value`, or `fallback` when it is missing or empty. */
+function nonEmpty(value: string | undefined, fallback: string) {
+  if (value) return value;
+  return fallback;
+}
+
 /** Embeds a file in a paperclip comment. The file is stored only; it is never opened here. */
 export async function addFileAttachmentComment(bytes: Uint8Array, input: FileCommentInput) {
   if (input.data.length > MAX_ATTACHMENT_SIZE_BYTES)
     throw new Error("Attachment exceeds maximum allowed size of 50 MB.");
-  const name = input.fileName.split(/[\\/]/).pop()?.trim() || "attachment";
+  const name = nonEmpty(input.fileName.split(/[\\/]/).pop()?.trim(), "attachment");
   const doc = await PDFDocument.load(bytes);
   const page = targetPage(doc, input.page);
   const [corner] = onPage(page, [input.at]);
@@ -386,7 +392,7 @@ export async function addFileAttachmentComment(bytes: Uint8Array, input: FileCom
     Rect: [x, y, x + 20, y + 20],
     FS: doc.context.register(spec),
     Name: PDFName.of("Paperclip"),
-    Contents: pdfText(input.description || name),
+    Contents: pdfText(nonEmpty(input.description, name)),
   });
   return doc.save();
 }

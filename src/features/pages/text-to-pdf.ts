@@ -54,27 +54,31 @@ export async function textToPdf(text: string, options: TextPdfOptions) {
   const font = await doc.embedFont(
     options.monospace ? StandardFonts.Courier : StandardFonts.Helvetica,
   );
-  const leading = options.fontSize * 1.25;
   const maxWidth = options.width - 2 * MARGIN;
-  const linesPerPage = Math.max(1, Math.floor((options.height - 2 * MARGIN) / leading));
   for (const block of normalized.split("\f")) {
     const lines = block
       .split("\n")
       .flatMap((paragraph) => wrapLine(paragraph, font, options.fontSize, maxWidth));
-    for (let start = 0; start < lines.length; start += linesPerPage) {
-      if (doc.getPageCount() >= MAX_PAGES)
-        throw new Error("The text would need more than 2,000 pages.");
-      const page = doc.addPage([options.width, options.height]);
-      lines.slice(start, start + linesPerPage).forEach((line, index) => {
-        if (line)
-          page.drawText(line, {
-            x: MARGIN,
-            y: options.height - MARGIN - options.fontSize - index * leading,
-            size: options.fontSize,
-            font,
-          });
-      });
-    }
+    addTextPages(doc, font, lines, options);
   }
   return doc.save();
+}
+
+/** Adds as many pages as `lines` need, starting each page at the top margin. */
+function addTextPages(doc: PDFDocument, font: PDFFont, lines: string[], options: TextPdfOptions) {
+  const leading = options.fontSize * 1.25;
+  const linesPerPage = Math.max(1, Math.floor((options.height - 2 * MARGIN) / leading));
+  for (let start = 0; start < lines.length; start += linesPerPage) {
+    if (doc.getPageCount() >= MAX_PAGES)
+      throw new Error("The text would need more than 2,000 pages.");
+    const page = doc.addPage([options.width, options.height]);
+    for (const [index, line] of lines.slice(start, start + linesPerPage).entries())
+      if (line)
+        page.drawText(line, {
+          x: MARGIN,
+          y: options.height - MARGIN - options.fontSize - index * leading,
+          size: options.fontSize,
+          font,
+        });
+  }
 }

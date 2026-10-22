@@ -1428,14 +1428,19 @@ export async function addFormFields(
   if (definitions.length > 1000) throw new Error("Create at most 1,000 fields at once.");
   const doc = await PDFDocument.load(pdfBytes);
   const form = doc.getForm();
-  for (const definition of definitions) {
+  const create = (definition: FormFieldDefinition) => {
     const pageIndex = definition.page - 1;
     if (pageIndex < 0 || pageIndex >= doc.getPageCount())
       throw new Error(`Invalid page number ${definition.page}.`);
     const name = definition.name.trim();
     if (!name) throw new Error("Field name cannot be empty.");
-    await createFormField(doc, form, doc.getPage(pageIndex), { ...definition, name }, definition);
-  }
+    return createFormField(doc, form, doc.getPage(pageIndex), { ...definition, name }, definition);
+  };
+  // Fields are created one at a time so each sees the names of those before it.
+  await definitions.reduce<Promise<unknown>>(
+    (previous, definition) => previous.then(() => create(definition)),
+    Promise.resolve(),
+  );
   return doc.save();
 }
 

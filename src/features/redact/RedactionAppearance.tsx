@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { parsePageRange } from "../pages/page-range";
+import { mapInOrder } from "../../utils/async-sequence";
 import type { PdfRect } from "../../types/engine";
 
 /** Redaction code sets: US FOIA exemptions and Privacy Act exemptions, plus plain labels. */
@@ -127,11 +128,13 @@ export function WholePagesMarker({
     if (!pdf) return;
     try {
       const pages = parsePageRange(range, pdf.numPages);
+      const mark = async (index: number) => {
+        const page = await pdf.getPage(index + 1);
+        const [x0, y0, x1, y1] = page.view;
+        return { page: index + 1, rect: [x0, y0, x1, y1] as PdfRect };
+      };
       const marks = [];
-      for (const index of pages) {
-        const [x0, y0, x1, y1] = (await pdf.getPage(index + 1)).view;
-        marks.push({ page: index + 1, rect: [x0, y0, x1, y1] as PdfRect });
-      }
+      for await (const pageMark of mapInOrder(pages, mark)) marks.push(pageMark);
       onMark(marks);
       setRange("");
     } catch (cause) {

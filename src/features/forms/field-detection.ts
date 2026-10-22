@@ -4,6 +4,8 @@
 // user applies them.
 
 import { PDFDocument } from "pdf-lib";
+import { uniqueName } from "../../utils/unique-name";
+import { mapInOrder } from "../../utils/async-sequence";
 import { allPageNumbers, pagesInOrder } from "../../utils/pdf-pages";
 import type { FormFieldDefinition } from "../../services/document-commands";
 
@@ -40,12 +42,17 @@ const isItem = (item: unknown): item is TextItem =>
 const horizontal = (item: TextItem) =>
   Math.abs(item.transform[1]) < 0.01 && Math.abs(item.transform[2]) < 0.01 && item.transform[0] > 0;
 
+/** Drops trailing colons, asterisks, question marks, full stops and spaces. */
+function withoutTrailingPunctuation(text: string) {
+  let end = text.length;
+  while (end > 0 && ":*?. \t\n\r".includes(text[end - 1])) end--;
+  return text.slice(0, end);
+}
+
 /** A readable field name from label text: trailing punctuation and extra spaces removed. */
 export function nameFromLabel(label: string) {
-  const cleaned = label
-    .replaceAll(/[_☐□▢❑]+/gu, " ")
-    .replaceAll(/[:*?.]+\s*$/g, "")
-    .replaceAll(/[.]/g, " ")
+  const cleaned = withoutTrailingPunctuation(label.replaceAll(/[_☐□▢❑]+/gu, " "))
+    .replaceAll(".", " ")
     .replaceAll(/\s+/g, " ")
     .trim();
   return cleaned.slice(0, 40).trim();
@@ -53,10 +60,7 @@ export function nameFromLabel(label: string) {
 
 function unique(name: string, used: Set<string>, fallback: string) {
   const base = name || fallback;
-  let candidate = base;
-  for (let index = 2; used.has(candidate.toLowerCase()); index++) candidate = `${base} ${index}`;
-  used.add(candidate.toLowerCase());
-  return candidate;
+  return uniqueName((copy) => (copy === 1 ? base : `${base} ${copy}`), used);
 }
 
 /** Characters' horizontal positions estimated from the item's width. */
@@ -101,8 +105,8 @@ export function pageCandidates(
         name: unique(nameFromLabel(label), used, `Text field ${used.size + 1}`),
       });
     }
-    [...item.str].forEach((char, index) => {
-      if (!BOXES.test(char)) return;
+    for (const [index, char] of [...item.str].entries()) {
+      if (!BOXES.test(char)) continue;
       const x1 = charX(item, index);
       const label = item.str.slice(index + 1).split(/[☐□▢❑]/u)[0];
       result.push({
@@ -111,7 +115,7 @@ export function pageCandidates(
         rect: [x1, baseline - size * 0.1, x1 + size * 0.9, baseline + size * 0.8],
         name: unique(nameFromLabel(label), used, `Check box ${used.size + 1}`),
       });
-    });
+    }
   }
   return result;
 }
@@ -183,6 +187,35 @@ export interface NameSuggestion {
   suggested: string;
 }
 
+/** The nearest text to the left of a widget on its line, or else just above it. */
+function nearbyLabel(items: TextItem[], rect: number[]) {
+  const [x1, y1, x2, y2] = rect;
+  const middle = (y1 + y2) / 2;
+  const left = items
+    .filter((item) => {
+      const size = Math.abs(item.transform[3]) || 10;
+      const right = item.transform[4] + item.width;
+      return (
+        right <= x1 + 2 &&
+        x1 - right < 150 &&
+        Math.abs(item.transform[5] + size * 0.35 - middle) < Math.max(size, y2 - y1) * 0.6 &&
+        item.str.trim() !== ""
+      );
+    })
+    .sort((a, b) => b.transform[4] + b.width - (a.transform[4] + a.width))[0];
+  const above = items
+    .filter(
+      (item) =>
+        item.transform[5] > y2 &&
+        item.transform[5] - y2 < 24 &&
+        item.transform[4] < x2 &&
+        item.transform[4] + item.width > x1 - 2 &&
+        item.str.trim() !== "",
+    )
+    .sort((a, b) => a.transform[5] - b.transform[5])[0];
+  return (left ?? above)?.str ?? "";
+}
+
 /** Labels to the left of, or just above, each field's first widget, as name suggestions. */
 export async function suggestFieldNames(source: TextSource, bytes: Uint8Array) {
   const doc = await PDFDocument.load(bytes, { updateMetadata: false });
@@ -190,45 +223,22 @@ export async function suggestFieldNames(source: TextSource, bytes: Uint8Array) {
     (widget, index, all) =>
       widget.page > 0 && all.findIndex((w) => w.field === widget.field) === index,
   );
-  const byPage = new Map<number, TextItem[]>();
   const used = new Set(
     doc
       .getForm()
       .getFields()
       .map((field) => field.getName().toLowerCase()),
   );
+  const byPage = new Map<number, TextItem[]>();
+  const pageItems = async (page: number) => {
+    const content = await source.getPage(page).then((proxy) => proxy.getTextContent());
+    return [page, content.items.filter(isItem).filter(horizontal)] as const;
+  };
+  const pages = new Set(widgets.map((widget) => widget.page));
+  for await (const [page, items] of mapInOrder(pages, pageItems)) byPage.set(page, items);
   const suggestions: NameSuggestion[] = [];
   for (const widget of widgets) {
-    if (!byPage.has(widget.page)) {
-      const content = await (await source.getPage(widget.page)).getTextContent();
-      byPage.set(widget.page, content.items.filter(isItem).filter(horizontal));
-    }
-    const items = byPage.get(widget.page)!;
-    const [x1, y1, , y2] = widget.rect;
-    const middle = (y1 + y2) / 2;
-    const left = items
-      .filter((item) => {
-        const size = Math.abs(item.transform[3]) || 10;
-        const right = item.transform[4] + item.width;
-        return (
-          right <= x1 + 2 &&
-          x1 - right < 150 &&
-          Math.abs(item.transform[5] + size * 0.35 - middle) < Math.max(size, y2 - y1) * 0.6 &&
-          item.str.trim()
-        );
-      })
-      .sort((a, b) => b.transform[4] + b.width - (a.transform[4] + a.width))[0];
-    const above = items
-      .filter(
-        (item) =>
-          item.transform[5] > y2 &&
-          item.transform[5] - y2 < 24 &&
-          item.transform[4] < widget.rect[2] &&
-          item.transform[4] + item.width > x1 - 2 &&
-          item.str.trim(),
-      )
-      .sort((a, b) => a.transform[5] - b.transform[5])[0];
-    const label = nameFromLabel((left ?? above)?.str ?? "");
+    const label = nameFromLabel(nearbyLabel(byPage.get(widget.page) ?? [], widget.rect));
     if (!label || label.toLowerCase() === widget.field.toLowerCase()) continue;
     used.delete(widget.field.toLowerCase());
     suggestions.push({ field: widget.field, suggested: unique(label, used, widget.field) });

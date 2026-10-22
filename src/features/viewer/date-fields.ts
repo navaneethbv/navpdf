@@ -38,7 +38,7 @@ export function formatDate(iso: string, format: string): string {
 
 /** Splits an AFDate format into tokens and literal text. */
 function tokenize(format: string) {
-  const parts: { token?: string; text?: string }[] = [];
+  const parts: ({ token: string } | { text: string })[] = [];
   let last = 0;
   for (const match of format.matchAll(TOKENS)) {
     if (match.index > last) parts.push({ text: format.slice(last, match.index) });
@@ -52,42 +52,59 @@ function tokenize(format: string) {
 const isDigit = (char: string | undefined) => char !== undefined && char >= "0" && char <= "9";
 const isLetter = (char: string | undefined) => char !== undefined && /[A-Za-z]/.test(char);
 
+interface DateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+const monthFromName = (name: string) =>
+  name.length >= 3
+    ? MONTHS.findIndex((month) => month.toLowerCase().startsWith(name.slice(0, 3).toLowerCase())) +
+      1
+    : 0;
+
+/**
+ * Reads one token's value at `at`, storing it in `parts`. Returns the position after it, or -1
+ * when the text there does not fit the token.
+ */
+function readToken(text: string, at: number, token: string, parts: DateParts) {
+  let end = at;
+  if (token.startsWith("mmm")) {
+    while (isLetter(text[end])) end++;
+    parts.month = monthFromName(text.slice(at, end));
+    return end;
+  }
+  const width = token.length === 4 ? 4 : 2;
+  while (end - at < width && isDigit(text[end])) end++;
+  if (end === at || (width === 4 && end - at !== 4)) return -1;
+  const number = Number(text.slice(at, end));
+  if (token === "yyyy") parts.year = number;
+  else if (token === "yy") parts.year = 2000 + number;
+  else if (token.startsWith("m")) parts.month = number;
+  else parts.day = number;
+  return end;
+}
+
+const pad = (value: number, width: number) => String(value).padStart(width, "0");
+
 /** Reads a value written in `format` back to an ISO date, or null when it does not match. */
 export function parseDate(value: string, format: string): string | null {
   const text = value.trim();
+  const parts: DateParts = { year: 0, month: 0, day: 0 };
   let at = 0;
-  let year = 0;
-  let month = 0;
-  let day = 0;
-  for (const { token, text: literal } of tokenize(format)) {
-    if (literal !== undefined) {
-      if (text.slice(at, at + literal.length).toLowerCase() !== literal.toLowerCase()) return null;
-      at += literal.length;
-      continue;
-    }
-    const start = at;
-    if (token!.startsWith("mmm")) {
-      while (isLetter(text[at])) at++;
-      const name = text.slice(start, at).toLowerCase();
-      month =
-        name.length >= 3
-          ? MONTHS.findIndex((month) => month.toLowerCase().startsWith(name.slice(0, 3))) + 1
-          : 0;
-      continue;
-    }
-    const width = token!.length === 4 ? 4 : 2;
-    while (at - start < width && isDigit(text[at])) at++;
-    if (at === start || (width === 4 && at - start !== 4)) return null;
-    const number = Number(text.slice(start, at));
-    if (token === "yyyy") year = number;
-    else if (token === "yy") year = 2000 + number;
-    else if (token!.startsWith("m")) month = number;
-    else day = number;
+  for (const part of tokenize(format)) {
+    if ("token" in part) at = readToken(text, at, part.token, parts);
+    else if (text.slice(at, at + part.text.length).toLowerCase() === part.text.toLowerCase())
+      at += part.text.length;
+    else return null;
+    if (at < 0) return null;
   }
   if (at !== text.length) return null;
+  const { year, month, day } = parts;
   const date = new Date(Date.UTC(year, month - 1, day));
   if (!year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
 }
 
 export interface DateFieldAnnotation {
