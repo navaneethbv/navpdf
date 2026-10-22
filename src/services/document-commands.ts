@@ -1119,7 +1119,16 @@ export async function describeStructureLoss(sources: Uint8Array[]): Promise<stri
 }
 
 export interface FormFieldDefinition {
-  type: "text" | "checkbox" | "radio" | "dropdown" | "button" | "signature";
+  type:
+    | "text"
+    | "checkbox"
+    | "radio"
+    | "dropdown"
+    | "listbox"
+    | "date"
+    | "image"
+    | "button"
+    | "signature";
   name: string;
   page: number;
   x: number;
@@ -1133,7 +1142,22 @@ export interface FormFieldDefinition {
   multiline?: boolean;
   options?: string[];
   group?: string;
+  /** List boxes: allow several selected options. */
+  multiSelect?: boolean;
+  /** Date fields: display format such as "yyyy-mm-dd". */
+  dateFormat?: string;
+  /** Image fields: the picture shown on the button. */
+  image?: { bytes: Uint8Array; type: "png" | "jpg" };
 }
+
+/** Date display formats offered for date fields, in Acrobat's AFDate notation. */
+export const DATE_FORMATS = [
+  "yyyy-mm-dd",
+  "mm/dd/yyyy",
+  "dd/mm/yyyy",
+  "d mmm yyyy",
+  "mmm d, yyyy",
+] as const;
 
 interface FieldGeometry {
   x: number;
@@ -1215,6 +1239,75 @@ function addDropdownField(
   field.addToPage(page, geometry);
 }
 
+function addListBoxField(
+  form: PDFForm,
+  page: PDFPage,
+  definition: FormFieldDefinition,
+  geometry: FieldGeometry,
+) {
+  requireUnusedField(form, definition.name);
+  const field = form.createOptionList(definition.name);
+  const options = definition.options?.length ? definition.options : ["Option 1", "Option 2"];
+  field.addOptions(options);
+  if (definition.multiSelect) field.enableMultiselect();
+  if (definition.defaultValue && options.includes(definition.defaultValue))
+    field.select(definition.defaultValue);
+  if (definition.required) field.enableRequired();
+  if (definition.readOnly) field.enableReadOnly();
+  field.addToPage(page, geometry);
+}
+
+/**
+ * A text field with Acrobat's date format and keystroke actions. Readers that run form scripts
+ * format and validate the date; NavPDF reads the format name for its date picker and never runs
+ * the actions.
+ */
+function addDateField(
+  doc: PDFDocument,
+  form: PDFForm,
+  page: PDFPage,
+  definition: FormFieldDefinition,
+  geometry: FieldGeometry,
+) {
+  const format = definition.dateFormat ?? "yyyy-mm-dd";
+  if (!(DATE_FORMATS as readonly string[]).includes(format))
+    throw new Error("Choose a supported date format.");
+  addTextField(form, page, { ...definition, multiline: false }, geometry);
+  const field = form.getTextField(definition.name);
+  const script = (code: string) => doc.context.obj({ S: "JavaScript", JS: pdfText(code) });
+  field.acroField.dict.set(
+    PDFName.of("AA"),
+    doc.context.obj({
+      F: script(`AFDate_FormatEx("${format}");`),
+      K: script(`AFDate_KeystrokeEx("${format}");`),
+    }),
+  );
+  for (const dict of new Set([
+    field.acroField.dict,
+    ...field.acroField.getWidgets().map((w) => w.dict),
+  ]))
+    if (!dict.has(PDFName.of("TU"))) dict.set(PDFName.of("TU"), pdfText(`Date (${format})`));
+}
+
+async function addImageField(
+  doc: PDFDocument,
+  form: PDFForm,
+  page: PDFPage,
+  definition: FormFieldDefinition,
+  geometry: FieldGeometry,
+) {
+  requireUnusedField(form, definition.name);
+  if (!definition.image) throw new Error("Choose a PNG or JPEG image for the image field.");
+  const image =
+    definition.image.type === "png"
+      ? await doc.embedPng(definition.image.bytes)
+      : await doc.embedJpg(definition.image.bytes);
+  const field = form.createButton(definition.name);
+  field.addToPage("", page, geometry);
+  field.setImage(image);
+  if (definition.readOnly) field.enableReadOnly();
+}
+
 function addButtonField(
   form: PDFForm,
   page: PDFPage,
@@ -1262,7 +1355,7 @@ function addSignatureField(
   page.node.set(PDFName.of("Annots"), annots);
 }
 
-function createFormField(
+async function createFormField(
   doc: PDFDocument,
   form: PDFForm,
   page: PDFPage,
@@ -1270,6 +1363,15 @@ function createFormField(
   geometry: FieldGeometry,
 ) {
   switch (definition.type) {
+    case "listbox":
+      addListBoxField(form, page, definition, geometry);
+      break;
+    case "date":
+      addDateField(doc, form, page, definition, geometry);
+      break;
+    case "image":
+      await addImageField(doc, form, page, definition, geometry);
+      break;
     case "text":
       addTextField(form, page, definition, geometry);
       break;
@@ -1312,8 +1414,33 @@ export async function addFormField(
   const width = Math.max(10, Math.min(definition.width, box.x + box.width - x));
   const height = Math.max(10, Math.min(definition.height, box.y + box.height - y));
 
-  createFormField(doc, form, page, definition, { x, y, width, height });
+  await createFormField(doc, form, page, definition, { x, y, width, height });
 
+  return doc.save();
+}
+
+/** Creates several fields in one edit, for example from automatic detection. */
+export async function addFormFields(
+  pdfBytes: Uint8Array,
+  definitions: FormFieldDefinition[],
+): Promise<Uint8Array> {
+  if (!definitions.length) throw new Error("Choose at least one field to create.");
+  if (definitions.length > 1000) throw new Error("Create at most 1,000 fields at once.");
+  const doc = await PDFDocument.load(pdfBytes);
+  const form = doc.getForm();
+  const create = (definition: FormFieldDefinition) => {
+    const pageIndex = definition.page - 1;
+    if (pageIndex < 0 || pageIndex >= doc.getPageCount())
+      throw new Error(`Invalid page number ${definition.page}.`);
+    const name = definition.name.trim();
+    if (!name) throw new Error("Field name cannot be empty.");
+    return createFormField(doc, form, doc.getPage(pageIndex), { ...definition, name }, definition);
+  };
+  // Fields are created one at a time so each sees the names of those before it.
+  await definitions.reduce<Promise<unknown>>(
+    (previous, definition) => previous.then(() => create(definition)),
+    Promise.resolve(),
+  );
   return doc.save();
 }
 

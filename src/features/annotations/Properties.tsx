@@ -1,8 +1,27 @@
+import type { ShapeKind } from "../../types/document";
 import { useState, useEffect } from "react";
 import { X, Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { formatBytes } from "../compress/CompressDialog";
+const SHAPE_NAMES: Record<ShapeKind, string> = {
+  Square: "rectangle",
+  Circle: "oval",
+  Line: "line",
+  Arrow: "arrow",
+  Cloud: "cloud",
+  Callout: "callout",
+  Polygon: "polygon",
+  PolyLine: "connected lines",
+};
+
+function shapeInstructions(kind: ShapeKind) {
+  if (kind === "Polygon" || kind === "PolyLine")
+    return `Click each point of the ${SHAPE_NAMES[kind]}, then double-click or press Enter.`;
+  if (kind === "Callout") return "Drag from the point being discussed to where the text box goes.";
+  return `Drag on the page to add a ${SHAPE_NAMES[kind]} annotation.`;
+}
+
 export function Properties({ controller }: Readonly<{ controller: ViewerController }>) {
   const s = useWorkspace();
   const selected = s.comments.find((comment) => comment.id === s.selectedAnnotationId);
@@ -256,9 +275,19 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
           </div>
           <h3>Draw with intention.</h3>
           <p className="muted">
-            Drag on the page to add a {s.shapeKind.toLowerCase()} annotation. Press Escape to leave
-            drawing mode.
+            {shapeInstructions(s.shapeKind)} Press Escape to leave drawing mode.
           </p>
+          {s.shapeKind === "Callout" && (
+            <label>
+              Callout text{" "}
+              <textarea
+                rows={3}
+                value={s.calloutText}
+                placeholder="Type the callout text, then drag from the point to the box position."
+                onChange={(e) => useWorkspace.getState().set({ calloutText: e.target.value })}
+              />
+            </label>
+          )}
           <label className="color-label">
             Stroke color{" "}
             <input

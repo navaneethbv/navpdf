@@ -97,7 +97,11 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
     )
       return;
     try {
-      await controller.addShape(kind, startPdf, endPdf, Number(current.page.dataset.pageNumber));
+      const page = Number(current.page.dataset.pageNumber);
+      if (kind === "Cloud") await controller.addCloud(startPdf, endPdf, page);
+      else if (kind === "Callout")
+        await controller.addCallout(startPdf, endPdf, useWorkspace.getState().calloutText, page);
+      else await controller.addShape(kind, startPdf, endPdf, page);
       useWorkspace.getState().set({ tool: "select" });
       controller.setTool("select");
     } catch (error) {

@@ -1,10 +1,18 @@
 import { mapInOrder } from "../../utils/async-sequence";
 import { expandImageInput } from "./extended-image-import";
 import { useId, useState, useRef, useEffect } from "react";
-import { FilePlus, Combine, Check, X, ArrowUp, ArrowDown } from "lucide-react";
+import { FilePlus, Combine, Check, X, ArrowUp, ArrowDown, ClipboardPaste } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import { useWorkspace } from "../../stores/workspace";
-import { createBlankDocument, mergeDocuments } from "../../services/document-commands";
+import {
+  createBlankDocument,
+  extractPages,
+  mergeDocuments,
+} from "../../services/document-commands";
+import { textToPdf } from "./text-to-pdf";
+import { createZip } from "../convert/ooxml";
+import { downloadBlob } from "../../utils/download";
+import { uniqueName } from "../../utils/unique-name";
 import { parsePageRange } from "./page-range";
 import type { MergeInputItem } from "../../types/operations";
 import { imageFileToPdf, isImageFile } from "./image-import";
@@ -21,18 +29,25 @@ export interface CombineEntry {
   cropStatus?: string;
 }
 
+const isPastedImage = (type: string) => type === "image/png" || type === "image/jpeg";
+
 export function CreatePdfDialog({
   onLoad,
   onClose,
   initialTab = "blank",
 }: Readonly<{
-  initialTab?: "blank" | "combine";
+  initialTab?: "blank" | "combine" | "text";
   onLoad: (file: File) => void;
   onClose: () => void;
 }>) {
   const fieldIds = useId();
   const s = useWorkspace();
-  const [tab, setTab] = useState<"blank" | "combine">(initialTab);
+  const [tab, setTab] = useState<"blank" | "combine" | "text">(initialTab);
+  const [text, setText] = useState("");
+  const [monospace, setMonospace] = useState(false);
+  const [fontSize, setFontSize] = useState(11);
+  const [separately, setSeparately] = useState(false);
+  const textFileRef = useRef<HTMLInputElement>(null);
   const [pageCount, setPageCount] = useState(1);
   const [pageSize, setPageSize] = useState<"a4" | "letter">("a4");
   const [creating, setCreating] = useState(false);
@@ -116,6 +131,133 @@ export function CreatePdfDialog({
       onLoad(file);
       s.set({ status: "Created new blank document" });
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const pageDimensions = (): [number, number] =>
+    pageSize === "a4" ? [595.28, 841.89] : [612, 792];
+
+  const openCreated = (bytes: Uint8Array, prefix: string, status: string) => {
+    onLoad(
+      new File([bytes as unknown as BlobPart], `${prefix}-${Date.now()}.pdf`, {
+        type: "application/pdf",
+      }),
+    );
+    s.set({ status });
+    onClose();
+  };
+
+  const handleCreateFromText = async () => {
+    setError("");
+    setCreating(true);
+    try {
+      const [width, height] = pageDimensions();
+      const bytes = await textToPdf(text, { width, height, fontSize, monospace });
+      openCreated(bytes, "Text", "Created a PDF from text");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const createFromImage = async (blob: Blob, type: string) => {
+    const extension = type === "image/png" ? "png" : "jpg";
+    const bytes = await imageFileToPdf(new File([blob], `Clipboard.${extension}`, { type }));
+    openCreated(bytes, "Clipboard", "Created a PDF from the clipboard image");
+  };
+
+  const pasteFromClipboard = async () => {
+    setError("");
+    setCreating(true);
+    try {
+      const clipboard = navigator.clipboard;
+      if (clipboard?.read) {
+        const items = await clipboard.read();
+        const image = items.find((item) => item.types.some(isPastedImage));
+        const type = image?.types.find(isPastedImage);
+        if (image && type) {
+          await createFromImage(await image.getType(type), type);
+          return;
+        }
+        const plain = items.find((item) => item.types.includes("text/plain"));
+        if (!plain) throw new Error("The clipboard has no text or PNG or JPEG image.");
+        const blob = await plain.getType("text/plain");
+        setText(await blob.text());
+        return;
+      }
+      if (!clipboard?.readText) throw new Error("Clipboard reading is unavailable.");
+      setText(await clipboard.readText());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`${message} You can also paste into the text box with Cmd+V or Ctrl+V.`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handlePaste = (event: React.ClipboardEvent) => {
+    const image = [...event.clipboardData.files].find((file) => isPastedImage(file.type));
+    if (!image) return;
+    event.preventDefault();
+    setError("");
+    setCreating(true);
+    void createFromImage(image, image.type)
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setCreating(false));
+  };
+
+  const loadTextFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Text files are limited to 5 MB.");
+      return;
+    }
+    setError("");
+    setText(await file.text());
+  };
+
+  /** Converts each listed file to its own PDF and saves them together as a ZIP archive. */
+  const handleConvertSeparately = async () => {
+    if (items.length === 0) return;
+    setError("");
+    setCreating(true);
+    try {
+      const used = new Set<string>();
+      const entries: { name: string; data: Uint8Array }[] = [];
+      const toPdf = async (item: (typeof items)[number]) => {
+        if (isImageFile(item.file)) return imageFileToPdf(item.croppedFile ?? item.file);
+        const bytes = new Uint8Array(await item.file.arrayBuffer());
+        const range = item.range.trim();
+        if (!range) return bytes;
+        const source = await PDFDocument.load(bytes);
+        return extractPages(bytes, parsePageRange("custom", range, 1, source.getPageCount()));
+      };
+      const convert = async (item: (typeof items)[number]) => ({ item, data: await toPdf(item) });
+      for await (const { item, data } of mapInOrder(items, convert)) {
+        const base = item.file.name.replace(/\.[^.]+$/, "") || "Document";
+        const name = uniqueName(
+          (copy) => (copy === 1 ? `${base}.pdf` : `${base} (${copy}).pdf`),
+          used,
+        );
+        entries.push({ name, data });
+      }
+      const saved = await downloadBlob(
+        new Blob([createZip(entries)], { type: "application/zip" }),
+        `Converted-${Date.now()}.zip`,
+      );
+      s.set({
+        status: saved
+          ? `Converted ${entries.length} file(s) to separate PDFs in a ZIP archive`
+          : "Save cancelled",
+      });
+      if (saved) onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -224,7 +366,9 @@ export function CreatePdfDialog({
     });
   };
 
-  const createLabel = tab === "blank" ? "Create PDF" : "Combine & Open";
+  let createLabel = "Combine & Open";
+  if (tab === "blank" || tab === "text") createLabel = "Create PDF";
+  else if (separately && items.length > 1) createLabel = "Convert & Save ZIP";
   return (
     <FeatureDialog title="Create PDF" onClose={onClose} busy={busy}>
       <div className="modal-dialog">
@@ -255,6 +399,14 @@ export function CreatePdfDialog({
           >
             <Combine size={15} /> Import / Combine Files
           </button>
+          <button
+            className={`tab-button ${tab === "text" ? "active" : ""}`}
+            aria-pressed={tab === "text"}
+            disabled={busy}
+            onClick={() => setTab("text")}
+          >
+            <ClipboardPaste size={15} /> Text & Paste
+          </button>
         </div>
 
         <div className="modal-body">
@@ -263,7 +415,7 @@ export function CreatePdfDialog({
               {error}
             </p>
           )}
-          {tab === "blank" ? (
+          {tab === "blank" && (
             <div key="blank-section">
               <div className="setting-group">
                 <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
@@ -296,11 +448,97 @@ export function CreatePdfDialog({
                 </select>
               </div>
             </div>
-          ) : (
+          )}
+          {tab === "text" && (
+            <div key="text-section" onPaste={handlePaste}>
+              <p className="field-hint">
+                Type or paste text, open a plain text file, or paste a PNG or JPEG image to create a
+                one-page PDF from it. Text uses the built-in Latin fonts.
+              </p>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={busy}
+                  onClick={() => void pasteFromClipboard()}
+                >
+                  <ClipboardPaste size={15} /> Paste from Clipboard
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={busy}
+                  onClick={() => textFileRef.current?.click()}
+                >
+                  Open Text File...
+                </button>
+                <input
+                  ref={textFileRef}
+                  type="file"
+                  accept=".txt,text/plain"
+                  style={{ display: "none" }}
+                  aria-label="Text file"
+                  onChange={(event) => void loadTextFile(event)}
+                />
+              </div>
+              <div className="setting-group">
+                <label htmlFor={`${fieldIds}-text`} className="setting-title">
+                  Text
+                </label>
+                <textarea
+                  id={`${fieldIds}-text`}
+                  className="text-input"
+                  rows={10}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                />
+              </div>
+              <div className="form-columns">
+                <div className="setting-group">
+                  <label htmlFor={`${fieldIds}-text-size`} className="setting-title">
+                    Font size
+                  </label>
+                  <input
+                    id={`${fieldIds}-text-size`}
+                    type="number"
+                    min={6}
+                    max={36}
+                    value={fontSize}
+                    onChange={(event) => setFontSize(Number(event.target.value))}
+                    className="text-input"
+                  />
+                </div>
+                <div className="setting-group">
+                  <label htmlFor={`${fieldIds}-text-page`} className="setting-title">
+                    Page size
+                  </label>
+                  <select
+                    id={`${fieldIds}-text-page`}
+                    value={pageSize}
+                    onChange={(e) => setPageSize(e.target.value as "a4" | "letter")}
+                    className="select-input"
+                  >
+                    <option value="a4">A4</option>
+                    <option value="letter">US Letter</option>
+                  </select>
+                </div>
+              </div>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={monospace}
+                  onChange={(event) => setMonospace(event.target.checked)}
+                />
+                <span>Monospaced font</span>
+              </label>
+            </div>
+          )}
+          {tab === "combine" && (
             <div key="combine-section" className="combine-files-section">
               <p>
-                Import PDFs, PNG, JPEG, HEIC or TIFF images in the order shown. Each image becomes
-                one page. Office documents must first be saved as PDF in their original app.
+                Import PDFs and PNG, JPEG, GIF, BMP, WebP, HEIC, TIFF or JPEG 2000 images in the
+                order shown. Each image becomes one page; animated images use their first frame.
+                Office documents must first be saved as PDF in their original app.
               </p>
               <button
                 className="button-secondary"
@@ -314,7 +552,7 @@ export function CreatePdfDialog({
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="application/pdf,.pdf,image/png,.png,image/jpeg,.jpg,.jpeg,.heic,.heif,.tif,.tiff"
+                accept="application/pdf,.pdf,image/png,.png,image/jpeg,.jpg,.jpeg,.gif,.bmp,.webp,.heic,.heif,.tif,.tiff,.jp2,.j2k,.jpf,.jpx"
                 style={{ display: "none" }}
                 onChange={handleFileChange}
               />
@@ -439,6 +677,17 @@ export function CreatePdfDialog({
                 </>
               )}
 
+              {items.length > 1 && (
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={separately}
+                    disabled={busy}
+                    onChange={(event) => setSeparately(event.target.checked)}
+                  />
+                  <span>Convert each file to its own PDF and save them as a ZIP archive</span>
+                </label>
+              )}
               {items.some((item) => !isImageFile(item.file)) && (
                 <output className="structure-warning">
                   Supported form fields and bookmarks are preserved. Conflicting field names are
@@ -468,13 +717,17 @@ export function CreatePdfDialog({
           <button
             type="button"
             onClick={() => {
-              void (tab === "blank" ? handleCreateBlank() : handleCombineFiles());
+              if (tab === "blank") void handleCreateBlank();
+              else if (tab === "text") void handleCreateFromText();
+              else if (separately && items.length > 1) void handleConvertSeparately();
+              else void handleCombineFiles();
             }}
             disabled={
               busy ||
               (tab === "blank" &&
                 (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 50)) ||
-              (tab === "combine" && items.length === 0)
+              (tab === "combine" && items.length === 0) ||
+              (tab === "text" && !text.trim())
             }
             className="button-primary"
           >

@@ -18,6 +18,7 @@
 | [0014: Additional local export formats](0014-additional-export-formats.md) | Accepted for scoped text and raster exports |
 | [0015: Document review and preparation tools](0015-document-review-tools.md) | Accepted for local review tools |
 | [0016: Selective PDFCraft capability integration](0016-pdfcraft-capability-integration.md) | Accepted; broader comparison and acceptance remain open |
+| [0017: Protection options, redaction labels and faux-redaction detection](0017-protection-options-and-redaction-labels.md) | Accepted for PDFCraft gap batch 5 |
 
 Use the [template](template.md) for a new decision.
 Dated context explains the original choice; later ADRs and the [delivery tracker](../DELIVERY-PHASES.md) determine current scope and acceptance.

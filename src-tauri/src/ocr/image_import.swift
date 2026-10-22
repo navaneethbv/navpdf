@@ -10,8 +10,8 @@ private func decodeImages(_ data: Data) throws -> Data {
     func fail(_ text: String) -> NSError { NSError(domain: "NavPDF.ImageImport", code: 1, userInfo: [NSLocalizedDescriptionKey: text]) }
     guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
           let type = CGImageSourceGetType(source) as String?,
-          ["public.tiff", "public.heic", "public.heif"].contains(type) else {
-        throw fail("Select a valid HEIC, HEIF or TIFF image.")
+          ["public.tiff", "public.heic", "public.heif", "public.jpeg-2000"].contains(type) else {
+        throw fail("Select a valid HEIC, HEIF, TIFF or JPEG 2000 image.")
     }
     let indices = type == "public.tiff" ? Array(0..<CGImageSourceGetCount(source)) : [CGImageSourceGetPrimaryImageIndex(source)]
     guard !indices.isEmpty && indices.count <= 100 else { throw fail("Import supports at most 100 TIFF pages.") }

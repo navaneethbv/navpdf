@@ -67,6 +67,10 @@ interface Workspace {
   inkWidth: number;
   inkOpacity: number;
   shapeKind: ShapeKind;
+  /** Text placed in the next callout drawn on the page. */
+  calloutText: string;
+  /** Text selected when an insert or replace proposal was started. */
+  textEditSelection: import("../types/document").SelectedTextGeometry[];
   measureKind: MeasureKind;
   measureScale: MeasureScale;
   toolMode: ToolMode | null;
@@ -139,6 +143,8 @@ export const useWorkspace = create<Workspace>((set) => ({
   inkWidth: 2,
   inkOpacity: 1,
   shapeKind: "Square",
+  calloutText: "",
+  textEditSelection: [],
   measureKind: "distance",
   measureScale: ACTUAL_SIZE,
   toolMode: null,

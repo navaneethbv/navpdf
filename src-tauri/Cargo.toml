@@ -40,6 +40,7 @@ x509-cert = "0.2.5"
 
 [dev-dependencies]
 x509-cert = { version = "0.2.5", features = ["builder"] }
+stringprep = "0.1.5"
 
 [patch.crates-io]
 # Upstream RUSTSEC-2024-0429 fix backported without changing GTK 0.18's API.

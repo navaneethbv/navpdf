@@ -1,4 +1,5 @@
 import {
+  ClipboardPaste,
   FileText,
   Files as FilesIcon,
   Image as ImageIcon,
@@ -38,6 +39,7 @@ import {
   Link as LinkIcon,
   Replace,
   HardDrive,
+  Frame,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 
@@ -136,6 +138,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: ListOrdered,
       action: () => s.set({ activeModal: "page-labels" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "page-properties",
+      label: "Page Boxes & Transitions",
+      description: "Set trim, bleed and art boxes or full-screen page transitions",
+      category: "pages",
+      icon: Frame,
+      action: () => s.set({ activeModal: "page-properties" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
     },
     {
       id: "split-pdf",
@@ -337,6 +348,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc,
     },
     {
+      id: "file-comment",
+      label: "Attach File as Comment",
+      description: "Embed a file in a paperclip comment on a page",
+      category: "review",
+      icon: Paperclip,
+      action: () => s.set({ activeModal: "file-comment" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
       id: "snapshot-tool",
       label: "Take Snapshot",
       description: "Capture rendered region to clipboard or image file",
@@ -392,6 +412,14 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc,
     },
     {
+      id: "ocr-batch",
+      label: "OCR Multiple Files",
+      description: "Add searchable text to several PDFs at once and save them as a ZIP archive",
+      category: "convert",
+      icon: Scan,
+      action: () => s.set({ activeModal: "ocr-batch" }),
+    },
+    {
       id: "export-images",
       label: "Export to Images",
       description: "Export pages as PNG, JPEG, TIFF, PostScript or EPS",
@@ -435,6 +463,24 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: Move,
       action: () => s.set({ activeModal: "field-layout" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "field-properties",
+      label: "Form Field Properties",
+      description: "Rename, add tooltips, lock, colour, duplicate fields and set tab order",
+      category: "forms",
+      icon: CheckSquare,
+      action: () => s.set({ activeModal: "field-properties" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
+      id: "form-assist",
+      label: "Detect & Name Fields",
+      description: "Find form fields from blank lines and boxes, or name fields from their labels",
+      category: "forms",
+      icon: Scan,
+      action: () => s.set({ activeModal: "form-assist" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
     },
     {
       id: "flatten-pdf",
@@ -492,6 +538,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc,
     },
     {
+      id: "cover-ups",
+      label: "Find Fake Redactions",
+      description: "Find text left under black boxes and redaction marks that were never applied",
+      category: "protect",
+      icon: EyeOff,
+      action: () => s.set({ activeModal: "cover-ups" }),
+      disabled: !hasDoc,
+    },
+    {
       id: "certificate-sign",
       label: "Certificate Signature",
       description: "Sign a copy with a .p12 certificate and check existing signatures",
@@ -508,6 +563,14 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       category: "pages",
       icon: FilePlus,
       action: () => s.set({ activeModal: "create-pdf" }),
+    },
+    {
+      id: "create-text",
+      label: "Create PDF from Text or Clipboard",
+      description: "Make a PDF from typed or pasted text, a text file or a clipboard image",
+      category: "pages",
+      icon: ClipboardPaste,
+      action: () => s.set({ activeModal: "create-text" }),
     },
     {
       id: "design-cover",
@@ -533,7 +596,8 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
     {
       id: "import-pdf",
       label: "Import / Convert to PDF",
-      description: "Create a PDF from PDFs, PNG, JPEG, HEIC or TIFF images",
+      description:
+        "Create a PDF from PDFs and PNG, JPEG, GIF, BMP, WebP, HEIC, TIFF or JPEG 2000 images",
       category: "pages",
       icon: FilePlus,
       action: () => s.set({ activeModal: "import-pdf" }),

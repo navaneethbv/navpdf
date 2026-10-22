@@ -155,7 +155,7 @@ describe("OcrPanel UI Component (P6.4)", () => {
     });
 
     // Check the "Replace existing text" checkbox
-    const checkbox = screen.getByRole("checkbox");
+    const checkbox = screen.getByRole("checkbox", { name: "Add OCR alongside original text" });
     fireEvent.click(checkbox);
 
     // Button should now read "Replace & Start OCR"

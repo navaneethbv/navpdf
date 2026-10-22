@@ -39,7 +39,8 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
     if (mode === "edit" && !["edit", "pages"].includes(t.category)) return false;
     if (mode === "convert" && t.category !== "convert") return false;
     if (mode === "esign" && t.category !== "forms") return false;
-    if (mode === "create" && !["create-blank", "combine-files"].includes(t.id)) return false;
+    if (mode === "create" && !["create-blank", "combine-files", "create-text"].includes(t.id))
+      return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
