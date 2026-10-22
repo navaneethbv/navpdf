@@ -495,15 +495,16 @@ mod tests {
 
     #[test]
     fn legacy_levels_reject_passwords_they_would_truncate() {
-        let empty = String::new();
+        // A separate generated owner password keeps every request free of fixed values.
+        let owner = password();
         // 64 ASCII characters, longer than the 32 bytes legacy handlers read.
         let long = password().repeat(2);
-        let mut chosen = request(&long, &empty, PermissionRequest::all());
+        let mut chosen = request(&long, &owner, PermissionRequest::all());
         chosen.encryption = EncryptionLevel::Aes128;
         assert!(protect(&fixture(), &chosen, 1).unwrap_err().contains("32"));
         // A short password ending in "ÿ" (U+00FF), outside ASCII.
         let accented_password = format!("{}{}", &password()[..8], char::from(u8::MAX));
-        let mut accented = request(&accented_password, &empty, PermissionRequest::all());
+        let mut accented = request(&accented_password, &owner, PermissionRequest::all());
         accented.encryption = EncryptionLevel::Rc440;
         assert!(protect(&fixture(), &accented, 1)
             .unwrap_err()
@@ -511,7 +512,7 @@ mod tests {
         // AES-256 keeps accepting long Unicode passwords.
         let unicode = request(
             &format!("{long}{}", char::from(u8::MAX)),
-            &empty,
+            &owner,
             PermissionRequest::all(),
         );
         assert!(protect(&fixture(), &unicode, 1).is_ok());
