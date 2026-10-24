@@ -8,7 +8,7 @@ import { native } from "../../services/native";
 export function AboutDialog({ onClose }: Readonly<{ onClose: () => void }>) {
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
-    if (!native) return;
+    if (!native) return undefined;
     let active = true;
     void getVersion()
       .then((value) => {

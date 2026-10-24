@@ -1011,6 +1011,16 @@ export class ViewerController {
     this.contexts.clear();
     return parked;
   }
+  /** Waits up to `frames` animation frames for the viewer to have a size. */
+  private whenMeasurable(frames = 30) {
+    return new Promise<void>((resolve) => {
+      const check = (left: number) => {
+        if (this.container.clientWidth > 0 || left <= 0) resolve();
+        else requestAnimationFrame(() => check(left - 1));
+      };
+      check(frames);
+    });
+  }
   /** Shows a parked document again at the page, zoom, rotation and scroll it had. */
   async resume(parked: ParkedDocument) {
     this.history = parked.history;
@@ -1018,8 +1028,7 @@ export class ViewerController {
     this.revisionTask = parked.revisionTask;
     this.committedRevisionId = parked.committedRevisionId;
     // PDF.js can apply the zoom only while the viewer has a size, as it lacks one while hidden.
-    for (let frame = 0; frame < 30 && this.container.clientWidth <= 0; frame++)
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+    await this.whenMeasurable();
     const shown = new Promise<void>((resolve) => {
       this.bus.on("pagesinit", () => resolve(), { once: true, signal: this.abort.signal });
     });
@@ -1744,22 +1753,26 @@ export class ViewerController {
       const action = byId.get(id);
       const section = div.querySelector<HTMLElement>(`[data-annotation-id="${CSS.escape(id)}"]`);
       if (!action || !section || section.dataset.navpdfAction) continue;
-      section.dataset.navpdfAction = "hide";
-      section.tabIndex = 0;
-      section.setAttribute("role", "button");
-      section.setAttribute(
-        "aria-label",
-        `${action.hide ? "Hide" : "Show"} ${action.fields.join(", ")}`,
-      );
-      const run = () => void this.runHideAction(pdf, action);
-      section.addEventListener("click", run);
-      section.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          run();
-        }
-      });
+      this.bindHideButton(section, pdf, action);
     }
+  }
+  /** Makes a link section a button that runs its show or hide field action. */
+  private bindHideButton(section: HTMLElement, pdf: PDFDocumentProxy, action: HideAction) {
+    section.dataset.navpdfAction = "hide";
+    section.tabIndex = 0;
+    section.setAttribute("role", "button");
+    section.setAttribute(
+      "aria-label",
+      `${action.hide ? "Hide" : "Show"} ${action.fields.join(", ")}`,
+    );
+    section.addEventListener("click", () => {
+      void this.runHideAction(pdf, action);
+    });
+    section.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      void this.runHideAction(pdf, action);
+    });
   }
   private async runHideAction(pdf: PDFDocumentProxy, action: HideAction) {
     const objects = ((await pdf.getFieldObjects()) ?? {}) as Record<string, { id?: string }[]>;

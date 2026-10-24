@@ -10,7 +10,7 @@ import type { ViewerController } from "../../src/features/viewer/controller";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => vi.fn()) }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []), isTauri: () => true }));
 vi.mock("../../src/services/pdf", () => ({ loadPdf: vi.fn() }));
 vi.mock("../../src/services/native", () => ({
@@ -85,13 +85,17 @@ afterEach(async () => {
 });
 
 /** Opens a, b and c in tabs, leaving c shown, and marks a as edited before b opened. */
+async function openOne(descriptor: (typeof docs)[number]) {
+  vi.mocked(desktop.openDocument).mockResolvedValueOnce(descriptor);
+  await act(async () => session.open());
+  await vi.waitFor(() => expect(useWorkspace.getState().document).toEqual(descriptor));
+}
+
 async function openThree() {
-  for (const [index, descriptor] of docs.entries()) {
-    vi.mocked(desktop.openDocument).mockResolvedValueOnce(descriptor);
-    await act(async () => session.open());
-    await vi.waitFor(() => expect(useWorkspace.getState().document).toEqual(descriptor));
-    if (index === 0) useWorkspace.getState().set({ dirty: true, page: 4, zoom: 150 });
-  }
+  await openOne(docs[0]);
+  useWorkspace.getState().set({ dirty: true, page: 4, zoom: 150 });
+  await openOne(docs[1]);
+  await openOne(docs[2]);
 }
 
 const ids = () => useWorkspace.getState().tabs.map((tab) => tab.id);

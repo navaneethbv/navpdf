@@ -21,6 +21,9 @@ Layer, show or hide and reset links read back through PDF.js with their states, 
 Writing these found that a parent field name such as "contact" was refused although Hide covers the fields below it, which is fixed.
 Dialog and controller tests cover choosing pictures and refusing other files, the sign-here and picture stamp names, picture watermark and missing background files, a show or hide field link, line ending and border choices, saving a shape style, the eraser's path and page-unit radius, and running a show or hide link on screen.
 
+SonarCloud reported 6 new issues on `4af554e`; its issue list cannot be read here, so the Sonar JavaScript rules were run locally on the lines this PR adds.
+They found loops awaiting each step, two functions over the complexity limit, inconsistent returns in effects, functions nested five deep, `window` where `globalThis` works, functions that belong at module scope and a `forEach`; all are now restructured without changing behavior.
+The object-injection rule matching Codacy's critical findings flagged two indexed function arguments in the eraser, which now read points without computed indexes.
 In the Chromium browser preview, a Sign Here tag, a picture stamp and a picture watermark drew on the reader fixture, as `output/batch-seven/15-stamps-watermark.png` shows.
 Native WebKit, Preview and Acrobat comparison of the new appearances and actions were not run.
 

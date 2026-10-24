@@ -52,7 +52,7 @@ export function LinkDialog({
   useEffect(() => {
     let active = true;
     const pdf = controller?.pdf;
-    if (!pdf) return;
+    if (!pdf) return undefined;
     void Promise.resolve()
       .then(() => pdf.getFieldObjects())
       .then((objects) => {

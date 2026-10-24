@@ -1,7 +1,7 @@
 // Erasing parts of freehand ink annotations. Each stroke is cut where the eraser passed and the
 // remaining pieces are kept as strokes of the same annotation; an emptied drawing is deleted.
 
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, type PDFPage } from "pdf-lib";
 import { generateAppearance } from "./annotation-appearance.ts";
 
 type Point = [number, number];
@@ -23,10 +23,9 @@ function segmentDistance(point: Point, start: Point, end: Point) {
 
 /** Whether a point lies within `radius` of the eraser's path. */
 function erased(point: Point, path: Point[], radius: number) {
-  if (path.length === 1) return Math.hypot(point[0] - path[0][0], point[1] - path[0][1]) <= radius;
-  for (let index = 1; index < path.length; index++)
-    if (segmentDistance(point, path[index - 1], path[index]) <= radius) return true;
-  return false;
+  const [first] = path;
+  if (path.length === 1) return Math.hypot(point[0] - first[0], point[1] - first[1]) <= radius;
+  return path.slice(1).some((end, index) => segmentDistance(point, path.at(index)!, end) <= radius);
 }
 
 /** Adds points along long segments so a cut falls where the eraser crossed between points. */
@@ -83,11 +82,12 @@ function inkStrokes(annotation: PDFDict): Point[][] {
     const numbers = values
       .asArray()
       .map((value) => (value instanceof PDFNumber ? value.asNumber() : Number.NaN));
-    const points: Point[] = [];
-    for (let index = 0; index + 1 < numbers.length; index += 2)
-      if (Number.isFinite(numbers[index]) && Number.isFinite(numbers[index + 1]))
-        points.push([numbers[index], numbers[index + 1]]);
-    return points;
+    // Coordinates come in x, y pairs; an incomplete or non-numeric pair is skipped.
+    return numbers
+      .flatMap((x, index): Point[] =>
+        index % 2 === 0 ? [[x, numbers.at(index + 1) ?? Number.NaN]] : [],
+      )
+      .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
   });
 }
 
@@ -95,6 +95,45 @@ function strokeWidth(annotation: PDFDict) {
   const style = annotation.lookup(PDFName.of("BS"));
   const width = style instanceof PDFDict ? style.lookup(PDFName.of("W")) : undefined;
   return width instanceof PDFNumber ? width.asNumber() : 1;
+}
+
+/** Keeps an ink annotation's remaining strokes, fits its rectangle and redraws it. */
+function keepStrokes(doc: PDFDocument, annotation: PDFDict, strokes: Point[][]) {
+  annotation.set(PDFName.of("InkList"), doc.context.obj(strokes.map((stroke) => stroke.flat())));
+  const margin = strokeWidth(annotation) / 2 + 1;
+  const xs = strokes.flat().map(([x]) => x);
+  const ys = strokes.flat().map(([, y]) => y);
+  annotation.set(
+    PDFName.of("Rect"),
+    doc.context.obj([
+      Math.min(...xs) - margin,
+      Math.min(...ys) - margin,
+      Math.max(...xs) + margin,
+      Math.max(...ys) + margin,
+    ]),
+  );
+  const appearance = generateAppearance(doc, annotation);
+  if (appearance) annotation.set(PDFName.of("AP"), doc.context.obj({ N: appearance }));
+  else annotation.delete(PDFName.of("AP"));
+}
+
+/** Removes emptied drawings, with their pop-up notes, from a page's annotations. */
+function removeAnnotations(
+  doc: PDFDocument,
+  page: PDFPage,
+  annots: PDFArray,
+  removed: Set<number>,
+) {
+  const popups = new Set(
+    [...removed].flatMap((index) => {
+      const popup = (annots.lookup(index) as PDFDict).get(PDFName.of("Popup"));
+      return popup instanceof PDFRef ? [popup.toString()] : [];
+    }),
+  );
+  const keep = annots
+    .asArray()
+    .filter((entry, index) => !removed.has(index) && !popups.has(entry.toString()));
+  page.node.set(PDFName.of("Annots"), doc.context.obj(keep));
 }
 
 /**
@@ -107,7 +146,7 @@ export async function eraseInk(
   path: Point[],
   radius: number,
 ) {
-  if (!path.length || !(radius > 0)) return { bytes, changed: 0 };
+  if (!path.length || !Number.isFinite(radius) || radius <= 0) return { bytes, changed: 0 };
   const doc = await PDFDocument.load(bytes);
   if (pageNumber < 1 || pageNumber > doc.getPageCount())
     throw new Error("That page does not exist.");
@@ -123,43 +162,10 @@ export async function eraseInk(
     const result = eraseStrokes(inkStrokes(annotation), path, radius);
     if (!result.changed) continue;
     changed++;
-    if (!result.strokes.length) {
-      removed.add(index);
-      continue;
-    }
-    annotation.set(
-      PDFName.of("InkList"),
-      doc.context.obj(result.strokes.map((stroke) => stroke.flat())),
-    );
-    const margin = strokeWidth(annotation) / 2 + 1;
-    const xs = result.strokes.flat().map(([x]) => x);
-    const ys = result.strokes.flat().map(([, y]) => y);
-    annotation.set(
-      PDFName.of("Rect"),
-      doc.context.obj([
-        Math.min(...xs) - margin,
-        Math.min(...ys) - margin,
-        Math.max(...xs) + margin,
-        Math.max(...ys) + margin,
-      ]),
-    );
-    const appearance = generateAppearance(doc, annotation);
-    if (appearance) annotation.set(PDFName.of("AP"), doc.context.obj({ N: appearance }));
-    else annotation.delete(PDFName.of("AP"));
+    if (result.strokes.length) keepStrokes(doc, annotation, result.strokes);
+    else removed.add(index);
   }
   if (!changed) return { bytes, changed: 0 };
-  if (removed.size) {
-    // Deleting an emptied drawing also deletes its pop-up note.
-    const popups = new Set(
-      [...removed].flatMap((index) => {
-        const popup = (annots.lookup(index) as PDFDict).get(PDFName.of("Popup"));
-        return popup instanceof PDFRef ? [popup.toString()] : [];
-      }),
-    );
-    const keep = annots
-      .asArray()
-      .filter((entry, index) => !removed.has(index) && !popups.has(entry.toString()));
-    page.node.set(PDFName.of("Annots"), doc.context.obj(keep));
-  }
+  if (removed.size) removeAnnotations(doc, page, annots, removed);
   return { bytes: await doc.save(), changed };
 }

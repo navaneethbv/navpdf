@@ -37,29 +37,28 @@ function targets(doc: PDFDocument, value: unknown): string[] {
   });
 }
 
+/** The show or hide action of one link annotation, or null for any other annotation. */
+function hideActionOf(doc: PDFDocument, annotation: unknown): HideAction | null {
+  if (!(annotation instanceof PDFDict)) return null;
+  if (annotation.lookup(PDFName.of("Subtype")) !== PDFName.of("Link")) return null;
+  const action = annotation.lookup(PDFName.of("A"));
+  if (!(action instanceof PDFDict) || action.lookup(PDFName.of("S")) !== PDFName.of("Hide"))
+    return null;
+  const fields = targets(doc, action.lookup(PDFName.of("T")));
+  if (!fields.length) return null;
+  const hide = action.lookup(PDFName.of("H"));
+  return { fields, hide: hide === undefined || String(hide) !== "false" };
+}
+
 /** Hide actions of link annotations by PDF.js annotation id, such as "12R". */
 export async function readHideActions(bytes: Uint8Array) {
   const actions = new Map<string, HideAction>();
   const doc = await PDFDocument.load(bytes, { updateMetadata: false }).catch(() => null);
   if (!doc) return actions;
-  for (const page of doc.getPages()) {
-    const annots = page.node.Annots();
-    if (!annots) continue;
-    for (const entry of annots.asArray()) {
-      const annotation = doc.context.lookup(entry);
-      if (!(entry instanceof PDFRef) || !(annotation instanceof PDFDict)) continue;
-      if (annotation.lookup(PDFName.of("Subtype")) !== PDFName.of("Link")) continue;
-      const action = annotation.lookup(PDFName.of("A"));
-      if (!(action instanceof PDFDict) || action.lookup(PDFName.of("S")) !== PDFName.of("Hide"))
-        continue;
-      const fields = targets(doc, action.lookup(PDFName.of("T")));
-      if (!fields.length) continue;
-      const hide = action.lookup(PDFName.of("H"));
-      actions.set(annotationIdentifier(entry), {
-        fields,
-        hide: hide === undefined || String(hide) !== "false",
-      });
-    }
+  const entries = doc.getPages().flatMap((page) => page.node.Annots()?.asArray() ?? []);
+  for (const entry of entries) {
+    const action = entry instanceof PDFRef ? hideActionOf(doc, doc.context.lookup(entry)) : null;
+    if (action) actions.set(annotationIdentifier(entry), action);
   }
   return actions;
 }

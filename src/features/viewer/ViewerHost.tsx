@@ -175,7 +175,7 @@ export function ViewerHost({
         // Alt-drag selects a rectangle of text instead of a run of lines.
         event.preventDefault();
         event.stopPropagation();
-        window.getSelection()?.removeAllRanges();
+        globalThis.getSelection()?.removeAllRanges();
         el.setPointerCapture?.(event.pointerId);
         const start = { x: event.clientX, y: event.clientY };
         columnDrag = { pointerId: event.pointerId, page: target, start };
@@ -233,7 +233,7 @@ export function ViewerHost({
       "copy",
       (event) => {
         const text = selectedColumn.current;
-        if (!text || window.getSelection()?.toString()) return;
+        if (!text || globalThis.getSelection()?.toString()) return;
         event.preventDefault();
         event.clipboardData?.setData("text/plain", text);
         useWorkspace.getState().set({ status: "Column text copied" });
@@ -260,7 +260,7 @@ export function ViewerHost({
     const shown = controller?.viewer.pdfDocument;
     if (!hasDocument || !shown || page < 1 || page > shown.numPages) {
       setPageSize(null);
-      return;
+      return undefined;
     }
     let active = true;
     void shown
@@ -285,7 +285,7 @@ export function ViewerHost({
         onContextMenu={(event) => {
           const x = event.clientX;
           const y = event.clientY;
-          if (window.getSelection()?.toString().trim()) {
+          if (globalThis.getSelection()?.toString().trim()) {
             event.preventDefault();
             setMenu({ kind: "text", x, y });
             return;
@@ -384,7 +384,7 @@ export function ViewerHost({
           ]}
           onAction={(id) => {
             if (id === "copy")
-              void navigator.clipboard?.writeText(window.getSelection()?.toString() ?? "");
+              void navigator.clipboard?.writeText(globalThis.getSelection()?.toString() ?? "");
             if (id === "highlight" || id === "underline" || id === "strike")
               void controller
                 .addTextMarkup(markupType(id))
@@ -401,7 +401,7 @@ export function ViewerHost({
             if (id === "search")
               useWorkspace.getState().set({
                 sidebar: "search",
-                searchQuery: window.getSelection()?.toString().trim() ?? "",
+                searchQuery: globalThis.getSelection()?.toString().trim() ?? "",
               });
           }}
         />

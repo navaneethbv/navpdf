@@ -11,6 +11,11 @@ import { mapInOrder } from "../utils/async-sequence";
 import type { ParkedDocument, ViewerController } from "../features/viewer/controller";
 import type { DocumentState } from "../stores/workspace";
 import { documentState, neighborTab, placeTab, stepTab } from "./document-tabs";
+/** Destroys a loading task, ignoring a failure because its document is being closed anyway. */
+function destroyQuietly(task: PDFDocumentLoadingTask | null | undefined) {
+  return task?.destroy().catch(() => {});
+}
+
 /** A document open in a tab other than the shown one. */
 interface BackgroundTab {
   task: PDFDocumentLoadingTask | null;
@@ -554,9 +559,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         pendingOpen.current = true;
         void desktop
           .openDocument(file)
-          .then((descriptor) => {
-            if (descriptor) return openInTab(descriptor);
-          })
+          .then((descriptor) => (descriptor ? openInTab(descriptor) : false))
           .catch(report)
           .finally(() => {
             pendingOpen.current = false;
@@ -610,28 +613,29 @@ export function useDocumentSession(controller: ViewerController | null) {
     },
     [openInTab, report],
   );
+  /** Closes the shown document; its neighbouring tab is shown, or Home after the last one. */
+  const closeShown = useCallback(async () => {
+    await afterAutosave();
+    const doc = useWorkspace.getState().document;
+    const next = doc ? neighborTab(useWorkspace.getState().tabs, doc.id) : null;
+    await controller?.detach();
+    await destroyQuietly(task.current);
+    task.current = null;
+    if (doc) await desktop.releaseDocument(doc.id);
+    const tabs = useWorkspace.getState().tabs.filter((tab) => tab.id !== doc?.id);
+    useWorkspace.getState().reset();
+    useWorkspace.getState().set({ tabs });
+    await desktop.markDirty(false);
+    if (doc) await desktop.discardRecovery(doc.id);
+    if (next) await showBackground(next);
+    await refreshLocal();
+  }, [afterAutosave, controller, refreshLocal, showBackground]);
   const home = useCallback(
     () =>
       guard(() => {
-        void (async () => {
-          await afterAutosave();
-          const doc = useWorkspace.getState().document;
-          const next = doc ? neighborTab(useWorkspace.getState().tabs, doc.id) : null;
-          await controller?.detach();
-          await task.current?.destroy().catch(() => {});
-          task.current = null;
-          if (doc) await desktop.releaseDocument(doc.id);
-          const tabs = useWorkspace.getState().tabs.filter((tab) => tab.id !== doc?.id);
-          useWorkspace.getState().reset();
-          useWorkspace.getState().set({ tabs });
-          await desktop.markDirty(false);
-          if (doc) await desktop.discardRecovery(doc.id);
-          // Closing a tab shows its neighbour; closing the last one shows Home.
-          if (next) await showBackground(next);
-          await refreshLocal();
-        })().catch(report);
+        void closeShown().catch(report);
       }),
-    [afterAutosave, controller, guard, report, refreshLocal, showBackground],
+    [closeShown, guard, report],
   );
   const recover = useCallback(
     (id: string) =>
@@ -726,7 +730,7 @@ export function useDocumentSession(controller: ViewerController | null) {
   }, []);
   // Watches the open document's file for changes made by other applications.
   useEffect(() => {
-    if (!desktop.native || !controller) return;
+    if (!desktop.native || !controller) return undefined;
     const interval = setInterval(() => {
       const state = useWorkspace.getState();
       const descriptor = state.document;
@@ -765,6 +769,17 @@ export function useDocumentSession(controller: ViewerController | null) {
     }, 2000);
     return () => clearInterval(interval);
   }, [controller, reloadFromDisk, report]);
+  /** Opens each document in its own tab, one at a time, then shows the first. */
+  const openSessionDocuments = useCallback(
+    async (documents: { descriptor: DocumentDescriptor; page: number }[]) => {
+      const openOne = async ({ descriptor, page }: (typeof documents)[number]) =>
+        (await openInTab(descriptor, page)) ? descriptor.id : null;
+      const opened: string[] = [];
+      for await (const id of mapInOrder(documents, openOne)) if (id) opened.push(id);
+      if (opened.length > 1) await switchTab(opened[0]);
+    },
+    [openInTab, switchTab],
+  );
   // Reopens the last session's documents once, after preferences and the viewer are ready.
   useEffect(() => {
     if (!desktop.native || !controller || !preferencesReady || sessionRestored.current) return;
@@ -773,20 +788,14 @@ export function useDocumentSession(controller: ViewerController | null) {
     void desktop
       .reopenSession()
       .then(async ({ documents, skipped }) => {
-        // Each document opens in its own tab, one at a time, then the first is shown.
-        const opened: string[] = [];
-        for await (const id of mapInOrder(documents, async ({ descriptor, page }) =>
-          (await openInTab(descriptor, page)) ? descriptor.id : null,
-        ))
-          if (id) opened.push(id);
-        if (opened.length > 1) await switchTab(opened[0]);
+        await openSessionDocuments(documents);
         if (skipped)
           useWorkspace.getState().set({
             status: `${skipped} document(s) from the last session could not be reopened`,
           });
       })
       .catch(report);
-  }, [controller, openInTab, preferencesReady, report, switchTab]);
+  }, [controller, openSessionDocuments, preferencesReady, report]);
   const closeWindow = useCallback(async () => {
     await afterAutosave();
     const shown = useWorkspace.getState().document?.id;

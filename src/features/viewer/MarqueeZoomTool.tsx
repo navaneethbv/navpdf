@@ -22,8 +22,6 @@ export function MarqueeZoomTool({ controller }: Readonly<{ controller: ViewerCon
     overlay.current?.focus();
   }, []);
 
-  const finish = () => useWorkspace.getState().set({ tool: "select" });
-
   const frame = overlay.current?.getBoundingClientRect();
   const box =
     drag && frame
@@ -45,7 +43,7 @@ export function MarqueeZoomTool({ controller }: Readonly<{ controller: ViewerCon
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          finish();
+          useWorkspace.getState().set({ tool: "select" });
         }
       }}
       onPointerDown={(event) => {

@@ -237,22 +237,21 @@ describe("page colours", () => {
   });
 });
 
+function pageView(scale: () => number) {
+  const div = document.createElement("div");
+  div.getBoundingClientRect = () => ({ left: 100, top: 50 }) as DOMRect;
+  return {
+    div,
+    get viewport() {
+      const factor = scale();
+      return {
+        convertToPdfPoint: (x: number, y: number) => [x / factor, y / factor],
+        convertToViewportPoint: (x: number, y: number) => [x * factor, y * factor],
+      };
+    },
+  };
+}
 describe("zooming to an area", () => {
-  function pageView(scale: () => number) {
-    const div = document.createElement("div");
-    div.getBoundingClientRect = () => ({ left: 100, top: 50 }) as DOMRect;
-    return {
-      div,
-      get viewport() {
-        const factor = scale();
-        return {
-          convertToPdfPoint: (x: number, y: number) => [x / factor, y / factor],
-          convertToViewportPoint: (x: number, y: number) => [x * factor, y * factor],
-        };
-      },
-    };
-  }
-
   it("zooms in around a click and fills the window with a dragged area", async () => {
     await open();
     const view = pageView(() => viewer.currentScale);
@@ -332,6 +331,25 @@ describe("background tabs", () => {
   });
 });
 
+/** Draws an annotation layer and announces it as PDF.js does after rendering a page. */
+function renderLayer(html: string) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  controller.container.append(div);
+  controller.bus.dispatch("annotationlayerrendered", {
+    source: {
+      div,
+      pdfPage: {
+        getAnnotations: async () => [
+          { subtype: "Link", id: "7R" },
+          { subtype: "Link", id: "8R", url: "https://example.org" },
+        ],
+      },
+    },
+  });
+  return div;
+}
+
 describe("show or hide field links", () => {
   it("turns a link PDF.js leaves inert into a button that hides the named fields", async () => {
     const pdf = await open({
@@ -343,24 +361,7 @@ describe("show or hide field links", () => {
       })),
     } as never);
     viewer.pdfDocument = pdf;
-    const render = (html: string) => {
-      const div = document.createElement("div");
-      div.innerHTML = html;
-      controller.container.append(div);
-      controller.bus.dispatch("annotationlayerrendered", {
-        source: {
-          div,
-          pdfPage: {
-            getAnnotations: async () => [
-              { subtype: "Link", id: "7R" },
-              { subtype: "Link", id: "8R", url: "https://example.org" },
-            ],
-          },
-        },
-      });
-      return div;
-    };
-    const page = render(
+    const page = renderLayer(
       '<section data-annotation-id="7R"></section><section data-annotation-id="9R"></section><section data-annotation-id="11R"></section>',
     );
     const link = page.querySelector<HTMLElement>('[data-annotation-id="7R"]')!;
@@ -372,7 +373,7 @@ describe("show or hide field links", () => {
     );
     expect(page.querySelector<HTMLElement>('[data-annotation-id="11R"]')!.hidden).toBe(false);
     // A page drawn again keeps the field hidden.
-    const again = render('<section data-annotation-id="9R"></section>');
+    const again = renderLayer('<section data-annotation-id="9R"></section>');
     expect(again.querySelector<HTMLElement>("section")!.hidden).toBe(true);
     // The document is read once for its actions.
     expect(pdf.getData).toHaveBeenCalledOnce();

@@ -7,7 +7,7 @@ import { useWorkspace } from "../../src/stores/workspace";
 import { defaultPreferences, type Preferences } from "../../src/types/document";
 import type { ViewerController } from "../../src/features/viewer/controller";
 
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => vi.fn()) }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []), isTauri: () => true }));
 vi.mock("../../src/services/pdf", () => ({ loadPdf: vi.fn() }));
 vi.mock("../../src/services/native", () => ({

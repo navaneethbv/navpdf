@@ -86,14 +86,15 @@ export function columnText(spans: TextSpan[], rect: Box) {
     .join("\n");
 }
 
+const inches = (points: number) => Number((points / 72).toFixed(2));
+const millimetres = (points: number) => Number(((points / 72) * 25.4).toFixed(1));
+
 /** "8.5 × 11 in (215.9 × 279.4 mm)" for a page's displayed size after /Rotate and /UserUnit. */
 export function pageSizeLabel(view: number[], rotate: number, userUnit = 1) {
   const [x1, y1, x2, y2] = view;
   let width = Math.abs(x2 - x1) * userUnit;
   let height = Math.abs(y2 - y1) * userUnit;
   if (Math.abs(rotate) % 180 === 90) [width, height] = [height, width];
-  const inches = (points: number) => Number((points / 72).toFixed(2));
-  const millimetres = (points: number) => Number(((points / 72) * 25.4).toFixed(1));
   return `${inches(width)} × ${inches(height)} in (${millimetres(width)} × ${millimetres(height)} mm)`;
 }
 
@@ -151,7 +152,7 @@ export function pageImages(fnArray: number[], argsArray: unknown[][], ops: Image
   const images: PageImage[] = [];
   let matrix: Matrix = [1, 0, 0, 1, 0, 0];
   const stack: Matrix[] = [];
-  fnArray.forEach((fn, index) => {
+  for (const [index, fn] of fnArray.entries()) {
     const args = argsArray[index] ?? [];
     if (fn === ops.save || fn === ops.paintFormXObjectBegin) {
       stack.push(matrix);
@@ -165,7 +166,7 @@ export function pageImages(fnArray: number[], argsArray: unknown[][], ops: Image
     } else if (fn === ops.paintImageXObject && typeof args[0] === "string") {
       images.push({ id: args[0], bounds: unitSquareBounds(matrix) });
     }
-  });
+  }
   return images;
 }
 
