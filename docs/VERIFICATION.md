@@ -23,6 +23,12 @@ Rust tests and Clippy cannot compile locally because pkg-config and the Linux GT
 Native NavPDF, Preview, Acrobat, physical printing and release packaging were not exercised in this Linux workspace.
 Hosted analysis and merge results must be checked on the final pushed head; earlier passing runs are not evidence for this follow-up.
 
+Cargo Deny then failed on two advisories published October 23.
+RUSTSEC-2026-0385 in ctutils is fixed by updating the lockfile from 0.4.2 to 0.4.5.
+RUSTSEC-2026-0387 in crypto-bigint 0.5.5 is fixed only in 0.7.6, which NavPDF reaches through p256 0.13 for local ECDSA certificate signing.
+Moving to it needs p256 0.14 with cms 0.3, x509-cert 0.3 and rsa 0.10, and cms and rsa have only release candidates of that stack, so `deny.toml` ignores the advisory with that reason, following ADR 0009's local-signing threat model.
+cargo-deny 0.20.2 reports advisories, bans, licenses and sources ok locally.
+
 ## October 22 PDFCraft gap quality follow-up
 
 SonarCloud reported a C reliability rating on new code and CodeQL reported 8 hard-coded password alerts on PR 71.
