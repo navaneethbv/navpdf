@@ -3513,7 +3513,9 @@ p {
   background: var(--surface-2);
 }
 .quick-tool-rail button[aria-pressed="true"],
-.navigation-rail button[aria-pressed="true"] {
+.quick-tool-rail button[aria-pressed="true"]:hover:not(:disabled),
+.navigation-rail button[aria-pressed="true"],
+.navigation-rail button[aria-pressed="true"]:hover:not(:disabled) {
   background: var(--accent);
   color: var(--on-accent);
 }
@@ -3948,4 +3950,38 @@ p {
   flex-wrap: wrap;
   gap: 8px;
   margin: 10px 0 12px;
+}
+
+.marquee-zoom-overlay {
+  cursor: zoom-in;
+}
+.column-selection {
+  position: absolute;
+  z-index: 29;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: var(--selection-fill);
+}
+.column-selection.dragging {
+  border-style: dashed;
+}
+.page-size-label {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 28;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 18%);
+  font-size: 12px;
+  pointer-events: none;
+}
+.about-dialog p {
+  margin: 0 0 8px;
+}
+.about-dialog .about-name {
+  font-size: 20px;
+  font-weight: 600;
 }

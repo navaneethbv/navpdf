@@ -26,6 +26,8 @@ interface Workspace {
   spread: "none" | "odd" | "even";
   readMode: boolean;
   nightMode: boolean;
+  /** Comments and pop-ups are hidden on screen; fields and links still draw. */
+  commentsHidden: boolean;
   pageLabels: string[] | null;
   tool: Tool;
   sidebar: SidebarTab;
@@ -96,6 +98,7 @@ const cleanDocument = {
   spread: "none",
   readMode: false,
   nightMode: false,
+  commentsHidden: false,
   pageLabels: null,
   editingAllowed: true,
   dirty: false,

@@ -8,6 +8,39 @@ import { ContextMenu } from "../../components/ContextMenu";
 import { ExternalLinkDialog } from "../../components/ExternalLinkDialog";
 import { validateSafeUrl } from "../../services/document-commands";
 import * as desktop from "../../services/native";
+import { MarqueeZoomTool } from "./MarqueeZoomTool";
+import { pageAt } from "../annotations/page-pointer";
+import { columnText, pageSizeLabel, type Box } from "./view-geometry";
+import { downloadBlob } from "../../utils/download";
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+type MenuState =
+  | { kind: "text"; x: number; y: number }
+  | { kind: "column"; x: number; y: number }
+  | { kind: "image"; x: number; y: number; image: Blob; page: number };
+
+/** Text spans of a rendered page's text layer, in window coordinates. */
+function textLayerSpans(page: Element) {
+  return [...page.querySelectorAll<HTMLElement>(".textLayer span:not(.markedContent)")].flatMap(
+    (span) => {
+      const text = span.textContent ?? "";
+      if (!text || span.childElementCount > 0) return [];
+      const rect = span.getBoundingClientRect();
+      return [{ text, left: rect.left, top: rect.top, width: rect.width, height: rect.height }];
+    },
+  );
+}
+
+const boxBetween = (from: Point, to: Point): Box => ({
+  left: Math.min(from.x, to.x),
+  top: Math.min(from.y, to.y),
+  right: Math.max(from.x, to.x),
+  bottom: Math.max(from.y, to.y),
+});
 export function ViewerHost({
   onReady,
   controller,
@@ -23,7 +56,13 @@ export function ViewerHost({
     pointShape = useWorkspace((s) =>
       s.shapeKind === "Polygon" || s.shapeKind === "PolyLine" ? s.shapeKind : null,
     );
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  /** An Alt-drag column selection: its rectangle in window coordinates and the text inside. */
+  const [column, setColumn] = useState<{ box: Box; text: string; dragging: boolean } | null>(null);
+  const selectedColumn = useRef("");
+  const [pageSize, setPageSize] = useState<string | null>(null);
+  const [hoverCorner, setHoverCorner] = useState(false);
+  const page = useWorkspace((s) => s.page);
   const [externalLink, setExternalLink] = useState<{ url: string; reason?: string } | null>(null);
   const allowedHosts = useRef(new Set<string>());
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -124,6 +163,82 @@ export function ViewerHost({
       },
       { signal: abort.signal },
     );
+    let columnDrag: { pointerId: number; page: Element; start: Point } | null = null;
+    el.addEventListener(
+      "pointerdown",
+      (event) => {
+        const state = useWorkspace.getState();
+        if (!event.altKey || event.button !== 0 || state.tool !== "select" || state.busy) return;
+        const target = event.target instanceof Element ? event.target.closest(".page") : null;
+        if (!target) return;
+        // Alt-drag selects a rectangle of text instead of a run of lines.
+        event.preventDefault();
+        event.stopPropagation();
+        window.getSelection()?.removeAllRanges();
+        el.setPointerCapture?.(event.pointerId);
+        const start = { x: event.clientX, y: event.clientY };
+        columnDrag = { pointerId: event.pointerId, page: target, start };
+        selectedColumn.current = "";
+        setColumn({ box: boxBetween(start, start), text: "", dragging: true });
+      },
+      { capture: true, signal: abort.signal },
+    );
+    el.addEventListener(
+      "pointermove",
+      (event) => {
+        setHoverCorner(() => {
+          const frame = el.getBoundingClientRect();
+          return (
+            event.clientX < frame.left + frame.width / 2 &&
+            event.clientY > frame.top + frame.height / 2
+          );
+        });
+        if (columnDrag?.pointerId !== event.pointerId) return;
+        const box = boxBetween(columnDrag.start, { x: event.clientX, y: event.clientY });
+        setColumn({ box, text: "", dragging: true });
+      },
+      { signal: abort.signal },
+    );
+    el.addEventListener("pointerleave", () => setHoverCorner(false), { signal: abort.signal });
+    el.addEventListener(
+      "pointerup",
+      (event) => {
+        if (columnDrag?.pointerId !== event.pointerId) return;
+        const box = boxBetween(columnDrag.start, { x: event.clientX, y: event.clientY });
+        const text = columnText(textLayerSpans(columnDrag.page), box);
+        columnDrag = null;
+        selectedColumn.current = text;
+        setColumn(text ? { box, text, dragging: false } : null);
+        useWorkspace.getState().set({
+          status: text ? "Column selected; use Copy to copy its text" : "No text in that area",
+        });
+      },
+      { signal: abort.signal },
+    );
+    const clearColumn = () => {
+      if (columnDrag) return;
+      selectedColumn.current = "";
+      setColumn(null);
+    };
+    el.addEventListener("scroll", clearColumn, { signal: abort.signal });
+    el.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!event.altKey && event.button === 0) clearColumn();
+      },
+      { signal: abort.signal },
+    );
+    document.addEventListener(
+      "copy",
+      (event) => {
+        const text = selectedColumn.current;
+        if (!text || window.getSelection()?.toString()) return;
+        event.preventDefault();
+        event.clipboardData?.setData("text/plain", text);
+        useWorkspace.getState().set({ status: "Column text copied" });
+      },
+      { signal: abort.signal },
+    );
     return () => {
       resize.disconnect();
       abort.abort();
@@ -140,6 +255,25 @@ export function ViewerHost({
     });
     return () => cancelAnimationFrame(frame);
   }, [controller, hasDocument]);
+  useEffect(() => {
+    const shown = controller?.viewer.pdfDocument;
+    if (!hasDocument || !shown || page < 1 || page > shown.numPages) {
+      setPageSize(null);
+      return;
+    }
+    let active = true;
+    void shown
+      .getPage(page)
+      .then((proxy) => {
+        if (active) setPageSize(pageSizeLabel(proxy.view, proxy.rotate, proxy.userUnit));
+      })
+      .catch(() => {
+        if (active) setPageSize(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [controller, hasDocument, page]);
   return (
     <div className={`viewer-frame ${hasDocument ? "" : "hidden"}`}>
       <div
@@ -148,14 +282,92 @@ export function ViewerHost({
         aria-label="PDF document"
         inert={busy}
         onContextMenu={(event) => {
-          if (!window.getSelection()?.toString().trim()) return;
+          const x = event.clientX;
+          const y = event.clientY;
+          if (window.getSelection()?.toString().trim()) {
+            event.preventDefault();
+            setMenu({ kind: "text", x, y });
+            return;
+          }
+          if (selectedColumn.current) {
+            event.preventDefault();
+            setMenu({ kind: "column", x, y });
+            return;
+          }
+          const pageElement = pageAt(x, y);
+          if (!controller || !pageElement) return;
           event.preventDefault();
-          setMenu({ x: event.clientX, y: event.clientY });
+          const pageNumber = Number(pageElement.dataset.pageNumber);
+          void controller
+            .imageAt(pageNumber, x, y)
+            .then((image) => {
+              if (image) setMenu({ kind: "image", x, y, image, page: pageNumber });
+            })
+            .catch((error: unknown) =>
+              useWorkspace.getState().set({
+                error: `The image could not be read: ${error instanceof Error ? error.message : String(error)}`,
+              }),
+            );
         }}
       >
         <div ref={pages} className="pdfViewer" />
       </div>
-      {menu && controller && (
+      {column && (
+        <div
+          className={`column-selection ${column.dragging ? "dragging" : ""}`}
+          aria-hidden="true"
+          style={{
+            left: column.box.left - (container.current?.getBoundingClientRect().left ?? 0),
+            top: column.box.top - (container.current?.getBoundingClientRect().top ?? 0),
+            width: column.box.right - column.box.left,
+            height: column.box.bottom - column.box.top,
+          }}
+        />
+      )}
+      {hasDocument && hoverCorner && pageSize && (
+        <output className="page-size-label" aria-label="Page size">
+          {pageSize}
+        </output>
+      )}
+      {menu?.kind === "column" && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          actions={[{ id: "copy", label: "Copy column text" }]}
+          onAction={() => {
+            void navigator.clipboard
+              ?.writeText(selectedColumn.current)
+              .then(() => useWorkspace.getState().set({ status: "Column text copied" }));
+          }}
+        />
+      )}
+      {menu?.kind === "image" && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          actions={[
+            { id: "copy-image", label: "Copy image" },
+            { id: "save-image", label: "Save image as PNG..." },
+          ]}
+          onAction={(id) => {
+            const image = menu.image;
+            if (id === "copy-image")
+              void navigator.clipboard
+                ?.write([new ClipboardItem({ [image.type]: image })])
+                .then(() => useWorkspace.getState().set({ status: "Image copied" }))
+                .catch(() =>
+                  useWorkspace.getState().set({ error: "The image could not be copied." }),
+                );
+            else
+              void downloadBlob(image, `Page ${menu.page} image.png`).then((saved) =>
+                useWorkspace.getState().set({ status: saved ? "Image saved" : "Save cancelled" }),
+              );
+          }}
+        />
+      )}
+      {menu?.kind === "text" && controller && (
         <ContextMenu
           x={menu.x}
           y={menu.y}
@@ -220,6 +432,9 @@ export function ViewerHost({
         <MeasureTool controller={controller} shape={pointShape} />
       )}
       {hasDocument && tool === "measure" && controller && <MeasureTool controller={controller} />}
+      {hasDocument && tool === "marquee" && controller && (
+        <MarqueeZoomTool controller={controller} />
+      )}
       {hasDocument && tool === "select" && controller && (
         <AnnotationSelectionLayer controller={controller} />
       )}

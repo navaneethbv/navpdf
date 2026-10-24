@@ -23,6 +23,8 @@ Batch 3 adds page clipboard operations, thumbnail sizing, print boxes, page tran
 Batch 4 adds list box, date and image fields, a script-free date picker, field properties, duplication across pages, tab order, field detection, label-based naming and form preview.
 Batch 5 adds RC4 and AES-128 encryption choices, unencrypted metadata, password strength, whole-page redaction, redaction colours, labels and code sets, and faux-redaction detection under [ADR 0017](adr/0017-protection-options-and-redaction-labels.md).
 Batch 6 adds print subsets, reverse order, content choices, grayscale and image printing with a preview, optimizer discards with form flattening, GIF, BMP, WebP and JPEG 2000 input, text and clipboard creation, separate-file conversion, multi-file OCR, skipping pages with text and OCR image cleanup.
+PR [71](https://github.com/navaneethbv/navpdf/pull/71) merged batches 3 to 6 on October 24; on the same day the user asked for batches 7 to 10 on a new draft PR.
+Batch 7's viewer part adds hiding all comments, replacement page colours, Fit Visible, marquee zoom, Alt-drag column selection, copying or saving an image from the page, a page-size label and an About dialog.
 
 ## Phase status and remaining gates
 

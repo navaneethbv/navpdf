@@ -53,6 +53,8 @@ import { ExportOptions } from "../features/convert/ExportOptions";
 import { DOCUMENT_TOOL_DIALOGS } from "../features/tools/document-tools";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
+import { pageColorsFor } from "../features/viewer/page-colors";
+import { AboutDialog } from "../features/help/AboutDialog";
 /** Menu and modal identifiers for the editable export dialog and the format each selects. */
 const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
   ["office-export", "docx"],
@@ -155,6 +157,14 @@ function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController 
 }
 
 type WorkspaceState = ReturnType<typeof useWorkspace.getState>;
+
+function toggleComments(state: WorkspaceState, controller: ViewerController | null) {
+  void controller
+    ?.setCommentsHidden(!state.commentsHidden)
+    .catch((error: unknown) =>
+      state.set({ error: error instanceof Error ? error.message : String(error) }),
+    );
+}
 type SessionActions = ReturnType<typeof useDocumentSession>;
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -233,6 +243,7 @@ function handleShortcut(
     ["]", () => controller?.goForward()],
     [",", () => state.set({ settingsOpen: true })],
     ["0", () => controller?.zoom("page-fit")],
+    ["3", () => void controller?.fitVisible()],
     ["+", () => controller?.zoom((state.zoom / 100) * 1.15)],
     ["=", () => controller?.zoom((state.zoom / 100) * 1.15)],
     ["-", () => controller?.zoom(state.zoom / 100 / 1.15)],
@@ -349,6 +360,12 @@ function menuActions(
       },
     ],
     [
+      "toggle-comments",
+      () => {
+        if (state.document) toggleComments(state, controller);
+      },
+    ],
+    [
       "night-mode",
       () => {
         if (state.document) state.set({ nightMode: !state.nightMode });
@@ -414,6 +431,9 @@ function menuActions(
     ],
     ["fit-page", () => controller?.zoom("page-fit")],
     ["fit-width", () => controller?.zoom("page-width")],
+    ["fit-visible", () => void controller?.fitVisible()],
+    ["marquee-zoom", () => controller?.setTool("marquee")],
+    ["about", () => state.set({ activeModal: "about" })],
     ["zoom-in", () => controller?.zoom((state.zoom / 100) * 1.15)],
     ["zoom-out", () => controller?.zoom(state.zoom / 100 / 1.15)],
   ]);
@@ -481,6 +501,10 @@ export default function App() {
   useEffect(() => {
     if (controller?.pdf) controller.setLayout(s.layout);
   }, [controller, s.layout]);
+  const { pageColors, pageForeground, pageBackground } = s.local.preferences;
+  useEffect(() => {
+    controller?.setPageColors(pageColorsFor({ pageColors, pageForeground, pageBackground }));
+  }, [controller, pageColors, pageForeground, pageBackground]);
   useEffect(() => {
     function key(event: KeyboardEvent) {
       const state = useWorkspace.getState();
@@ -834,6 +858,14 @@ export default function App() {
                 icon: FileText,
                 action: () => s.set({ activeModal: "shortcuts" }),
               },
+              {
+                id: "about",
+                label: "About NavPDF",
+                description: "Version and components",
+                category: "review",
+                icon: Info,
+                action: () => s.set({ activeModal: "about" }),
+              },
             ]}
           />
         )}
@@ -935,6 +967,7 @@ export default function App() {
           <DesignTools controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
         {s.activeModal === "export-options" && <ExportOptions />}
+        {s.activeModal === "about" && <AboutDialog onClose={() => s.set({ activeModal: null })} />}
         {s.activeModal === "properties" && (
           <PropertiesDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}

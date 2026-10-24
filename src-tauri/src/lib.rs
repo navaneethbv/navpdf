@@ -135,6 +135,8 @@ pub fn run() {
                 .text("actual-size", "Actual Size")
                 .text("fit-page", "Fit Page")
                 .text("fit-width", "Fit Width")
+                .text("fit-visible", "Fit Visible")
+                .text("marquee-zoom", "Marquee Zoom")
                 .build()?;
             let panels = SubmenuBuilder::new(app, "Show/Hide")
                 .text("all-tools", "All Tools")
@@ -142,6 +144,8 @@ pub fn run() {
                 .text("panel-pages", "Page Thumbnails")
                 .text("panel-bookmarks", "Bookmarks")
                 .text("panel-comments", "Comments")
+                .separator()
+                .text("toggle-comments", "Hide or Show All Comments")
                 .build()?;
             let read_aloud = SubmenuBuilder::new(app, "Read Out Loud")
                 .text("read-page", "Read This Page Only")
@@ -175,6 +179,8 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+Q")
                 .build(app)?;
             let settings = SubmenuBuilder::new(app, "NavPDF")
+                .text("about", "About NavPDF")
+                .separator()
                 .text("settings", "Settings...")
                 .separator()
                 .hide()

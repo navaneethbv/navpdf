@@ -10,7 +10,8 @@ export type Tool =
   | "shape"
   | "measure"
   | "signature"
-  | "snapshot";
+  | "snapshot"
+  | "marquee";
 export type ShapeKind =
   "Square" | "Circle" | "Line" | "Arrow" | "Cloud" | "Callout" | "Polygon" | "PolyLine";
 /** Shapes drawn by clicking their points rather than dragging. */
@@ -73,7 +74,13 @@ export interface Preferences {
   annotationStrokeWidth: number;
   ocrLanguage: string;
   ocrScope: "current" | "all";
+  /** Colours that replace page colours on screen; "off" shows the document's own colours. */
+  pageColors: PageColorScheme;
+  pageForeground: string;
+  pageBackground: string;
 }
+export type PageColorScheme =
+  "off" | "white-on-black" | "yellow-on-black" | "green-on-black" | "black-on-white" | "custom";
 export interface RecentDocument {
   id: string;
   name: string;
@@ -158,4 +165,7 @@ export const defaultPreferences: Preferences = {
   annotationStrokeWidth: 2,
   ocrLanguage: "en-US",
   ocrScope: "current",
+  pageColors: "off",
+  pageForeground: "#000000",
+  pageBackground: "#ffffff",
 };

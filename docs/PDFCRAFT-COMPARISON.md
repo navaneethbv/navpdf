@@ -61,7 +61,7 @@ The user asked for every gap, including the decision items, delivered in batches
 | 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Implemented; see the fourth batch mapping |
 | 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Implemented; see the fifth batch mapping |
 | 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Implemented; see the sixth batch mapping |
-| 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Planned |
+| 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Viewer part implemented, see the seventh batch mapping; lifecycle and editing parts planned |
 | 8 to 10 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance; tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
 | 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
 
@@ -127,6 +127,21 @@ Showing or hiding all comments moved to batch 7 because PDF.js fixes its annotat
 | `ocr.recognize-multiple` | OCR Multiple Files | Up to 50 PDFs of up to 200 MB each, saved as searchable copies in a ZIP archive with a per-file result; password-protected files are reported as failures. |
 | `ocr.skip-renderable-text` | Scan & OCR and OCR Multiple Files, Skip pages that already have text | Uses the existing digital-text check, which ignores earlier NavPDF OCR layers. |
 | `ocr.despeckle`, `ocr.background-removal` | Scan & OCR and OCR Multiple Files, image cleanup | Grayscale, percentile contrast stretch, Otsu black and white (which drops light backgrounds) and isolated-speck removal, applied only to the image sent for recognition. Deskew, edge shadow and perspective correction are not provided. |
+
+## Seventh batch mapping
+
+Batch 7 is delivered in three parts on a new draft PR after PR 71 merged: viewer, document lifecycle and editing.
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `comment.show-hide-comments` | View options and View, Show/Hide, Hide or Show All Comments | Pages are drawn from a copy without comments and pop-ups, keeping fields and links; the copy is never saved. Fields cannot be filled while comments are hidden, page-view drawing tools show comments first, and any edit shows them again. Per-type hiding is not provided, and thumbnails still show comments. |
+| `a11y.replace-page-colors` | Settings, Page colours | Off by default; four high-contrast presets or custom text and page colours with a contrast warning below 4.5:1. PDF.js draws text and line art in the text colour and fills pages with the page colour; images keep their colours. The document is unchanged. |
+| `view.zoom-fit-visible` | View options, View, Zoom, Fit Visible and Command-3 | The current page's inked area, found by a render of at most 480 pixels with view rotation, spans the window width with a small margin; a blank page fits its width. |
+| `view.marquee-zoom` | View options and View, Zoom, Marquee Zoom | Drag an area to fill the window with it, click to zoom in by 25% or Option-click to zoom out, both around the pointer, within the 25% to 500% zoom range. |
+| `view.column-select` | Alt-drag (Option-drag) with the Select tool | Copies the text inside the rectangle, line by line, with Copy or the context menu. Characters of a span crossing the rectangle are chosen by position assuming even widths. Text markup from a column selection is not provided. |
+| `view.copy-image` | Right-click an image, Copy image or Save image as PNG | The topmost image XObject under the pointer, following page, save and form matrices, is copied or saved as PNG at its own resolution. Inline images, image masks and shading are not found; the original JPEG bytes are not kept. |
+| `view.page-size-hover` | Page size label | While the pointer is in the lower-left quarter of the page view, a label shows the current page's size after /Rotate and /UserUnit in inches and millimetres. |
+| `view.about-dialog` | NavPDF, About NavPDF and the command palette | Application version, PDF.js version and a statement that PDF scripts are never run. |
 
 ## Acceptance boundary
 

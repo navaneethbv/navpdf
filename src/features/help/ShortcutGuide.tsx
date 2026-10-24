@@ -21,6 +21,8 @@ const shortcuts = [
   ["Reading", "Next view", "Cmd/Ctrl + ] or Alt + Right"],
   ["Reading", "Previous / next page (single-page layout)", "Page Up / Down or Left / Right"],
   ["Reading", "Fit page", "Cmd/Ctrl + 0"],
+  ["Reading", "Fit visible content", "Cmd/Ctrl + 3"],
+  ["Reading", "Select a column of text", "Alt/Option + drag"],
   ["Reading", "Zoom in / out", "Cmd/Ctrl + plus / minus"],
   ["Reading", "Toggle automatic scrolling", "Cmd/Ctrl + Shift + H"],
   ["Read aloud", "Read current page", "Cmd/Ctrl + Shift + V"],

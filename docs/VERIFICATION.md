@@ -5,6 +5,26 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 24 PDFCraft gap batch 7, viewer
+
+The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,075 tests across 143 files, with 85.5% statements, 77.71% branches, 84.55% functions and 88.55% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+A Rust test checks that page colour preferences default to off, accept custom six-digit colours and reject unknown schemes or malformed colours without changing saved settings.
+
+Controller tests check that hiding comments shows a copy filtered to fields and links at the same page, rotation and layer visibility, that showing them again restores the document and releases the copy, and that a drawing tool or an attached revision shows comments again.
+They also check that a read-only encrypted document refuses hiding, that page colours redraw only on change, and that unsaved page-view edits are committed as a revision instead of being drawn over.
+Marquee zoom tests cover a click keeping the page point under the pointer, a drag filling the window and Option-click zooming out.
+An integration test reads a pdf-lib document through PDF.js and finds two drawn images at their page bounds, the topmost first, and decodes the first one's pixels.
+It found that PDF.js can deliver decoded image data after the operator list, so image lookup now waits for the image instead of failing.
+Other tests cover inked bounds, column text, page size labels, image data expansion, the page colour settings and contrast warning, the About dialog, column copying, the image context menu and the page size label.
+
+In the Chromium browser preview, hiding comments removed the sticky note and kept the form field at the same scroll position, Fit Visible zoomed to 228%, a marquee drag zoomed to 219%, yellow-on-black page colours drew the reader fixture, Alt-drag selected a column and the page size label read 8.5 × 11 in.
+Screenshots are in `output/batch-seven/`.
+The check found unreadable text on pressed rail buttons under the pointer, because the hover background replaced the pressed background; pressed buttons now keep their colours.
+Native WebKit rendering, clipboard image writing in WebKit, Preview and Acrobat comparison were not run.
+
 ## October 24 PR 71 conflict and quality review
 
 Merged the current main dependency update into the PDFCraft branch, retaining SHA-2 0.11.1 and the branch's stringprep test dependency in Cargo.lock.

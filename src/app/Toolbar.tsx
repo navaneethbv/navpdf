@@ -16,6 +16,9 @@ import {
   Plus,
   Scan,
   MoveHorizontal,
+  MessageSquareOff,
+  ScanText,
+  ZoomIn,
   ChevronUp,
   ChevronDown,
   ArrowLeft,
@@ -504,6 +507,29 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
             </label>
             <button aria-label="Fit width" onClick={() => controller?.zoom("page-width")}>
               <MoveHorizontal size={18} /> Fit width
+            </button>
+            <button aria-label="Fit visible content" onClick={() => void controller?.fitVisible()}>
+              <ScanText size={18} /> Fit visible
+            </button>
+            <button
+              aria-label="Marquee zoom"
+              aria-pressed={s.tool === "marquee"}
+              onClick={() => controller?.setTool(s.tool === "marquee" ? "select" : "marquee")}
+            >
+              <ZoomIn size={18} /> Marquee zoom
+            </button>
+            <button
+              aria-label={s.commentsHidden ? "Show all comments" : "Hide all comments"}
+              aria-pressed={s.commentsHidden}
+              onClick={() =>
+                void controller
+                  ?.setCommentsHidden(!s.commentsHidden)
+                  .catch((error: unknown) =>
+                    s.set({ error: error instanceof Error ? error.message : String(error) }),
+                  )
+              }
+            >
+              <MessageSquareOff size={18} /> {s.commentsHidden ? "Show comments" : "Hide comments"}
             </button>
             <button
               aria-label={s.nightMode ? "Disable night mode" : "Enable night mode"}

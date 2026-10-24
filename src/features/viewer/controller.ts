@@ -62,6 +62,10 @@ import { contentIdentity } from "../../services/document-identity";
 import { ViewHistory } from "./view-history";
 import { ReadAloud } from "./read-aloud";
 import { AutoScroll } from "./auto-scroll";
+import type { PageColors } from "./page-colors";
+import { preparePrintContent } from "../pages/print-options";
+import { inkedBounds } from "./view-geometry";
+import { imagePngAt } from "./page-images";
 
 /** Reports the page left by link and bookmark jumps so Previous View can return to it. */
 class HistoryLinkService extends PDFLinkService {
@@ -295,6 +299,8 @@ export class ViewerController {
   private replacing = false;
   /** The zoom to restore when a revision of the open document is attached. */
   private keptScale: string | null = null;
+  /** A copy of the document without comments, shown in place of it while comments are hidden. */
+  private commentFreeCopy: PDFDocumentLoadingTask | null = null;
   readonly views = new ViewHistory();
   readonly readAloud = new ReadAloud({
     pageText: (page) => this.pageText(page),
@@ -402,6 +408,12 @@ export class ViewerController {
     on(
       "annotationlayerrendered",
       ({ source }: { source: { div: HTMLElement; pdfPage?: PDFPageProxy | null } }) => {
+        // Fields in the comment-free copy are drawn but cannot be filled, so no entry is lost.
+        if (this.commentFreeCopy)
+          for (const field of source.div.querySelectorAll<HTMLElement>(
+            '[class*="WidgetAnnotation"]',
+          ))
+            field.inert = true;
         void source.pdfPage
           ?.getAnnotations()
           .then((annotations) => enhanceDateFields(source.div, annotations))
@@ -519,6 +531,7 @@ export class ViewerController {
     this.links.setDocument(pdf);
     this.find.setDocument(pdf);
     this.viewer.setDocument(pdf);
+    this.releaseCommentFreeCopy();
     this.updateViewControls();
     await this.refreshLayers(generation);
     (pdf.annotationStorage as unknown as { onSetModified: () => void }).onSetModified = () => {
@@ -556,6 +569,7 @@ export class ViewerController {
     clearTimeout(this.pageTimer);
     await this.releaseRevision();
     this.viewer.setDocument(null as unknown as PDFDocumentProxy);
+    this.releaseCommentFreeCopy();
     this.links.setDocument(null);
     this.find.setDocument(null as unknown as PDFDocumentProxy);
     this.readAloud.stop();
@@ -826,6 +840,110 @@ export class ViewerController {
     this.suspendView();
     void this.detach();
   }
+  /**
+   * Draws the open document's pages again, for example with other page colours, keeping the
+   * page, zoom, view rotation and layer visibility. `shown` is the open document or its
+   * comment-free copy.
+   */
+  private async redisplay(shown: PDFDocumentProxy) {
+    const page = this.viewer.currentPageNumber;
+    const rotation = this.viewer.pagesRotation;
+    const { scrollLeft, scrollTop } = this.container;
+    this.keptScale = String(this.viewer.currentScaleValue);
+    this.editor?.commitOrRemove();
+    const ready = new Promise<void>((resolve) => {
+      this.bus.on("pagesinit", () => resolve(), { once: true, signal: this.abort.signal });
+    });
+    this.viewer.setDocument(shown);
+    await ready;
+    if (this.viewer.pdfDocument !== shown) return;
+    if (rotation) this.viewer.pagesRotation = rotation;
+    this.viewer.currentPageNumber = Math.min(page, shown.numPages);
+    // The pages keep their sizes, so the exact scroll position stays valid.
+    this.container.scrollLeft = scrollLeft;
+    this.container.scrollTop = scrollTop;
+    const config = await this.viewer.optionalContentConfigPromise;
+    if (!config || this.viewer.pdfDocument !== shown) return;
+    for (const layer of useWorkspace.getState().layers)
+      config.setVisibility(layer.id, layer.visible);
+    this.viewer.optionalContentConfigPromise = Promise.resolve(config);
+  }
+  /** Replaces page colours on screen; null shows the document's own colours. */
+  setPageColors(colors: PageColors | null) {
+    const current = this.viewer.pageColors as PageColors | null;
+    if (current?.foreground === colors?.foreground && current?.background === colors?.background)
+      return;
+    this.viewer.pageColors = colors;
+    const shown = this.viewer.pdfDocument;
+    if (shown)
+      void this.foldViewEdits()
+        .then((folded) => (folded ? undefined : this.redisplay(shown)))
+        .catch((error: unknown) =>
+          useWorkspace.getState().set({
+            error: `Pages could not be redrawn: ${error instanceof Error ? error.message : String(error)}`,
+          }),
+        );
+  }
+  /**
+   * Hides or shows every comment and pop-up. Form fields and links still draw. While comments are
+   * hidden the pages show a copy without them, so fields cannot be filled until they are shown.
+   */
+  async setCommentsHidden(hidden: boolean) {
+    let pdf = this.pdf;
+    if (!pdf || hidden === !!this.commentFreeCopy) return;
+    if (!hidden) {
+      const copy = this.commentFreeCopy;
+      this.commentFreeCopy = null;
+      useWorkspace.getState().set({ commentsHidden: false, status: "Comments shown" });
+      await this.redisplay(pdf);
+      await copy?.destroy();
+      return;
+    }
+    if (useWorkspace.getState().info?.encrypted)
+      throw new Error("Comments cannot be hidden in a password-protected PDF opened read-only.");
+    this.setTool("select");
+    this.editor?.commitOrRemove();
+    // Committing page-view edits attaches a new revision, which is the one to copy.
+    if (await this.foldViewEdits()) pdf = this.pdf;
+    if (!pdf) return;
+    const generation = this.generation;
+    const task = loadPdfFromBytes(
+      (await preparePrintContent(await pdf.saveDocument(), "document")) as Uint8Array<ArrayBuffer>,
+    );
+    const copy = await task.promise.catch(async (error: unknown) => {
+      await task.destroy();
+      throw error;
+    });
+    if (generation !== this.generation || this.pdf !== pdf || this.commentFreeCopy) {
+      await task.destroy();
+      return;
+    }
+    this.commentFreeCopy = task;
+    useWorkspace
+      .getState()
+      .set({ commentsHidden: true, selectedAnnotationId: null, status: "Comments hidden" });
+    await this.redisplay(copy);
+  }
+  /**
+   * Commits edits the page view still holds, such as drawings and filled fields, as a revision.
+   * Drawing the pages again would otherwise leave those edits saved but no longer on screen.
+   * Returns true when the pages were drawn again by the commit.
+   */
+  private async foldViewEdits() {
+    const pdf = this.pdf;
+    if (!pdf || !this.storageModified || this.viewer.pdfDocument !== pdf) return false;
+    await this.mutate("Keeping page edits", async () => {
+      await this.replaceWithBytes(await pdf.saveDocument(), "Page edits kept");
+    });
+    return true;
+  }
+  private releaseCommentFreeCopy() {
+    const copy = this.commentFreeCopy;
+    if (!copy) return;
+    this.commentFreeCopy = null;
+    useWorkspace.getState().set({ commentsHidden: false });
+    void copy.destroy();
+  }
   setLayout(layout: Layout) {
     this.viewer.scrollMode = layout === "single" ? ScrollMode.PAGE : ScrollMode.VERTICAL;
     const configured = useWorkspace.getState().spread;
@@ -871,6 +989,17 @@ export class ViewerController {
   }
   setTool(tool: Tool) {
     if (!this.pdf) return;
+    // Page-view editors work on the pages on screen, so they need the document itself.
+    if (this.commentFreeCopy && annotationEditorTypeForTool(tool) !== AnnotationEditorType.NONE) {
+      void this.setCommentsHidden(false)
+        .then(() => this.setTool(tool))
+        .catch((error: unknown) =>
+          useWorkspace
+            .getState()
+            .set({ error: error instanceof Error ? error.message : String(error) }),
+        );
+      return;
+    }
     try {
       this.viewer.annotationEditorMode = {
         mode: annotationEditorTypeForTool(tool),
@@ -1316,6 +1445,133 @@ export class ViewerController {
   zoom(value: number | string) {
     if (typeof value === "string") this.viewer.currentScaleValue = value;
     else this.viewer.currentScale = boundedZoom(value);
+  }
+  /** The PDF user-space point under a window position on a displayed page. */
+  pagePoint(pageNumber: number, clientX: number, clientY: number): [number, number] | null {
+    const view = this.viewer.getPageView(pageNumber - 1) as
+      | { div: HTMLElement; viewport: { convertToPdfPoint(x: number, y: number): number[] } }
+      | undefined;
+    if (!view) return null;
+    const rect = view.div.getBoundingClientRect();
+    const [x, y] = view.viewport.convertToPdfPoint(
+      clientX - rect.left - view.div.clientLeft,
+      clientY - rect.top - view.div.clientTop,
+    );
+    return [x, y];
+  }
+  /** Zooms so a PDF point on a page stays under the same window position. */
+  private zoomAround(
+    pageNumber: number,
+    point: [number, number],
+    scale: number,
+    clientX: number,
+    clientY: number,
+  ) {
+    this.zoom(scale);
+    const view = this.viewer.getPageView(pageNumber - 1) as
+      | { div: HTMLElement; viewport: { convertToViewportPoint(x: number, y: number): number[] } }
+      | undefined;
+    if (!view) return;
+    const rect = view.div.getBoundingClientRect();
+    const [x, y] = view.viewport.convertToViewportPoint(...point);
+    this.container.scrollLeft += rect.left + view.div.clientLeft + x - clientX;
+    this.container.scrollTop += rect.top + view.div.clientTop + y - clientY;
+  }
+  /**
+   * Marquee zoom: fills the window with the area dragged between two window positions on a
+   * page, or zooms in one step around a click (out with `zoomOut`).
+   */
+  zoomToArea(
+    pageNumber: number,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    zoomOut = false,
+  ) {
+    const width = Math.abs(to.x - from.x);
+    const height = Math.abs(to.y - from.y);
+    const scale = this.viewer.currentScale;
+    if (width < 4 && height < 4) {
+      const point = this.pagePoint(pageNumber, to.x, to.y);
+      if (point)
+        this.zoomAround(pageNumber, point, zoomOut ? scale / 1.25 : scale * 1.25, to.x, to.y);
+      return;
+    }
+    const centre = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    const point = this.pagePoint(pageNumber, centre.x, centre.y);
+    if (!point) return;
+    const fill = Math.min(
+      (this.container.clientWidth - 40) / Math.max(width, 1),
+      (this.container.clientHeight - 40) / Math.max(height, 1),
+    );
+    const frame = this.container.getBoundingClientRect();
+    this.zoomAround(
+      pageNumber,
+      point,
+      scale * fill,
+      frame.left + this.container.clientWidth / 2,
+      frame.top + this.container.clientHeight / 2,
+    );
+  }
+  /**
+   * Fit Visible: the current page's inked area, found by a low-resolution render, spans the
+   * window width. A blank page fits its full width.
+   */
+  async fitVisible() {
+    const shown = this.viewer.pdfDocument;
+    if (!shown) return;
+    const pageNumber = this.viewer.currentPageNumber;
+    const page = await shown.getPage(pageNumber);
+    const rotation = (page.rotate + this.viewer.pagesRotation) % 360;
+    const natural = page.getViewport({ scale: 1, rotation });
+    const viewport = page.getViewport({
+      scale: Math.min(1, 480 / Math.max(natural.width, natural.height)),
+      rotation,
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    let bounds: ReturnType<typeof inkedBounds>;
+    try {
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("The page could not be measured.");
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvas, canvasContext: context, viewport }).promise;
+      bounds = inkedBounds(
+        context.getImageData(0, 0, canvas.width, canvas.height).data,
+        canvas.width,
+        canvas.height,
+      );
+    } finally {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    if (this.viewer.pdfDocument !== shown || this.viewer.currentPageNumber !== pageNumber) return;
+    if (!bounds) {
+      this.zoom("page-width");
+      return;
+    }
+    const view = this.viewer.getPageView(pageNumber - 1) as { width: number } | undefined;
+    if (!view) return;
+    const unscaledWidth = view.width / this.viewer.currentScale;
+    const fraction = (bounds.right - bounds.left) / Math.ceil(viewport.width);
+    this.zoom((this.container.clientWidth - 40) / (unscaledWidth * fraction));
+    // A few points of margin keep the first inked column off the window edge.
+    const margin = 4 * viewport.scale;
+    const [x, y] = viewport.convertToPdfPoint(bounds.left - margin, bounds.top - margin);
+    this.viewer.scrollPageIntoView({
+      pageNumber,
+      destArray: [null, { name: "XYZ" }, x, y, null],
+      allowNegativeOffset: true,
+    });
+    useWorkspace.getState().set({ status: "Fit visible content" });
+  }
+  /** The image under a window position on a displayed page as PNG, or null. */
+  async imageAt(pageNumber: number, clientX: number, clientY: number) {
+    const shown = this.viewer.pdfDocument;
+    const point = this.pagePoint(pageNumber, clientX, clientY);
+    if (!shown || !point) return null;
+    return imagePngAt(await shown.getPage(pageNumber), ...point);
   }
   /**
    * Moves to the first page with a form field and focuses that field, so the form can be tried
