@@ -2216,7 +2216,10 @@ p {
   border-color: var(--accent);
 }
 /* The modal body's flex gap separates its direct fields; nested wrappers need their own. */
-.modal-body > div:not(.setting-group, .settings-row) > .setting-group + .setting-group {
+.modal-body
+  > div:not(.setting-group, .settings-row, .form-columns)
+  > .setting-group
+  + .setting-group {
   margin-top: 14px;
 }
 /* A legend is not a flex item, so the group's gap does not separate it from its controls. */
@@ -2662,7 +2665,7 @@ p {
 .page-workspace-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(140px * var(--page-card-scale, 1)), 1fr));
   /* Rows keep their card height instead of stretching to fill the workspace. */
   align-content: start;
   gap: 20px;
@@ -2700,8 +2703,8 @@ p {
 }
 .page-card-preview {
   position: relative;
-  width: 120px;
-  height: 160px;
+  width: calc(120px * var(--page-card-scale, 1));
+  height: calc(160px * var(--page-card-scale, 1));
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -2886,7 +2889,8 @@ p {
 .measure-tool-status {
   position: absolute;
   left: 50%;
-  bottom: 24px;
+  /* Clears the floating annotation toolbar, which shares the bottom of the viewer. */
+  bottom: 104px;
   transform: translateX(-50%);
   max-width: min(90%, 40rem);
   padding: 8px 14px;
@@ -3882,4 +3886,66 @@ p {
 }
 .command-results button:disabled {
   opacity: 0.5;
+}
+
+.page-thumbnail-size {
+  justify-content: flex-end;
+  padding: 0 24px;
+}
+.page-thumbnail-size label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-card-preview .thumb-paper {
+  width: auto;
+  min-height: 0;
+}
+.page-card-preview .thumb-paper canvas {
+  max-width: calc(100px * var(--page-card-scale, 1));
+  max-height: calc(140px * var(--page-card-scale, 1));
+}
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.password-strength meter {
+  width: 96px;
+  flex: none;
+}
+.link-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.discard-options {
+  margin: 12px 0;
+}
+
+.discard-options summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.discard-options fieldset {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 0 0;
+  border: 0;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
 }

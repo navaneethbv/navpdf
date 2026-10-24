@@ -269,6 +269,7 @@ pub fn run() {
             commands::engine::engine_redact,
             commands::engine::engine_compress,
             commands::engine::engine_prune,
+            commands::engine::engine_find_cover_ups,
             commands::engine::engine_inspect_page,
             commands::engine::engine_edit,
             commands::engine::engine_save_protected,

@@ -4,12 +4,14 @@ import type {
   CertificateSummary,
   CompressionPreset,
   CompressionReport,
+  DiscardOptions,
   EditReport,
   EditRequest,
   EngineResult,
   PageObjects,
   ProtectedSave,
   ProtectionRequest,
+  CoverUpReport,
   RedactionReport,
   RedactionRequest,
   SignatureInfo,
@@ -75,6 +77,7 @@ export async function compressDocument(
   bytes: Uint8Array,
   preset: CompressionPreset,
   jobId: string,
+  discard?: DiscardOptions,
 ): Promise<EngineResult<CompressionReport>> {
   requireEngine();
   const inputId = await stage(bytes);
@@ -83,6 +86,7 @@ export async function compressDocument(
       inputId,
       jobId,
       preset,
+      ...(discard && { discard }),
     }),
   );
 }
@@ -113,6 +117,13 @@ export async function editPage(
 }
 
 /** Opens the native Save As picker; resolves to null when the picker is cancelled. */
+/** Text still extractable under covers, and unapplied redaction marks; read-only. */
+export async function findCoverUps(bytes: Uint8Array): Promise<CoverUpReport> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return invoke<CoverUpReport>("engine_find_cover_ups", { inputId });
+}
+
 export async function saveProtectedCopy(
   documentId: string,
   bytes: Uint8Array,

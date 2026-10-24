@@ -4,7 +4,21 @@ import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { discardRecovery, markDirty, native } from "../../services/native";
 import { ENGINE_UNAVAILABLE, saveProtectedCopy, unlockDocument } from "../../services/engine";
-import type { PermissionRequest } from "../../types/engine";
+import type { EncryptionLevel, PermissionRequest } from "../../types/engine";
+import { passwordStrength } from "./password-strength";
+
+const LEVELS: [EncryptionLevel, string][] = [
+  ["aes256", "AES-256 (recommended)"],
+  ["aes128", "AES-128 (Acrobat 7 and later)"],
+  ["rc4128", "RC4 128-bit (legacy, weak)"],
+  ["rc440", "RC4 40-bit (legacy, very weak)"],
+];
+const LEVEL_NAMES: Record<EncryptionLevel, string> = {
+  aes256: "AES-256",
+  aes128: "AES-128",
+  rc4128: "RC4 128-bit",
+  rc440: "RC4 40-bit",
+};
 import { FeatureDialog } from "../../components/FeatureDialog";
 
 const ALL_PERMISSIONS: PermissionRequest = {
@@ -32,6 +46,27 @@ const PERMISSION_LABELS: [keyof PermissionRequest, string][] = [
 const MAX_PASSWORD_BYTES = 127;
 const byteLength = (value: string) => new TextEncoder().encode(value).length;
 
+function validatePasswordFormat(
+  openPassword: string,
+  permissionsPassword: string,
+  level: EncryptionLevel,
+): string | null {
+  if (
+    byteLength(openPassword) > MAX_PASSWORD_BYTES ||
+    byteLength(permissionsPassword) > MAX_PASSWORD_BYTES
+  )
+    return "Passwords can be at most 127 bytes long.";
+  // Older levels read only the first 32 bytes of a password.
+  if (
+    level !== "aes256" &&
+    [openPassword, permissionsPassword].some(
+      (value) => value.length > 32 || !/^[\x20-\x7e]*$/.test(value),
+    )
+  )
+    return "Older encryption levels need passwords of at most 32 plain ASCII characters.";
+  return null;
+}
+
 /** Mirrors the native checks so problems are explained before the save picker opens. */
 export function validateProtection(
   openPassword: string,
@@ -39,12 +74,10 @@ export function validateProtection(
   permissionsPassword: string,
   confirmPermissions: string,
   permissions: PermissionRequest,
+  level: EncryptionLevel = "aes256",
 ): string | null {
-  if (
-    byteLength(openPassword) > MAX_PASSWORD_BYTES ||
-    byteLength(permissionsPassword) > MAX_PASSWORD_BYTES
-  )
-    return "Passwords can be at most 127 bytes long.";
+  const formatProblem = validatePasswordFormat(openPassword, permissionsPassword, level);
+  if (formatProblem) return formatProblem;
   const restricted = Object.values(permissions).some((allowed) => !allowed);
   if (!openPassword && !permissionsPassword)
     return "Enter a password, or use a separate permissions password for an open-without-password copy.";
@@ -81,6 +114,8 @@ export function ProtectDialog({
   const [permissionsPassword, setPermissionsPassword] = useState("");
   const [confirmPermissions, setConfirmPermissions] = useState("");
   const [permissions, setPermissions] = useState<PermissionRequest>(ALL_PERMISSIONS);
+  const [level, setLevel] = useState<EncryptionLevel>("aes256");
+  const [encryptMetadata, setEncryptMetadata] = useState(true);
   const [unlockPassword, setUnlockPassword] = useState("");
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState("");
@@ -136,6 +171,7 @@ export function ProtectDialog({
       permissionsPassword,
       confirmPermissions,
       permissions,
+      level,
     );
     if (invalid) {
       setProblem(invalid);
@@ -150,6 +186,8 @@ export function ProtectDialog({
         userPassword: openPassword,
         ownerPassword: permissionsPassword,
         permissions,
+        encryption: level,
+        encryptMetadata: level.startsWith("aes") ? encryptMetadata : true,
       });
       if (!result) {
         s.set({ status: "Save cancelled" });
@@ -172,7 +210,7 @@ export function ProtectDialog({
       }
       state.set({
         status: result.replacedSource
-          ? `Saved ${result.name} with AES-256 password protection.`
+          ? `Saved ${result.name} with ${LEVEL_NAMES[level]} password protection.`
           : `Protected copy saved as ${result.name}. The open document itself is not password protected.`,
       });
       onClose();
@@ -190,22 +228,48 @@ export function ProtectDialog({
     await onSaveUnprotected();
   };
 
-  const field = (suffix: string, label: string, value: string, change: (value: string) => void) => (
-    <div className="setting-group">
-      <label className="setting-title" htmlFor={`${ids}-${suffix}`}>
-        {label}
-      </label>
-      <input
-        id={`${ids}-${suffix}`}
-        type="password"
-        autoComplete="new-password"
-        className="text-input"
-        value={value}
-        disabled={working || !native}
-        onChange={(event) => change(event.target.value)}
-      />
-    </div>
-  );
+  const field = (
+    suffix: string,
+    label: string,
+    value: string,
+    change: (value: string) => void,
+    meter = false,
+  ) => {
+    const strength = meter && value ? passwordStrength(value) : null;
+    return (
+      <div className="setting-group">
+        <label className="setting-title" htmlFor={`${ids}-${suffix}`}>
+          {label}
+        </label>
+        <input
+          id={`${ids}-${suffix}`}
+          type="password"
+          autoComplete="new-password"
+          className="text-input"
+          value={value}
+          disabled={working || !native}
+          aria-describedby={strength ? `${ids}-${suffix}-strength` : undefined}
+          onChange={(event) => change(event.target.value)}
+        />
+        {strength && (
+          <div id={`${ids}-${suffix}-strength`} className="password-strength" aria-live="polite">
+            <meter
+              min={0}
+              max={4}
+              low={2}
+              high={3}
+              optimum={4}
+              value={strength.score}
+              aria-label={`${label} strength`}
+            />
+            <span>
+              {strength.label}. {strength.advice}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <FeatureDialog title={title} onClose={onClose} busy={working}>
@@ -258,11 +322,46 @@ export function ProtectDialog({
                 </div>
               )}
               <p className="field-hint">
-                The copy is encrypted with AES-256 and checked before it replaces anything. Leave
-                the open password empty to create a copy that opens without a password while the
-                separate permissions password protects its restrictions.
+                The copy is encrypted and checked before it replaces anything. Leave the open
+                password empty to create a copy that opens without a password while the separate
+                permissions password protects its restrictions.
               </p>
-              {field("open", "Open password", openPassword, setOpenPassword)}
+              <div className="setting-group">
+                <label className="setting-title" htmlFor={`${ids}-level`}>
+                  Encryption
+                </label>
+                <select
+                  id={`${ids}-level`}
+                  className="text-input"
+                  value={level}
+                  disabled={working || !native}
+                  onChange={(event) => setLevel(event.target.value as EncryptionLevel)}
+                >
+                  {LEVELS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {level !== "aes256" && (
+                  <p className="field-hint">
+                    Use an older level only for readers that cannot open AES-256. RC4 can be broken
+                    quickly; passwords are limited to 32 plain ASCII characters.
+                  </p>
+                )}
+                {level.startsWith("aes") && (
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={!encryptMetadata}
+                      disabled={working || !native}
+                      onChange={(event) => setEncryptMetadata(!event.target.checked)}
+                    />
+                    <span>Leave document metadata unencrypted for search tools</span>
+                  </label>
+                )}
+              </div>
+              {field("open", "Open password", openPassword, setOpenPassword, true)}
               {field("confirm-open", "Confirm open password", confirmOpen, setConfirmOpen)}
               <fieldset className="permission-grid" disabled={working || !native}>
                 <legend className="setting-title">Allowed without the permissions password</legend>
@@ -291,6 +390,7 @@ export function ProtectDialog({
                 "Permissions password",
                 permissionsPassword,
                 setPermissionsPassword,
+                true,
               )}
               {field(
                 "confirm-permissions",

@@ -5,7 +5,7 @@ use super::content::{self, deref, Glyph, ItemKind, Resources};
 use super::geometry::{Matrix, Rect};
 use super::images::{self, Source};
 use lopdf::content::Operation;
-use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
+use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::AtomicBool;
@@ -52,11 +52,14 @@ const UNSAFE_ACTIONS: &[&[u8]] = &[
     b"GoToR",
 ];
 
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegionInput {
     pub page: u32,
     pub rect: [f64; 4],
+    /// Overlay text such as a redaction code, drawn centred on the region.
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -94,6 +97,148 @@ pub struct RedactionRequest {
     pub options: SanitizeOptions,
     #[serde(default)]
     pub acknowledge_signatures: bool,
+    /// Overlay fill colour as RGB from 0 to 1; black when absent.
+    #[serde(default)]
+    pub fill: Option<[f64; 3]>,
+}
+
+/// Font resource used only for overlay labels. The audit accepts text in redacted regions
+/// only from this font and only when it spells exactly the requested label.
+const LABEL_FONT: &[u8] = b"NavRedactLabel";
+const MAX_LABEL_CHARS: usize = 60;
+const LABEL_MARGIN: f64 = 2.0;
+const MIN_LABEL_SIZE: f64 = 4.0;
+
+/// Labelled regions per page.
+pub type LabelMap = BTreeMap<u32, Vec<(Rect, String)>>;
+
+fn helvetica_width(text: &str, size: f64) -> f64 {
+    let font = super::standard_fonts::STANDARD_FONTS
+        .iter()
+        .find(|font| font.name == "Helvetica")
+        .expect("Helvetica metrics are generated");
+    text.chars()
+        .map(|char| {
+            font.unicode_widths
+                .binary_search_by_key(&(char as u32), |(code, _)| *code)
+                .map_or(font.missing_width, |index| font.unicode_widths[index].1)
+        })
+        .map(|width| f64::from(width) * size / 1000.0)
+        .sum()
+}
+
+/// The size at which a label fits its region, or None when it would be unreadably small.
+fn label_size(rect: &Rect, label: &str) -> Option<f64> {
+    let width = helvetica_width(label, 1.0);
+    let size = (rect.height() * 0.6)
+        .min(12.0)
+        .min((rect.width() - 2.0 * LABEL_MARGIN) / width.max(0.001));
+    (size >= MIN_LABEL_SIZE && size * 1.1 + 2.0 * LABEL_MARGIN <= rect.height()).then_some(size)
+}
+
+fn label_map(inputs: &[RegionInput]) -> Result<LabelMap, String> {
+    let mut labels = LabelMap::new();
+    for (index, input) in inputs.iter().enumerate() {
+        let Some(label) = input
+            .label
+            .as_deref()
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+        else {
+            continue;
+        };
+        if label.chars().count() > MAX_LABEL_CHARS
+            || !label.chars().all(|char| (' '..='~').contains(&char))
+        {
+            return Err(
+                "Overlay text must be 1 to 60 printable ASCII characters, such as a redaction code."
+                    .into(),
+            );
+        }
+        let [x0, y0, x1, y1] = input.rect;
+        let rect = Rect::new(x0, y0, x1, y1);
+        if label_size(&rect, label).is_none() {
+            return Err(format!(
+                "A redaction area on page {} is too small for its overlay text.",
+                input.page
+            ));
+        }
+        let overlapping = inputs.iter().enumerate().any(|(other, region)| {
+            let [a, b, c, d] = region.rect;
+            other != index && region.page == input.page && rect.overlaps(&Rect::new(a, b, c, d))
+        });
+        if overlapping {
+            return Err("Redaction areas with overlay text must not overlap other areas.".into());
+        }
+        labels
+            .entry(input.page)
+            .or_default()
+            .push((rect, label.to_owned()));
+    }
+    Ok(labels)
+}
+
+fn validated_fill(request: &RedactionRequest) -> Result<[f64; 3], String> {
+    let fill = request.fill.unwrap_or([0.0; 3]);
+    if fill
+        .iter()
+        .all(|channel| channel.is_finite() && (0.0..=1.0).contains(channel))
+    {
+        Ok(fill)
+    } else {
+        Err("The overlay colour is invalid.".into())
+    }
+}
+
+fn pdf_literal(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('(');
+    for char in text.chars() {
+        if matches!(char, '(' | ')' | '\\') {
+            out.push('\\');
+        }
+        out.push(char);
+    }
+    out.push(')');
+    out
+}
+
+/// Content that paints each region in the fill colour and centres its label, if any.
+fn overlay_stream(regions: &[Rect], labels: &[(Rect, String)], fill: [f64; 3]) -> Vec<u8> {
+    let mut stream = Vec::new();
+    for rect in regions {
+        stream.extend(
+            format!(
+                "q {:.4} {:.4} {:.4} rg {:.4} {:.4} {:.4} {:.4} re f Q\n",
+                fill[0],
+                fill[1],
+                fill[2],
+                rect.x0,
+                rect.y0,
+                rect.width(),
+                rect.height()
+            )
+            .as_bytes(),
+        );
+    }
+    let luminance = 0.2126 * fill[0] + 0.7152 * fill[1] + 0.0722 * fill[2];
+    let ink = if luminance < 0.5 { 1.0 } else { 0.0 };
+    for (rect, label) in labels {
+        let Some(size) = label_size(rect, label) else {
+            continue;
+        };
+        let x = rect.x0 + (rect.width() - helvetica_width(label, size)) / 2.0;
+        let y = rect.y0 + (rect.height() - size * 0.72) / 2.0;
+        stream.extend(
+            format!(
+                "q {ink} {ink} {ink} rg BT /{} {size:.4} Tf {x:.4} {y:.4} Td {} Tj ET Q\n",
+                String::from_utf8_lossy(LABEL_FONT),
+                pdf_literal(label)
+            )
+            .as_bytes(),
+        );
+    }
+    stream
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -129,6 +274,7 @@ pub struct RedactionReport {
 #[derive(Clone, Default)]
 pub struct AuditSpec {
     pub regions: BTreeMap<u32, Vec<Rect>>,
+    pub labels: LabelMap,
     pub terms: Vec<String>,
 }
 
@@ -138,6 +284,7 @@ impl AuditSpec {
         let terms = validated_terms(request)?;
         Ok(Self {
             regions: region_map(&request.regions)?,
+            labels: label_map(&request.regions)?,
             terms,
         })
     }
@@ -146,6 +293,9 @@ impl AuditSpec {
     pub fn merge(&mut self, other: AuditSpec) {
         for (page, rects) in other.regions {
             self.regions.entry(page).or_default().extend(rects);
+        }
+        for (page, labels) in other.labels {
+            self.labels.entry(page).or_default().extend(labels);
         }
         for term in other.terms {
             if !self.terms.contains(&term) {
@@ -167,6 +317,8 @@ pub fn apply(
     let mut doc = super::load(bytes)?;
     let pages = doc.get_pages();
     let regions = group_regions(&pages, &request.regions)?;
+    let labels = label_map(&request.regions)?;
+    let fill = validated_fill(request)?;
     let options = request.options;
     let mut report = RedactionReport::default();
     clear_signatures(&mut doc, request.acknowledge_signatures, &mut report)?;
@@ -197,7 +349,11 @@ pub fn apply(
         redact_page(
             &mut doc,
             page_id,
-            page_regions,
+            Overlay {
+                regions: page_regions,
+                labels: labels.get(&number).map(Vec::as_slice).unwrap_or_default(),
+                fill,
+            },
             &hidden,
             options.remove_hidden_content,
             &mut report,
@@ -217,7 +373,7 @@ pub fn apply(
     doc.prune_objects();
     let output = super::save(&mut doc)?;
     super::check_cancelled(cancel)?;
-    report.audit = audit(&output, &regions, &terms)?;
+    report.audit = audit(&output, &regions, &labels, &terms)?;
     if !report.audit.passed {
         return Err(format!(
             "Redaction was blocked because the audit found {} marked item(s) still inside a region and {} audit term(s) still present in text, metadata, attachments or hidden data. The document is unchanged.",
@@ -310,14 +466,22 @@ struct Rewriter<'a, 'p> {
     report: &'p mut RedactionReport,
 }
 
+/// What one page's redactions paint on top: the regions, any labels and the fill colour.
+struct Overlay<'a> {
+    regions: &'a [Rect],
+    labels: &'a [(Rect, String)],
+    fill: [f64; 3],
+}
+
 fn redact_page(
     doc: &mut Document,
     page_id: ObjectId,
-    regions: &[Rect],
+    overlay: Overlay<'_>,
     hidden: &HashSet<ObjectId>,
     remove_hidden: bool,
     report: &mut RedactionReport,
 ) -> Result<(), String> {
+    let regions = overlay.regions;
     let ops = super::page_operations(doc, page_id)?;
     let mut plan = Plan {
         next_id: doc.max_id,
@@ -350,19 +514,17 @@ fn redact_page(
     stream.extend_from_slice(b"\n");
     // Close any states the original content left open so the boxes use default user space.
     stream.extend(std::iter::repeat_n(b"Q\n".as_slice(), unclosed + 1).flatten());
-    for rect in regions {
-        stream.extend(
-            format!(
-                "q 0 0 0 rg {:.4} {:.4} {:.4} {:.4} re f Q\n",
-                rect.x0,
-                rect.y0,
-                rect.width(),
-                rect.height()
-            )
-            .as_bytes(),
-        );
-    }
+    stream.extend(overlay_stream(regions, overlay.labels, overlay.fill));
     super::set_page_content(doc, page_id, stream)?;
+    if !overlay.labels.is_empty() {
+        let font = doc.add_object(dictionary! {
+            "Type" => "Font",
+            "Subtype" => "Type1",
+            "BaseFont" => "Helvetica",
+            "Encoding" => "WinAnsiEncoding",
+        });
+        additions.push((b"Font".to_vec(), LABEL_FONT.to_vec(), font));
+    }
     if !additions.is_empty() {
         super::own_page_resources(doc, page_id)?;
         for (category, name, id) in additions {
@@ -865,7 +1027,7 @@ pub(super) fn rewrite_text(op: &Operation, glyphs: &[Glyph], remove: &[bool]) ->
     }
 }
 
-fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
+pub(super) fn catalog_id(doc: &Document) -> Result<ObjectId, String> {
     doc.trailer
         .get(b"Root")
         .and_then(Object::as_reference)
@@ -1015,13 +1177,13 @@ fn annotation_rect(annotation: &Dictionary) -> Option<Rect> {
         .and_then(|values| Rect::from_objects(values))
 }
 
-struct RemovedAnnotations {
-    count: usize,
-    ids: HashSet<ObjectId>,
+pub(super) struct RemovedAnnotations {
+    pub(super) count: usize,
+    pub(super) ids: HashSet<ObjectId>,
 }
 
 /// Removes matching annotations, and popups belonging to removed annotations, from a page.
-fn filter_annotations(
+pub(super) fn filter_annotations(
     doc: &mut Document,
     page_id: ObjectId,
     should_remove: impl Fn(&Document, &Dictionary) -> bool,
@@ -1252,7 +1414,7 @@ fn strip_actions(object: &mut Object, unsafe_ids: &HashSet<ObjectId>) {
     }
 }
 
-fn names_dictionary(doc: &mut Document, catalog: ObjectId) -> Option<&mut Dictionary> {
+pub(super) fn names_dictionary(doc: &mut Document, catalog: ObjectId) -> Option<&mut Dictionary> {
     let reference = doc
         .get_dictionary(catalog)
         .ok()
@@ -1397,6 +1559,7 @@ fn sanitize_document(
 pub fn audit(
     bytes: &[u8],
     regions: &BTreeMap<u32, Vec<Rect>>,
+    labels: &LabelMap,
     terms: &[String],
 ) -> Result<AuditReport, String> {
     let doc = super::load(bytes)?;
@@ -1409,6 +1572,8 @@ pub fn audit(
     let mut page_texts = String::new();
     for (number, page_id) in doc.get_pages() {
         let rects = regions.get(&number).map(Vec::as_slice).unwrap_or_default();
+        let page_labels = labels.get(&number).map(Vec::as_slice).unwrap_or_default();
+        let mut label_texts = vec![String::new(); page_labels.len()];
         if !terms.is_empty() {
             // A second, independent text decoder, so a term the interpreter misreads is found.
             if let Ok(text) = doc.extract_text(&[number]) {
@@ -1430,13 +1595,27 @@ pub fn audit(
             &mut |item| {
                 let in_region = rects.iter().any(|rect| rect.overlaps(&item.bbox));
                 match &item.kind {
-                    ItemKind::Text { glyphs, .. } => {
+                    ItemKind::Text { font, glyphs, .. } => {
                         page_texts.push(' ');
                         page_texts.extend(glyphs.iter().map(|glyph| glyph.text.as_str()));
-                        residual += glyphs
-                            .iter()
-                            .filter(|glyph| rects.iter().any(|rect| rect.overlaps(&glyph.bbox)))
-                            .count();
+                        for glyph in glyphs {
+                            if !rects.iter().any(|rect| rect.overlaps(&glyph.bbox)) {
+                                continue;
+                            }
+                            // An overlay label is the only text allowed in a region, and only
+                            // in the label font, inside its own region.
+                            let label = (font.as_slice() == LABEL_FONT)
+                                .then(|| {
+                                    page_labels.iter().position(|(rect, _)| {
+                                        rect.inflate(1.0).contains(&glyph.bbox)
+                                    })
+                                })
+                                .flatten();
+                            match label {
+                                Some(index) => label_texts[index].push_str(&glyph.text),
+                                None => residual += 1,
+                            }
+                        }
                     }
                     ItemKind::Image {
                         id: Some(id), ctm, ..
@@ -1480,6 +1659,13 @@ pub fn audit(
                 }
             }
         }
+        // Each label must read exactly as requested, so no other text hides behind it.
+        let compact = |text: &str| text.split_whitespace().collect::<String>();
+        residual += page_labels
+            .iter()
+            .zip(&label_texts)
+            .filter(|((_, expected), found)| compact(expected) != compact(found))
+            .count();
         if let Ok(annotations) = doc.get_page_annotations(page_id) {
             residual += annotations
                 .iter()
@@ -1606,6 +1792,7 @@ mod tests {
             terms: terms.iter().map(|term| (*term).to_owned()).collect(),
             options: SanitizeOptions::default(),
             acknowledge_signatures: false,
+            fill: None,
         }
     }
 
@@ -1613,7 +1800,81 @@ mod tests {
         RegionInput {
             page,
             rect: rect.to_array(),
+            label: None,
         }
+    }
+
+    #[test]
+    fn labelled_regions_show_their_code_in_the_fill_colour_and_pass_the_audit() {
+        let (mut doc, _) = page_document(LINE, dictionary! {});
+        let bytes = crate::engine::save(&mut doc).unwrap();
+        let mut marked = region(1, Rect::new(60.0, 690.0, 560.0, 730.0));
+        marked.label = Some("(b)(6)".into());
+        let mut chosen = request(vec![marked], &["SECRET-CANARY"]);
+        chosen.fill = Some([0.2, 0.2, 0.6]);
+        let cancel = AtomicBool::new(false);
+        let (output, report) = apply(&bytes, &chosen, &cancel).unwrap();
+        assert!(report.audit.passed);
+        let saved = crate::engine::load(&output).unwrap();
+        let text = saved.extract_text(&[1]).unwrap();
+        assert!(text.contains("(b)(6)"), "{text}");
+        assert!(!text.contains("SECRET"), "{text}");
+        let page = saved.get_pages()[&1];
+        let content = String::from_utf8_lossy(&saved.get_page_content(page)).into_owned();
+        assert!(content.contains("0.2000 0.2000 0.6000 rg"), "{content}");
+        // The saved spec keeps auditing the label on later saves.
+        let spec = AuditSpec::from_request(&chosen).unwrap();
+        assert!(
+            audit(&output, &spec.regions, &spec.labels, &spec.terms)
+                .unwrap()
+                .passed
+        );
+        let mut other = spec.labels.clone();
+        other.get_mut(&1).unwrap()[0].1 = "(b)(7)".into();
+        assert!(
+            !audit(&output, &spec.regions, &other, &spec.terms)
+                .unwrap()
+                .passed
+        );
+    }
+
+    #[test]
+    fn label_text_outside_the_label_font_still_fails_the_audit() {
+        let (mut doc, _) = page_document(LINE, dictionary! {});
+        let bytes = crate::engine::save(&mut doc).unwrap();
+        let area = Rect::new(60.0, 690.0, 560.0, 730.0);
+        let labels = LabelMap::from([(1, vec![(area, "Name".to_owned())])]);
+        let regions = BTreeMap::from([(1, vec![area])]);
+        // The original text is still present, so its glyphs count as residue.
+        assert!(!audit(&bytes, &regions, &labels, &[]).unwrap().passed);
+    }
+
+    #[test]
+    fn invalid_labels_and_colours_are_rejected_before_editing() {
+        let (mut doc, _) = page_document(LINE, dictionary! {});
+        let bytes = crate::engine::save(&mut doc).unwrap();
+        let cancel = AtomicBool::new(false);
+        let mut tiny = region(1, Rect::new(60.0, 690.0, 70.0, 694.0));
+        tiny.label = Some("FOIA (b)(6)".into());
+        assert!(apply(&bytes, &request(vec![tiny], &[]), &cancel)
+            .unwrap_err()
+            .contains("too small"));
+        let mut unicode = region(1, Rect::new(60.0, 690.0, 560.0, 730.0));
+        unicode.label = Some("Geheim \u{2713}".into());
+        assert!(apply(&bytes, &request(vec![unicode], &[]), &cancel)
+            .unwrap_err()
+            .contains("ASCII"));
+        let mut first = region(1, Rect::new(60.0, 690.0, 300.0, 730.0));
+        first.label = Some("PII".into());
+        let second = region(1, Rect::new(200.0, 690.0, 560.0, 730.0));
+        assert!(apply(&bytes, &request(vec![first, second], &[]), &cancel)
+            .unwrap_err()
+            .contains("overlap"));
+        let mut coloured = request(vec![region(1, Rect::new(60.0, 690.0, 560.0, 730.0))], &[]);
+        coloured.fill = Some([1.5, 0.0, 0.0]);
+        assert!(apply(&bytes, &coloured, &cancel)
+            .unwrap_err()
+            .contains("colour"));
     }
 
     /// Visits every item on page `number` of a saved document.
@@ -2251,6 +2512,7 @@ mod tests {
                 remove_bookmarks: false,
             },
             acknowledge_signatures: false,
+            fill: None,
         };
         let cancel = AtomicBool::new(false);
         let (output, report) = apply(&bytes, &request, &cancel).unwrap();

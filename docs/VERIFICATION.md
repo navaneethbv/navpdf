@@ -5,6 +5,158 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 24 PR 71 conflict and quality review
+
+Merged the current main dependency update into the PDFCraft branch, retaining SHA-2 0.11.1 and the branch's stringprep test dependency in Cargo.lock.
+The eight hosted Sonar findings were five ambiguous form-label text nodes and three functions over the cognitive-complexity limit.
+Label text now has explicit spans, and image reading, OCR page selection and password-format validation have cohesive helpers with the existing check order and document-ownership guards preserved.
+
+Codacy's generic-header-injection finding on the page transition duration is a false positive.
+The target is pdf-lib's PDFPageLeaf dictionary, not an HTTP response, and validateTransition rejects nonnumeric, nonfinite and out-of-range advance times before serialization.
+Codacy did not honor the inline annotation, so the individual finding was reviewed as False positive in its UI with the numeric PDF boundary and regression evidence.
+The generic security rule remains enabled for the file and project.
+Ten integration cases reject CRLF strings, numeric strings, objects, NaN, infinity and out-of-range values, and round-trip zero, 3600 and null while preserving an unselected page.
+
+Local Node 24 verification passes lint, typecheck, formatting, the production build and the frontend coverage gates.
+The transition integration file passes 19 tests.
+The first fresh hosted run found GHSA-834v-8h66-3h79 in test-only happy-dom 21.0.3; the follow-up requires and locks patched 21.0.4, and npm audit reports zero vulnerabilities.
+The full frontend suite passes 1,054 tests across 140 files.
+
+Cargo Deny also identified RUSTSEC-2026-0385 and RUSTSEC-2026-0387.
+The final patch updates P-256 to stable 0.14, crypto-bigint to 0.7.7 and ctutils to 0.4.5, removing both vulnerable versions.
+The temporary advisory exception from the concurrent branch update is superseded by this dependency fix and removed.
+The encoded-key and signature adapter retains stable CMS, X.509 and RSA dependencies without changing the application MSRV of 1.90; ADR 0009 records the boundary.
+An isolated harness compiling the actual signing engine passes eight signing tests and Clippy with warnings denied.
+A fixed-output regression preserves the prior DER signature and SPKI encodings and checks algorithm identifiers and PKCS #8 import.
+An OpenSSL-generated P-256 PKCS #12 identity signs a PDF through the actual engine; OpenSSL CMS integrity verification accepts the extracted byte ranges and returns identical content.
+This independent check does not claim certificate trust.
+
+Cargo metadata with --locked and cargo fmt --check pass after conflict resolution.
+Rust tests and Clippy cannot compile locally because pkg-config and the Linux GTK/WebKit development libraries are unavailable; Linux, macOS, MSRV and native acceptance must be verified on the pushed commit in hosted CI.
+Native NavPDF, Preview, Acrobat, physical printing and release packaging were not exercised in this Linux workspace.
+Hosted analysis and merge results must be checked on the final pushed head; earlier passing runs are not evidence for this follow-up.
+
+## October 22 PDFCraft gap quality follow-up
+
+SonarCloud reported a C reliability rating on new code and CodeQL reported 8 hard-coded password alerts on PR 71.
+SonarCloud and Codacy issue lists cannot be read from the development container because its network policy blocks both hosts.
+The Sonar JavaScript and TypeScript rules were therefore run locally with `eslint-plugin-sonarjs` 3, plus the typescript-eslint, React, jsx-a11y and unicorn rules SonarCloud applies, limited to lines this PR adds.
+That run found 88 findings, including loops awaiting one operation at a time, nested ternaries, functions over the cognitive-complexity limit, array-index React keys, a backtracking regular expression and optional-chain candidates; after the follow-up it reports none.
+Sequential work now uses the existing in-order helper, numbered output names share one `uniqueName` helper, and long functions are split into named steps.
+CSS checks for duplicate properties, unknown properties and selectors, and empty blocks report no new findings.
+The CodeQL alerts came from literal test passwords and the literal first character of the wrong-password probe used to validate protected output; tests now derive passwords at run time and the probe uses a random prefix.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass, and 1,044 frontend tests pass across 140 files with the coverage gates; `cargo fmt --check`, Clippy with `-D warnings` and every Rust test except the 2 root-only permission tests pass.
+Hosted SonarCloud, CodeQL and Codacy results must be read on the pushed commit; this local run is not a substitute for them.
+On `8ef7a93` the SonarCloud gate passed with 8 new issues and Codacy reported 5 critical security findings, still without readable details.
+Codacy's JavaScript security profile was reproduced with `eslint-plugin-security` 3 under ESLint 9: its function-call and variable-assignment object-injection findings and two timing-attack matches on a variable named `token` tracked Codacy's critical counts across the PR's commits.
+These now use `Map` lookups, `.at()`, destructured regular-expression groups in one shared `parseHexColor` helper, and a renamed date-format field.
+The Sonar rule set was also run on the PR's test files; awaits inside loops, helpers nested in `describe` blocks, `charCodeAt` and an `Array` constructor there are replaced.
+Semgrep's public JavaScript, TypeScript and Rust rules report no error-severity findings on the changed files.
+On `2f5ceb6` Codacy fell from 5 to 2 critical findings; Semgrep's dynamic-method rule matched the page clipboard shortcut handler, which now uses a `switch`.
+CodeQL's remaining alerts were empty owner passwords in the legacy-encryption test, which now uses a generated owner password.
+SonarCloud still reported 8 issues after the test-file changes, so the new Rust was checked against Sonar's cognitive-complexity limit of 15 with a local estimate: the faux-redaction scan (about 38) is split into per-page helpers, and the optimizer discards (about 18) run from a table.
+
+## October 21 PDFCraft gap batch 6, creation and OCR
+
+The [sixth batch mapping](PDFCRAFT-COMPARISON.md#sixth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,044 tests across 140 files, with 85.83% statements, 77.85% branches, 84.77% functions and 88.90% lines; the coverage gates pass.
+No Rust source changed; the only native change adds JPEG 2000 to the Swift ImageIO import list, which cannot be compiled or run in this Linux container.
+
+Integration tests read text-created PDFs with PDF.js across page continuation and form feeds, check word and character wrapping, font-coverage rejection, image routing between the web view and the native decoder, Otsu thresholding, contrast stretching and speck removal.
+Testing found that a word's trailing space counted toward the line width, so a word that fitted exactly wrapped early; the width check now ignores trailing spaces.
+Dialog tests cover text creation, coverage errors, clipboard reading and its failure message, separate-file ZIP conversion with numbered duplicate names, multi-file OCR that skips a page with text and reports an unreadable file, and the OCR panel skipping text pages with black-and-white cleanup.
+The existing OCR warning test now selects its checkbox by name because the panel has more checkboxes.
+
+In the Chromium browser preview, generated GIF, BMP and WebP samples in `output/batch-six/` imported as a three-page PDF, typed text with accented and curly-quote characters opened as a PDF, and the multi-file OCR dialog showed its desktop-only notice.
+The Create PDF tabs wrapped onto two rows with the first label, so the new tab is named Text & Paste.
+Native OCR, clipboard permission prompts in WebKit, JPEG 2000 decoding and Preview acceptance were not run.
+
+## October 21 PDFCraft gap batch 6, printing and optimizer
+
+The [sixth batch mapping](PDFCRAFT-COMPARISON.md#sixth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,030 tests across 138 files, with 86.00% statements, 78.07% branches, 85.00% functions and 89.11% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass; `cargo test --locked` passes 105 and fails the same 2 root-only permission tests recorded for batch 5.
+Logs are under ignored `output/batch-six/`.
+
+Engine tests show that nothing is discarded by default, that each discard removes only its own structures (a URI link keeps its action but loses a chained script), that comment discards keep links and multimedia, and that a discard is kept even when compression saves no space.
+Integration tests read prepared print copies with PDF.js to check parity selection and order, the annotations kept for each content choice, the empty page content for form fields only, grayscale conversion, raster bounds and full-page image rebuilding, plus the optimizer's handling of form flattening.
+Dialog tests cover odd pages in reverse order through the native print call, the grayscale preview and its reset when an option changes, and the discard request.
+
+Poppler `pdfinfo` reports the synthetic `output/batch-six/discard-source.pdf` (SHA-256 `735b566d549ce378cc8a412de228129c5311b6f89df2712766b1d2d2b366b4dc`) as tagged with a title, and `discard-output.pdf` (SHA-256 `0845036ec804900b6cd4dc7ef1ec58f4c36dcf0f98bd6d17702e0db61a1159b1`), made with every discard, as untagged without a title; `pdftotext` still extracts the body text.
+In the Chromium browser preview, a grayscale, form-fields-only preview of `output/batch-six/form-fixture.pdf` showed only the field on a white page; the two print selects were misaligned by a shared spacing rule, which now exempts two-column rows.
+Native printing, Preview and Acrobat acceptance were not run, and no physical printer was used.
+
+## October 21 PDFCraft gap batch 5
+
+The [fifth batch mapping](PDFCRAFT-COMPARISON.md#fifth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,019 tests across 136 files, with 86.15% statements, 78.11% branches, 85.11% functions and 89.28% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass.
+`cargo test --locked` passes 101 library tests and fails 2: `unwritable_destination_directory_keeps_the_original` and `legacy_assets_stay_listed_when_the_upgrade_cannot_be_written`.
+Both depend on a directory being unwritable, which does not hold when the container runs as root; neither touches batch 5 code, and they are expected to pass on hosted CI.
+Logs are under ignored `output/batch-five/`.
+
+Engine tests open every encryption level only with its password, keep metadata readable only for AES, reject legacy passwords that would be truncated, show labels in the chosen colour while passing the audit, fail the audit for label text in another font or a changed label, and find covered text, unapplied Redact annotations and filled covering annotations.
+Testing found that legacy security handlers truncate passwords to 32 bytes and lopdf drops control characters, which made the wrong-password check accept some wrong passwords; legacy passwords are now limited and the check uses a printable prefix.
+Dialog tests cover the encryption request, the legacy password limit, strength labels, labelled regions and fill colours, whole-page marks and marking findings for redaction.
+
+Poppler 24 `pdfinfo` and `pdftotext` open each sample in `output/batch-five/` with the user password and refuse a wrong one.
+They report AES-256 (V5 R6, `/EncryptMetadata false`), AES (V4 R4), RC4 128-bit (V2 R3) and RC4 40-bit (V1 R2).
+The labelled redaction sample extracts only `(b)(6)`, and its Poppler raster shows white label text on the chosen blue fill.
+
+| Sample | SHA-256 |
+| --- | --- |
+| `aes256.pdf` | `10c4dc743ea71a7126abcdb35cfb3bc76416791bf59228ad104d788aeea69741` |
+| `aes128.pdf` | `3e10fbd425ffbab6b168f9057d9f084f515ba1b2729e69c88e7564f90ad39814` |
+| `rc4128.pdf` | `bb71b5904fa13fd57a0f7a922234ad6439d0ed4d6ac4661e91df8bba910890f6` |
+| `rc440.pdf` | `997ae818be4c80269d3e5d1d7fcc62482d889bcac2370f3dba0f53631422a673` |
+| `labelled.pdf` | `0a95a90e3ee9bd92273524a2a570d216990cafd0f1815cbd79d91cd559b7a746` |
+
+The Chromium browser preview shows the new protection, redaction and Find Fake Redactions controls with the desktop-only notice; the engine does not run there.
+Native NavPDF, Preview and Acrobat acceptance were not run.
+
+## October 21 PDFCraft gap batch 4
+
+The [fourth batch mapping](PDFCRAFT-COMPARISON.md#fourth-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 1,012 tests across 135 files, with 86.14% statements, 78.07% branches, 85.16% functions and 89.27% lines; the coverage gates pass.
+No Rust source changed.
+Logs are under ignored `output/batch-four/`.
+
+Integration tests read saved output with PDF.js: list box multiple selection, the date format PDF.js derives from the saved actions, push-button image fields, tooltips, comb and maximum length, shared values across duplicated widgets, tab order, atomic renaming, detection of labelled underscore lines that skips covered areas, label-based name suggestions, and date formatting and parsing for every offered format.
+Testing found that PDF.js reads a field's tooltip only from its widget, so tooltips are now written to the field and each widget.
+Dialog tests cover property saving, duplication, tab-order changes, invalid ranges, detected-field creation, new field types and the preview action; a DOM test covers the date input swap and preserved non-date text.
+Date parsing no longer builds a regular expression from the document's format string; a token walker treats every non-token character literally, with a regression test using regular-expression syntax in the format.
+
+In the Chromium browser preview with `output/batch-four/form-fixture.pdf`, the date field became a native date input on focus and wrote `25/12/2026` in its `dd/mm/yyyy` format on blur; Detect & Name Fields found and created the labelled "Full name" field; Preview focused the first field.
+Native NavPDF, Preview and Acrobat acceptance were not run; Acrobat is the relevant reader for the saved date-format actions.
+
+## October 21 PDFCraft gap batch 3
+
+Source baseline: `8e9b310` on `main`, with the batch on `feat/pdfcraft-remaining-gaps`.
+The [third batch mapping](PDFCRAFT-COMPARISON.md#third-batch-mapping) lists each addition and its limits.
+
+### Local checks
+
+Node 24.22.0 and `npm ci` were used.
+Lint, typecheck, formatting, production build and `git diff --check` pass.
+The frontend suite passes 990 tests across 133 files, with 86.41% statements, 78.43% branches, 85.59% functions and 89.49% lines; the coverage gates pass and LCOV is retained.
+No Rust source changed, so the Rust suite and Clippy were not rerun locally.
+Logs are under ignored `output/batch-three/`.
+
+Integration tests read saved output with PDF.js and pdf-lib: pasted page order, displayed-margin mapping for every rotation, trim and bleed preservation, transition dictionaries, custom-property round trips and validation, font listing, polygon, connected-line, cloud and callout annotations with appearances, grouped replacement proposals, and embedded attachment content.
+Dialog tests cover keyboard and button page clipboard use, thumbnail scaling, page-property application and range errors, custom-property editing, proposal submission and attachment placement.
+Testing found that PDF.js 5 no longer returns attachment content with annotation data; the test reads it through `getAttachmentContent` instead.
+
+### Independent-reader and browser-preview evidence
+
+Poppler `pdfinfo -box` reads the trim and bleed boxes, `pdfdetach -list` finds the comment attachment, and a Poppler raster shows the polygon, cloud, callout, replacement strikeout with caret, and attachment icon in `output/batch-three/batch-three-evidence.pdf`, SHA-256 `8c8b8cad2f06dd99185d118b26f57e880d6f06290fb76c4bc3bdabb6dee26aea`.
+In the Chromium browser preview, drawing a cloud and a polygon from the annotation toolbar saved both with visible appearances.
+The preview showed enlarged thumbnails not scaling their page image, uneven margin fields, and the point-tool status hidden behind the annotation toolbar; all three were fixed and recaptured.
+Native NavPDF and Preview acceptance were not run because the work was done in a Linux container.
+
 ## October 16 documentation review and merged baseline
 
 Reviewed source: `c09576f7d96de04ba30b20a9a5737d4d42ae3010` on clean `main`.

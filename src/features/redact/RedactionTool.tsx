@@ -19,12 +19,13 @@ import {
 } from "./redaction-marks";
 import { PatternFinder, patternSummary } from "./PatternFinder";
 import { MAX_WORD_LIST_TERMS, parseWordList } from "./word-list";
+import { RedactionAppearance, WholePagesMarker, hexToRgb } from "./RedactionAppearance";
 
 interface Mark {
   id: string;
   page: number;
   rect: PdfRect;
-  source: "drawn" | "search" | "coordinates";
+  source: "drawn" | "search" | "coordinates" | "page";
 }
 
 export const DEFAULT_SANITIZE_OPTIONS: SanitizeOptions = {
@@ -69,6 +70,8 @@ export function RedactionTool({
     ),
   );
   const [terms, setTerms] = useState<string[]>([]);
+  const [fill, setFill] = useState("#000000");
+  const [overlayText, setOverlayText] = useState("");
   const [term, setTerm] = useState("");
   const [options, setOptions] = useState(DEFAULT_SANITIZE_OPTIONS);
   const [drawing, setDrawing] = useState(false);
@@ -259,10 +262,15 @@ export function RedactionTool({
         doc.id,
         bytes,
         {
-          regions: marks.map(({ page, rect }) => ({ page, rect })),
+          regions: marks.map(({ page, rect }) => ({
+            page,
+            rect,
+            ...(overlayText.trim() ? { label: overlayText.trim() } : {}),
+          })),
           terms,
           options,
           acknowledgeSignatures: acknowledged,
+          fill: hexToRgb(fill),
         },
         jobId,
       );
@@ -427,7 +435,28 @@ export function RedactionTool({
                 Add Region
               </button>
             </details>
+            <WholePagesMarker
+              pdf={controller?.pdf}
+              onError={(message) => setNotice(message)}
+              onMark={(found) => {
+                setMarks((current) => [
+                  ...current,
+                  ...found.map((mark) => ({
+                    id: crypto.randomUUID(),
+                    ...mark,
+                    source: "page" as const,
+                  })),
+                ]);
+                setNotice(`Marked ${found.length} whole page${found.length === 1 ? "" : "s"}.`);
+              }}
+            />
             {notice && <output className="field-hint">{notice}</output>}
+            <RedactionAppearance
+              fill={fill}
+              onFill={setFill}
+              label={overlayText}
+              onLabel={setOverlayText}
+            />
 
             <div className="setting-group">
               <span className="setting-title">Marked regions ({marks.length})</span>

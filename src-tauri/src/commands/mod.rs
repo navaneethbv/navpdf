@@ -766,7 +766,7 @@ fn verify_redactions(bytes: &[u8], audit: Option<&redact::AuditSpec>) -> Result<
     let Some(spec) = audit else {
         return Ok(());
     };
-    if redact::audit(bytes, &spec.regions, &spec.terms)?.passed {
+    if redact::audit(bytes, &spec.regions, &spec.labels, &spec.terms)?.passed {
         Ok(())
     } else {
         Err("Saving was blocked because this copy no longer passes the redaction audit: content was found inside a redacted area or a redaction term is present again. The file on disk is unchanged.".into())
@@ -1473,6 +1473,7 @@ mod tests {
         let spec = redact::AuditSpec {
             regions: Default::default(),
             terms: vec!["SECRET-CANARY".into()],
+            labels: Default::default(),
         };
         doc.redaction_audit.lock().unwrap().candidate =
             Some((Sha256::digest(&redacted).to_vec(), spec));

@@ -5,6 +5,8 @@ export type PdfRect = [number, number, number, number];
 export interface RedactionRegion {
   page: number;
   rect: PdfRect;
+  /** Overlay text such as a redaction code, centred on the region. */
+  label?: string;
 }
 
 export interface SanitizeOptions {
@@ -21,6 +23,25 @@ export interface RedactionRequest {
   terms: string[];
   options: SanitizeOptions;
   acknowledgeSignatures: boolean;
+  /** Overlay colour as RGB channels from 0 to 1; black when absent. */
+  fill?: [number, number, number];
+}
+
+export type CoverUpKind = "coveredText" | "unappliedRedaction" | "coveringAnnotation";
+
+export interface CoverUp {
+  page: number;
+  kind: CoverUpKind;
+  rect: PdfRect;
+  characters: number;
+  /** Start of the text under the cover, for the reviewer only. */
+  sample: string;
+}
+
+export interface CoverUpReport {
+  findings: CoverUp[];
+  pagesChecked: number;
+  truncated: boolean;
 }
 
 export interface AuditReport {
@@ -66,7 +87,24 @@ export interface CompressionReport {
   imagesRecompressed: number;
   imagesSkipped: number;
   checks: FidelityCheck[];
+  /** One entry per chosen discard that changed the document. */
+  discarded?: string[];
   message: string;
+}
+
+/** Structures the optimizer removes before compressing; every option defaults to off. */
+export interface DiscardOptions {
+  javascript: boolean;
+  thumbnails: boolean;
+  tags: boolean;
+  bookmarks: boolean;
+  printSettings: boolean;
+  alternateImages: boolean;
+  comments: boolean;
+  multimedia: boolean;
+  metadata: boolean;
+  attachments: boolean;
+  privateData: boolean;
 }
 
 export interface PermissionRequest {
@@ -80,10 +118,16 @@ export interface PermissionRequest {
   accessibility: boolean;
 }
 
+/** Cipher for a protected copy; only AES-256 is recommended. */
+export type EncryptionLevel = "aes256" | "aes128" | "rc4128" | "rc440";
+
 export interface ProtectionRequest {
   userPassword: string;
   ownerPassword: string;
   permissions: PermissionRequest;
+  encryption?: EncryptionLevel;
+  /** False keeps the XMP metadata readable; AES levels only. */
+  encryptMetadata?: boolean;
 }
 
 export interface ProtectedSave {

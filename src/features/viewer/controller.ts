@@ -6,6 +6,7 @@ import {
   AnnotationEditorParamsType,
   PermissionFlag,
   type PDFDocumentProxy,
+  type PDFPageProxy,
   type PDFDocumentLoadingTask,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { AnnotationEditorUIManager } from "pdfjs-dist/types/src/display/editor/tools";
@@ -43,6 +44,14 @@ import {
   updateAnnotation,
   type TextMarkupKind,
 } from "../../services/document-commands";
+import { enhanceDateFields } from "./date-fields";
+import {
+  addCallout,
+  addCloud,
+  addFileAttachmentComment,
+  addPolyShape,
+  addTextEditProposal,
+} from "../../services/pdf/comment-types";
 import { addMeasurement, type MeasurementInput } from "../../services/pdf/measure";
 import { PDFDocument } from "pdf-lib";
 import { readComment } from "../../services/pdf/read-comment";
@@ -389,6 +398,17 @@ export class ViewerController {
     });
     on("scalechanging", ({ scale }: { scale: number }) =>
       useWorkspace.getState().set({ zoom: Math.round(scale * 100) }),
+    );
+    on(
+      "annotationlayerrendered",
+      ({ source }: { source: { div: HTMLElement; pdfPage?: PDFPageProxy | null } }) => {
+        void source.pdfPage
+          ?.getAnnotations()
+          .then((annotations) => enhanceDateFields(source.div, annotations))
+          .catch(() => {
+            // Fields stay usable as plain text when annotations cannot be read again.
+          });
+      },
     );
     on("textlayerrendered", ({ error }: { error?: unknown }) => {
       if (error)
@@ -932,6 +952,84 @@ export class ViewerController {
       await this.replaceWithBytes(shaped, status, { preMutationBytes: bytes });
     });
   }
+  /** Applies one comment edit to the current revision with the current markup style. */
+  private async addComment(
+    status: string,
+    edit: (
+      bytes: Uint8Array,
+      style: { color: [number, number, number]; width: number; opacity: number },
+    ) => Promise<Uint8Array>,
+  ) {
+    if (!this.pdf) throw new Error("Open a PDF before adding a comment.");
+    return this.mutate(status, async () => {
+      const state = useWorkspace.getState();
+      const bytes = await this.pdf!.saveDocument();
+      const changed = await edit(bytes, {
+        color: rgbFromHex(state.inkColor),
+        width: state.inkWidth,
+        opacity: state.inkOpacity,
+      });
+      await this.replaceWithBytes(changed, status, { preMutationBytes: bytes });
+    });
+  }
+  addPolyShape(kind: "Polygon" | "PolyLine", vertices: [number, number][], page: number) {
+    return this.addComment(
+      kind === "Polygon" ? "Polygon added to document" : "Connected lines added to document",
+      (bytes, style) => addPolyShape(bytes, { ...style, page, kind, vertices }),
+    );
+  }
+  addCloud(start: [number, number], end: [number, number], page: number) {
+    return this.addComment("Cloud added to document", (bytes, style) =>
+      addCloud(bytes, { ...style, page, start, end }),
+    );
+  }
+  addCallout(tip: [number, number], box: [number, number], text: string, page: number) {
+    return this.addComment("Callout added to document", (bytes, style) =>
+      addCallout(bytes, { ...style, page, tip, box, text }),
+    );
+  }
+  async addTextEditProposal(
+    kind: "insert" | "replace",
+    selection: SelectedTextGeometry[],
+    text: string,
+  ) {
+    if (!selection.length) throw new Error("Select text on the page first.");
+    const [first] = selection;
+    const hex = useWorkspace.getState().highlightColor;
+    await this.addComment(
+      kind === "insert" ? "Insertion proposed" : "Replacement proposed",
+      (bytes, style) =>
+        addTextEditProposal(bytes, {
+          ...style,
+          color: rgbFromHex(hex),
+          page: first.page,
+          kind,
+          quads: first.quads,
+          text,
+          selected: first.text,
+        }),
+    );
+    globalThis.getSelection()?.removeAllRanges();
+  }
+  addFileComment(
+    file: { name: string; type: string; data: Uint8Array },
+    description: string,
+    page: number,
+    at: [number, number],
+  ) {
+    return this.addComment("File attachment comment added", (bytes, style) =>
+      addFileAttachmentComment(bytes, {
+        ...style,
+        color: undefined,
+        page,
+        at,
+        fileName: file.name,
+        mimeType: file.type,
+        data: file.data,
+        description,
+      }),
+    );
+  }
   /** Saves a measurement drawn on `input.page` with the current markup color. */
   async addMeasurement(input: Omit<MeasurementInput, "color">) {
     if (!this.pdf) throw new Error("Open a PDF before measuring.");
@@ -1218,6 +1316,38 @@ export class ViewerController {
   zoom(value: number | string) {
     if (typeof value === "string") this.viewer.currentScaleValue = value;
     else this.viewer.currentScale = boundedZoom(value);
+  }
+  /**
+   * Moves to the first page with a form field and focuses that field, so the form can be tried
+   * out with Tab as a person filling it would.
+   */
+  async previewForm() {
+    const pdf = this.pdf;
+    if (!pdf) return;
+    const hasField = async (page: number) => {
+      const proxy = await pdf.getPage(page);
+      const annotations = await proxy.getAnnotations();
+      return { page, found: annotations.some((annotation) => annotation.subtype === "Widget") };
+    };
+    const pages = Array.from({ length: Math.min(pdf.numPages, 500) }, (_, index) => index + 1);
+    for await (const { page, found } of mapInOrder(pages, hasField)) {
+      if (pdf !== this.pdf) return;
+      if (!found) continue;
+      this.goTo(page);
+      useWorkspace.getState().set({
+        status: "Form preview: fill the fields and press Tab to move between them",
+      });
+      const focus = (attempt: number) => {
+        const field = this.container.querySelector<HTMLElement>(
+          `.page[data-page-number="${page}"] .annotationLayer :is(input, select, textarea, button)`,
+        );
+        if (field) field.focus();
+        else if (attempt < 20) setTimeout(() => focus(attempt + 1), 100);
+      };
+      focus(0);
+      return;
+    }
+    useWorkspace.getState().set({ status: "This PDF has no form fields to preview" });
   }
   goTo(page: number) {
     if (!this.pdf) return;

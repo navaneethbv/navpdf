@@ -20,6 +20,12 @@ import { applyOcrSearchableLayer, detectExistingText } from "../../services/docu
 import type { OcrEngineInfo, OcrPageResult } from "../../types/operations";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
+import {
+  NO_PREPROCESSING,
+  PREPROCESSING_LABELS,
+  pageImage,
+  type OcrPreprocessing,
+} from "./ocr-pages";
 
 function identifyReview(pages: OcrPageResult[]) {
   return pages.map((page) => ({
@@ -34,49 +40,12 @@ function identifyReview(pages: OcrPageResult[]) {
 
 type PdfDocument = NonNullable<ViewerController["pdf"]>;
 
-function pageWithinOcrLimit(width: number, height: number): boolean {
-  return (
-    width > 0 &&
-    height > 0 &&
-    Number.isFinite(width * height) &&
-    width <= 8192 &&
-    height <= 8192 &&
-    width * height <= 16_000_000
-  );
-}
-
-async function pageImage(
-  sourcePdf: PdfDocument,
-  pageNumber: number,
-  ensureCurrent: () => void,
-): Promise<Uint8Array> {
-  const page = await sourcePdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: 2.0, rotation: 0 });
-  if (!pageWithinOcrLimit(viewport.width, viewport.height)) {
-    throw new Error("This page exceeds the OCR image size limit.");
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  try {
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Unable to render the OCR page.");
-    await page.render({ canvas, canvasContext: context, viewport }).promise;
-    ensureCurrent();
-    const encoded = canvas.toDataURL("image/png").split(",")[1];
-    if (!encoded) throw new Error("Unable to encode the OCR page.");
-    return Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
-  } finally {
-    canvas.width = 0;
-    canvas.height = 0;
-  }
-}
-
 interface RecognizeOcrPagesOptions {
   sourcePdf: PdfDocument;
   targetIndices: number[];
   totalPages: number;
   language: string;
+  preprocessing: OcrPreprocessing;
   cancelled: () => boolean;
   ensureCurrent: () => void;
   onProgress: (value: number) => void;
@@ -89,6 +58,7 @@ async function recognizeOcrPages({
   targetIndices,
   totalPages,
   language,
+  preprocessing,
   cancelled,
   ensureCurrent,
   onProgress,
@@ -102,7 +72,7 @@ async function recognizeOcrPages({
     const pageNumber = pageIndex + 1;
     onProgress(Math.round((index / targetIndices.length) * 85) + 5);
     onStatus(`Recognizing page ${pageNumber} of ${totalPages}...`);
-    const imageBytes = await pageImage(sourcePdf, pageNumber, ensureCurrent);
+    const imageBytes = await pageImage(sourcePdf, pageNumber, ensureCurrent, preprocessing);
     const result = await ocrRecognizePage(imageBytes, { pageIndex, language });
     ensureCurrent();
     return { result, pageNumber };
@@ -129,6 +99,43 @@ function languageName(code: string): string {
 
 type OcrTargetScope = "current" | "all" | "range";
 type OcrMode = "searchable" | "extract";
+
+async function selectOcrPages({
+  pdfBytes,
+  targetIndices,
+  skipTextPages,
+  warnExistingText,
+  ensureCurrent,
+  onSkip,
+}: {
+  pdfBytes: Uint8Array;
+  targetIndices: number[];
+  skipTextPages: boolean;
+  warnExistingText: boolean;
+  ensureCurrent: () => void;
+  onSkip: (count: number) => void;
+}): Promise<number[] | null> {
+  if (skipTextPages) {
+    // One page at a time: each check parses the document.
+    const checkPage = async (idx: number) => ({
+      idx,
+      hasText: await detectExistingText(pdfBytes, idx),
+    });
+    const withoutText: number[] = [];
+    for await (const page of mapInOrder(targetIndices, checkPage))
+      if (!page.hasText) withoutText.push(page.idx);
+    ensureCurrent();
+    if (!withoutText.length) throw new Error("Every target page already has text.");
+    if (withoutText.length < targetIndices.length)
+      onSkip(targetIndices.length - withoutText.length);
+    return withoutText;
+  }
+  if (!warnExistingText) return targetIndices;
+  for (const idx of targetIndices) {
+    if (await detectExistingText(pdfBytes, idx)) return null;
+  }
+  return targetIndices;
+}
 
 function OcrErrorMessage({ error }: Readonly<{ error: string | null }>) {
   return error ? <p role="alert">{error}</p> : null;
@@ -461,6 +468,8 @@ export function OcrPanel({
   const [mode, setMode] = useState<"searchable" | "extract">("searchable");
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [hasExistingWarning, setHasExistingWarning] = useState(false);
+  const [skipTextPages, setSkipTextPages] = useState(false);
+  const [preprocessing, setPreprocessing] = useState<OcrPreprocessing>(NO_PREPROCESSING);
 
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -522,23 +531,26 @@ export function OcrPanel({
     setHasExistingWarning(false);
 
     try {
-      const targetIndices = getTargetPages();
-      if (targetIndices.length === 0) {
+      const selectedIndices = getTargetPages();
+      if (selectedIndices.length === 0) {
         throw new Error("No valid pages selected for OCR.");
       }
 
       const pdfBytes = await sourcePdf.saveDocument();
       ensureCurrent();
 
-      if (!replaceExisting && mode === "searchable") {
-        for (const idx of targetIndices) {
-          const hasText = await detectExistingText(pdfBytes, idx);
-          if (hasText) {
-            setHasExistingWarning(true);
-            setRunning(false);
-            return;
-          }
-        }
+      const targetIndices = await selectOcrPages({
+        pdfBytes,
+        targetIndices: selectedIndices,
+        skipTextPages,
+        warnExistingText: !replaceExisting && mode === "searchable",
+        ensureCurrent,
+        onSkip: (count) => s.set({ status: `Skipping ${count} page(s) that already have text.` }),
+      });
+      if (!targetIndices) {
+        setHasExistingWarning(true);
+        setRunning(false);
+        return;
       }
 
       const recognized = await recognizeOcrPages({
@@ -546,6 +558,7 @@ export function OcrPanel({
         targetIndices,
         totalPages,
         language: selectedLang,
+        preprocessing,
         cancelled: () => cancelledRef.current,
         ensureCurrent,
         onProgress: setProgress,
@@ -776,6 +789,33 @@ export function OcrPanel({
             Review saved OCR text
           </button>
           <OcrActionSettings mode={mode} running={running} onModeChange={setMode} />
+          <fieldset className="setting-group" disabled={running}>
+            <legend className="setting-title">Pages and image cleanup</legend>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={skipTextPages}
+                onChange={(event) => setSkipTextPages(event.target.checked)}
+              />
+              <span>Skip pages that already have text</span>
+            </label>
+            {(Object.keys(PREPROCESSING_LABELS) as (keyof OcrPreprocessing)[]).map((key) => (
+              <label key={key} className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={preprocessing[key]}
+                  disabled={key === "despeckle" && !preprocessing.threshold}
+                  onChange={(event) =>
+                    setPreprocessing({ ...preprocessing, [key]: event.target.checked })
+                  }
+                />
+                <span>{PREPROCESSING_LABELS[key]}</span>
+              </label>
+            ))}
+            <p className="field-hint">
+              Cleanup applies only to the image sent for recognition; the page itself is unchanged.
+            </p>
+          </fieldset>
           <OcrProgress running={running} statusText={statusText} progress={progress} />
           <OcrResult
             recognizedText={recognizedText}

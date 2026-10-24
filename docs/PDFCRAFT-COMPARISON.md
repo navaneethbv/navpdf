@@ -48,6 +48,86 @@ Each row names the upstream entry, the NavPDF implementation and its scoped limi
 
 Replacing page colours (`a11y.replace-page-colors`) was assessed and deferred because PDF.js accepts page colours only when the viewer is constructed, so it needs viewer lifecycle work with its own acceptance.
 
+## Remaining gap programme
+
+On October 21, 2026 the upstream checklist at `416495145354828a9efefc39df381ba3ee8f864f` listed 438 shipped and 94 partial entries.
+Since the previous reference it adds `organize.reverse-pages`, which NavPDF already provides, and `organize.custom-properties`.
+A source review of `main` at `8e9b310` found the gaps below; items marked "decision" conflict with the repository's safety rules and proceed only with an accepted ADR, disabled by default.
+The user asked for every gap, including the decision items, delivered in batches on one draft PR.
+
+| Batch | Gaps | Status |
+| --- | --- | --- |
+| 3 | Cut, copy and paste pages; thumbnail size; trim, bleed and art boxes; page transitions; custom document properties; fonts list; polygon, connected-line, cloud and callout comments; insert and replace proposals; file attachment comments | Implemented; see the third batch mapping |
+| 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Implemented; see the fourth batch mapping |
+| 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Implemented; see the fifth batch mapping |
+| 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Implemented; see the sixth batch mapping |
+| 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Planned |
+| 8 to 10 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance; tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
+| 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
+
+## Third batch mapping
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `organize.cut-copy-paste-pages` | Organize Pages Copy, Cut and Paste with Cmd/Ctrl+C, X and V | Copied pages are held in memory as a small PDF and can be pasted into another open document; extraction carries the same form and outline limits as Extract. |
+| `organize.thumbnail-size` | Organize Pages thumbnail slider | 75% to 200%, with matching render resolution; not persisted between sessions. |
+| `organize.page-boxes` (trim, bleed, art) | Page Boxes & Transitions | Margins are measured on the displayed page and mapped through rotation; boxes describe print production and never hide content. |
+| `organize.page-transitions` | Page Boxes & Transitions | Standard /Trans dictionaries and /Dur advance times; NavPDF stores but does not animate transitions. |
+| `organize.custom-properties` | Document Properties | Text entries in the information dictionary with names limited to letters, digits, `-`, `_` and `.`; XMP mirrors only standard fields. |
+| `organize.fonts-list` | Document Properties fonts table | Fonts referenced by page and form XObject resources, with type, encoding and embedding; annotation appearance fonts are not listed. |
+| `comment.polygon`, `comment.polyline` | Annotation toolbar point tools | Click points and finish with double-click or Enter; appearances are generated. |
+| `comment.cloud` | Annotation toolbar cloud | Dragged rectangles saved as polygons with a cloudy border effect and generated scalloped appearance. |
+| `comment.callout` | Annotation toolbar callout | FreeText callout with leader, knee and arrow; text uses the built-in Latin font, so other scripts are rejected. |
+| `comment.insert-text`, `comment.replace-text` | Propose Text Edit | Caret for insertions; replacements group a strikeout with a caret carrying the new text. A selection across pages uses its first page. |
+| `comment.attach-file-comment` | Attach File as Comment | Embedded file up to 50 MB at a corner or centre of the page; NavPDF never opens it automatically. |
+
+Showing or hiding all comments moved to batch 7 because PDF.js fixes its annotation mode when the viewer is constructed, the same lifecycle work as high-contrast page colours.
+
+## Fourth batch mapping
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `form.add-listbox` | Prepare Form, List Box | Options, default selection and optional multiple selection. |
+| `form.add-date-field`, `form.date-picker` | Prepare Form, Date; viewer date picker | A text field carrying Acrobat's `AFDate_FormatEx` and `AFDate_KeystrokeEx` actions for readers that run form scripts. NavPDF reads the format name, never runs the actions, and swaps the field to a native date input while focused; text that is not a date in the field's format stays editable as text. |
+| `form.add-image-field` | Prepare Form, Image | A push button showing a chosen PNG or JPEG; choosing a new image while filling needs form scripts and is not provided. |
+| `form.props-general`, `form.props-appearance`, `form.rename-lock-fields` | Form Field Properties | Name (last segment), tooltip on the field and its widgets, font size, alignment, maximum length, comb, border and fill colours, the Locked and Hidden flags. Actions, format and validation properties belong to the script batch. |
+| `form.duplicate-fields` | Form Field Properties, Duplicate across pages | Widgets sharing one value at the first widget's position; radio groups and signature fields are rejected. |
+| `form.tab-order` | Form Field Properties, Tab order | Row, column or structure order for every page; manual per-field ordering is not provided. |
+| `form.auto-detect-fields` | Detect & Name Fields | Underscore runs and box characters in horizontal text, skipping places already covered by a field. Drawn boxes and scanned forms without OCR are not detected. |
+| `form.auto-name-fields` | Detect & Name Fields | The nearest label to the left on the same line, or just above, renamed as one edit. |
+| `form.preview-form` | Prepare Form, Preview | Moves to the first field and focuses it for Tab-driven testing; forms are always fillable in NavPDF, so no separate mode is needed. |
+
+## Fifth batch mapping
+
+[ADR 0017](adr/0017-protection-options-and-redaction-labels.md) records the decisions.
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `protect.encryption-level` | Password Protect PDF, Encryption | AES-256 (default), AES-128, RC4 128-bit and RC4 40-bit; legacy levels accept passwords of at most 32 ASCII characters. |
+| `protect.encrypt-except-metadata`, `core.unencrypted-metadata` | Password Protect PDF metadata option | AES levels only; the metadata stream stays readable to anyone holding the file. |
+| `protect.password-strength` | Strength meter on both passwords | A local estimate from length, character variety and common patterns, not a guarantee. |
+| `protect.redact-pages` | Redact PDF, Mark whole pages | Marks the displayed page bounds for each page in a range. |
+| `protect.redaction-properties`, `protect.redaction-codes` | Redact PDF appearance | Fill colour and overlay text of up to 60 printable ASCII characters in Helvetica; US FOIA, Privacy Act and general code sets. The audit accepts only the exact label in its own font inside its region. |
+| `protect.audit-faux-redactions` | Find Fake Redactions | Filled paths over text, unapplied Redact annotations and filled Square or Circle annotations; findings can be marked for redaction. Images, clipping and transparency are not analysed. |
+
+## Sixth batch mapping
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `print.odd-even-reverse` | Print, Subset and Reverse page order | Parity follows page numbers within the chosen range. |
+| `print.comments-and-forms` | Print, Comments and forms | Document and markups, document only, document and stamps, or form fields only; links stay because they draw nothing. Form fields only replaces page content with an empty stream in the printed copy. |
+| `print.print-preview` | Print, Preview | Renders the prepared print copy, with the same pages, order, content and raster options that will be sent. |
+| `print.grayscale`, `print.print-as-image` | Print, grayscale and Print as image | Pages are rendered with PDF.js at 150 or 300 dpi (limited to 16 megapixels and 8,192 pixels per edge) and rebuilt as JPEG pages; grayscale always uses this raster path, so printed text is not selectable. |
+| `optimize.discard-javascript`, `discard-thumbnails`, `discard-tags`, `discard-bookmarks`, `discard-print-settings`, `discard-alternate-images`, `discard-comments`, `discard-metadata`, `discard-attachments`, `discard-private-data` | Compress PDF, Discard objects | Native discards before compression, each off by default and reported with a count. Fidelity checks compare against the document after the chosen discards. Multimedia covers Screen, Movie, Sound, RichMedia and 3D annotations. |
+| `optimize.flatten-form-fields` | Compress PDF, Flatten form fields | Uses the existing flattener before compression; a flattening is kept even when compression saves no space. Signed documents are refused. |
+| `create.from-images` (GIF, BMP, JPEG 2000) | Import / Convert to PDF | GIF, BMP and WebP are decoded by the web view, using the first frame of an animation. JPEG 2000 uses the macOS ImageIO decoder alongside HEIC and TIFF, with the same size limits; that Swift change is not compiled or tested in the Linux container. |
+| `create.from-text` | Create PDF from Text or Clipboard | Typed text or a text file up to 5 MB, wrapped at word boundaries, with form feeds starting pages; built-in Helvetica or Courier, so characters outside Windows Latin 1 are rejected with the characters named. |
+| `create.from-clipboard` | Create PDF from Text or Clipboard | Clipboard text, or a PNG or JPEG image pasted into the dialog or read with the clipboard API; the web view may ask for or deny clipboard access. |
+| `create.create-multiple` | Import / Convert to PDF, Convert each file to its own PDF | Each listed file or page range becomes its own PDF in one ZIP archive with duplicate names numbered. |
+| `ocr.recognize-multiple` | OCR Multiple Files | Up to 50 PDFs of up to 200 MB each, saved as searchable copies in a ZIP archive with a per-file result; password-protected files are reported as failures. |
+| `ocr.skip-renderable-text` | Scan & OCR and OCR Multiple Files, Skip pages that already have text | Uses the existing digital-text check, which ignores earlier NavPDF OCR layers. |
+| `ocr.despeckle`, `ocr.background-removal` | Scan & OCR and OCR Multiple Files, image cleanup | Grayscale, percentile contrast stretch, Otsu black and white (which drops light backgrounds) and isolated-speck removal, applied only to the image sent for recognition. Deskew, edge shadow and perspective correction are not provided. |
+
 ## Acceptance boundary
 
 The additions are independent implementations using the established PDF engines and a dedicated XML parser, not copied upstream modules.

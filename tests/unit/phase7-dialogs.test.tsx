@@ -142,6 +142,8 @@ describe("password protection", () => {
       userPassword: "synthetic-open",
       ownerPassword: "synthetic-owner",
       permissions: { ...ALL, print: false },
+      encryption: "aes256",
+      encryptMetadata: true,
     });
     expect(useWorkspace.getState().status).toMatch(/not password protected/);
   });
@@ -238,7 +240,12 @@ describe("measured compression", () => {
     fireEvent.click(screen.getByLabelText(/Smallest/));
     fireEvent.click(screen.getByText("Analyze Compression"));
     expect(await screen.findByText(/4,096 bytes/)).toBeTruthy();
-    expect(engine.compressDocument).toHaveBeenCalledWith(expect.any(Uint8Array), "small", "job-1");
+    expect(engine.compressDocument).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      "small",
+      "job-1",
+      undefined,
+    );
     expect(screen.getByText("Fonts: changed")).toBeTruthy();
     fireEvent.click(screen.getByText("Apply Compressed Version"));
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());

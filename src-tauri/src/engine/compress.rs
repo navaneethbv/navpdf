@@ -2,6 +2,7 @@
 //! re-encoding. The result is offered only when fidelity checks pass and bytes are saved.
 
 use super::content::{self, ItemKind, Resources};
+use super::discard::{self, DiscardOptions};
 use super::geometry::Matrix;
 use super::images;
 use lopdf::{Dictionary, Document, Object, ObjectId, SaveOptions, Stream};
@@ -56,6 +57,8 @@ pub struct CompressionReport {
     pub images_recompressed: usize,
     pub images_skipped: usize,
     pub checks: Vec<FidelityCheck>,
+    /// One entry per chosen discard that changed the document.
+    pub discarded: Vec<String>,
     pub message: String,
 }
 
@@ -65,9 +68,22 @@ pub fn compress(
     preset: CompressionPreset,
     cancel: &AtomicBool,
 ) -> Result<(Option<Vec<u8>>, CompressionReport), String> {
+    compress_with(bytes, preset, &DiscardOptions::default(), cancel)
+}
+
+/// Applies the chosen discards, then compresses. Fidelity is checked against the document as it
+/// stands after the discards, so only the structures the user chose to remove may change.
+pub fn compress_with(
+    bytes: &[u8],
+    preset: CompressionPreset,
+    discard: &DiscardOptions,
+    cancel: &AtomicBool,
+) -> Result<(Option<Vec<u8>>, CompressionReport), String> {
     let mut doc = super::load(bytes)?;
+    let discarded = discard::apply(&mut doc, discard)?;
     let baseline = Fingerprint::of(&doc)?;
     let mut report = CompressionReport {
+        discarded,
         preset,
         before_bytes: bytes.len() as u64,
         after_bytes: bytes.len() as u64,
@@ -97,11 +113,14 @@ pub fn compress(
     report.after_bytes = output.len() as u64;
     let faithful = report.checks.iter().all(|check| check.passed);
     let saved = report.before_bytes.saturating_sub(report.after_bytes);
-    report.useful = faithful && saved >= (report.before_bytes / 100).max(1024);
+    let worthwhile = saved >= (report.before_bytes / 100).max(1024);
+    report.useful = faithful && (worthwhile || !report.discarded.is_empty());
     report.message = if !faithful {
         "A fidelity check failed, so the original was kept.".into()
     } else if !report.useful {
         "Compression would not save a useful amount of space, so the original was kept.".into()
+    } else if !worthwhile {
+        "The chosen items were discarded; the file size barely changed.".into()
     } else {
         format!(
             "Saves {saved} bytes ({:.1}%).",
@@ -737,5 +756,32 @@ mod tests {
             compress(&tiny, CompressionPreset::Small, &AtomicBool::new(false)).unwrap();
         assert!(output.is_none() && !report.useful && report.message.contains("original was kept"));
         assert!(compress(&tiny, CompressionPreset::Small, &AtomicBool::new(true)).is_err());
+    }
+
+    #[test]
+    fn discards_are_kept_even_without_a_size_saving() {
+        let (mut doc, page) = page_document("BT /F1 12 Tf 72 700 Td (Kept) Tj ET", dictionary! {});
+        let thumb = doc.add_object(Stream::new(dictionary! {}, vec![0; 64]));
+        doc.get_dictionary_mut(page).unwrap().set("Thumb", thumb);
+        let bytes = crate::engine::save(&mut doc).unwrap();
+        let options = DiscardOptions {
+            thumbnails: true,
+            ..DiscardOptions::default()
+        };
+        let (output, report) = compress_with(
+            &bytes,
+            CompressionPreset::Lossless,
+            &options,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert!(report.useful, "{}", report.message);
+        assert_eq!(report.discarded, vec!["Page thumbnails removed: 1"]);
+        let saved = crate::engine::load(&output.unwrap()).unwrap();
+        assert!(!saved
+            .get_dictionary(saved.get_pages()[&1])
+            .unwrap()
+            .has(b"Thumb"));
+        assert!(saved.extract_text(&[1]).unwrap().contains("Kept"));
     }
 }

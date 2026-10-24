@@ -54,10 +54,13 @@ export function ThumbCanvas({
   pdf,
   page,
   revision,
+  resolution = 1.5,
 }: Readonly<{
   pdf?: PDFDocumentProxy | null;
   page: number;
   revision: number;
+  /** Device pixels per CSS pixel of the 128 by 151 thumbnail box. */
+  resolution?: number;
 }>) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
@@ -76,7 +79,7 @@ export function ThumbCanvas({
         if (cancelled) return;
         const original = p.getViewport({ scale: 1 }),
           viewport = p.getViewport({
-            scale: Math.min(128 / original.width, 151 / original.height) * 1.5,
+            scale: Math.min(128 / original.width, 151 / original.height) * resolution,
           });
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -97,7 +100,7 @@ export function ThumbCanvas({
       canvas.width = 0;
       canvas.height = 0;
     };
-  }, [pdf, page, revision]);
+  }, [pdf, page, revision, resolution]);
   return (
     <div className="thumb-paper">
       {failed ? (

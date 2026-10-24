@@ -229,8 +229,30 @@ pub fn walk<'a>(
     depth: usize,
     visit: &mut dyn FnMut(&Item),
 ) -> Result<(), String> {
+    walk_with_ops(
+        doc,
+        ops,
+        resources,
+        base,
+        hidden_ocgs,
+        depth,
+        &mut |item, _| visit(item),
+    )
+}
+
+/// Like [`walk`], also passing the operations of the stream each item came from, so a
+/// visitor can read the operator at `item.op` inside nested forms.
+pub fn walk_with_ops<'a>(
+    doc: &'a Document,
+    ops: &[Operation],
+    resources: &Resources<'a>,
+    base: Matrix,
+    hidden_ocgs: &HashSet<ObjectId>,
+    depth: usize,
+    visit: &mut dyn FnMut(&Item, &[Operation]),
+) -> Result<(), String> {
     for item in scan(doc, ops, resources, base, hidden_ocgs) {
-        visit(&item);
+        visit(&item, ops);
         let ItemKind::Form { id, ctm, .. } = &item.kind else {
             continue;
         };
@@ -242,7 +264,7 @@ pub fn walk<'a>(
         };
         let nested = Resources::for_form(doc, &stream.dict, resources);
         let ops = super::stream_operations(stream)?;
-        walk(doc, &ops, &nested, *ctm, hidden_ocgs, depth + 1, visit)?;
+        walk_with_ops(doc, &ops, &nested, *ctm, hidden_ocgs, depth + 1, visit)?;
     }
     Ok(())
 }
