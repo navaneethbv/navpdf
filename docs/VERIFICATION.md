@@ -18,6 +18,7 @@ Ten integration cases reject CRLF strings, numeric strings, objects, NaN, infini
 
 Local Node 24 verification passes lint, typecheck, formatting, the production build and the frontend coverage gates.
 The transition integration file passes 19 tests.
+The first fresh hosted run found GHSA-834v-8h66-3h79 in test-only happy-dom 21.0.3; the follow-up requires and locks patched 21.0.4, and npm audit reports zero vulnerabilities.
 Cargo metadata with --locked and cargo fmt --check pass after conflict resolution.
 Rust tests and Clippy cannot compile locally because pkg-config and the Linux GTK/WebKit development libraries are unavailable; Linux, macOS, MSRV and native acceptance must be verified on the pushed commit in hosted CI.
 Native NavPDF, Preview, Acrobat, physical printing and release packaging were not exercised in this Linux workspace.
