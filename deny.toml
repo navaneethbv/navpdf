@@ -12,12 +12,6 @@ ignore = [
     "RUSTSEC-2025-0081",
     "RUSTSEC-2025-0098",
     "RUSTSEC-2025-0100",
-    # crypto-bigint 0.5 timing variability, reached only through p256 0.13 for local
-    # ECDSA certificate signing. The fix is in crypto-bigint 0.7.6, which needs the
-    # p256 0.14 / cms 0.3 / x509-cert 0.3 / rsa 0.10 stack; cms and rsa have no stable
-    # release of that stack yet. Signing runs once per local user action with no
-    # network-observable timing oracle (see docs/adr/0009-local-certificate-signatures.md).
-    "RUSTSEC-2026-0387",
 ]
 
 [licenses]

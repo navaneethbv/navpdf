@@ -13,7 +13,7 @@ NavPDF processes PDFs in pure Rust through lopdf (ADR 0006) and bundles no C or 
 ## Decision
 
 NavPDF signs a copy of the open document with a key and certificate chain read from a PKCS #12 file that the user selects in the native file picker.
-The stable RustCrypto crate line provides the cryptography: `p12-keystore` 0.1.5 for PKCS #12, `cms` 0.2.3 and `x509-cert` 0.2.5 for CMS and certificates, `rsa` 0.9 for RSA PKCS #1 v1.5 with SHA-256, and `p256` 0.13 for ECDSA P-256.
+The stable RustCrypto crate line provides the cryptography: `p12-keystore` 0.1.5 for PKCS #12, `cms` 0.2.3 and `x509-cert` 0.2.5 for CMS and certificates, `rsa` 0.9 for RSA PKCS #1 v1.5 with SHA-256, and `p256` 0.14 for ECDSA P-256.
 These crates are MIT or Apache-2.0 licensed; the pre-release `cms` 0.3 and `rsa` 0.10 lines were not used.
 
 The signature follows the PAdES baseline B-B profile: `/SubFilter /ETSI.CAdES.detached`, a SHA-256 message digest, the ESS signing-certificate-v2 attribute, the certificate chain from the file, and the signing time in the signature dictionary's `/M` entry.
@@ -46,3 +46,10 @@ The `rsa` 0.9 crate carries advisory RUSTSEC-2023-0071 about timing side channel
 NavPDF signs locally through the randomized, blinded signing path and exposes no network-reachable signing or decryption operation.
 The decrypted PKCS #8 bytes held briefly by `p12-keystore` are not zeroized when freed, while the parsed `rsa` and `p256` keys are.
 The local verifier re-encodes signed attributes as DER, so a third-party signature with non-canonical attribute encoding can be reported as not matching even when other validators accept it.
+
+## October 24 security dependency update
+
+P-256 0.14 replaces the vulnerable crypto-bigint 0.5 line with locked crypto-bigint 0.7.7, and ctutils is locked to 0.4.5, addressing RUSTSEC-2026-0387 and RUSTSEC-2026-0385.
+A small adapter translates encoded keys, signatures and algorithm identifiers between the current P-256 traits and the stable CMS and X.509 traits; all cryptographic operations remain in p256.
+CMS 0.2, X.509 0.2 and RSA 0.9 remain stable dependencies, and the application MSRV remains 1.90.
+A fixed-output regression checks the previous DER signature and SPKI encoding, SHA-256 algorithm identifier and PKCS #8 import round trip.

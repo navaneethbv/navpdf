@@ -220,7 +220,6 @@ function writeTransition(doc: PDFDocument, node: PDFPageLeaf, transition: PageTr
   else {
     // This is a PDF dictionary, not an HTTP response. validateTransition admits only finite
     // numbers in [0, 3600]; the integration regressions also reject CRLF and nonnumbers.
-    // nosemgrep: rules_lgpl_javascript_headers_rule-generic-header-injection
     node.set(PDFName.of("Dur"), PDFNumber.of(transition.advanceAfter));
   }
 }

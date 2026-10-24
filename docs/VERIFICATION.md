@@ -13,22 +13,28 @@ Label text now has explicit spans, and image reading, OCR page selection and pas
 
 Codacy's generic-header-injection finding on the page transition duration is a false positive.
 The target is pdf-lib's PDFPageLeaf dictionary, not an HTTP response, and validateTransition rejects nonnumeric, nonfinite and out-of-range advance times before serialization.
-A rule-specific inline exception records that distinction without disabling the security rule for the file or project.
+Codacy did not honor the inline annotation, so the individual finding was reviewed as False positive in its UI with the numeric PDF boundary and regression evidence.
+The generic security rule remains enabled for the file and project.
 Ten integration cases reject CRLF strings, numeric strings, objects, NaN, infinity and out-of-range values, and round-trip zero, 3600 and null while preserving an unselected page.
 
 Local Node 24 verification passes lint, typecheck, formatting, the production build and the frontend coverage gates.
 The transition integration file passes 19 tests.
 The first fresh hosted run found GHSA-834v-8h66-3h79 in test-only happy-dom 21.0.3; the follow-up requires and locks patched 21.0.4, and npm audit reports zero vulnerabilities.
+The full frontend suite passes 1,054 tests across 140 files.
+
+Cargo Deny also identified RUSTSEC-2026-0385 and RUSTSEC-2026-0387.
+The final patch updates P-256 to stable 0.14, crypto-bigint to 0.7.7 and ctutils to 0.4.5, removing both vulnerable versions.
+The temporary advisory exception from the concurrent branch update is superseded by this dependency fix and removed.
+The encoded-key and signature adapter retains stable CMS, X.509 and RSA dependencies without changing the application MSRV of 1.90; ADR 0009 records the boundary.
+An isolated harness compiling the actual signing engine passes eight signing tests and Clippy with warnings denied.
+A fixed-output regression preserves the prior DER signature and SPKI encodings and checks algorithm identifiers and PKCS #8 import.
+An OpenSSL-generated P-256 PKCS #12 identity signs a PDF through the actual engine; OpenSSL CMS integrity verification accepts the extracted byte ranges and returns identical content.
+This independent check does not claim certificate trust.
+
 Cargo metadata with --locked and cargo fmt --check pass after conflict resolution.
 Rust tests and Clippy cannot compile locally because pkg-config and the Linux GTK/WebKit development libraries are unavailable; Linux, macOS, MSRV and native acceptance must be verified on the pushed commit in hosted CI.
 Native NavPDF, Preview, Acrobat, physical printing and release packaging were not exercised in this Linux workspace.
 Hosted analysis and merge results must be checked on the final pushed head; earlier passing runs are not evidence for this follow-up.
-
-Cargo Deny then failed on two advisories published October 23.
-RUSTSEC-2026-0385 in ctutils is fixed by updating the lockfile from 0.4.2 to 0.4.5.
-RUSTSEC-2026-0387 in crypto-bigint 0.5.5 is fixed only in 0.7.6, which NavPDF reaches through p256 0.13 for local ECDSA certificate signing.
-Moving to it needs p256 0.14 with cms 0.3, x509-cert 0.3 and rsa 0.10, and cms and rsa have only release candidates of that stack, so `deny.toml` ignores the advisory with that reason, following ADR 0009's local-signing threat model.
-cargo-deny 0.20.2 reports advisories, bans, licenses and sources ok locally.
 
 ## October 22 PDFCraft gap quality follow-up
 

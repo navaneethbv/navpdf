@@ -24,7 +24,7 @@ use rsa::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePublicKey, PrivateKeyI
 use rsa::signature::Verifier;
 use rsa::traits::PublicKeyParts;
 use serde::{Deserialize, Serialize};
-// The signing path hashes with the sha2 release that rsa, cms and p256 are built against.
+// CMS and RSA use sha2 0.10; P-256 hashes with its own SHA-256 implementation.
 use rsa::sha2::{Digest, Sha256, Sha384, Sha512};
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -49,6 +49,54 @@ const CREATE_FAILED: &str = "The signature could not be created. The document is
 const NOT_CMS: &str = "The signature value is not a supported CMS signature.";
 const MISPLACED: &str = "The signature value is not where its byte range says.";
 
+// Bridge only encoded keys and signatures between P-256's current RustCrypto traits
+// and the stable CMS/X.509 builders. Cryptographic operations stay in p256.
+struct P256Signer<'a>(&'a p256::ecdsa::SigningKey);
+
+#[derive(Clone)]
+struct P256PublicKey(p256::ecdsa::VerifyingKey);
+
+struct P256Signature(p256::ecdsa::DerSignature);
+
+impl rsa::signature::Keypair for P256Signer<'_> {
+    type VerifyingKey = P256PublicKey;
+
+    fn verifying_key(&self) -> Self::VerifyingKey {
+        P256PublicKey(*self.0.verifying_key())
+    }
+}
+
+impl EncodePublicKey for P256PublicKey {
+    fn to_public_key_der(&self) -> x509_cert::spki::Result<der::Document> {
+        let document = p256::pkcs8::EncodePublicKey::to_public_key_der(&self.0)
+            .map_err(|_| x509_cert::spki::Error::KeyMalformed)?;
+        Ok(der::Document::try_from(document.as_bytes())?)
+    }
+}
+
+impl x509_cert::spki::DynSignatureAlgorithmIdentifier for P256Signer<'_> {
+    fn signature_algorithm_identifier(&self) -> x509_cert::spki::Result<AlgorithmIdentifierOwned> {
+        Ok(AlgorithmIdentifierOwned {
+            oid: rfc5912::ECDSA_WITH_SHA_256,
+            parameters: None,
+        })
+    }
+}
+
+impl rsa::signature::Signer<P256Signature> for P256Signer<'_> {
+    fn try_sign(&self, message: &[u8]) -> Result<P256Signature, rsa::signature::Error> {
+        p256::ecdsa::signature::Signer::try_sign(self.0, message)
+            .map(P256Signature)
+            .map_err(|_| rsa::signature::Error::new())
+    }
+}
+
+impl x509_cert::spki::SignatureBitStringEncoding for P256Signature {
+    fn to_bitstring(&self) -> der::Result<der::asn1::BitString> {
+        der::asn1::BitString::from_bytes(self.0.as_bytes())
+    }
+}
+
 enum SignerKey {
     Rsa(Box<rsa::RsaPrivateKey>),
     P256(p256::ecdsa::SigningKey),
@@ -66,7 +114,7 @@ impl SignerKey {
             }
             Ok(Self::Rsa(Box::new(key)))
         } else if info.algorithm.oid == rfc5912::ID_EC_PUBLIC_KEY {
-            p256::ecdsa::SigningKey::from_pkcs8_der(der)
+            <p256::ecdsa::SigningKey as p256::pkcs8::DecodePrivateKey>::from_pkcs8_der(der)
                 .map(Self::P256)
                 .map_err(|_| "Only P-256 elliptic-curve keys are supported.".into())
         } else {
@@ -77,7 +125,7 @@ impl SignerKey {
     fn public_key_der(&self) -> Result<Vec<u8>, String> {
         match self {
             Self::Rsa(key) => rsa::RsaPublicKey::from(key.as_ref()).to_public_key_der(),
-            Self::P256(key) => key.verifying_key().to_public_key_der(),
+            Self::P256(key) => P256PublicKey(*key.verifying_key()).to_public_key_der(),
         }
         .map(|document| document.as_bytes().to_vec())
         .map_err(|_| "The public key could not be encoded.".into())
@@ -590,13 +638,19 @@ fn signed_data(identity: &SigningIdentity, digest: &[u8]) -> Result<Vec<u8>, Str
             builder.build_with_rng::<rsa::pkcs1v15::Signature>(&mut rsa::rand_core::OsRng)
         }
         SignerKey::P256(key) => {
-            let mut builder =
-                SignerInfoBuilder::new(key, sid, digest_algorithm.clone(), &content, Some(digest))
-                    .map_err(|_| CREATE_FAILED)?;
+            let signer = P256Signer(key);
+            let mut builder = SignerInfoBuilder::new(
+                &signer,
+                sid,
+                digest_algorithm.clone(),
+                &content,
+                Some(digest),
+            )
+            .map_err(|_| CREATE_FAILED)?;
             builder
                 .add_signed_attribute(signing_certificate)
                 .map_err(|_| CREATE_FAILED)?;
-            builder.build::<p256::ecdsa::DerSignature>()
+            builder.build::<P256Signature>()
         }
     }
     .map_err(|_| CREATE_FAILED)?;
@@ -870,11 +924,13 @@ fn verify_value(
         };
     }
     if algorithm == rfc5912::ECDSA_WITH_SHA_256 && digest == rfc5912::ID_SHA_256 {
-        let key = p256::ecdsa::VerifyingKey::from_public_key_der(&key).ok()?;
+        let key =
+            <p256::ecdsa::VerifyingKey as p256::pkcs8::DecodePublicKey>::from_public_key_der(&key)
+                .ok()?;
         let Ok(signature) = p256::ecdsa::DerSignature::try_from(value) else {
             return Some(false);
         };
-        return Some(key.verify(message, &signature).is_ok());
+        return Some(p256::ecdsa::signature::Verifier::verify(&key, message, &signature).is_ok());
     }
     None
 }
@@ -1167,14 +1223,54 @@ mod tests {
         Validity::from_now(Duration::from_secs(3600)).unwrap()
     }
 
+    #[test]
+    fn p256_bridge_preserves_existing_signature_and_key_encodings() {
+        use rsa::signature::{Keypair, Signer};
+        use x509_cert::spki::{DynSignatureAlgorithmIdentifier, SignatureBitStringEncoding};
+
+        let key = p256::ecdsa::SigningKey::from_slice(&[7; 32]).unwrap();
+        let signer = P256Signer(&key);
+        let signature = signer.try_sign(b"NavPDF P-256 compatibility").unwrap();
+        // Fixed outputs from p256 0.13.2, before upgrading its arithmetic dependencies.
+        let expected_signature = decode_hex(b"3045022100d63af9823bcc30a9e58a18ca568645fa7d2809f5613fc350d871c244ed5a7846022053b097ff6144a3e16feadc9d38c1a2deeccf67288607163c6ce50e6b95c7024a").unwrap();
+        assert_eq!(
+            signature.to_bitstring().unwrap().as_bytes().unwrap(),
+            expected_signature
+        );
+        let public_key = signer.verifying_key().to_public_key_der().unwrap();
+        let expected_key = decode_hex(b"3059301306072a8648ce3d020106082a8648ce3d030107034200041e18532fd4754c02f3041d9c75ceb33b83ffd81ac7ce4fe882ccb1c98bc5896ea46c311c4e2ff40dd96a3653e6e45445d32dfe486eced75c7a90c6a18881c0a3").unwrap();
+        assert_eq!(public_key.as_bytes(), expected_key);
+        let algorithm = signer.signature_algorithm_identifier().unwrap();
+        assert_eq!(algorithm.oid, rfc5912::ECDSA_WITH_SHA_256);
+        assert!(algorithm.parameters.is_none());
+
+        let private_key = p256::pkcs8::EncodePrivateKey::to_pkcs8_der(&key).unwrap();
+        let imported = SignerKey::from_pkcs8(private_key.as_bytes()).unwrap();
+        assert_eq!(imported.public_key_der().unwrap(), expected_key);
+        let restored_key =
+            <p256::ecdsa::VerifyingKey as p256::pkcs8::DecodePublicKey>::from_public_key_der(
+                public_key.as_bytes(),
+            )
+            .unwrap();
+        assert!(p256::ecdsa::signature::Verifier::verify(
+            &restored_key,
+            b"NavPDF P-256 compatibility",
+            &signature.0
+        )
+        .is_ok());
+    }
+
     fn p256_parts() -> (p256::ecdsa::SigningKey, Certificate) {
-        let key = p256::ecdsa::SigningKey::random(&mut OsRng);
-        let spki = SubjectPublicKeyInfoOwned::from_key(*key.verifying_key()).unwrap();
+        use p256::elliptic_curve::Generate;
+        let key = p256::ecdsa::SigningKey::generate();
+        let spki =
+            SubjectPublicKeyInfoOwned::from_key(P256PublicKey(*key.verifying_key())).unwrap();
+        let signer = P256Signer(&key);
         let serial = SerialNumber::new(&[7]).unwrap();
         let certificate =
-            CertificateBuilder::new(leaf_profile(), serial, validity(), name(), spki, &key)
+            CertificateBuilder::new(leaf_profile(), serial, validity(), name(), spki, &signer)
                 .unwrap()
-                .build::<p256::ecdsa::DerSignature>()
+                .build::<P256Signature>()
                 .unwrap();
         (key, certificate)
     }
@@ -1194,7 +1290,9 @@ mod tests {
         let password = test_password();
         (
             keystore(
-                key.to_pkcs8_der().unwrap().as_bytes(),
+                p256::pkcs8::EncodePrivateKey::to_pkcs8_der(&key)
+                    .unwrap()
+                    .as_bytes(),
                 &certificate,
                 &password,
             ),
@@ -1426,7 +1524,9 @@ mod tests {
         let (_, certificate) = p256_parts();
         let (other_key, _) = p256_parts();
         let foreign = keystore(
-            other_key.to_pkcs8_der().unwrap().as_bytes(),
+            p256::pkcs8::EncodePrivateKey::to_pkcs8_der(&other_key)
+                .unwrap()
+                .as_bytes(),
             &certificate,
             &password,
         );
