@@ -100,6 +100,37 @@ describe("page boxes and transitions", () => {
     await expect(setPrintBox(bytes, [], "ArtBox", margins)).rejects.toThrow("at least one page");
   });
 
+  it.each([NaN, Infinity, -1, 3601, "5\r\nInjected: value", "5", {}])(
+    "rejects invalid page advance duration %j before serialization",
+    async (advanceAfter) => {
+      const bytes = await blank();
+      await expect(
+        setPageTransition(bytes, [0], {
+          style: "Fade",
+          duration: 1,
+          direction: 0,
+          dimension: "H",
+          motion: "I",
+          advanceAfter: advanceAfter as never,
+        }),
+      ).rejects.toThrow("Advance time");
+    },
+  );
+
+  it.each([0, 3600, null])("round-trips page advance boundary %j", async (advanceAfter) => {
+    const bytes = await blank(2);
+    const transition = {
+      style: "Fade" as const,
+      duration: 1,
+      direction: 0 as const,
+      dimension: "H" as const,
+      motion: "I" as const,
+      advanceAfter,
+    };
+    const output = await setPageTransition(bytes, [1], transition);
+    expect(await readPageTransitions(output)).toEqual([null, transition]);
+  });
+
   it("writes standard transition dictionaries and removes them", async () => {
     const bytes = await blank(2);
     const transition = {

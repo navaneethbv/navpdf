@@ -46,14 +46,10 @@ const PERMISSION_LABELS: [keyof PermissionRequest, string][] = [
 const MAX_PASSWORD_BYTES = 127;
 const byteLength = (value: string) => new TextEncoder().encode(value).length;
 
-/** Mirrors the native checks so problems are explained before the save picker opens. */
-export function validateProtection(
+function validatePasswordFormat(
   openPassword: string,
-  confirmOpen: string,
   permissionsPassword: string,
-  confirmPermissions: string,
-  permissions: PermissionRequest,
-  level: EncryptionLevel = "aes256",
+  level: EncryptionLevel,
 ): string | null {
   if (
     byteLength(openPassword) > MAX_PASSWORD_BYTES ||
@@ -68,6 +64,20 @@ export function validateProtection(
     )
   )
     return "Older encryption levels need passwords of at most 32 plain ASCII characters.";
+  return null;
+}
+
+/** Mirrors the native checks so problems are explained before the save picker opens. */
+export function validateProtection(
+  openPassword: string,
+  confirmOpen: string,
+  permissionsPassword: string,
+  confirmPermissions: string,
+  permissions: PermissionRequest,
+  level: EncryptionLevel = "aes256",
+): string | null {
+  const formatProblem = validatePasswordFormat(openPassword, permissionsPassword, level);
+  if (formatProblem) return formatProblem;
   const restricted = Object.values(permissions).some((allowed) => !allowed);
   if (!openPassword && !permissionsPassword)
     return "Enter a password, or use a separate permissions password for an open-without-password copy.";

@@ -216,7 +216,7 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
           </div>
           <div className="form-columns">
             <label className="setting-title">
-              Font size (blank keeps it, 0 is automatic)
+              <span>Font size (blank keeps it, 0 is automatic)</span>
               <input
                 className="text-input"
                 type="number"
@@ -229,7 +229,7 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
             </label>
             {field.kind === "text" && (
               <label className="setting-title">
-                Alignment
+                <span>Alignment</span>
                 <select
                   className="text-input"
                   value={draft.alignment}
@@ -245,7 +245,7 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
             )}
             {field.kind === "text" && (
               <label className="setting-title">
-                Maximum characters (blank for no limit)
+                <span>Maximum characters (blank for no limit)</span>
                 <input
                   className="text-input"
                   type="number"
@@ -257,7 +257,7 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
               </label>
             )}
             <label className="setting-title">
-              Border colour
+              <span>Border colour</span>
               <span className="inline-field">
                 <input
                   type="color"
@@ -275,7 +275,7 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
               </span>
             </label>
             <label className="setting-title">
-              Fill colour
+              <span>Fill colour</span>
               <span className="inline-field">
                 <input
                   type="color"

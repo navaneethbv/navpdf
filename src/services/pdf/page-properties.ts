@@ -217,5 +217,10 @@ function writeTransition(doc: PDFDocument, node: PDFPageLeaf, transition: PageTr
   if (MOTION.has(transition.style)) entries.M = transition.motion;
   node.set(PDFName.of("Trans"), doc.context.obj(entries as never));
   if (transition.advanceAfter === null) node.delete(PDFName.of("Dur"));
-  else node.set(PDFName.of("Dur"), PDFNumber.of(transition.advanceAfter));
+  else {
+    // This is a PDF dictionary, not an HTTP response. validateTransition admits only finite
+    // numbers in [0, 3600]; the integration regressions also reject CRLF and nonnumbers.
+    // nosemgrep: generic-header-injection, Semgrep_rules_lgpl_javascript_headers_rule-generic-header-injection
+    node.set(PDFName.of("Dur"), PDFNumber.of(transition.advanceAfter));
+  }
 }

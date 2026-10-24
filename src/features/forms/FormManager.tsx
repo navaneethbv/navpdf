@@ -69,6 +69,14 @@ type ExistingField = {
   readOnly: boolean;
 };
 
+async function readFieldImage(file: File | null): Promise<FormFieldDefinition["image"]> {
+  if (!file) return undefined;
+  return {
+    bytes: new Uint8Array(await file.arrayBuffer()),
+    type: /png$/i.test(file.type) ? "png" : "jpg",
+  };
+}
+
 export function FormManager({
   controller,
   onClose,
@@ -247,12 +255,7 @@ export function FormManager({
 
       const [width, defaultHeight] = SIZES[fieldType] ?? [200, 24];
       const height = fieldType === "text" && multiline ? 60 : defaultHeight;
-      const image = imageFile
-        ? {
-            bytes: new Uint8Array(await imageFile.arrayBuffer()),
-            type: /png$/i.test(imageFile.type) ? ("png" as const) : ("jpg" as const),
-          }
-        : undefined;
+      const image = await readFieldImage(imageFile);
 
       let mappedX = posX;
       let mappedY = posY;

@@ -100,6 +100,43 @@ function languageName(code: string): string {
 type OcrTargetScope = "current" | "all" | "range";
 type OcrMode = "searchable" | "extract";
 
+async function selectOcrPages({
+  pdfBytes,
+  targetIndices,
+  skipTextPages,
+  warnExistingText,
+  ensureCurrent,
+  onSkip,
+}: {
+  pdfBytes: Uint8Array;
+  targetIndices: number[];
+  skipTextPages: boolean;
+  warnExistingText: boolean;
+  ensureCurrent: () => void;
+  onSkip: (count: number) => void;
+}): Promise<number[] | null> {
+  if (skipTextPages) {
+    // One page at a time: each check parses the document.
+    const checkPage = async (idx: number) => ({
+      idx,
+      hasText: await detectExistingText(pdfBytes, idx),
+    });
+    const withoutText: number[] = [];
+    for await (const page of mapInOrder(targetIndices, checkPage))
+      if (!page.hasText) withoutText.push(page.idx);
+    ensureCurrent();
+    if (!withoutText.length) throw new Error("Every target page already has text.");
+    if (withoutText.length < targetIndices.length)
+      onSkip(targetIndices.length - withoutText.length);
+    return withoutText;
+  }
+  if (!warnExistingText) return targetIndices;
+  for (const idx of targetIndices) {
+    if (await detectExistingText(pdfBytes, idx)) return null;
+  }
+  return targetIndices;
+}
+
 function OcrErrorMessage({ error }: Readonly<{ error: string | null }>) {
   return error ? <p role="alert">{error}</p> : null;
 }
@@ -494,39 +531,26 @@ export function OcrPanel({
     setHasExistingWarning(false);
 
     try {
-      let targetIndices = getTargetPages();
-      if (targetIndices.length === 0) {
+      const selectedIndices = getTargetPages();
+      if (selectedIndices.length === 0) {
         throw new Error("No valid pages selected for OCR.");
       }
 
       const pdfBytes = await sourcePdf.saveDocument();
       ensureCurrent();
 
-      if (skipTextPages) {
-        // One page at a time: each check parses the document.
-        const checkPage = async (idx: number) => ({
-          idx,
-          hasText: await detectExistingText(pdfBytes, idx),
-        });
-        const withoutText: number[] = [];
-        for await (const page of mapInOrder(targetIndices, checkPage))
-          if (!page.hasText) withoutText.push(page.idx);
-        ensureCurrent();
-        if (!withoutText.length) throw new Error("Every target page already has text.");
-        if (withoutText.length < targetIndices.length)
-          s.set({
-            status: `Skipping ${targetIndices.length - withoutText.length} page(s) that already have text.`,
-          });
-        targetIndices = withoutText;
-      } else if (!replaceExisting && mode === "searchable") {
-        for (const idx of targetIndices) {
-          const hasText = await detectExistingText(pdfBytes, idx);
-          if (hasText) {
-            setHasExistingWarning(true);
-            setRunning(false);
-            return;
-          }
-        }
+      const targetIndices = await selectOcrPages({
+        pdfBytes,
+        targetIndices: selectedIndices,
+        skipTextPages,
+        warnExistingText: !replaceExisting && mode === "searchable",
+        ensureCurrent,
+        onSkip: (count) => s.set({ status: `Skipping ${count} page(s) that already have text.` }),
+      });
+      if (!targetIndices) {
+        setHasExistingWarning(true);
+        setRunning(false);
+        return;
       }
 
       const recognized = await recognizeOcrPages({

@@ -5,6 +5,24 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 24 PR 71 conflict and quality review
+
+Merged the current main dependency update into the PDFCraft branch, retaining SHA-2 0.11.1 and the branch's stringprep test dependency in Cargo.lock.
+The eight hosted Sonar findings were five ambiguous form-label text nodes and three functions over the cognitive-complexity limit.
+Label text now has explicit spans, and image reading, OCR page selection and password-format validation have cohesive helpers with the existing check order and document-ownership guards preserved.
+
+Codacy's generic-header-injection finding on the page transition duration is a false positive.
+The target is pdf-lib's PDFPageLeaf dictionary, not an HTTP response, and validateTransition rejects nonnumeric, nonfinite and out-of-range advance times before serialization.
+A rule-specific inline exception records that distinction without disabling the security rule for the file or project.
+Ten integration cases reject CRLF strings, numeric strings, objects, NaN, infinity and out-of-range values, and round-trip zero, 3600 and null while preserving an unselected page.
+
+Local Node 24 verification passes lint, typecheck, formatting, the production build and the frontend coverage gates.
+The transition integration file passes 19 tests.
+Cargo metadata with --locked and cargo fmt --check pass after conflict resolution.
+Rust tests and Clippy cannot compile locally because pkg-config and the Linux GTK/WebKit development libraries are unavailable; Linux, macOS, MSRV and native acceptance must be verified on the pushed commit in hosted CI.
+Native NavPDF, Preview, Acrobat, physical printing and release packaging were not exercised in this Linux workspace.
+Hosted analysis and merge results must be checked on the final pushed head; earlier passing runs are not evidence for this follow-up.
+
 ## October 22 PDFCraft gap quality follow-up
 
 SonarCloud reported a C reliability rating on new code and CodeQL reported 8 hard-coded password alerts on PR 71.
