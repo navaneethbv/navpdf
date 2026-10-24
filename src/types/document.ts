@@ -11,7 +11,8 @@ export type Tool =
   | "measure"
   | "signature"
   | "snapshot"
-  | "marquee";
+  | "marquee"
+  | "eraser";
 export type ShapeKind =
   "Square" | "Circle" | "Line" | "Arrow" | "Cloud" | "Callout" | "Polygon" | "PolyLine";
 /** Shapes drawn by clicking their points rather than dragging. */
@@ -82,6 +83,13 @@ export interface Preferences {
   reloadChangedFiles: boolean;
   /** Reopen the documents open when NavPDF last closed. */
   reopenSession: boolean;
+  /** Colour, width and opacity new annotations of each shape kind start with. */
+  annotationDefaults: Partial<Record<ShapeKind, AnnotationDefault>>;
+}
+export interface AnnotationDefault {
+  color: string;
+  width: number;
+  opacity: number;
 }
 export type PageColorScheme =
   "off" | "white-on-black" | "yellow-on-black" | "green-on-black" | "black-on-white" | "custom";
@@ -125,6 +133,8 @@ export interface Comment {
   rect?: [number, number, number, number];
   line?: [number, number, number, number];
   lineEndings?: [string, string];
+  /** Dashed or cloudy borders; absent for a solid border. */
+  borderStyle?: "dashed" | "cloudy";
   quads?: number[][];
   color?: [number, number, number];
   opacity?: number;
@@ -174,4 +184,5 @@ export const defaultPreferences: Preferences = {
   pageBackground: "#ffffff",
   reloadChangedFiles: true,
   reopenSession: false,
+  annotationDefaults: {},
 };

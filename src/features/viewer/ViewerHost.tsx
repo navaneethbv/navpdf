@@ -9,6 +9,7 @@ import { ExternalLinkDialog } from "../../components/ExternalLinkDialog";
 import { validateSafeUrl } from "../../services/document-commands";
 import * as desktop from "../../services/native";
 import { MarqueeZoomTool } from "./MarqueeZoomTool";
+import { EraserTool } from "../annotations/EraserTool";
 import { pageAt } from "../annotations/page-pointer";
 import { columnText, pageSizeLabel, type Box } from "./view-geometry";
 import { downloadBlob } from "../../utils/download";
@@ -435,6 +436,7 @@ export function ViewerHost({
       {hasDocument && tool === "marquee" && controller && (
         <MarqueeZoomTool controller={controller} />
       )}
+      {hasDocument && tool === "eraser" && controller && <EraserTool controller={controller} />}
       {hasDocument && tool === "select" && controller && (
         <AnnotationSelectionLayer controller={controller} />
       )}

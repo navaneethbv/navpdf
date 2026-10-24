@@ -5,6 +5,25 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 24 PDFCraft gap batch 7, editing
+
+The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists the editing additions and their limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,114 tests across 148 files, with 85.7% statements, 77.88% branches, 84.52% functions and 88.8% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests; a new Rust test checks that saved shape styles accept only known kinds, six-digit colours, widths from 0.5 to 20 and opacities from 0.1 to 1.
+
+Integration tests read the output with PDF.js.
+A picture watermark covers half the page width at the page centre after the page text, a background is drawn before it from a first content stream, Remove Decorations leaves the text, a page of another PDF draws as a form, and the placement matrix keeps a picture upright on a page turned 90 degrees.
+A sign-here stamp is a filled tag without a detail line, and picture and PDF-page stamps keep their shape, centred, and are turned with a rotated page.
+Every line ending style draws, a diamond and a reversed closed arrow are filled, a dashed line sets a dash pattern, the rectangle grows to hold the endings, and a later colour change redraws the appearance in the new colour; a cloudy line and an unknown ending are refused, and a rectangle's cloudy border and a connected line's endings read back.
+The eraser cuts a stroke between stored points, keeps untouched strokes, redraws the remaining three strokes and deletes a wholly erased drawing with its pop-up.
+Layer, show or hide and reset links read back through PDF.js with their states, a dashed border and an outline highlight, the show or hide action reads back for NavPDF, and unknown layers or fields are refused.
+Writing these found that a parent field name such as "contact" was refused although Hide covers the fields below it, which is fixed.
+Dialog and controller tests cover choosing pictures and refusing other files, the sign-here and picture stamp names, picture watermark and missing background files, a show or hide field link, line ending and border choices, saving a shape style, the eraser's path and page-unit radius, and running a show or hide link on screen.
+
+In the Chromium browser preview, a Sign Here tag, a picture stamp and a picture watermark drew on the reader fixture, as `output/batch-seven/15-stamps-watermark.png` shows.
+Native WebKit, Preview and Acrobat comparison of the new appearances and actions were not run.
+
 ## October 24 PDFCraft gap batch 7, document lifecycle
 
 The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists tabs, Revert, reloading changed files and session reopening with their limits.

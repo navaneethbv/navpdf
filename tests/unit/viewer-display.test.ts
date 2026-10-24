@@ -78,7 +78,15 @@ vi.mock("../../src/features/pages/print-options", () => ({
   preparePrintContent: vi.fn(async () => new Uint8Array([7])),
 }));
 
+vi.mock("../../src/services/pdf/hide-actions", () => ({
+  readHideActions: vi.fn(async () => new Map([["7R", { fields: ["contact"], hide: true }]])),
+}));
+vi.mock("../../src/services/pdf/ink-eraser", () => ({
+  eraseInk: vi.fn(async () => ({ bytes: new Uint8Array([8]), changed: 1 })),
+}));
+
 import { ViewerController } from "../../src/features/viewer/controller";
+import { eraseInk } from "../../src/services/pdf/ink-eraser";
 import { useWorkspace } from "../../src/stores/workspace";
 import { preparePrintContent } from "../../src/features/pages/print-options";
 import { loadPdfFromBytes } from "../../src/services/pdf";
@@ -321,5 +329,89 @@ describe("background tabs", () => {
     pdf.annotationStorage.onSetModified?.();
     await controller.park();
     expect(replace).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), "Page edits kept");
+  });
+});
+
+describe("show or hide field links", () => {
+  it("turns a link PDF.js leaves inert into a button that hides the named fields", async () => {
+    const pdf = await open({
+      ...makePdf(),
+      getData: vi.fn(async () => new Uint8Array([1])),
+      getFieldObjects: vi.fn(async () => ({
+        "contact.name": [{ id: "9R" }],
+        notes: [{ id: "11R" }],
+      })),
+    } as never);
+    viewer.pdfDocument = pdf;
+    const render = (html: string) => {
+      const div = document.createElement("div");
+      div.innerHTML = html;
+      controller.container.append(div);
+      controller.bus.dispatch("annotationlayerrendered", {
+        source: {
+          div,
+          pdfPage: {
+            getAnnotations: async () => [
+              { subtype: "Link", id: "7R" },
+              { subtype: "Link", id: "8R", url: "https://example.org" },
+            ],
+          },
+        },
+      });
+      return div;
+    };
+    const page = render(
+      '<section data-annotation-id="7R"></section><section data-annotation-id="9R"></section><section data-annotation-id="11R"></section>',
+    );
+    const link = page.querySelector<HTMLElement>('[data-annotation-id="7R"]')!;
+    await vi.waitFor(() => expect(link.getAttribute("role")).toBe("button"));
+    expect(link.getAttribute("aria-label")).toBe("Hide contact");
+    link.click();
+    await vi.waitFor(() =>
+      expect(page.querySelector<HTMLElement>('[data-annotation-id="9R"]')!.hidden).toBe(true),
+    );
+    expect(page.querySelector<HTMLElement>('[data-annotation-id="11R"]')!.hidden).toBe(false);
+    // A page drawn again keeps the field hidden.
+    const again = render('<section data-annotation-id="9R"></section>');
+    expect(again.querySelector<HTMLElement>("section")!.hidden).toBe(true);
+    // The document is read once for its actions.
+    expect(pdf.getData).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ink eraser", () => {
+  it("erases along page points with a radius in page units and commits one revision", async () => {
+    await open();
+    const view = {
+      div: document.createElement("div"),
+      viewport: {
+        scale: 2,
+        convertToPdfPoint: (x: number, y: number) => [x / 2, y / 2],
+      },
+    };
+    view.div.getBoundingClientRect = () => ({ left: 0, top: 0 }) as DOMRect;
+    Object.assign(viewer, { getPageView: () => view });
+    const replace = vi.spyOn(controller, "replaceWithBytes").mockResolvedValue();
+    const changed = await controller.eraseInk(
+      1,
+      [
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ],
+      16,
+    );
+    expect(changed).toBe(1);
+    expect(eraseInk).toHaveBeenCalledWith(
+      new Uint8Array([1, 2, 3]),
+      1,
+      [
+        [5, 10],
+        [15, 20],
+      ],
+      4,
+    );
+    expect(replace).toHaveBeenCalledWith(new Uint8Array([8]), "Ink erased", {
+      preMutationBytes: new Uint8Array([1, 2, 3]),
+    });
   });
 });

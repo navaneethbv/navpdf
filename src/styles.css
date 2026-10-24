@@ -4023,3 +4023,29 @@ p {
   font-size: 20px;
   font-weight: 600;
 }
+.property-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.property-row select {
+  width: 100%;
+}
+.eraser-overlay {
+  cursor: none;
+}
+.eraser-cursor {
+  position: absolute;
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  pointer-events: none;
+}
+.annotationLayer .linkAnnotation[data-navpdf-action] {
+  cursor: pointer;
+  pointer-events: auto;
+}
+.field-pick-list {
+  max-height: 160px;
+  overflow-y: auto;
+}

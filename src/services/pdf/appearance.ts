@@ -112,11 +112,24 @@ export async function embedAppearanceFonts(doc: PDFDocument): Promise<Appearance
 export function appearanceStream(
   doc: PDFDocument,
   operators: PDFOperator[],
-  options: { width: number; height: number; matrix?: number[]; fonts?: AppearanceFonts },
+  options: {
+    width: number;
+    height: number;
+    matrix?: number[];
+    fonts?: AppearanceFonts;
+    /** Images or forms the appearance draws, by resource name. */
+    xObjects?: Record<string, PDFRef>;
+  },
 ): PDFRef {
-  const resources = options.fonts
-    ? { Font: { Helv: options.fonts.regular.ref, HeBo: options.fonts.bold.ref } }
-    : undefined;
+  const resources =
+    options.fonts || options.xObjects
+      ? {
+          ...(options.fonts
+            ? { Font: { Helv: options.fonts.regular.ref, HeBo: options.fonts.bold.ref } }
+            : {}),
+          ...(options.xObjects ? { XObject: options.xObjects } : {}),
+        }
+      : undefined;
   const stream = doc.context.formXObject(operators, {
     BBox: [0, 0, options.width, options.height],
     Matrix: options.matrix ?? [1, 0, 0, 1, 0, 0],

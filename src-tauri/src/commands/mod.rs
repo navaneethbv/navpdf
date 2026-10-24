@@ -61,6 +61,16 @@ pub struct Preferences {
     pub page_background: String,
     pub reload_changed_files: bool,
     pub reopen_session: bool,
+    /// Colour, width and opacity new annotations of each kind start with.
+    pub annotation_defaults: std::collections::BTreeMap<String, AnnotationDefault>,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AnnotationDefault {
+    pub color: String,
+    pub width: f32,
+    pub opacity: f32,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -89,6 +99,7 @@ impl Default for Preferences {
             page_background: "#ffffff".into(),
             reload_changed_files: true,
             reopen_session: false,
+            annotation_defaults: std::collections::BTreeMap::new(),
         }
     }
 }
@@ -880,11 +891,28 @@ fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result
     if !PAGE_COLORS.contains(&preferences.page_colors.as_str()) {
         return Err("Invalid preference value.".into());
     }
+    const ANNOTATION_KINDS: [&str; 8] = [
+        "Square", "Circle", "Line", "Arrow", "Cloud", "Callout", "Polygon", "PolyLine",
+    ];
+    for (kind, default) in &preferences.annotation_defaults {
+        if !ANNOTATION_KINDS.contains(&kind.as_str())
+            || !(0.5..=20.0).contains(&default.width)
+            || !(0.1..=1.0).contains(&default.opacity)
+        {
+            return Err("Invalid annotation default.".into());
+        }
+    }
     let custom = [&preferences.light_overrides, &preferences.dark_overrides]
         .into_iter()
         .flat_map(|overrides| [&overrides.background, &overrides.accent])
         .flatten()
-        .chain([&preferences.page_foreground, &preferences.page_background]);
+        .chain([&preferences.page_foreground, &preferences.page_background])
+        .chain(
+            preferences
+                .annotation_defaults
+                .values()
+                .map(|default| &default.color),
+        );
     for color in custom {
         if color.len() != 7
             || !color.starts_with('#')
@@ -1352,6 +1380,54 @@ mod tests {
                 original
             );
             assert_eq!(state.local.lock().unwrap().preferences.theme, "light");
+        }
+    }
+
+    #[test]
+    fn annotation_defaults_are_validated_per_kind() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let default = AnnotationDefault {
+            color: "#3366cc".into(),
+            width: 3.0,
+            opacity: 0.5,
+        };
+        let mut preferences = Preferences::default();
+        preferences
+            .annotation_defaults
+            .insert("Square".into(), default.clone());
+        persist_preferences(&state, preferences.clone()).unwrap();
+        let saved: LocalData =
+            serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
+        assert_eq!(saved.preferences.annotation_defaults["Square"], default);
+        let invalid = [
+            ("Script", default.clone()),
+            (
+                "Line",
+                AnnotationDefault {
+                    color: "blue".into(),
+                    ..default.clone()
+                },
+            ),
+            (
+                "Line",
+                AnnotationDefault {
+                    width: 40.0,
+                    ..default.clone()
+                },
+            ),
+            (
+                "Line",
+                AnnotationDefault {
+                    opacity: 0.0,
+                    ..default.clone()
+                },
+            ),
+        ];
+        for (kind, value) in invalid {
+            let mut candidate = preferences.clone();
+            candidate.annotation_defaults.insert(kind.into(), value);
+            assert!(persist_preferences(&state, candidate).is_err());
         }
     }
 

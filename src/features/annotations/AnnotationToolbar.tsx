@@ -16,6 +16,7 @@ import {
   Spline,
   TextCursorInput,
   Paperclip,
+  Eraser,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -41,7 +42,7 @@ export function AnnotationToolbar({
   const s = useWorkspace();
   const isBlocked = !controller || s.busy || !!s.info?.encrypted || !s.editingAllowed;
 
-  const handleSetTool = (tool: "highlight" | "draw" | "text" | "select") => {
+  const handleSetTool = (tool: "highlight" | "draw" | "text" | "select" | "eraser") => {
     s.set({ tool, selectedAnnotationId: null, hasSelection: false });
     controller?.setTool(tool);
   };
@@ -65,7 +66,10 @@ export function AnnotationToolbar({
 
   const selectShape = (shapeKind: ShapeKind) => {
     controller?.setTool("select");
+    // A style saved with "Use this style for new ..." starts each new shape of that kind.
+    const saved = s.local.preferences.annotationDefaults?.[shapeKind];
     s.set({
+      ...(saved ? { inkColor: saved.color, inkWidth: saved.width, inkOpacity: saved.opacity } : {}),
       shapeKind,
       tool: "shape",
       activeModal: "annotations",
@@ -114,6 +118,16 @@ export function AnnotationToolbar({
           onClick={() => handleSetTool("draw")}
         >
           <PenTool size={16} />
+        </button>
+        <button
+          className={s.tool === "eraser" ? "active" : ""}
+          title="Ink Eraser"
+          aria-label="Ink eraser"
+          aria-pressed={s.tool === "eraser"}
+          disabled={isBlocked}
+          onClick={() => handleSetTool(s.tool === "eraser" ? "select" : "eraser")}
+        >
+          <Eraser size={16} />
         </button>
         <button
           className={s.tool === "text" ? "active" : ""}

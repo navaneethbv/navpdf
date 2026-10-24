@@ -1,9 +1,49 @@
 import type { ShapeKind } from "../../types/document";
 import { useState, useEffect } from "react";
-import { X, Circle, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
+import { X, Circle, Eraser, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { formatBytes } from "../compress/CompressDialog";
+import { LINE_ENDINGS, type LineEnding } from "../../services/pdf/annotation-appearance";
+import { savePreferences } from "../../services/native";
+
+const ENDING_LABELS: Record<LineEnding, string> = {
+  None: "None",
+  Square: "Square",
+  Circle: "Circle",
+  Diamond: "Diamond",
+  OpenArrow: "Open arrow",
+  ClosedArrow: "Closed arrow",
+  Butt: "Butt",
+  ROpenArrow: "Reversed open arrow",
+  RClosedArrow: "Reversed closed arrow",
+  Slash: "Slash",
+};
+const SHAPE_TYPES = ["Square", "Circle", "Line", "Arrow", "PolyLine", "Polygon"];
+const LINE_TYPES = new Set(["Line", "Arrow", "PolyLine"]);
+const CLOUDY_TYPES = new Set(["Square", "Circle", "Polygon"]);
+
+/** Saves a selected annotation's style as the starting style for new ones of its kind. */
+async function saveAnnotationDefault(
+  kind: ShapeKind,
+  color: string,
+  width: number,
+  opacity: number,
+) {
+  const state = useWorkspace.getState();
+  const preferences = {
+    ...state.local.preferences,
+    annotationDefaults: {
+      ...state.local.preferences.annotationDefaults,
+      [kind]: { color, width, opacity },
+    },
+  };
+  await savePreferences(preferences);
+  useWorkspace.getState().set({
+    local: { ...useWorkspace.getState().local, preferences },
+    status: `New ${SHAPE_NAMES[kind]} annotations will use this style`,
+  });
+}
 const SHAPE_NAMES: Record<ShapeKind, string> = {
   Square: "rectangle",
   Circle: "oval",
@@ -25,8 +65,7 @@ function shapeInstructions(kind: ShapeKind) {
 export function Properties({ controller }: Readonly<{ controller: ViewerController }>) {
   const s = useWorkspace();
   const selected = s.comments.find((comment) => comment.id === s.selectedAnnotationId);
-  const selectedShape =
-    selected && ["Square", "Circle", "Line"].includes(selected.type) ? selected : null;
+  const selectedShape = selected && SHAPE_TYPES.includes(selected.type) ? selected : null;
   const selectedColor = selectedShape?.color
     ? `#${selectedShape.color
         .map((channel) =>
@@ -110,6 +149,68 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
             />
             <span>{Math.round(localOpacity * 100)}%</span>
           </label>
+          {LINE_TYPES.has(selectedShape.type) && (
+            <div className="property-row">
+              {(["Start", "End"] as const).map((end, index) => (
+                <label key={end}>
+                  {end}{" "}
+                  <select
+                    aria-label={`Line ${end.toLowerCase()} ending`}
+                    value={selectedShape.lineEndings?.[index] ?? "None"}
+                    disabled={s.busy}
+                    onChange={(event) => {
+                      const endings: [LineEnding, LineEnding] = [
+                        (selectedShape.lineEndings?.[0] ?? "None") as LineEnding,
+                        (selectedShape.lineEndings?.[1] ?? "None") as LineEnding,
+                      ];
+                      endings[index] = event.target.value as LineEnding;
+                      void controller.updateSelectedAnnotation({ lineEndings: endings });
+                    }}
+                  >
+                    {LINE_ENDINGS.map((name) => (
+                      <option key={name} value={name}>
+                        {ENDING_LABELS[name]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          )}
+          <label>
+            Border{" "}
+            <select
+              aria-label="Selected annotation border"
+              value={selectedShape.borderStyle ?? "solid"}
+              disabled={s.busy}
+              onChange={(event) =>
+                void controller.updateSelectedAnnotation({
+                  borderStyle: event.target.value as "solid" | "dashed" | "cloudy",
+                })
+              }
+            >
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+              {CLOUDY_TYPES.has(selectedShape.type) && <option value="cloudy">Cloudy</option>}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="button"
+            disabled={s.busy}
+            onClick={() =>
+              void saveAnnotationDefault(
+                selectedShape.type as ShapeKind,
+                selectedColor,
+                localWidth,
+                localOpacity,
+              ).catch((error: unknown) =>
+                s.set({ error: error instanceof Error ? error.message : String(error) }),
+              )
+            }
+          >
+            Use this style for new {SHAPE_NAMES[selectedShape.type as ShapeKind]} annotations
+          </button>
           <fieldset
             className="property-button-grid"
 
@@ -267,6 +368,32 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
           </button>
         </>
       );
+    if (s.tool === "eraser")
+      return (
+        <>
+          <div className="properties-icon">
+            <Eraser size={25} />
+          </div>
+          <h3>Erase freehand ink.</h3>
+          <p className="muted">
+            Drag over a drawing to cut it where the eraser passes. Each drag can be undone. Other
+            comments are not erased.
+          </p>
+          <label className="range-label">
+            Eraser size{" "}
+            <input
+              type="range"
+              min="4"
+              max="72"
+              step="2"
+              aria-label="Eraser size"
+              value={s.eraserSize}
+              onChange={(e) => useWorkspace.getState().set({ eraserSize: Number(e.target.value) })}
+            />
+            <span>{s.eraserSize} px</span>
+          </label>
+        </>
+      );
     if (s.tool === "shape")
       return (
         <>
@@ -391,5 +518,6 @@ function getSidebarTitle(selected: boolean, tool: string): string {
   if (selected) return "Annotation properties";
   if (tool === "highlight") return "Highlight properties";
   if (tool === "shape") return "Shape properties";
+  if (tool === "eraser") return "Ink eraser";
   return "Document";
 }

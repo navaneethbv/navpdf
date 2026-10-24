@@ -26,6 +26,7 @@ Batch 6 adds print subsets, reverse order, content choices, grayscale and image 
 PR [71](https://github.com/navaneethbv/navpdf/pull/71) merged batches 3 to 6 on October 24; on the same day the user asked for batches 7 to 10 on a new draft PR.
 Batch 7's viewer part adds hiding all comments, replacement page colours, Fit Visible, marquee zoom, Alt-drag column selection, copying or saving an image from the page, a page-size label and an About dialog.
 Batch 7's lifecycle part adds document tabs, Revert, reloading a document whose file changed on disk and reopening the last session's documents.
+Batch 7's editing part adds sign-here and picture stamps, watermarks and backgrounds from a picture or PDF page, an ink eraser, all ten line endings with dashed and cloudy borders, saved shape styles, and links that change layers or form fields with chosen borders.
 
 ## Phase status and remaining gates
 

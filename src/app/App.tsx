@@ -853,7 +853,8 @@ export default function App() {
             (s.tool === "highlight" ||
               s.tool === "draw" ||
               s.tool === "text" ||
-              s.tool === "shape"))) && (
+              s.tool === "shape" ||
+              s.tool === "eraser"))) && (
           <AnnotationToolbar
             controller={controller}
             onClose={() => {
@@ -862,7 +863,8 @@ export default function App() {
                 s.tool === "highlight" ||
                 s.tool === "draw" ||
                 s.tool === "text" ||
-                s.tool === "shape"
+                s.tool === "shape" ||
+                s.tool === "eraser"
               ) {
                 s.set({ tool: "select" });
                 controller?.setTool("select");

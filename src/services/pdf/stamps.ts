@@ -3,7 +3,14 @@
 
 import {
   PDFDocument,
+  PDFImage,
   PDFName,
+  closePath,
+  concatTransformationMatrix,
+  drawObject,
+  fill,
+  lineTo,
+  moveTo,
   popGraphicsState,
   pushGraphicsState,
   setFillingRgbColor,
@@ -11,6 +18,7 @@ import {
   setStrokingRgbColor,
   stroke,
 } from "pdf-lib";
+import { embedDecorationImage } from "./decoration-images.ts";
 import { pdfText } from "./text-string.ts";
 import { toPdfDate } from "../document-commands.ts";
 import { fromTopLeftVisual, visibleBox } from "./page-box.ts";
@@ -46,6 +54,20 @@ export const STANDARD_STAMPS = {
 } as const;
 
 export type StandardStampName = keyof typeof STANDARD_STAMPS;
+
+/** Pointed sign-here tags, drawn filled with the point to the left as the page is displayed. */
+export const SIGN_HERE_STAMPS = {
+  SignHere: { label: "SIGN HERE", tone: "red" },
+  InitialHere: { label: "INITIAL HERE", tone: "blue" },
+  Witness: { label: "WITNESS", tone: "blue" },
+  Accepted: { label: "ACCEPTED", tone: "green" },
+  Rejected: { label: "REJECTED", tone: "red" },
+} as const;
+
+export type SignHereStampName = keyof typeof SIGN_HERE_STAMPS;
+
+const isSignHere = (name: string): name is SignHereStampName =>
+  Object.hasOwn(SIGN_HERE_STAMPS, name);
 export type StampTone = "green" | "blue" | "red";
 
 const TONES: Record<StampTone, [number, number, number]> = {
@@ -67,8 +89,8 @@ export type StampPosition = (typeof STAMP_POSITIONS)[number];
 
 export interface StampInput {
   page: number;
-  /** A standard stamp name, or `Custom` with `label`. */
-  stamp: StandardStampName | "Custom";
+  /** A standard or sign-here stamp name, or `Custom` with `label`. */
+  stamp: StandardStampName | SignHereStampName | "Custom";
   label?: string;
   tone?: StampTone;
   /** An optional second line, such as the reviewer and date. */
@@ -101,7 +123,9 @@ function stampText(input: StampInput) {
     if (label.length > 40) throw new Error("Custom stamp text is limited to 40 characters.");
     return { label, tone: input.tone ?? "blue" };
   }
-  const standard = STANDARD_STAMPS[input.stamp];
+  const standard = isSignHere(input.stamp)
+    ? SIGN_HERE_STAMPS[input.stamp]
+    : STANDARD_STAMPS[input.stamp];
   if (!standard) throw new Error("Choose a stamp.");
   return { label: standard.label, tone: input.tone ?? standard.tone };
 }
@@ -120,7 +144,8 @@ export async function addStamp(pdfBytes: Uint8Array, input: StampInput): Promise
     height: quarterTurn ? box.width : box.height,
   };
   const { label, tone } = stampText(input);
-  const detail = input.detail?.trim() ?? "";
+  // Sign-here tags carry only their label.
+  const detail = isSignHere(input.stamp) ? "" : (input.detail?.trim() ?? "");
   if (detail.length > 80) throw new Error("The stamp detail line is limited to 80 characters.");
 
   const fonts = await embedAppearanceFonts(doc);
@@ -137,33 +162,35 @@ export async function addStamp(pdfBytes: Uint8Array, input: StampInput): Promise
   const color = TONES[tone];
 
   const labelWidth = fonts.bold.widthOfTextAtSize(label, labelSize);
-  const operators = [
-    pushGraphicsState(),
-    setStrokingRgbColor(...color),
-    setFillingRgbColor(...color),
-    setLineWidth(2.5),
-    ...roundedRectangle(1.25, 1.25, width - 2.5, height - 2.5, 6),
-    stroke(),
-    ...textLine(
-      fonts.bold,
-      APPEARANCE_FONT_NAMES.bold,
-      label,
-      labelSize,
-      (width - labelWidth) / 2,
-      height - padding - labelSize * 0.75,
-    ),
-    ...(detail
-      ? textLine(
-          fonts.regular,
-          APPEARANCE_FONT_NAMES.regular,
-          detail,
-          detailSize,
-          (width - fonts.regular.widthOfTextAtSize(detail, detailSize)) / 2,
-          padding,
-        )
-      : []),
-    popGraphicsState(),
-  ];
+  const operators = isSignHere(input.stamp)
+    ? signHereTag(fonts, label, labelSize, width, height, color)
+    : [
+        pushGraphicsState(),
+        setStrokingRgbColor(...color),
+        setFillingRgbColor(...color),
+        setLineWidth(2.5),
+        ...roundedRectangle(1.25, 1.25, width - 2.5, height - 2.5, 6),
+        stroke(),
+        ...textLine(
+          fonts.bold,
+          APPEARANCE_FONT_NAMES.bold,
+          label,
+          labelSize,
+          (width - labelWidth) / 2,
+          height - padding - labelSize * 0.75,
+        ),
+        ...(detail
+          ? textLine(
+              fonts.regular,
+              APPEARANCE_FONT_NAMES.regular,
+              detail,
+              detailSize,
+              (width - fonts.regular.widthOfTextAtSize(detail, detailSize)) / 2,
+              padding,
+            )
+          : []),
+        popGraphicsState(),
+      ];
   const appearance = appearanceStream(doc, operators, {
     width,
     height,
@@ -178,13 +205,132 @@ export async function addStamp(pdfBytes: Uint8Array, input: StampInput): Promise
     Type: "Annot",
     Subtype: "Stamp",
     Rect: [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height],
-    Name: PDFName.of(input.stamp === "Custom" ? "NavPDFCustom" : input.stamp),
+    Name: PDFName.of(stampName(input.stamp)),
     F: 4,
     P: page.ref,
     C: color,
     NM: pdfText(input.id ?? `navpdf-stamp-${crypto.randomUUID()}`),
     T: pdfText(annotationAuthor(input.author)),
     Contents: pdfText(detail ? `${label}\n${detail}` : label),
+    M: pdfText(now),
+    CreationDate: pdfText(now),
+    AP: normalAppearance(doc, appearance),
+  });
+  page.node.addAnnot(doc.context.register(annotation));
+  return doc.save();
+}
+
+/** The /Name entry: specification names as they are, NavPDF's own stamps with a prefix. */
+function stampName(stamp: StampInput["stamp"]) {
+  if (stamp === "Custom") return "NavPDFCustom";
+  return isSignHere(stamp) ? `NavPDF${stamp}` : stamp;
+}
+
+/** A filled tag pointing left, with its label in white, for sign-here stamps. */
+function signHereTag(
+  fonts: Awaited<ReturnType<typeof embedAppearanceFonts>>,
+  label: string,
+  size: number,
+  width: number,
+  height: number,
+  color: [number, number, number],
+) {
+  const point = height / 2;
+  const labelWidth = fonts.bold.widthOfTextAtSize(label, size);
+  return [
+    pushGraphicsState(),
+    setFillingRgbColor(...color),
+    moveTo(0, height / 2),
+    lineTo(point, 0),
+    lineTo(width, 0),
+    lineTo(width, height),
+    lineTo(point, height),
+    closePath(),
+    fill(),
+    setFillingRgbColor(1, 1, 1),
+    ...textLine(
+      fonts.bold,
+      APPEARANCE_FONT_NAMES.bold,
+      label,
+      size,
+      point + (width - point - labelWidth) / 2,
+      (height - size * 0.7) / 2,
+    ),
+    popGraphicsState(),
+  ];
+}
+
+export interface ImageStampInput {
+  page: number;
+  /** PNG or JPEG bytes, or a PDF whose page `pageNumber` is used. */
+  bytes: Uint8Array;
+  type: "png" | "jpg" | "pdf";
+  pageNumber?: number;
+  position: StampPosition;
+  /** Width in points as displayed; the height keeps the picture's shape. */
+  width: number;
+  /** Name shown for the stamp in comment lists. */
+  label?: string;
+  author?: string;
+  id?: string;
+}
+
+/** Adds a stamp whose appearance is a picture or a page of another PDF, upright on the page. */
+export async function addImageStamp(pdfBytes: Uint8Array, input: ImageStampInput) {
+  const doc = await PDFDocument.load(pdfBytes);
+  const pageIndex = input.page - 1;
+  if (!Number.isInteger(input.page) || pageIndex < 0 || pageIndex >= doc.getPageCount())
+    throw new Error("Stamp page is outside the document.");
+  const page = doc.getPage(pageIndex);
+  const box = visibleBox(page);
+  const quarterTurn = box.rotation === 90 || box.rotation === 270;
+  const visual = {
+    width: quarterTurn ? box.height : box.width,
+    height: quarterTurn ? box.width : box.height,
+  };
+  const embedded = await embedDecorationImage(doc, {
+    bytes: input.bytes,
+    type: input.type,
+    pageNumber: input.pageNumber,
+    scale: 1,
+    opacity: 1,
+    rotation: 0,
+    behind: false,
+  });
+  const ratio = embedded.height / embedded.width;
+  const width = Math.min(Math.max(input.width, 24), visual.width - 2 * MARGIN, 400);
+  const height = Math.min(width * ratio, visual.height - 2 * MARGIN);
+  const drawnWidth = height / ratio;
+  if (drawnWidth < 12) throw new Error("The page is too small for this stamp.");
+  // An image fills the unit square; an embedded page keeps its size in points.
+  const unit = embedded instanceof PDFImage ? 1 : embedded.width;
+  const operators = [
+    pushGraphicsState(),
+    concatTransformationMatrix(drawnWidth / unit, 0, 0, drawnWidth / unit, 0, 0),
+    ...(embedded instanceof PDFImage ? [concatTransformationMatrix(1, 0, 0, ratio, 0, 0)] : []),
+    drawObject("Pic"),
+    popGraphicsState(),
+  ];
+  const appearance = appearanceStream(doc, operators, {
+    width: drawnWidth,
+    height,
+    matrix: uprightMatrix(box.rotation),
+    xObjects: { Pic: embedded.ref },
+  });
+  const where = placement(input.position, visual)({ width: drawnWidth, height });
+  const rect = fromTopLeftVisual(page, where.x, where.y, drawnWidth, height);
+  const label = input.label?.trim().slice(0, 80) || "Image stamp";
+  const now = toPdfDate();
+  const annotation = doc.context.obj({
+    Type: "Annot",
+    Subtype: "Stamp",
+    Rect: [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height],
+    Name: PDFName.of("NavPDFImage"),
+    F: 4,
+    P: page.ref,
+    NM: pdfText(input.id ?? `navpdf-stamp-${crypto.randomUUID()}`),
+    T: pdfText(annotationAuthor(input.author)),
+    Contents: pdfText(label),
     M: pdfText(now),
     CreationDate: pdfText(now),
     AP: normalAppearance(doc, appearance),

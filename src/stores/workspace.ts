@@ -76,6 +76,8 @@ interface Workspace {
   inkColor: string;
   inkWidth: number;
   inkOpacity: number;
+  /** The ink eraser's width in screen pixels. */
+  eraserSize: number;
   shapeKind: ShapeKind;
   /** Text placed in the next callout drawn on the page. */
   calloutText: string;
@@ -157,6 +159,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   inkColor: "#25604b",
   inkWidth: 2,
   inkOpacity: 1,
+  eraserSize: 16,
   shapeKind: "Square",
   calloutText: "",
   textEditSelection: [],

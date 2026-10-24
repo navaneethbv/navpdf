@@ -67,6 +67,8 @@ import type { PageColors } from "./page-colors";
 import { preparePrintContent } from "../pages/print-options";
 import { inkedBounds } from "./view-geometry";
 import { imagePngAt } from "./page-images";
+import { eraseInk } from "../../services/pdf/ink-eraser";
+import { readHideActions, type HideAction } from "../../services/pdf/hide-actions";
 
 /** A document kept open in a background tab while another tab is shown. */
 export interface ParkedDocument {
@@ -316,6 +318,10 @@ export class ViewerController {
   private replacing = false;
   /** The zoom to restore when a revision of the open document is attached. */
   private keptScale: string | null = null;
+  /** Show or hide field actions of each shown document, read once when a page needs them. */
+  private readonly hideActions = new WeakMap<PDFDocumentProxy, Promise<Map<string, HideAction>>>();
+  /** Field widgets hidden on screen by a show or hide action; this is not saved. */
+  private readonly hiddenFields = new Set<string>();
   /** A background tab's document being shown again, whose zoom and view history are kept. */
   private resuming: ParkedDocument | null = null;
   /** A copy of the document without comments, shown in place of it while comments are hidden. */
@@ -433,9 +439,13 @@ export class ViewerController {
             '[class*="WidgetAnnotation"]',
           ))
             field.inert = true;
+        this.applyHiddenFields(source.div);
         void source.pdfPage
           ?.getAnnotations()
-          .then((annotations) => enhanceDateFields(source.div, annotations))
+          .then(async (annotations) => {
+            enhanceDateFields(source.div, annotations);
+            await this.bindHideActions(source.div, annotations);
+          })
           .catch(() => {
             // Fields stay usable as plain text when annotations cannot be read again.
           });
@@ -543,6 +553,7 @@ export class ViewerController {
       this.readAloud.stop();
       this.autoScroll.stop();
     } else if (!this.replacing) {
+      this.hiddenFields.clear();
       this.views.clear();
       this.readAloud.stop();
       this.autoScroll.stop();
@@ -1678,6 +1689,91 @@ export class ViewerController {
       allowNegativeOffset: true,
     });
     useWorkspace.getState().set({ status: "Fit visible content" });
+  }
+  /**
+   * Erases freehand ink along a path of window positions on one page, `size` pixels across on
+   * screen. The strokes are cut where the eraser passed, in one undoable step.
+   */
+  async eraseInk(pageNumber: number, points: { x: number; y: number }[], size: number) {
+    const pdf = this.pdf;
+    if (!pdf || !points.length) return 0;
+    const view = this.viewer.getPageView(pageNumber - 1) as
+      { viewport: { scale: number } } | undefined;
+    const path = points.flatMap(({ x, y }) => {
+      const point = this.pagePoint(pageNumber, x, y);
+      return point ? [point] : [];
+    });
+    const radius = size / 2 / (view?.viewport.scale || 1);
+    return this.mutate("Erasing ink", async () => {
+      const bytes = await pdf.saveDocument();
+      const result = await eraseInk(bytes, pageNumber, path, radius);
+      if (!result.changed) {
+        useWorkspace.getState().set({ status: "No ink to erase there" });
+        return 0;
+      }
+      await this.replaceWithBytes(result.bytes, "Ink erased", { preMutationBytes: bytes });
+      return result.changed;
+    });
+  }
+  private applyHiddenFields(root: ParentNode) {
+    for (const element of root.querySelectorAll<HTMLElement>("[data-annotation-id]"))
+      element.hidden = this.hiddenFields.has(element.dataset.annotationId ?? "");
+  }
+  /**
+   * Makes links with a show or hide field action, which PDF.js draws but does not run, work as
+   * buttons. The document is read only for pages with such links.
+   */
+  private async bindHideActions(div: HTMLElement, annotations: unknown[]) {
+    const pdf = this.viewer.pdfDocument;
+    const unbound = (annotations as Record<string, unknown>[]).filter(
+      (annotation) =>
+        annotation.subtype === "Link" &&
+        !["url", "unsafeUrl", "dest", "action", "setOCGState", "resetForm", "attachment"].some(
+          (key) => annotation[key],
+        ),
+    );
+    if (!pdf || !unbound.length) return;
+    let actions = this.hideActions.get(pdf);
+    if (!actions) {
+      actions = pdf.getData().then((bytes) => readHideActions(bytes));
+      this.hideActions.set(pdf, actions);
+    }
+    const byId = await actions;
+    for (const annotation of unbound) {
+      const id = String(annotation.id);
+      const action = byId.get(id);
+      const section = div.querySelector<HTMLElement>(`[data-annotation-id="${CSS.escape(id)}"]`);
+      if (!action || !section || section.dataset.navpdfAction) continue;
+      section.dataset.navpdfAction = "hide";
+      section.tabIndex = 0;
+      section.setAttribute("role", "button");
+      section.setAttribute(
+        "aria-label",
+        `${action.hide ? "Hide" : "Show"} ${action.fields.join(", ")}`,
+      );
+      const run = () => void this.runHideAction(pdf, action);
+      section.addEventListener("click", run);
+      section.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          run();
+        }
+      });
+    }
+  }
+  private async runHideAction(pdf: PDFDocumentProxy, action: HideAction) {
+    const objects = ((await pdf.getFieldObjects()) ?? {}) as Record<string, { id?: string }[]>;
+    // A named field covers its widgets and the fields below it, as "name.child".
+    const ids = Object.entries(objects)
+      .filter(([name]) =>
+        action.fields.some((field) => name === field || name.startsWith(`${field}.`)),
+      )
+      .flatMap(([, widgets]) => widgets.flatMap((widget) => (widget.id ? [widget.id] : [])));
+    for (const id of ids) {
+      if (action.hide) this.hiddenFields.add(id);
+      else this.hiddenFields.delete(id);
+    }
+    this.applyHiddenFields(this.container);
   }
   /** The image under a window position on a displayed page as PNG, or null. */
   async imageAt(pageNumber: number, clientX: number, clientY: number) {

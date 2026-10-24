@@ -19,6 +19,7 @@ import {
   StandardFonts,
   rgb,
   PDFRawStream,
+  PDFStream,
   degrees,
   drawLinesOfText,
   drawRectangle,
@@ -31,6 +32,18 @@ import {
 } from "pdf-lib";
 import { pdfText } from "./pdf/text-string.ts";
 import { appendTaggedStream, removeTaggedStreams } from "./pdf/content-streams.ts";
+import {
+  GENERATED_APPEARANCE,
+  LINE_ENDINGS,
+  generateAppearance,
+  lineEndingSize,
+  type LineEnding,
+} from "./pdf/annotation-appearance.ts";
+import {
+  drawDecorationImage,
+  embedDecorationImage,
+  type DecorationImage,
+} from "./pdf/decoration-images.ts";
 import { stripExternalPageLinks } from "./pdf/link-targets.ts";
 import { walkEmbeddedFiles } from "./pdf/name-tree.ts";
 import { mergePreservingStructure } from "./pdf/merge.ts";
@@ -408,6 +421,10 @@ export interface AnnotationUpdateInput {
   contents?: string;
   dx?: number;
   dy?: number;
+  /** Start and end styles for a line or connected lines. */
+  lineEndings?: [LineEnding, LineEnding];
+  /** Cloudy applies to rectangles, ovals and polygons. */
+  borderStyle?: "solid" | "dashed" | "cloudy";
 }
 
 export function annotationIdentifier(value: unknown): string {
@@ -495,13 +512,13 @@ export function findAnnotation(doc: PDFDocument, id: string, targetPage?: number
 
 type AnnotationBox = ReturnType<typeof visibleBox>;
 
-function annotationHasArrow(annotation: PDFDict): boolean {
+function annotationHasEnding(annotation: PDFDict): boolean {
   const lineEndings = annotation.lookupMaybe(PDFName.of("LE"), PDFArray);
   return Boolean(
     lineEndings &&
     Array.from({ length: lineEndings.size() }).some((_, index) => {
-      const value = lineEndings.lookupMaybe(index, PDFName)?.asString()?.toLowerCase() ?? "";
-      return value.includes("arrow");
+      const value = lineEndings.lookupMaybe(index, PDFName)?.decodeText() ?? "None";
+      return value !== "None";
     }),
   );
 }
@@ -518,7 +535,9 @@ function setLineGeometry(
   const existingBS = annotation.lookupMaybe(PDFName.of("BS"), PDFDict);
   const existingWidth = existingBS?.lookupMaybe(PDFName.of("W"), PDFNumber)?.asNumber();
   const lineWidth = clamp(width ?? existingWidth ?? 2, 0.5, 20);
-  const arrowheadSize = annotationHasArrow(annotation) ? Math.max(10, lineWidth * 3) : 0;
+  const arrowheadSize = annotationHasEnding(annotation)
+    ? Math.max(10, lineEndingSize(lineWidth))
+    : 0;
   const margin = lineWidth / 2 + 2 + arrowheadSize;
   annotation.set(
     PDFName.of("Rect"),
@@ -630,6 +649,91 @@ function updateAnnotationAppearance(
   if (input.contents !== undefined) annotation.set(PDFName.of("Contents"), pdfText(input.contents));
 }
 
+const CLOUDY_SUBTYPES = new Set(["Square", "Circle", "Polygon"]);
+const ENDING_SUBTYPES = new Set(["Line", "PolyLine"]);
+
+/** Applies line endings and solid, dashed or cloudy borders. Returns true when one changed. */
+function updateAnnotationStyle(
+  annotation: PDFDict,
+  context: PDFContext,
+  input: AnnotationUpdateInput,
+): boolean {
+  const subtype = annotation.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() ?? "";
+  let changed = false;
+  if (input.lineEndings) {
+    if (!ENDING_SUBTYPES.has(subtype)) throw new Error("Only lines can have line endings.");
+    if (!input.lineEndings.every((name) => (LINE_ENDINGS as readonly string[]).includes(name)))
+      throw new Error("Choose a line ending from the list.");
+    annotation.set(
+      PDFName.of("LE"),
+      context.obj(input.lineEndings.map((name) => PDFName.of(name))),
+    );
+    changed = true;
+  }
+  if (input.borderStyle) {
+    if (input.borderStyle === "cloudy" && !CLOUDY_SUBTYPES.has(subtype))
+      throw new Error("Only rectangles, ovals and polygons can have a cloudy border.");
+    const existing = annotation.lookupMaybe(PDFName.of("BS"), PDFDict);
+    const width = existing?.lookupMaybe(PDFName.of("W"), PDFNumber)?.asNumber() ?? 1;
+    annotation.set(
+      PDFName.of("BS"),
+      context.obj(
+        input.borderStyle === "dashed" ? { W: width, S: "D", D: [3, 2] } : { W: width, S: "S" },
+      ),
+    );
+    if (input.borderStyle === "cloudy")
+      annotation.set(PDFName.of("BE"), context.obj({ S: "C", I: 1 }));
+    else annotation.delete(PDFName.of("BE"));
+    changed = true;
+  }
+  return changed;
+}
+
+/** Grows a line's or connected lines' rectangle to hold their endings or cloudy border. */
+function fitAnnotationRect(annotation: PDFDict, context: PDFContext, box: AnnotationBox) {
+  const line = annotation.lookupMaybe(PDFName.of("L"), PDFArray);
+  if (line?.size() === 4) {
+    const [x1, y1, x2, y2] = line.asArray().map((value) => (value as PDFNumber).asNumber());
+    setLineGeometry(annotation, context, box, [x1, y1], [x2, y2]);
+    return;
+  }
+  const vertices = annotation.lookupMaybe(PDFName.of("Vertices"), PDFArray);
+  if (!vertices || vertices.size() < 4) return;
+  const values = vertices.asArray().map((value) => (value as PDFNumber).asNumber());
+  const xs = values.filter((_, index) => index % 2 === 0);
+  const ys = values.filter((_, index) => index % 2 === 1);
+  const width =
+    annotation
+      .lookupMaybe(PDFName.of("BS"), PDFDict)
+      ?.lookupMaybe(PDFName.of("W"), PDFNumber)
+      ?.asNumber() ?? 1;
+  const margin =
+    width / 2 +
+    2 +
+    Math.max(
+      annotationHasEnding(annotation) ? lineEndingSize(width) : 0,
+      annotation.lookupMaybe(PDFName.of("BE"), PDFDict) ? 6 : 0,
+    );
+  annotation.set(
+    PDFName.of("Rect"),
+    context.obj([
+      clamp(Math.min(...xs) - margin, box.x, box.x + box.width),
+      clamp(Math.min(...ys) - margin, box.y, box.y + box.height),
+      clamp(Math.max(...xs) + margin, box.x, box.x + box.width),
+      clamp(Math.max(...ys) + margin, box.y, box.y + box.height),
+    ]),
+  );
+}
+
+/** Whether an annotation's normal appearance was drawn by NavPDF and can be redrawn. */
+function hasGeneratedAppearance(annotation: PDFDict) {
+  const appearance = annotation.lookupMaybe(PDFName.of("AP"), PDFDict);
+  const normal = appearance?.lookup(PDFName.of("N"));
+  return normal instanceof PDFRawStream || normal instanceof PDFStream
+    ? normal.dict.get(PDFName.of(GENERATED_APPEARANCE)) !== undefined
+    : false;
+}
+
 /** Update the persisted geometry and drawing properties of one annotation. */
 export async function updateAnnotation(
   pdfBytes: Uint8Array,
@@ -648,6 +752,14 @@ export async function updateAnnotation(
   updateRectangle(found.annotation, context, box, input.rect);
   updateLine(found.annotation, context, box, input.line, input.width);
   updateAnnotationAppearance(found.annotation, context, input);
+  const restyled = updateAnnotationStyle(found.annotation, context, input);
+  // Endings and dashed or cloudy borders need an appearance to show alike in every reader; one
+  // NavPDF drew earlier is redrawn so it follows every later change.
+  if (restyled || hasGeneratedAppearance(found.annotation)) {
+    if (restyled) fitAnnotationRect(found.annotation, context, box);
+    const appearance = generateAppearance(doc, found.annotation);
+    if (appearance) found.annotation.set(PDFName.of("AP"), context.obj({ N: appearance }));
+  }
   return doc.save();
 }
 
@@ -1870,10 +1982,14 @@ export interface DocumentDecorationsOptions {
     rotationDegrees?: number;
     fontSize?: number;
     color?: [number, number, number];
+    /** A picture from a file, drawn instead of text. */
+    image?: DecorationImage;
   };
   background?: {
     color?: [number, number, number];
     opacity?: number;
+    /** A picture from a file, drawn behind the page's content instead of a tint. */
+    image?: DecorationImage;
   };
   pageRange?: number[]; // 1-based page numbers; all if omitted
   metadata?: {
@@ -2158,17 +2274,31 @@ export async function applyDocumentDecorations(
   const docAuthor = options.metadata?.author || doc.getAuthor() || "";
 
   const formatTokens = createDecorationTokenFormatter(total, today, docTitle, docAuthor);
+  const pictures = [
+    { image: options.watermark?.image, key: "NavPDF_WmPicture" },
+    {
+      image: options.background?.image && { ...options.background.image, behind: true },
+      key: "NavPDF_BgPicture",
+    },
+  ].filter((entry): entry is { image: DecorationImage; key: string } => !!entry.image);
+  const embedded = await Promise.all(
+    pictures.map(async (entry) => ({
+      ...entry,
+      embedded: await embedDecorationImage(doc, entry.image),
+    })),
+  );
+  // A picture replaces the text watermark or the tint it stands for.
+  const drawn: DocumentDecorationsOptions = {
+    ...options,
+    watermark: options.watermark?.image ? undefined : options.watermark,
+    background: options.background?.image ? undefined : options.background,
+  };
 
   for (const pageIndex of targetIndices) {
-    renderDecorationPage(
-      doc,
-      doc.getPage(pageIndex),
-      options,
-      font,
-      fontBold,
-      pageIndex + 1,
-      formatTokens,
-    );
+    const page = doc.getPage(pageIndex);
+    for (const picture of embedded)
+      drawDecorationImage(doc, page, picture.embedded, picture.image, picture.key);
+    renderDecorationPage(doc, page, drawn, font, fontBold, pageIndex + 1, formatTokens);
   }
 
   return doc.save();
@@ -2359,10 +2489,26 @@ export interface LinkAnnotationOptions {
   page: number; // 1-based page number
   rect: [number, number, number, number]; // [x1, y1, x2, y2]
   target: {
-    type: "url" | "page";
+    type: "url" | "page" | "layers" | "fields" | "reset";
     url?: string;
     targetPage?: number; // 1-based page number
+    /** Optional content group ids as PDF.js reports them, such as "12R". */
+    layers?: string[];
+    layerState?: "ON" | "OFF" | "Toggle";
+    /** Fully qualified form field names to show, hide or reset; none resets every field. */
+    fields?: string[];
+    hideFields?: boolean;
   };
+  appearance?: LinkAppearance;
+}
+
+/** How a link's rectangle looks and responds to a click. */
+export interface LinkAppearance {
+  /** 0 hides the border. */
+  width: number;
+  style: "solid" | "dashed" | "underline";
+  color: [number, number, number];
+  highlight: "None" | "Invert" | "Outline" | "Push";
 }
 
 /** Add a standard PDF /Link annotation (external URL or internal page jump). */
@@ -2388,7 +2534,15 @@ export async function addLinkAnnotation(
   }
 
   let linkAnnot: PDFDict;
-  if (options.target.type === "url") {
+  if (["layers", "fields", "reset"].includes(options.target.type)) {
+    linkAnnot = doc.context.obj({
+      Type: "Annot",
+      Subtype: "Link",
+      Rect: clampedRect,
+      Border: [0, 0, 0],
+      A: linkAction(doc, options.target),
+    });
+  } else if (options.target.type === "url") {
     const urlCheck = validateSafeUrl(options.target.url ?? "");
     if (!urlCheck.valid || !urlCheck.normalizedUrl) {
       throw new Error(urlCheck.reason || "Invalid URL destination.");
@@ -2420,8 +2574,75 @@ export async function addLinkAnnotation(
     });
   }
 
+  if (options.appearance) applyLinkAppearance(doc, linkAnnot, options.appearance);
   page.node.addAnnot(doc.context.register(linkAnnot));
   return doc.save();
+}
+
+/** A PDF.js optional content id such as "12R" or "12R3" as a reference. */
+function layerRef(id: string) {
+  const match = /^(\d+)R(\d*)$/.exec(id);
+  if (!match) throw new Error("That layer is not in this document.");
+  return PDFRef.of(Number(match[1]), Number(match[2] || 0));
+}
+
+/** Show or hide layers, show or hide fields, or reset fields. Scripts are never created. */
+function linkAction(doc: PDFDocument, target: LinkAnnotationOptions["target"]) {
+  if (target.type === "layers") {
+    const ids = target.layers ?? [];
+    if (!ids.length) throw new Error("Choose at least one layer.");
+    const groups = doc.catalog
+      .lookupMaybe(PDFName.of("OCProperties"), PDFDict)
+      ?.lookupMaybe(PDFName.of("OCGs"), PDFArray);
+    const known = new Set(groups?.asArray().map((entry) => entry.toString()) ?? []);
+    const refs = ids.map(layerRef);
+    if (refs.some((ref) => !known.has(ref.toString())))
+      throw new Error("That layer is not in this document.");
+    const state = target.layerState ?? "Toggle";
+    return doc.context.obj({
+      Type: "Action",
+      S: "SetOCGState",
+      State: [PDFName.of(state), ...refs],
+    });
+  }
+  const known = doc
+    .getForm()
+    .getFields()
+    .map((field) => field.getName());
+  const names = target.fields ?? [];
+  // A parent name, such as "contact" for "contact.name", covers the fields below it.
+  const missing = names.find(
+    (name) => !known.some((field) => field === name || field.startsWith(`${name}.`)),
+  );
+  if (missing) throw new Error(`There is no form field named ${missing}.`);
+  if (target.type === "fields") {
+    if (!names.length) throw new Error("Choose at least one form field.");
+    return doc.context.obj({
+      Type: "Action",
+      S: "Hide",
+      T: names.map((name) => pdfText(name)),
+      H: target.hideFields !== false,
+    });
+  }
+  // Without names, Reset Form resets every field.
+  return doc.context.obj({
+    Type: "Action",
+    S: "ResetForm",
+    ...(names.length ? { Fields: names.map((name) => pdfText(name)) } : {}),
+  });
+}
+
+function applyLinkAppearance(doc: PDFDocument, link: PDFDict, appearance: LinkAppearance) {
+  const width = clamp(appearance.width, 0, 6);
+  if (!appearance.color.every(finite)) throw new Error("Link colour is invalid.");
+  const style = { solid: "S", dashed: "D", underline: "U" }[appearance.style];
+  link.set(PDFName.of("Border"), doc.context.obj([0, 0, width]));
+  link.set(
+    PDFName.of("BS"),
+    doc.context.obj({ W: width, S: style, ...(style === "D" ? { D: [3, 2] } : {}) }),
+  );
+  link.set(PDFName.of("C"), doc.context.obj(appearance.color.map((value) => clamp(value, 0, 1))));
+  link.set(PDFName.of("H"), PDFName.of(appearance.highlight.charAt(0)));
 }
 
 /** Delete a link annotation from a specific page by link index. */
