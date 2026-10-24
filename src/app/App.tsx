@@ -8,6 +8,8 @@ import {
   Info,
   LoaderCircle,
   LockKeyhole,
+  RefreshCw,
+  RotateCcw,
   Save,
   X,
   FileText,
@@ -239,6 +241,7 @@ function handleShortcut(
     ["w", () => session.home()],
     ["z", () => (event.shiftKey ? controller?.redo() : controller?.undo())],
     ["y", () => controller?.redo()],
+    ["tab", () => session.stepTabs(event.shiftKey ? -1 : 1)],
     ["[", () => controller?.goBack()],
     ["]", () => controller?.goForward()],
     [",", () => state.set({ settingsOpen: true })],
@@ -377,12 +380,20 @@ function menuActions(
     ["save", () => void session.save()],
     ["save-as", () => void session.save(true)],
     [
+      "revert",
+      () => {
+        if (state.document) session.revert();
+      },
+    ],
+    [
       "print",
       () => {
         if (state.document) state.set({ activeModal: "print" });
       },
     ],
     ["home", () => session.home()],
+    ["next-tab", () => session.stepTabs(1)],
+    ["previous-tab", () => session.stepTabs(-1)],
     [
       "organize",
       () => {
@@ -569,6 +580,8 @@ export default function App() {
         open={open}
         save={(as) => void session.save(as)}
         home={session.home}
+        switchTab={(id) => void session.switchTab(id)}
+        closeTab={(id) => void session.closeBackground(id)}
       />
       {s.error && (
         <div className="error-banner" role="alert">
@@ -719,6 +732,77 @@ export default function App() {
           </form>
         </Dialog>
       )}
+      {session.unsavedTabs && (
+        <Dialog
+          title="Close with unsaved documents?"
+          icon={<Save size={18} />}
+          onClose={session.cancelClose}
+          priority
+        >
+          <p>These open documents have unsaved changes: {session.unsavedTabs.join(", ")}.</p>
+          <div className="dialog-actions">
+            <button type="button" className="button" onClick={session.cancelClose}>
+              Keep editing
+            </button>
+            <button type="button" className="button" onClick={session.discardUnsavedAndClose}>
+              Discard them and close
+            </button>
+            <button type="button" className="button primary" onClick={session.reviewUnsaved}>
+              Show the first one
+            </button>
+          </div>
+        </Dialog>
+      )}
+      {session.revertPending && (
+        <Dialog
+          title="Revert to the saved version?"
+          icon={<RotateCcw size={18} />}
+          onClose={session.cancelRevert}
+          priority
+        >
+          <p>
+            NavPDF opens the saved file again. Unsaved changes and undo history for this document
+            are discarded and cannot be restored.
+          </p>
+          <div className="dialog-actions">
+            <button type="button" className="button" onClick={session.cancelRevert}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button primary"
+              onClick={() => void session.confirmRevert()}
+            >
+              Revert
+            </button>
+          </div>
+        </Dialog>
+      )}
+      {session.externalChange && (
+        <Dialog
+          title="The file changed on disk"
+          icon={<RefreshCw size={18} />}
+          onClose={session.keepExternalChange}
+          priority
+        >
+          <p>
+            Another app changed {session.externalChange} while it has unsaved edits here. Reload the
+            version on disk and discard your edits, or keep your version.
+          </p>
+          <div className="dialog-actions">
+            <button type="button" className="button" onClick={session.keepExternalChange}>
+              Keep my version
+            </button>
+            <button
+              type="button"
+              className="button primary"
+              onClick={() => void session.reloadExternalChange()}
+            >
+              Reload from disk
+            </button>
+          </div>
+        </Dialog>
+      )}
       {session.confirm && (
         <Dialog
           title="Save your changes?"
@@ -819,6 +903,15 @@ export default function App() {
                   void session.save(true);
                 },
                 disabled: !s.document,
+              },
+              {
+                id: "revert",
+                label: "Revert",
+                description: "Go back to the last saved version",
+                category: "edit",
+                icon: RotateCcw,
+                action: session.revert,
+                disabled: !s.document || !!s.document.unsaved,
               },
               {
                 id: "undo",

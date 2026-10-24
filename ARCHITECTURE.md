@@ -38,6 +38,11 @@ PDF scripting, automatic attachment launching and remote webview navigation are 
 The native picker opens a PDF and returns an opaque document identifier, its display name and its length.
 PDF.js requests bounded byte ranges through binary Tauri IPC, keeping raw file paths and unrestricted filesystem access out of the renderer.
 The loaded document is owned by a document session service, separate from serializable Zustand UI state.
+Each open document has a tab; one viewer instance shows one tab at a time.
+A background tab keeps its PDF.js document, loading tasks, revision and view histories and view location in the session service, while Zustand holds only tab names and unsaved flags.
+Moving a tab to the background first commits edits held by the PDF.js page view as a revision and writes a recovery copy when it has unsaved changes.
+The native dirty flag covers every tab, so quitting still asks while a background tab has unsaved changes.
+A watcher compares the open file's size and modification time, then its hash, with the version opened or saved, to reload or ask about changes made by other applications.
 PDF.js parses in a dedicated worker and provides the text layer, annotation layer, links, selection, page labels and outlines.
 Its maintained viewer rendering queue and page buffer render nearby pages, release distant canvases and preserve text correctness across page rotations and dimensions.
 The thumbnail sidebar is independently virtualized and never mounts a thousand canvases.

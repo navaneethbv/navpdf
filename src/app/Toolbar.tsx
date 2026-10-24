@@ -55,15 +55,25 @@ export function Toolbar({
   open,
   save,
   home,
+  switchTab,
+  closeTab,
 }: Readonly<
   ControllerProps & {
     open: () => void;
     save: (as: boolean) => void;
     home: () => void;
+    switchTab?: (id: string) => void;
+    closeTab?: (id: string) => void;
   }
 >) {
   const s = useWorkspace();
   const disabled = !s.document || s.busy;
+  // The shown document's own fields are current; its tab entry is refreshed when it is parked.
+  const tabs = s.tabs.map((tab) =>
+    tab.id === s.document?.id ? { ...tab, name: s.document.name, dirty: s.dirty } : tab,
+  );
+  if (s.document && !tabs.some((tab) => tab.id === s.document?.id))
+    tabs.push({ id: s.document.id, name: s.document.name, dirty: s.dirty });
   const toggleMode = (mode: ToolMode) => s.set({ toolMode: s.toolMode === mode ? null : mode });
   return (
     <>
@@ -71,21 +81,43 @@ export function Toolbar({
         <button className="icon-button" onClick={home} aria-label="NavPDF home" title="Home">
           <Home size={21} />
         </button>
-        <div className={`document-tab ${s.document ? "is-open" : ""}`}>
-          <Files size={17} />
-          <span>{s.document?.name || "NavPDF"}</span>
-          {s.dirty && <span className="dirty-indicator" title="Unsaved changes" />}
-          {s.document && (
-            <button
-              className="icon-button"
-              onClick={home}
-              disabled={s.busy}
-              aria-label="Close document"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
+        {tabs.length === 0 ? (
+          <div className="document-tab">
+            <Files size={17} />
+            <span>NavPDF</span>
+          </div>
+        ) : (
+          <ul className="document-tabs" aria-label="Open documents">
+            {tabs.map((tab) => {
+              const shown = tab.id === s.document?.id;
+              return (
+                <li key={tab.id} className={`document-tab ${shown ? "is-open" : ""}`}>
+                  <button
+                    type="button"
+                    className="document-tab-name"
+                    aria-current={shown ? "page" : undefined}
+                    title={tab.name}
+                    disabled={s.busy}
+                    onClick={() => switchTab?.(tab.id)}
+                  >
+                    <Files size={17} />
+                    <span>{tab.name}</span>
+                  </button>
+                  {tab.dirty && <span className="dirty-indicator" title="Unsaved changes" />}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => (shown ? home() : closeTab?.(tab.id))}
+                    disabled={s.busy}
+                    aria-label={shown ? "Close document" : `Close ${tab.name}`}
+                  >
+                    <X size={16} />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <button
           className="create-button"
           disabled={s.busy}

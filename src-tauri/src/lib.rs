@@ -72,6 +72,7 @@ pub fn run() {
                 .text("combine-pdf", "Combine Files...")
                 .separator()
                 .items(&[&save, &save_as])
+                .text("revert", "Revert")
                 .item(&export)
                 .text("compress", "Compress a PDF...")
                 .text("protect", "Protect Using Password...")
@@ -172,6 +173,9 @@ pub fn run() {
                 .minimize()
                 .maximize()
                 .fullscreen()
+                .separator()
+                .text("next-tab", "Show Next Tab")
+                .text("previous-tab", "Show Previous Tab")
                 .build()?;
             // The predefined macOS Quit item calls NSApplication.terminate directly,
             // bypassing the runtime's cancellable exit event.
@@ -261,6 +265,9 @@ pub fn run() {
             discard_recovery,
             mark_dirty,
             close_window,
+            commands::lifecycle::source_status,
+            commands::lifecycle::reopen_document,
+            commands::lifecycle::reopen_session,
             load_signatures,
             save_signature,
             delete_signature,

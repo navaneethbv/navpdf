@@ -5,6 +5,24 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 24 PDFCraft gap batch 7, document lifecycle
+
+The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists tabs, Revert, reloading changed files and session reopening with their limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,094 tests across 146 files, with 85.52% statements, 77.7% branches, 84.46% functions and 88.59% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests check that a rewritten file with identical bytes counts as unchanged while edited content counts as changed and a deleted file as missing, that Revert reopens the saved file with its page and refuses an unsaved import, and that sessions are recorded only while the preference is on, in opening order with pages, and restored once while skipping a missing file.
+Session tests check that Revert asks first, keeps the document when there is no saved file, reloads an unchanged document automatically, asks before replacing unsaved edits and reports each change once, warns once about a missing file and opens a restored session in tabs.
+Tab tests check that each tab keeps its own unsaved state and page, writes a recovery copy and keeps quitting guarded while a background tab has unsaved changes, closes clean background tabs, shows an edited one before closing it, shows the neighbour after closing the shown tab and lists unsaved tabs before closing the window.
+Controller tests check that parking keeps the undo and view histories and that resuming returns to the same PDF point, rotation and layer visibility.
+
+Opening another document now adds a tab instead of asking to discard unsaved edits, so six earlier session tests that expected that prompt were rewritten to assert that the edited document stays open in a background tab with its recovery copy, and that a document that fails to open shows the edited one again.
+Writing them found that loading reset the tab list and that a document PDF.js could not start loading was never released when no other document was shown; both are fixed.
+In the Chromium browser preview, two documents opened in tabs, switching back returned to scroll offset 3000 and Control-Tab and closing a tab worked.
+That check found that the viewer restored the previous document's offset when a hidden viewer reappeared, so parking now clears it and a new tab starts at the top, and that resuming while the viewer was hidden lost the zoom, so switching keeps the viewer shown.
+Native file watching, Revert from the macOS menu, quitting with unsaved background tabs and session reopening at launch were not exercised natively.
+
 ## October 24 PDFCraft gap batch 7, viewer
 
 The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists each addition and its limits.

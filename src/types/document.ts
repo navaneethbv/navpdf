@@ -78,6 +78,10 @@ export interface Preferences {
   pageColors: PageColorScheme;
   pageForeground: string;
   pageBackground: string;
+  /** Reload a document whose file another application changed, when it has no unsaved edits. */
+  reloadChangedFiles: boolean;
+  /** Reopen the documents open when NavPDF last closed. */
+  reopenSession: boolean;
 }
 export type PageColorScheme =
   "off" | "white-on-black" | "yellow-on-black" | "green-on-black" | "black-on-white" | "custom";
@@ -168,4 +172,6 @@ export const defaultPreferences: Preferences = {
   pageColors: "off",
   pageForeground: "#000000",
   pageBackground: "#ffffff",
+  reloadChangedFiles: true,
+  reopenSession: false,
 };

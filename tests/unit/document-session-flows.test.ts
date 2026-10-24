@@ -10,6 +10,8 @@ import type { ViewerController } from "../../src/features/viewer/controller";
 vi.mock("../../src/services/pdf", () => ({ loadPdf: vi.fn() }));
 vi.mock("../../src/services/native", () => ({
   native: false,
+  setBackgroundDirty: vi.fn(),
+  sourceStatus: vi.fn(async () => ({ changed: false, missing: false })),
   localState: vi.fn(async () => ({
     preferences: defaultPreferences,
     recents: [],
@@ -54,6 +56,10 @@ beforeEach(async () => {
     detach: vi.fn(async () => {}),
     attach: vi.fn(async () => {}),
     releaseRevision: vi.fn(async () => {}),
+    park: vi.fn(async () => ({
+      pdf: { numPages: 2, saveDocument: vi.fn(async () => new Uint8Array([9])) },
+    })),
+    resume: vi.fn(async () => {}),
     replaceWithBytes: vi.fn(async () => {}),
     goTo: vi.fn(),
     viewer: { firstPagePromise: Promise.resolve() },
@@ -249,5 +255,6 @@ it("opens recents with the remembered page when enabled", async () => {
   await vi.waitFor(() => {
     expect(desktop.openRecent).toHaveBeenCalledWith("r1");
   });
-  expect(controller.goTo).toHaveBeenCalledWith(3);
+  await vi.waitFor(() => expect(controller.goTo).toHaveBeenCalledWith(3));
+  expect(useWorkspace.getState().tabs.map((tab) => tab.id)).toEqual([doc.id, "r1"]);
 });

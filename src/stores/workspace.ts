@@ -16,7 +16,15 @@ import type {
 import type { ReadAloudState } from "../features/viewer/read-aloud";
 import { defaultPreferences } from "../types/document";
 import { ACTUAL_SIZE, type MeasureKind, type MeasureScale } from "../services/pdf/measure";
+/** An open document's tab: its name and whether it has unsaved changes. */
+export interface DocumentTab {
+  id: string;
+  name: string;
+  dirty: boolean;
+}
 interface Workspace {
+  /** Open documents in tab order; the shown one is `document`, whose own fields are current. */
+  tabs: DocumentTab[];
   document: DocumentDescriptor | null;
   info: DocumentInfo | null;
   page: number;
@@ -122,8 +130,12 @@ const cleanDocument = {
   selectedPages: [],
   activeSnapshot: false,
 } satisfies Partial<Workspace>;
+/** The state that belongs to one document, kept with a tab while another tab is shown. */
+export type DocumentState = Pick<Workspace, keyof typeof cleanDocument>;
+export const DOCUMENT_STATE_KEYS = Object.keys(cleanDocument) as (keyof DocumentState)[];
 export const useWorkspace = create<Workspace>((set) => ({
   ...cleanDocument,
+  tabs: [],
   zoom: 100,
   layout: "continuous",
   tool: "select",
@@ -157,6 +169,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   reset: () =>
     set({
       ...cleanDocument,
+      tabs: [],
       tool: "select",
       toolMode: null,
       activeModal: null,

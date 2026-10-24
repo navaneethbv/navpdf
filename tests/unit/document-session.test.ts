@@ -12,6 +12,8 @@ import type { ViewerController } from "../../src/features/viewer/controller";
 vi.mock("../../src/services/pdf", () => ({ loadPdf: vi.fn() }));
 vi.mock("../../src/services/native", () => ({
   native: false,
+  setBackgroundDirty: vi.fn(),
+  sourceStatus: vi.fn(async () => ({ changed: false, missing: false })),
   openRecovery: vi.fn(async () => null),
   localState: vi.fn(async () => ({
     preferences: defaultPreferences,
@@ -41,6 +43,10 @@ beforeEach(async () => {
     detach: vi.fn(async () => {}),
     attach: vi.fn(async () => {}),
     releaseRevision: vi.fn(async () => {}),
+    park: vi.fn(async () => ({
+      pdf: { numPages: 2, saveDocument: vi.fn(async () => new Uint8Array([9])) },
+    })),
+    resume: vi.fn(async () => {}),
     replaceWithBytes: vi.fn(async () => {}),
     goTo: vi.fn(),
     viewer: { firstPagePromise: Promise.resolve() },
@@ -131,17 +137,15 @@ it("reports Ready after late range progress while attaching the viewer", async (
   });
 });
 
-it("R1: preserves dirty state and recovery guard if discard-and-open is cancelled", async () => {
+it("R1: keeps a dirty document open without asking when opening another is cancelled", async () => {
   useWorkspace.getState().set({ dirty: true });
-  act(() => {
-    session.open();
-  });
-  expect(session.confirm).not.toBeNull();
   vi.mocked(desktop.openDocument).mockResolvedValueOnce(null);
   await act(async () => {
-    session.discardAndContinue();
+    session.open();
   });
-  // Active document remains dirty because replacement never committed
+  expect(session.confirm).toBeNull();
+  expect(desktop.openDocument).toHaveBeenCalled();
+  expect(controller.park).not.toHaveBeenCalled();
   expect(useWorkspace.getState().dirty).toBe(true);
   expect(useWorkspace.getState().document).toEqual(previous);
 });
@@ -225,6 +229,9 @@ it("retains the recovery file until the recovered copy is saved", async () => {
   } as unknown as Awaited<ReturnType<typeof loadPdf>>);
   await act(async () => session.recover("candidate-recovery"));
   expect(desktop.openRecovery).toHaveBeenCalledWith("candidate-recovery");
+  // The open document stays in a tab beside the recovered copy.
+  expect(controller.park).toHaveBeenCalled();
+  expect(useWorkspace.getState().tabs.map((tab) => tab.id)).toEqual(["previous", "candidate"]);
   expect(useWorkspace.getState().document).toEqual(next);
   expect(useWorkspace.getState().dirty).toBe(true);
   expect(desktop.discardRecovery).not.toHaveBeenCalledWith("candidate-recovery");

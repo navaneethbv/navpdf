@@ -267,3 +267,59 @@ describe("zooming to an area", () => {
     expect(viewer.currentScale).toBeCloseTo(1.2);
   });
 });
+
+describe("background tabs", () => {
+  it("parks a document with its histories and shows it again where it was", async () => {
+    const pdf = await open();
+    const history = controller.history;
+    const views = controller.views;
+    const layers = [{ id: "4R", name: "Notes", visible: false }];
+    useWorkspace.getState().set({ layers });
+    viewer.currentPageNumber = 5;
+    viewer.pagesRotation = 180;
+    viewer.currentScaleValue = "2";
+    Object.assign(viewer, {
+      _location: { pageNumber: 5, left: 10, top: 700 },
+      scrollPageIntoView: vi.fn(),
+    });
+
+    const parked = await controller.park();
+    expect(parked).toMatchObject({
+      pdf,
+      history,
+      views,
+      page: 5,
+      rotation: 180,
+      scale: "2",
+      layers,
+    });
+    expect(controller.pdf).toBeNull();
+    expect(viewer.pdfDocument).toBeNull();
+    expect(controller.history).not.toBe(history);
+
+    await open(makePdf());
+    const config = layerConfig();
+    pdf.getOptionalContentConfig.mockResolvedValue(config);
+    await controller.resume(parked!);
+    expect(controller.pdf).toBe(pdf);
+    expect(controller.history).toBe(history);
+    expect(controller.views).toBe(views);
+    // The window returns to the same point on the page, not just the same scroll offset.
+    expect(viewer.scrollPageIntoView).toHaveBeenCalledWith({
+      pageNumber: 5,
+      destArray: [null, { name: "XYZ" }, 10, 700, null],
+      allowNegativeOffset: true,
+    });
+    expect(viewer.pagesRotation).toBe(180);
+    expect(config.setVisibility).toHaveBeenCalledWith("4R", false);
+    expect(useWorkspace.getState()).toMatchObject({ viewRotation: 180, layers });
+  });
+
+  it("commits page-view edits before parking so they are drawn when the tab returns", async () => {
+    const pdf = await open();
+    const replace = vi.spyOn(controller, "replaceWithBytes").mockResolvedValue();
+    pdf.annotationStorage.onSetModified?.();
+    await controller.park();
+    expect(replace).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), "Page edits kept");
+  });
+});

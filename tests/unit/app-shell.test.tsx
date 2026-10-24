@@ -57,6 +57,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../../src/services/native", () => ({
   native: true,
+  setBackgroundDirty: vi.fn(),
+  sourceStatus: vi.fn(async () => ({ changed: false, missing: false })),
   localState: vi.fn(async () => ({
     preferences: { ...defaultPreferences, tourCompleted: true, showStartupTips: false },
     recents: [],
@@ -249,6 +251,22 @@ describe("App shell", () => {
     });
     expect(useWorkspace.getState().sidebar).toBe("search");
     expect(useWorkspace.getState().settingsOpen).toBe(true);
+  });
+
+  it("confirms Revert from the menu and shows the About dialog", async () => {
+    seedDocument();
+    render(<App />);
+    const menu = vi
+      .mocked(listen)
+      .mock.calls.find(([event]) => event === "menu-action")?.[1] as (payload: {
+      payload: string;
+    }) => void;
+    await act(async () => menu({ payload: "revert" }));
+    expect(screen.getByRole("dialog", { name: "Revert to the saved version?" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Revert to the saved version?" })).toBeNull();
+    await act(async () => menu({ payload: "about" }));
+    expect(screen.getByRole("dialog", { name: "About NavPDF" })).toBeTruthy();
   });
 
   it("handles keyboard shortcuts and file picker changes", () => {

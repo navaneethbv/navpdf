@@ -49,6 +49,33 @@ export async function readRange(
   if (!file) throw new Error("This document is no longer available.");
   return new Uint8Array(await file.slice(begin, end).arrayBuffer());
 }
+/** Whether an open document's file changed on disk or disappeared since it was opened or saved. */
+export interface SourceStatus {
+  changed: boolean;
+  missing: boolean;
+}
+export async function sourceStatus(id: string): Promise<SourceStatus> {
+  if (!native) return { changed: false, missing: false };
+  return await invoke<SourceStatus>("source_status", { id });
+}
+/** Opens a document's saved file again as a new document, for Revert and reloading. */
+export async function reopenDocument(id: string): Promise<DocumentDescriptor> {
+  if (native) return await invoke<DocumentDescriptor>("reopen_document", { id });
+  const file = files.get(id);
+  if (!file) throw new Error("This document has no saved file to go back to.");
+  const reopened = crypto.randomUUID();
+  files.set(reopened, file);
+  return { id: reopened, name: file.name, size: file.size };
+}
+export interface RestoredSession {
+  documents: { descriptor: DocumentDescriptor; page: number }[];
+  skipped: number;
+}
+/** Opens the documents of the last session once, when that preference is on. */
+export async function reopenSession(): Promise<RestoredSession> {
+  if (!native) return { documents: [], skipped: 0 };
+  return await invoke<RestoredSession>("reopen_session");
+}
 export async function releaseDocument(id: string) {
   if (native) await invoke("close_document", { id });
   else files.delete(id);
@@ -102,8 +129,13 @@ export async function savePreferences(preferences: Preferences) {
 export async function clearRecents() {
   if (native) await invoke("clear_recents");
 }
+/** Whether a background tab has unsaved changes, so quitting asks even when the shown one has none. */
+let backgroundDirty = false;
+export function setBackgroundDirty(dirty: boolean) {
+  backgroundDirty = dirty;
+}
 export async function markDirty(dirty: boolean) {
-  if (native) await invoke("mark_dirty", { dirty });
+  if (native) await invoke("mark_dirty", { dirty: dirty || backgroundDirty });
 }
 export async function rememberPage(id: string, page: number) {
   if (native) await invoke("remember_page", { id, page });

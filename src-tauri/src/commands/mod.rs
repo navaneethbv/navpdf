@@ -1,5 +1,6 @@
 pub mod engine;
 pub mod export;
+pub mod lifecycle;
 pub mod open_queue;
 mod recovery;
 
@@ -58,6 +59,8 @@ pub struct Preferences {
     pub page_colors: String,
     pub page_foreground: String,
     pub page_background: String,
+    pub reload_changed_files: bool,
+    pub reopen_session: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -84,6 +87,8 @@ impl Default for Preferences {
             page_colors: "off".into(),
             page_foreground: "#000000".into(),
             page_background: "#ffffff".into(),
+            reload_changed_files: true,
+            reopen_session: false,
         }
     }
 }
@@ -101,6 +106,9 @@ pub struct Recent {
 pub struct LocalData {
     pub preferences: Preferences,
     pub recents: Vec<Recent>,
+    /// Documents open when NavPDF last closed, kept only while session reopening is on.
+    #[serde(default)]
+    pub session: Vec<lifecycle::SessionEntry>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +157,12 @@ pub struct Opened {
     /// Set when the source file was encrypted when opened.
     pub source_encrypted: Mutex<bool>,
     pub redaction_audit: Mutex<RedactionAudit>,
+    /// Size and modification time of the source when it was last known to match `source`.
+    pub stamp: Mutex<Option<lifecycle::SourceStamp>>,
+    /// The page last shown, for reopening the session.
+    pub page: Mutex<u32>,
+    /// Opening order, so a reopened session keeps its document order.
+    pub sequence: u64,
 }
 /// Redaction audits that a save must pass, because the renderer re-serializes redacted output.
 #[derive(Default)]
@@ -221,6 +235,8 @@ pub fn refuse_plaintext_overwrite(doc: &Opened, target: &std::path::Path) -> Res
     Ok(())
 }
 fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor, String> {
+    // Taken before the snapshot, so a change during it is reported later rather than missed.
+    let stamp = lifecycle::stamp(&path);
     let (snapshot, hash, length) = filesystem::snapshot(&path)?;
     let file = snapshot
         .reopen()
@@ -254,6 +270,9 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
         force_save_as: Mutex::new(false),
         source_encrypted: Mutex::new(source_encrypted),
         redaction_audit: Mutex::new(RedactionAudit::default()),
+        stamp: Mutex::new(stamp),
+        page: Mutex::new(1),
+        sequence: lifecycle::next_sequence(),
     });
     state
         .documents
@@ -605,6 +624,9 @@ pub async fn save_document(
             *doc.source
                 .lock()
                 .map_err(|_| "Document state unavailable.")? = (target.clone(), new_hash);
+            if let Ok(mut stamp) = doc.stamp.lock() {
+                *stamp = lifecycle::stamp(&target);
+            }
             let target_name = target
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -898,6 +920,7 @@ fn persist_cleared_recents(state: &AppState) -> Result<(), String> {
 #[tauri::command]
 pub fn remember_page(state: State<AppState>, id: String, page: u32) -> Result<(), String> {
     let doc = document(&state, &id)?;
+    *doc.page.lock().map_err(|_| "Document unavailable.")? = page.max(1);
     let source = doc
         .source
         .lock()
@@ -997,6 +1020,8 @@ pub fn mark_dirty(state: State<AppState>, dirty: bool) -> Result<(), String> {
 }
 #[tauri::command]
 pub fn close_window(window: WebviewWindow, state: State<AppState>) -> Result<(), String> {
+    // A session that cannot be recorded must not stop the window from closing.
+    let _ = lifecycle::record_session(&state);
     *state
         .dirty
         .lock()

@@ -248,6 +248,26 @@ export function Settings() {
             Page colours change only how pages look on screen, not the document. Images keep their
             colours.
           </p>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.reloadChangedFiles}
+              onChange={(e) => {
+                patch({ reloadChangedFiles: e.target.checked });
+              }}
+            />{" "}
+            Reload a document when another app changes its file
+          </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.reopenSession}
+              onChange={(e) => {
+                patch({ reopenSession: e.target.checked });
+              }}
+            />{" "}
+            Reopen documents from the last session at startup
+          </label>
           <h3>General & privacy</h3>
           <label>
             Default save behavior{" "}

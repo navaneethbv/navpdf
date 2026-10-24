@@ -21,6 +21,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("../../src/services/pdf", () => ({ loadPdf: vi.fn() }));
 vi.mock("../../src/services/native", () => ({
   native: true,
+  setBackgroundDirty: vi.fn(),
+  sourceStatus: vi.fn(async () => ({ changed: false, missing: false })),
   localState: vi.fn(async () => ({
     preferences: defaultPreferences,
     recents: [],
@@ -60,6 +62,10 @@ beforeEach(async () => {
     detach: vi.fn(async () => {}),
     attach: vi.fn(async () => {}),
     releaseRevision: vi.fn(async () => {}),
+    park: vi.fn(async () => ({
+      pdf: { numPages: 2, saveDocument: vi.fn(async () => new Uint8Array([9])) },
+    })),
+    resume: vi.fn(async () => {}),
     goTo: vi.fn(),
     viewer: { firstPagePromise: Promise.resolve() },
   } as unknown as ViewerController;
@@ -298,57 +304,62 @@ it("ignores close requests while busy", async () => {
   expect(desktop.discardRecovery).not.toHaveBeenCalled();
 });
 
-it("cancels an in-flight open from the dirty guard", async () => {
+it("opens another PDF in a new tab without asking to discard edits", async () => {
+  loadedDocument();
+  const next = { id: "next", name: "next.pdf", size: 10 };
+  vi.mocked(desktop.openDocument).mockResolvedValueOnce(next);
   useWorkspace.getState().set({ document: doc, dirty: true });
-  act(() => {
+  await act(async () => {
     session.open();
   });
-  expect(session.confirm).not.toBeNull();
-  act(() => {
-    session.cancelConfirm();
-  });
-  expect(loadPdf).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(useWorkspace.getState().document).toEqual(next));
+  expect(session.confirm).toBeNull();
+  expect(controller.park).toHaveBeenCalledOnce();
+  expect(useWorkspace.getState().tabs).toEqual([
+    { id: "doc", name: "doc.pdf", dirty: true },
+    { id: "next", name: "next.pdf", dirty: false },
+  ]);
+  // The dirty document keeps its handle and a recovery copy, and quitting still asks.
+  expect(desktop.releaseDocument).not.toHaveBeenCalledWith("doc");
+  expect(desktop.writeRecovery).toHaveBeenCalledWith(doc, new Uint8Array([9]), 2);
+  expect(desktop.setBackgroundDirty).toHaveBeenLastCalledWith(true);
 });
 
-it("cancels a queued native open without replacing dirty work or retaining the token", async () => {
+it("opens a queued native request in a new tab and dismisses its token", async () => {
+  loadedDocument();
   const request = { token: "queued", error: null };
   let queued = true;
   vi.mocked(invoke).mockImplementation(async (command) => {
     if (command === "pending_open_requests") return queued ? [request] : [];
     if (command === "dismiss_open_request") queued = false;
   });
+  const next = { id: "next", name: "next.pdf", size: 10 };
+  vi.mocked(desktop.openDocumentFromToken).mockResolvedValueOnce(next);
   useWorkspace
     .getState()
     .set({ document: doc, dirty: true, activeModal: null, settingsOpen: false });
   const onOpen = vi.mocked(listen).mock.calls.find(([event]) => event === "open-token")?.[1];
   await act(async () => onOpen?.({ payload: {} } as never));
-  expect(session.confirm).not.toBeNull();
-  expect(desktop.openDocumentFromToken).not.toHaveBeenCalled();
-  await act(async () => session.cancelConfirm());
-  expect(invoke).toHaveBeenCalledWith("dismiss_open_request", { token: "queued" });
-  expect(useWorkspace.getState()).toMatchObject({ document: doc, dirty: true });
-  expect(queued).toBe(false);
+  await vi.waitFor(() => expect(queued).toBe(false));
+  expect(session.confirm).toBeNull();
+  expect(useWorkspace.getState().document).toEqual(next);
+  expect(useWorkspace.getState().tabs.map((tab) => [tab.id, tab.dirty])).toEqual([
+    ["doc", true],
+    ["next", false],
+  ]);
 });
 
-it("releases a queued request after save failure while preserving edits", async () => {
-  let queued = true;
-  vi.mocked(invoke).mockImplementation(async (command) => {
-    if (command === "pending_open_requests")
-      return queued ? [{ token: "after-save", error: null }] : [];
-    if (command === "dismiss_open_request") queued = false;
+it("shows the dirty document again when a new tab's document cannot be opened", async () => {
+  vi.mocked(loadPdf).mockRejectedValueOnce(new Error("Invalid PDF structure"));
+  const next = { id: "next", name: "next.pdf", size: 10 };
+  vi.mocked(desktop.openDocument).mockResolvedValueOnce(next);
+  useWorkspace.getState().set({ document: doc, dirty: true });
+  await act(async () => {
+    session.open();
   });
-  useWorkspace
-    .getState()
-    .set({ document: doc, dirty: true, activeModal: null, settingsOpen: false });
-  (controller as unknown as { pdf: unknown }).pdf = {
-    saveDocument: async () => new Uint8Array([1]),
-    numPages: 2,
-  };
-  vi.mocked(desktop.saveDocument).mockRejectedValueOnce(new Error("disk full"));
-  const onOpen = vi.mocked(listen).mock.calls.find(([event]) => event === "open-token")?.[1];
-  await act(async () => onOpen?.({ payload: {} } as never));
-  await act(async () => session.saveAndContinue());
-  expect(desktop.openDocumentFromToken).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(controller.resume).toHaveBeenCalledOnce());
   expect(useWorkspace.getState()).toMatchObject({ document: doc, dirty: true });
-  expect(queued).toBe(false);
+  expect(desktop.releaseDocument).toHaveBeenCalledWith("next");
+  expect(desktop.releaseDocument).not.toHaveBeenCalledWith("doc");
+  expect(desktop.setBackgroundDirty).toHaveBeenLastCalledWith(false);
 });

@@ -26,6 +26,7 @@ import type {
   Comment,
   ShapeKind,
   SelectedTextGeometry,
+  DocumentLayer,
 } from "../../types/document";
 import type { DocumentRevision } from "../../types/operations";
 import { useWorkspace } from "../../stores/workspace";
@@ -66,6 +67,21 @@ import type { PageColors } from "./page-colors";
 import { preparePrintContent } from "../pages/print-options";
 import { inkedBounds } from "./view-geometry";
 import { imagePngAt } from "./page-images";
+
+/** A document kept open in a background tab while another tab is shown. */
+export interface ParkedDocument {
+  pdf: PDFDocumentProxy;
+  revisionTask: PDFDocumentLoadingTask | null;
+  history: RevisionHistory;
+  views: ViewHistory;
+  committedRevisionId: string | undefined;
+  scale: string;
+  page: number;
+  rotation: number;
+  /** The PDF point at the top left of the window, which stays valid when the zoom is reapplied. */
+  location: { pageNumber: number; left: number; top: number } | null;
+  layers: DocumentLayer[];
+}
 
 /** Reports the page left by link and bookmark jumps so Previous View can return to it. */
 class HistoryLinkService extends PDFLinkService {
@@ -289,7 +305,8 @@ export class ViewerController {
   private findPending = false;
   private searchClosed = false;
   private activeSearchKey = "";
-  readonly history = new RevisionHistory();
+  /** Replaced, with the view history, when another tab's document is shown. */
+  history = new RevisionHistory();
   private nativeCanUndo = false;
   private nativeCanRedo = false;
   private committedRevisionId: string | undefined;
@@ -299,9 +316,11 @@ export class ViewerController {
   private replacing = false;
   /** The zoom to restore when a revision of the open document is attached. */
   private keptScale: string | null = null;
+  /** A background tab's document being shown again, whose zoom and view history are kept. */
+  private resuming: ParkedDocument | null = null;
   /** A copy of the document without comments, shown in place of it while comments are hidden. */
   private commentFreeCopy: PDFDocumentLoadingTask | null = null;
-  readonly views = new ViewHistory();
+  views = new ViewHistory();
   readonly readAloud = new ReadAloud({
     pageText: (page) => this.pageText(page),
     showPage: (page) => {
@@ -519,7 +538,11 @@ export class ViewerController {
     this.storageModified = false;
     // An edit reloads the document; keep the reader's zoom instead of the default.
     this.keptScale = keepScale ? String(this.viewer.currentScaleValue) : null;
-    if (!this.replacing) {
+    if (this.resuming) {
+      this.keptScale = this.resuming.scale;
+      this.readAloud.stop();
+      this.autoScroll.stop();
+    } else if (!this.replacing) {
       this.views.clear();
       this.readAloud.stop();
       this.autoScroll.stop();
@@ -862,10 +885,13 @@ export class ViewerController {
     // The pages keep their sizes, so the exact scroll position stays valid.
     this.container.scrollLeft = scrollLeft;
     this.container.scrollTop = scrollTop;
+    await this.applyLayerVisibility(shown, useWorkspace.getState().layers);
+  }
+  /** Shows and hides optional content in the drawn pages as `layers` records. */
+  private async applyLayerVisibility(shown: PDFDocumentProxy, layers: DocumentLayer[]) {
     const config = await this.viewer.optionalContentConfigPromise;
     if (!config || this.viewer.pdfDocument !== shown) return;
-    for (const layer of useWorkspace.getState().layers)
-      config.setVisibility(layer.id, layer.visible);
+    for (const layer of layers) config.setVisibility(layer.id, layer.visible);
     this.viewer.optionalContentConfigPromise = Promise.resolve(config);
   }
   /** Replaces page colours on screen; null shows the document's own colours. */
@@ -923,6 +949,93 @@ export class ViewerController {
       .getState()
       .set({ commentsHidden: true, selectedAnnotationId: null, status: "Comments hidden" });
     await this.redisplay(copy);
+  }
+  /**
+   * Moves the open document to a background tab with its undo history, view history and view
+   * position, leaving the viewer empty for another document. Edits the page view holds are
+   * committed first so they are drawn when the tab returns.
+   */
+  async park(): Promise<ParkedDocument | null> {
+    if (!this.pdf) return null;
+    this.editor?.commitOrRemove();
+    await this.foldViewEdits();
+    const pdf = this.pdf;
+    if (!pdf) return null;
+    const parked: ParkedDocument = {
+      pdf,
+      revisionTask: this.revisionTask,
+      history: this.history,
+      views: this.views,
+      committedRevisionId: this.committedRevisionId,
+      scale: String(this.viewer.currentScaleValue),
+      page: this.viewer.currentPageNumber,
+      rotation: this.viewer.pagesRotation,
+      location:
+        (this.viewer as unknown as { _location?: ParkedDocument["location"] })._location ?? null,
+      layers: useWorkspace.getState().layers,
+    };
+    this.readAloud.stop();
+    this.autoScroll.stop();
+    this.generation++;
+    this.searchGeneration++;
+    clearTimeout(this.searchTimer);
+    clearTimeout(this.pageTimer);
+    this.viewer.setDocument(null as unknown as PDFDocumentProxy);
+    // The next document starts at the top; a hidden viewer would otherwise keep this offset.
+    this.container.scrollTop = 0;
+    this.container.scrollLeft = 0;
+    this.releaseCommentFreeCopy();
+    this.links.setDocument(null);
+    this.find.setDocument(null as unknown as PDFDocumentProxy);
+    this.revisionTask = null;
+    this.history = new RevisionHistory();
+    this.views = new ViewHistory();
+    this.committedRevisionId = undefined;
+    this.editor = null;
+    this.pdf = null;
+    this.identity = null;
+    this.nativeCanUndo = false;
+    this.nativeCanRedo = false;
+    this.storageModified = false;
+    this.contexts.clear();
+    return parked;
+  }
+  /** Shows a parked document again at the page, zoom, rotation and scroll it had. */
+  async resume(parked: ParkedDocument) {
+    this.history = parked.history;
+    this.views = parked.views;
+    this.revisionTask = parked.revisionTask;
+    this.committedRevisionId = parked.committedRevisionId;
+    // PDF.js can apply the zoom only while the viewer has a size, as it lacks one while hidden.
+    for (let frame = 0; frame < 30 && this.container.clientWidth <= 0; frame++)
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    const shown = new Promise<void>((resolve) => {
+      this.bus.on("pagesinit", () => resolve(), { once: true, signal: this.abort.signal });
+    });
+    this.resuming = parked;
+    try {
+      await this.attach(parked.pdf);
+    } finally {
+      this.resuming = null;
+    }
+    await shown;
+    if (this.pdf !== parked.pdf) return;
+    if (parked.rotation) {
+      this.viewer.pagesRotation = parked.rotation;
+      useWorkspace.getState().set({ viewRotation: parked.rotation as 0 | 90 | 180 | 270 });
+    }
+    const { location } = parked;
+    if (location && location.pageNumber <= parked.pdf.numPages)
+      this.viewer.scrollPageIntoView({
+        pageNumber: location.pageNumber,
+        destArray: [null, { name: "XYZ" }, location.left, location.top, null],
+        allowNegativeOffset: true,
+      });
+    else this.viewer.currentPageNumber = Math.min(parked.page, parked.pdf.numPages);
+    await this.applyLayerVisibility(parked.pdf, parked.layers);
+    useWorkspace.getState().set({ layers: parked.layers });
+    this.updateHistoryControls();
+    this.updateViewControls();
   }
   /**
    * Commits edits the page view still holds, such as drawings and filled fields, as a revision.

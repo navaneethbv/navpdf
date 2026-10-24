@@ -57,6 +57,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../../src/services/native", () => ({
   native: true,
+  setBackgroundDirty: vi.fn(),
+  sourceStatus: vi.fn(async () => ({ changed: false, missing: false })),
   localState: vi.fn(async () => ({
     preferences: { ...defaultPreferences, tourCompleted: true, showStartupTips: false },
     recents: [],
