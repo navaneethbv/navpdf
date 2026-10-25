@@ -97,24 +97,20 @@ function strokeWidth(annotation: PDFDict) {
   return width instanceof PDFNumber ? width.asNumber() : 1;
 }
 
-/** Keeps an ink annotation's remaining strokes, fits its rectangle and redraws it. */
-function keepStrokes(doc: PDFDocument, annotation: PDFDict, strokes: Point[][]) {
-  annotation.set(PDFName.of("InkList"), doc.context.obj(strokes.map((stroke) => stroke.flat())));
-  const margin = strokeWidth(annotation) / 2 + 1;
+/** The ink list and fitted rectangle for an ink annotation's remaining strokes. */
+function strokeEntries(doc: PDFDocument, width: number, strokes: Point[][]) {
+  const margin = width / 2 + 1;
   const xs = strokes.flat().map(([x]) => x);
   const ys = strokes.flat().map(([, y]) => y);
-  annotation.set(
-    PDFName.of("Rect"),
-    doc.context.obj([
+  return {
+    InkList: doc.context.obj(strokes.map((stroke) => stroke.flat())),
+    Rect: doc.context.obj([
       Math.min(...xs) - margin,
       Math.min(...ys) - margin,
       Math.max(...xs) + margin,
       Math.max(...ys) + margin,
     ]),
-  );
-  const appearance = generateAppearance(doc, annotation);
-  if (appearance) annotation.set(PDFName.of("AP"), doc.context.obj({ N: appearance }));
-  else annotation.delete(PDFName.of("AP"));
+  };
 }
 
 /** Removes emptied drawings, with their pop-up notes, from a page's annotations. */
@@ -136,6 +132,17 @@ function removeAnnotations(
   page.node.set(PDFName.of("Annots"), doc.context.obj(keep));
 }
 
+/** Ink annotations on a page with their positions in its annotation list. */
+function inkAnnotations(annots: PDFArray) {
+  return annots.asArray().flatMap((_, index) => {
+    const annotation = annots.lookup(index);
+    return annotation instanceof PDFDict &&
+      annotation.lookup(PDFName.of("Subtype")) === PDFName.of("Ink")
+      ? [[index, annotation] as const]
+      : [];
+  });
+}
+
 /**
  * Erases ink along `path`, in PDF user space, on a 1-based page. Returns the new bytes and how
  * many ink annotations changed, including deleted ones.
@@ -155,15 +162,20 @@ export async function eraseInk(
   if (!annots) return { bytes, changed: 0 };
   let changed = 0;
   const removed = new Set<number>();
-  for (let index = 0; index < annots.size(); index++) {
-    const annotation = annots.lookup(index);
-    if (!(annotation instanceof PDFDict)) continue;
-    if (annotation.lookup(PDFName.of("Subtype")) !== PDFName.of("Ink")) continue;
+  for (const [index, annotation] of inkAnnotations(annots)) {
     const result = eraseStrokes(inkStrokes(annotation), path, radius);
     if (!result.changed) continue;
     changed++;
-    if (result.strokes.length) keepStrokes(doc, annotation, result.strokes);
-    else removed.add(index);
+    if (!result.strokes.length) {
+      removed.add(index);
+      continue;
+    }
+    // The remaining strokes replace the old ones, and the drawing is redrawn from them.
+    const entries = strokeEntries(doc, strokeWidth(annotation), result.strokes);
+    for (const [key, value] of Object.entries(entries)) annotation.set(PDFName.of(key), value);
+    const appearance = generateAppearance(doc, annotation);
+    if (appearance) annotation.set(PDFName.of("AP"), doc.context.obj({ N: appearance }));
+    else annotation.delete(PDFName.of("AP"));
   }
   if (!changed) return { bytes, changed: 0 };
   if (removed.size) removeAnnotations(doc, page, annots, removed);

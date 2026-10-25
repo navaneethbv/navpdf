@@ -548,23 +548,21 @@ export function useDocumentSession(controller: ViewerController | null) {
   const open = useCallback(
     (file?: File) => {
       if (useWorkspace.getState().busy || lock.current || confirmationPending.current) return;
-      {
-        if (pendingOpen.current) {
-          useWorkspace.getState().set({
-            error: "Open is already in progress.",
-            status: "Open is already in progress.",
-          });
-          return;
-        }
-        pendingOpen.current = true;
-        void desktop
-          .openDocument(file)
-          .then((descriptor) => (descriptor ? openInTab(descriptor) : false))
-          .catch(report)
-          .finally(() => {
-            pendingOpen.current = false;
-          });
+      if (pendingOpen.current) {
+        useWorkspace.getState().set({
+          error: "Open is already in progress.",
+          status: "Open is already in progress.",
+        });
+        return;
       }
+      pendingOpen.current = true;
+      void desktop
+        .openDocument(file)
+        .then((descriptor) => (descriptor ? openInTab(descriptor) : false))
+        .catch(report)
+        .finally(() => {
+          pendingOpen.current = false;
+        });
     },
     [openInTab, report],
   );
@@ -731,6 +729,28 @@ export function useDocumentSession(controller: ViewerController | null) {
   // Watches the open document's file for changes made by other applications.
   useEffect(() => {
     if (!desktop.native || !controller) return undefined;
+    const checkSource = async (descriptor: DocumentDescriptor) => {
+      const source = await desktop.sourceStatus(descriptor.id).catch(() => null);
+      // A failed check is retried at the next interval.
+      const current = useWorkspace.getState();
+      if (
+        !source ||
+        current.document?.id !== descriptor.id ||
+        reportedSources.current.has(descriptor.id)
+      )
+        return;
+      if (source.missing) {
+        reportedSources.current.add(descriptor.id);
+        current.set({
+          error: `${descriptor.name} was moved or deleted. Use Save As to keep this document.`,
+        });
+      } else if (source.changed) {
+        reportedSources.current.add(descriptor.id);
+        if (current.dirty || current.activeModal || current.settingsOpen)
+          setExternalChange(descriptor.name);
+        else await reloadFromDisk(`Reloaded ${descriptor.name} because it changed on disk`);
+      }
+    };
     const interval = setInterval(() => {
       const state = useWorkspace.getState();
       const descriptor = state.document;
@@ -742,30 +762,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         reportedSources.current.has(descriptor.id)
       )
         return;
-      void desktop
-        .sourceStatus(descriptor.id)
-        .then((source) => {
-          const current = useWorkspace.getState();
-          if (current.document?.id !== descriptor.id || reportedSources.current.has(descriptor.id))
-            return;
-          if (source.missing) {
-            reportedSources.current.add(descriptor.id);
-            current.set({
-              error: `${descriptor.name} was moved or deleted. Use Save As to keep this document.`,
-            });
-          } else if (source.changed) {
-            reportedSources.current.add(descriptor.id);
-            if (current.dirty || current.activeModal || current.settingsOpen)
-              setExternalChange(descriptor.name);
-            else
-              void reloadFromDisk(`Reloaded ${descriptor.name} because it changed on disk`).catch(
-                report,
-              );
-          }
-        })
-        .catch(() => {
-          // A failed check is retried at the next interval.
-        });
+      void checkSource(descriptor).catch(report);
     }, 2000);
     return () => clearInterval(interval);
   }, [controller, reloadFromDisk, report]);

@@ -244,7 +244,7 @@ describe("line endings and dashed or cloudy borders", () => {
       fn === OPS.constructPath ? [list.argsArray[index][0]] : [],
     );
     // Diamond and the closed reversed arrow are filled; the line itself is stroked.
-    expect(painted.filter((op) => op === OPS.fillStroke).length).toBe(2);
+    expect(painted.filter((op) => op === OPS.fillStroke)).toHaveLength(2);
 
     // A colour change redraws the appearance NavPDF made, in the new colour.
     const recoloured = await updateAnnotation(ended, { id: "line", page: 1, color: [0, 0, 1] });
@@ -323,7 +323,7 @@ describe("line endings and dashed or cloudy borders", () => {
       fn === OPS.constructPath ? [polyList.argsArray[index][0]] : [],
     );
     // The connected line, the open arrow and the slash are each stroked.
-    expect(strokes.filter((op) => op === OPS.stroke).length).toBe(3);
+    expect(strokes.filter((op) => op === OPS.stroke)).toHaveLength(3);
   });
 });
 

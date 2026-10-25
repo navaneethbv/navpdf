@@ -76,14 +76,8 @@ export function columnText(spans: TextSpan[], rect: Box) {
       line.push(piece);
     else lines.push([piece]);
   }
-  return lines
-    .map((line) =>
-      line
-        .sort((a, b) => a.left - b.left)
-        .map((piece) => piece.text.trim())
-        .join(" "),
-    )
-    .join("\n");
+  for (const line of lines) line.sort((a, b) => a.left - b.left);
+  return lines.map((line) => line.map((piece) => piece.text.trim()).join(" ")).join("\n");
 }
 
 const inches = (points: number) => Number((points / 72).toFixed(2));

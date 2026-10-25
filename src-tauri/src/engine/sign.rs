@@ -1901,7 +1901,7 @@ mod tests {
             .unwrap()
             .as_secs();
         let report = inspect::evaluate_chain(&leaf, &[], std::slice::from_ref(&root), now);
-        assert_eq!(report.trust, TrustStatus::Trusted, "{}", report.message);
+        assert_eq!(report.trust, TrustStatus::Trusted);
         assert_eq!(report.certificates.len(), 2);
         assert!(report.certificates[1].trusted && !report.certificates[0].trusted);
         assert!(report.certificates[1].self_signed);

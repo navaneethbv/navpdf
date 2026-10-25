@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 import { pageAt } from "./page-pointer";
+import { useOverlayEvents } from "./overlay-events";
 
 interface Stroke {
   pointerId: number;
@@ -29,6 +30,45 @@ export function EraserTool({ controller }: Readonly<{ controller: ViewerControll
     y: point.y - (frame?.top ?? 0),
   });
 
+  useOverlayEvents(overlay, {
+    keydown: (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        useWorkspace.getState().set({ tool: "select" });
+      }
+    },
+    pointerdown: (event) => {
+      if (event.button !== 0 || !controller.pdf || useWorkspace.getState().busy) return;
+      const page = pageAt(event.clientX, event.clientY);
+      if (!page) return;
+      event.preventDefault();
+      overlay.current?.setPointerCapture?.(event.pointerId);
+      setStroke({
+        pointerId: event.pointerId,
+        page: Number(page.dataset.pageNumber),
+        points: [{ x: event.clientX, y: event.clientY }],
+      });
+    },
+    pointermove: (event) => {
+      const point = { x: event.clientX, y: event.clientY };
+      setCursor(point);
+      if (stroke?.pointerId === event.pointerId)
+        setStroke({ ...stroke, points: [...stroke.points, point] });
+    },
+    pointerup: (event) => {
+      if (stroke?.pointerId !== event.pointerId) return;
+      setStroke(null);
+      void controller
+        .eraseInk(stroke.page, [...stroke.points, { x: event.clientX, y: event.clientY }], size)
+        .catch(() => {
+          // The controller reports the failure; the document is unchanged.
+        });
+    },
+    pointercancel: () => setStroke(null),
+    pointerleave: () => setCursor(null),
+    wheel: (event) => controller.container.scrollBy(event.deltaX, event.deltaY),
+  });
+
   return (
     <div
       ref={overlay}
@@ -36,42 +76,6 @@ export function EraserTool({ controller }: Readonly<{ controller: ViewerControll
       role="application"
       aria-label="Ink eraser: drag over drawings to erase them, Escape to stop"
       tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          useWorkspace.getState().set({ tool: "select" });
-        }
-      }}
-      onPointerDown={(event) => {
-        if (event.button !== 0 || !controller.pdf || useWorkspace.getState().busy) return;
-        const page = pageAt(event.clientX, event.clientY);
-        if (!page) return;
-        event.preventDefault();
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-        setStroke({
-          pointerId: event.pointerId,
-          page: Number(page.dataset.pageNumber),
-          points: [{ x: event.clientX, y: event.clientY }],
-        });
-      }}
-      onPointerMove={(event) => {
-        const point = { x: event.clientX, y: event.clientY };
-        setCursor(point);
-        if (stroke?.pointerId === event.pointerId)
-          setStroke({ ...stroke, points: [...stroke.points, point] });
-      }}
-      onPointerUp={(event) => {
-        if (stroke?.pointerId !== event.pointerId) return;
-        setStroke(null);
-        void controller
-          .eraseInk(stroke.page, [...stroke.points, { x: event.clientX, y: event.clientY }], size)
-          .catch(() => {
-            // The controller reports the failure; the document is unchanged.
-          });
-      }}
-      onPointerCancel={() => setStroke(null)}
-      onPointerLeave={() => setCursor(null)}
-      onWheel={(event) => controller.container.scrollBy(event.deltaX, event.deltaY)}
     >
       {stroke && (
         <svg className="shape-preview-svg" aria-hidden="true">

@@ -306,7 +306,7 @@ export function CertificateSignature({
                     disabled={working}
                     onChange={(event) => setVisible(event.target.checked)}
                   />
-                  Show the signature on a page
+                  <span>Show the signature on a page</span>
                 </label>
                 {visible && (
                   <div className="signature-appearance-options">

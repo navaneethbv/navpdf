@@ -92,6 +92,71 @@ export function DecorationsDialog({
     return [r, g, b];
   };
 
+  /** A watermark or background drawn from a chosen picture or PDF page. */
+  const pictureFrom = (
+    file: NonNullable<typeof watermarkFile>,
+    opacity: number,
+    rotation: number,
+    behind: boolean,
+  ) => ({
+    image: {
+      bytes: file.bytes,
+      type: file.type,
+      pageNumber: file.pageNumber,
+      scale: file.scale / 100,
+      opacity,
+      rotation,
+      behind,
+    },
+  });
+
+  const watermarkOptions = (): DocumentDecorationsOptions["watermark"] => {
+    if (watermarkSource === "file") {
+      if (!watermarkFile) throw new Error("Choose a picture or PDF for the watermark.");
+      return pictureFrom(watermarkFile, watermarkOpacity, watermarkRotation, watermarkBehind);
+    }
+    if (!watermarkText.trim()) return undefined;
+    return {
+      text: watermarkText.trim(),
+      opacity: watermarkOpacity,
+      rotationDegrees: watermarkRotation,
+      fontSize: watermarkFontSize,
+      color: hexToRgb(watermarkColor),
+    };
+  };
+
+  const backgroundOptions = (): DocumentDecorationsOptions["background"] => {
+    if (bgSource !== "file") return { color: hexToRgb(bgColor), opacity: bgOpacity };
+    if (!bgFile) throw new Error("Choose a picture or PDF for the background.");
+    return pictureFrom(bgFile, bgOpacity, 0, true);
+  };
+
+  const decorationOptions = (): DocumentDecorationsOptions => {
+    const options: DocumentDecorationsOptions = {
+      pageRange: parsedPageRange,
+      metadata: {
+        title: s.info?.title || s.document?.name.replace(/\.pdf$/i, "") || "",
+        author: s.info?.author || "",
+        date: new Date().toLocaleDateString(),
+      },
+    };
+    if (tab === "watermark") options.watermark = watermarkOptions();
+    else if (tab === "background") options.background = backgroundOptions();
+    else if (tab === "header-footer") {
+      options.header = {
+        left: headerLeft.trim() || undefined,
+        center: headerCenter.trim() || undefined,
+        right: headerRight.trim() || undefined,
+      };
+      options.footer = {
+        left: footerLeft.trim() || undefined,
+        center: footerCenter.trim() || undefined,
+        right: footerRight.trim() || undefined,
+      };
+    }
+    return options;
+  };
+
   const handleApply = async () => {
     if (!controller?.pdf || pageRangeError) return;
     setApplying(true);
@@ -114,67 +179,7 @@ export function DecorationsDialog({
           { expectedSource: sourcePdf },
         );
       } else {
-        const options: DocumentDecorationsOptions = {
-          pageRange: parsedPageRange,
-          metadata: {
-            title: s.info?.title || s.document?.name.replace(/\.pdf$/i, "") || "",
-            author: s.info?.author || "",
-            date: new Date().toLocaleDateString(),
-          },
-        };
-
-        if (tab === "watermark" && watermarkSource === "file") {
-          if (!watermarkFile) throw new Error("Choose a picture or PDF for the watermark.");
-          options.watermark = {
-            image: {
-              bytes: watermarkFile.bytes,
-              type: watermarkFile.type,
-              pageNumber: watermarkFile.pageNumber,
-              scale: watermarkFile.scale / 100,
-              opacity: watermarkOpacity,
-              rotation: watermarkRotation,
-              behind: watermarkBehind,
-            },
-          };
-        } else if (tab === "watermark" && watermarkText.trim()) {
-          options.watermark = {
-            text: watermarkText.trim(),
-            opacity: watermarkOpacity,
-            rotationDegrees: watermarkRotation,
-            fontSize: watermarkFontSize,
-            color: hexToRgb(watermarkColor),
-          };
-        } else if (tab === "header-footer") {
-          options.header = {
-            left: headerLeft.trim() || undefined,
-            center: headerCenter.trim() || undefined,
-            right: headerRight.trim() || undefined,
-          };
-          options.footer = {
-            left: footerLeft.trim() || undefined,
-            center: footerCenter.trim() || undefined,
-            right: footerRight.trim() || undefined,
-          };
-        } else if (tab === "background" && bgSource === "file") {
-          if (!bgFile) throw new Error("Choose a picture or PDF for the background.");
-          options.background = {
-            image: {
-              bytes: bgFile.bytes,
-              type: bgFile.type,
-              pageNumber: bgFile.pageNumber,
-              scale: bgFile.scale / 100,
-              opacity: bgOpacity,
-              rotation: 0,
-              behind: true,
-            },
-          };
-        } else if (tab === "background") {
-          options.background = {
-            color: hexToRgb(bgColor),
-            opacity: bgOpacity,
-          };
-        }
-
+        const options = decorationOptions();
         const newBytes = await applyDocumentDecorations(currentBytes, options);
         await controller.replaceWithBytes(newBytes, `Decorations applied (${tab})`, {
           expectedSource: sourcePdf,

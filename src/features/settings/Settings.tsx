@@ -239,10 +239,10 @@ export function Settings() {
             </div>
           )}
           {lowContrast && (
-            <p className="muted" role="status">
+            <output className="muted contrast-warning">
               These colours have a contrast ratio of {lowContrast}:1; 4.5:1 or more is easier to
               read.
-            </p>
+            </output>
           )}
           <p className="muted">
             Page colours change only how pages look on screen, not the document. Images keep their

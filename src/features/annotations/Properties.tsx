@@ -19,7 +19,7 @@ const ENDING_LABELS: Record<LineEnding, string> = {
   RClosedArrow: "Reversed closed arrow",
   Slash: "Slash",
 };
-const SHAPE_TYPES = ["Square", "Circle", "Line", "Arrow", "PolyLine", "Polygon"];
+const SHAPE_TYPES = new Set(["Square", "Circle", "Line", "Arrow", "PolyLine", "Polygon"]);
 const LINE_TYPES = new Set(["Line", "Arrow", "PolyLine"]);
 const CLOUDY_TYPES = new Set(["Square", "Circle", "Polygon"]);
 
@@ -65,7 +65,7 @@ function shapeInstructions(kind: ShapeKind) {
 export function Properties({ controller }: Readonly<{ controller: ViewerController }>) {
   const s = useWorkspace();
   const selected = s.comments.find((comment) => comment.id === s.selectedAnnotationId);
-  const selectedShape = selected && SHAPE_TYPES.includes(selected.type) ? selected : null;
+  const selectedShape = selected && SHAPE_TYPES.has(selected.type) ? selected : null;
   const selectedColor = selectedShape?.color
     ? `#${selectedShape.color
         .map((channel) =>

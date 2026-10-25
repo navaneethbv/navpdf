@@ -2574,7 +2574,11 @@ export async function addLinkAnnotation(
     });
   }
 
-  if (options.appearance) applyLinkAppearance(doc, linkAnnot, options.appearance);
+  if (options.appearance) {
+    for (const [key, value] of Object.entries(linkAppearance(doc, options.appearance))) {
+      linkAnnot.set(PDFName.of(key), value);
+    }
+  }
   page.node.addAnnot(doc.context.register(linkAnnot));
   return doc.save();
 }
@@ -2632,17 +2636,17 @@ function linkAction(doc: PDFDocument, target: LinkAnnotationOptions["target"]) {
   });
 }
 
-function applyLinkAppearance(doc: PDFDocument, link: PDFDict, appearance: LinkAppearance) {
+/** Border, colour and highlight entries for a link annotation. */
+function linkAppearance(doc: PDFDocument, appearance: LinkAppearance) {
   const width = clamp(appearance.width, 0, 6);
   if (!appearance.color.every(finite)) throw new Error("Link colour is invalid.");
   const style = { solid: "S", dashed: "D", underline: "U" }[appearance.style];
-  link.set(PDFName.of("Border"), doc.context.obj([0, 0, width]));
-  link.set(
-    PDFName.of("BS"),
-    doc.context.obj({ W: width, S: style, ...(style === "D" ? { D: [3, 2] } : {}) }),
-  );
-  link.set(PDFName.of("C"), doc.context.obj(appearance.color.map((value) => clamp(value, 0, 1))));
-  link.set(PDFName.of("H"), PDFName.of(appearance.highlight.charAt(0)));
+  return {
+    Border: doc.context.obj([0, 0, width]),
+    BS: doc.context.obj({ W: width, S: style, ...(style === "D" ? { D: [3, 2] } : {}) }),
+    C: doc.context.obj(appearance.color.map((value) => clamp(value, 0, 1))),
+    H: PDFName.of(appearance.highlight.charAt(0)),
+  };
 }
 
 /** Delete a link annotation from a specific page by link index. */
