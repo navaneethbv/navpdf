@@ -29,7 +29,7 @@ Batch 7's lifecycle part adds document tabs, Revert, reloading a document whose 
 Batch 7's editing part adds sign-here and picture stamps, watermarks and backgrounds from a picture or PDF page, an ink eraser, all ten line endings with dashed and cloudy borders, saved shape styles, and links that change layers or form fields with chosen borders.
 Batch 8 adds a local trusted-certificate list, certificate details, changes after signing with certification checks, opening a signed version and visible signature appearances under [ADR 0018](adr/0018-local-signature-trust-and-inspection.md).
 Batch 9 adds a Tags and Reading Order dialog with tag properties, reordering, artifacts, untagged content and automatic tagging under [ADR 0019](adr/0019-tag-editing-and-autotagging.md).
-Batch 10's PDF/A part adds PDF/A-2 and PDF/A-3 checks and conversion, sRGB output intents and a standards panel under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md); guided actions and batch processing are next.
+Batch 10's PDF/A part adds PDF/A-2 and PDF/A-3 checks and conversion, sRGB output intents and a standards panel under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md); its actions part adds guided actions that run saved or built-in step sequences on the open document or on several files.
 
 ## Phase status and remaining gates
 

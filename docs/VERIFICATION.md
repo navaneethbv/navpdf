@@ -5,6 +5,20 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 25 PDFCraft gap batch 10, guided actions
+
+The [tenth batch mapping](PDFCRAFT-COMPARISON.md#tenth-batch-mapping) lists the guided action entries and their limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,134 tests across 153 files, with 85.77% statements, 77.89% branches, 84.53% functions and 88.87% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` on Rust 1.97 and 1.99 pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests check that saved actions round-trip through their JSON shape and that empty actions, empty or multi-line watermarks, out-of-range opacity, unknown presets and levels, malformed OCR languages, empty headers, more than 20 steps, blank names, unsafe identifiers and duplicate identifiers are refused.
+An integration test runs a watermark, header and footer, properties and flattening action on a two-page pdf-lib document and reads the result with PDF.js: the watermark, title header, page footer, author, keywords and flattened field value are all present.
+Writing it found that a header step erased the watermark drawn by the step before, because each decoration call replaces NavPDF's earlier decorations; one run's decorations are now drawn together, and the step descriptions say they replace decorations added before the action.
+With the native engine replaced by recorders, it also checks that each step receives the previous step's output, that unchanged compression and an already tagged document are noted rather than failing, that a failing step is named with its number and that cancelling stops the action.
+Dialog tests cover a built-in action's guide, running on the open document as one change with its notes, copying, editing, reordering and removing steps, saving and deleting through preferences, running on two files with one failure and saving a ZIP, and a refused save.
+Native runs of OCR, compression, tagging and PDF/A steps through the packaged app were not run.
+
 ## October 25 PDFCraft gap batch 10, PDF/A and standards
 
 The [tenth batch mapping](PDFCRAFT-COMPARISON.md#tenth-batch-mapping) lists each addition and its limits, and [ADR 0020](adr/0020-pdfa-validation-and-conversion.md) records the rules.

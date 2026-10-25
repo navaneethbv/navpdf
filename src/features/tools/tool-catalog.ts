@@ -42,6 +42,7 @@ import {
   Frame,
   Tags,
   FileCheck2,
+  ListChecks,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 
@@ -430,6 +431,14 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: Scan,
       action: () => s.set({ activeModal: "ocr" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "actions",
+      label: "Guided Actions",
+      description: "Run a sequence of steps on this document or on several files at once",
+      category: "convert",
+      icon: ListChecks,
+      action: () => s.set({ activeModal: "actions" }),
     },
     {
       id: "ocr-batch",

@@ -64,7 +64,7 @@ The user asked for every gap, including the decision items, delivered in batches
 | 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Implemented; see the seventh batch mapping |
 | 8 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance | Implemented; see the eighth batch mapping |
 | 9 | Tags panel, reading order, autotagging, artifacts, untagged content | Implemented; see the ninth batch mapping |
-| 10 | Guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | PDF/A part implemented; see the tenth batch mapping. Guided actions and batch processing are planned |
+| 10 | Guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Implemented; see the tenth batch mapping |
 | 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
 
 ## Third batch mapping
@@ -185,7 +185,7 @@ Batch 9 adds Tags and Reading Order to the Tools catalog under [ADR 0019](adr/00
 
 ## Tenth batch mapping
 
-Batch 10's PDF/A part adds PDF/A and Standards to the Tools catalog under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md).
+Batch 10 adds PDF/A and Standards under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md) and Guided Actions to the Tools catalog.
 
 | Upstream entry | NavPDF implementation | Scope and limits |
 | --- | --- | --- |
@@ -195,6 +195,10 @@ Batch 10's PDF/A part adds PDF/A and Standards to the Tools catalog under [ADR 0
 | `optimize.output-intents` | Add sRGB Output Intent | A generated sRGB ICC profile as a GTS_PDFA1 intent; other conditions are not offered. |
 | `optimize.standards-panel` | Standards this document declares | Declared PDF/A, PDF/UA and PDF/X with each output intent's condition and colour components. |
 | `optimize.remove-standards-id` | Remove Standards Identification | Removes PDF/A and PDF/UA identification from XMP and PDF/X keys from the document information, keeping other metadata and output intents. |
+| `misc.action-wizard-run` | Guided Actions, Run on This Document or Several files | Runs the steps in order on the open document as one undoable change, or on up to 50 files of up to 200 MB each, saved as copies in a ZIP archive with a result per file. A failing step stops that file and names the step; cancelling stops after the current step and saves nothing. Results are not written to a chosen folder. |
+| `misc.action-wizard-create` | New Action, Copy and Edit | Up to 20 steps from nine kinds: text watermark, header and footer with page tokens, document properties, flattening, removing hidden information, compression, OCR (macOS), automatic tagging and PDF/A conversion. Watermark and header steps replace NavPDF decorations added before the action. Scripts and form detection are not offered. |
+| `misc.action-wizard-manage` | Edit and Delete, kept in settings | Up to 50 saved actions, checked natively before they are stored; four built-in actions can be run or copied but not changed. Actions cannot be exported or shared. |
+| `optimize.batch-optimize` | Guided Actions with a Reduce file size step | Any action, including compression and hidden-information removal, runs over several files at once. |
 
 ## Acceptance boundary
 

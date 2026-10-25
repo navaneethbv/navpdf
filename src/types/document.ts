@@ -85,6 +85,27 @@ export interface Preferences {
   reopenSession: boolean;
   /** Colour, width and opacity new annotations of each shape kind start with. */
   annotationDefaults: Partial<Record<ShapeKind, AnnotationDefault>>;
+  /** Guided actions the user saved. */
+  actions: SavedAction[];
+}
+
+/** One step of a guided action, applied to a document in order. */
+export type ActionStep =
+  | { kind: "watermark"; text: string; opacity: number; fontSize: number }
+  | { kind: "headerFooter"; header: string; footer: string }
+  /** Empty values leave the document's own value. */
+  | { kind: "metadata"; title: string; author: string; subject: string; keywords: string }
+  | { kind: "flatten" }
+  | { kind: "removeHidden" }
+  | { kind: "compress"; preset: "lossless" | "balanced" | "small" }
+  | { kind: "ocr"; language: string; skipTextPages: boolean }
+  | { kind: "autotag" }
+  | { kind: "pdfa"; level: "2b" | "2u" | "2a" | "3b" | "3u" | "3a" };
+
+export interface SavedAction {
+  id: string;
+  name: string;
+  steps: ActionStep[];
 }
 export interface AnnotationDefault {
   color: string;
@@ -185,4 +206,5 @@ export const defaultPreferences: Preferences = {
   reloadChangedFiles: true,
   reopenSession: false,
   annotationDefaults: {},
+  actions: [],
 };

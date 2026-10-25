@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod engine;
 pub mod export;
 pub mod lifecycle;
@@ -64,6 +65,8 @@ pub struct Preferences {
     pub reopen_session: bool,
     /// Colour, width and opacity new annotations of each kind start with.
     pub annotation_defaults: std::collections::BTreeMap<String, AnnotationDefault>,
+    /// Guided actions the user saved.
+    pub actions: Vec<actions::SavedAction>,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -101,6 +104,7 @@ impl Default for Preferences {
             reload_changed_files: true,
             reopen_session: false,
             annotation_defaults: std::collections::BTreeMap::new(),
+            actions: Vec::new(),
         }
     }
 }
@@ -903,6 +907,7 @@ fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result
             return Err("Invalid annotation default.".into());
         }
     }
+    actions::validate(&preferences.actions)?;
     let custom = [&preferences.light_overrides, &preferences.dark_overrides]
         .into_iter()
         .flat_map(|overrides| [&overrides.background, &overrides.accent])
