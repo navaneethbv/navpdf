@@ -13,6 +13,7 @@ import { native } from "../../services/native";
 import { pruneDocument } from "../../services/engine";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
+import { DecorationFile, type DecorationFileChoice } from "./DecorationFile";
 
 export function DecorationsDialog({
   controller,
@@ -34,6 +35,9 @@ export function DecorationsDialog({
   const [watermarkRotation, setWatermarkRotation] = useState(45);
   const [watermarkFontSize, setWatermarkFontSize] = useState(50);
   const [watermarkColor, setWatermarkColor] = useState("#b33333");
+  const [watermarkSource, setWatermarkSource] = useState<"text" | "file">("text");
+  const [watermarkFile, setWatermarkFile] = useState<DecorationFileChoice | null>(null);
+  const [watermarkBehind, setWatermarkBehind] = useState(false);
 
   // Header & Footer (6 slots)
   const [headerLeft, setHeaderLeft] = useState("");
@@ -55,6 +59,8 @@ export function DecorationsDialog({
   // Background
   const [bgColor, setBgColor] = useState("#f0f4f2");
   const [bgOpacity, setBgOpacity] = useState(0.2);
+  const [bgSource, setBgSource] = useState<"color" | "file">("color");
+  const [bgFile, setBgFile] = useState<DecorationFileChoice | null>(null);
 
   // Scope
   const [pageScope, setPageScope] = useState<"all" | "custom">("all");
@@ -86,6 +92,71 @@ export function DecorationsDialog({
     return [r, g, b];
   };
 
+  /** A watermark or background drawn from a chosen picture or PDF page. */
+  const pictureFrom = (
+    file: NonNullable<typeof watermarkFile>,
+    opacity: number,
+    rotation: number,
+    behind: boolean,
+  ) => ({
+    image: {
+      bytes: file.bytes,
+      type: file.type,
+      pageNumber: file.pageNumber,
+      scale: file.scale / 100,
+      opacity,
+      rotation,
+      behind,
+    },
+  });
+
+  const watermarkOptions = (): DocumentDecorationsOptions["watermark"] => {
+    if (watermarkSource === "file") {
+      if (!watermarkFile) throw new Error("Choose a picture or PDF for the watermark.");
+      return pictureFrom(watermarkFile, watermarkOpacity, watermarkRotation, watermarkBehind);
+    }
+    if (!watermarkText.trim()) return undefined;
+    return {
+      text: watermarkText.trim(),
+      opacity: watermarkOpacity,
+      rotationDegrees: watermarkRotation,
+      fontSize: watermarkFontSize,
+      color: hexToRgb(watermarkColor),
+    };
+  };
+
+  const backgroundOptions = (): DocumentDecorationsOptions["background"] => {
+    if (bgSource !== "file") return { color: hexToRgb(bgColor), opacity: bgOpacity };
+    if (!bgFile) throw new Error("Choose a picture or PDF for the background.");
+    return pictureFrom(bgFile, bgOpacity, 0, true);
+  };
+
+  const decorationOptions = (): DocumentDecorationsOptions => {
+    const options: DocumentDecorationsOptions = {
+      pageRange: parsedPageRange,
+      metadata: {
+        title: s.info?.title || s.document?.name.replace(/\.pdf$/i, "") || "",
+        author: s.info?.author || "",
+        date: new Date().toLocaleDateString(),
+      },
+    };
+    if (tab === "watermark") options.watermark = watermarkOptions();
+    else if (tab === "background") options.background = backgroundOptions();
+    else if (tab === "header-footer") {
+      options.header = {
+        left: headerLeft.trim() || undefined,
+        center: headerCenter.trim() || undefined,
+        right: headerRight.trim() || undefined,
+      };
+      options.footer = {
+        left: footerLeft.trim() || undefined,
+        center: footerCenter.trim() || undefined,
+        right: footerRight.trim() || undefined,
+      };
+    }
+    return options;
+  };
+
   const handleApply = async () => {
     if (!controller?.pdf || pageRangeError) return;
     setApplying(true);
@@ -108,41 +179,7 @@ export function DecorationsDialog({
           { expectedSource: sourcePdf },
         );
       } else {
-        const options: DocumentDecorationsOptions = {
-          pageRange: parsedPageRange,
-          metadata: {
-            title: s.info?.title || s.document?.name.replace(/\.pdf$/i, "") || "",
-            author: s.info?.author || "",
-            date: new Date().toLocaleDateString(),
-          },
-        };
-
-        if (tab === "watermark" && watermarkText.trim()) {
-          options.watermark = {
-            text: watermarkText.trim(),
-            opacity: watermarkOpacity,
-            rotationDegrees: watermarkRotation,
-            fontSize: watermarkFontSize,
-            color: hexToRgb(watermarkColor),
-          };
-        } else if (tab === "header-footer") {
-          options.header = {
-            left: headerLeft.trim() || undefined,
-            center: headerCenter.trim() || undefined,
-            right: headerRight.trim() || undefined,
-          };
-          options.footer = {
-            left: footerLeft.trim() || undefined,
-            center: footerCenter.trim() || undefined,
-            right: footerRight.trim() || undefined,
-          };
-        } else if (tab === "background") {
-          options.background = {
-            color: hexToRgb(bgColor),
-            opacity: bgOpacity,
-          };
-        }
-
+        const options = decorationOptions();
         const newBytes = await applyDocumentDecorations(currentBytes, options);
         await controller.replaceWithBytes(newBytes, `Decorations applied (${tab})`, {
           expectedSource: sourcePdf,
@@ -234,33 +271,74 @@ export function DecorationsDialog({
         <div className="modal-body">
           {tab === "watermark" && (
             <>
-              <div className="setting-group">
-                <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
-                  Watermark Text
+              <fieldset className="setting-group">
+                <legend className="setting-title">Watermark source</legend>
+                <label className="checkbox-row">
+                  <input
+                    type="radio"
+                    name={`${fieldIds}-watermark-source`}
+                    checked={watermarkSource === "text"}
+                    onChange={() => setWatermarkSource("text")}
+                  />
+                  <span>Text</span>
                 </label>
-                <input
-                  id={`${fieldIds}-field-1`}
-                  type="text"
-                  value={watermarkText}
-                  onChange={(e) => setWatermarkText(e.target.value)}
-                  className="text-input"
-                />
-              </div>
-              <div className="settings-row">
+                <label className="checkbox-row">
+                  <input
+                    type="radio"
+                    name={`${fieldIds}-watermark-source`}
+                    checked={watermarkSource === "file"}
+                    onChange={() => setWatermarkSource("file")}
+                  />
+                  <span>Picture or PDF page</span>
+                </label>
+              </fieldset>
+              {watermarkSource === "text" ? (
                 <div className="setting-group">
-                  <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
-                    Font Size (pt)
+                  <label htmlFor={`${fieldIds}-field-1`} className="setting-title">
+                    Watermark Text
                   </label>
                   <input
-                    id={`${fieldIds}-field-2`}
-                    type="number"
-                    min={12}
-                    max={120}
-                    value={watermarkFontSize}
-                    onChange={(e) => setWatermarkFontSize(Number(e.target.value))}
+                    id={`${fieldIds}-field-1`}
+                    type="text"
+                    value={watermarkText}
+                    onChange={(e) => setWatermarkText(e.target.value)}
                     className="text-input"
                   />
                 </div>
+              ) : (
+                <>
+                  <DecorationFile
+                    label="Watermark file"
+                    value={watermarkFile}
+                    onChange={setWatermarkFile}
+                  />
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={watermarkBehind}
+                      onChange={(e) => setWatermarkBehind(e.target.checked)}
+                    />
+                    <span>Behind the page content</span>
+                  </label>
+                </>
+              )}
+              <div className="settings-row">
+                {watermarkSource === "text" && (
+                  <div className="setting-group">
+                    <label htmlFor={`${fieldIds}-field-2`} className="setting-title">
+                      Font Size (pt)
+                    </label>
+                    <input
+                      id={`${fieldIds}-field-2`}
+                      type="number"
+                      min={12}
+                      max={120}
+                      value={watermarkFontSize}
+                      onChange={(e) => setWatermarkFontSize(Number(e.target.value))}
+                      className="text-input"
+                    />
+                  </div>
+                )}
                 <div className="setting-group">
                   <label htmlFor={`${fieldIds}-field-3`} className="setting-title">
                     Rotation (degrees)
@@ -293,18 +371,20 @@ export function DecorationsDialog({
                     onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
                   />
                 </div>
-                <div className="setting-group">
-                  <label htmlFor={`${fieldIds}-field-5`} className="setting-title">
-                    Color
-                  </label>
-                  <input
-                    id={`${fieldIds}-field-5`}
-                    type="color"
-                    value={watermarkColor}
-                    onChange={(e) => setWatermarkColor(e.target.value)}
-                    className="color-input"
-                  />
-                </div>
+                {watermarkSource === "text" && (
+                  <div className="setting-group">
+                    <label htmlFor={`${fieldIds}-field-5`} className="setting-title">
+                      Color
+                    </label>
+                    <input
+                      id={`${fieldIds}-field-5`}
+                      type="color"
+                      value={watermarkColor}
+                      onChange={(e) => setWatermarkColor(e.target.value)}
+                      className="color-input"
+                    />
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -459,27 +539,53 @@ export function DecorationsDialog({
 
           {tab === "background" && (
             <>
-              <div className="setting-group">
-                <label htmlFor={`${fieldIds}-field-11`} className="setting-title">
-                  Background Tint Color
+              <fieldset className="setting-group">
+                <legend className="setting-title">Background source</legend>
+                <label className="checkbox-row">
+                  <input
+                    type="radio"
+                    name={`${fieldIds}-background-source`}
+                    checked={bgSource === "color"}
+                    onChange={() => setBgSource("color")}
+                  />
+                  <span>Colour tint</span>
                 </label>
-                <input
-                  id={`${fieldIds}-field-11`}
-                  type="color"
-                  value={bgColor}
-                  onChange={(e) => setBgColor(e.target.value)}
-                  className="color-input"
-                />
-              </div>
+                <label className="checkbox-row">
+                  <input
+                    type="radio"
+                    name={`${fieldIds}-background-source`}
+                    checked={bgSource === "file"}
+                    onChange={() => setBgSource("file")}
+                  />
+                  <span>Picture or PDF page behind the content</span>
+                </label>
+              </fieldset>
+              {bgSource === "color" ? (
+                <div className="setting-group">
+                  <label htmlFor={`${fieldIds}-field-11`} className="setting-title">
+                    Background Tint Color
+                  </label>
+                  <input
+                    id={`${fieldIds}-field-11`}
+                    type="color"
+                    value={bgColor}
+                    onChange={(e) => setBgColor(e.target.value)}
+                    className="color-input"
+                  />
+                </div>
+              ) : (
+                <DecorationFile label="Background file" value={bgFile} onChange={setBgFile} />
+              )}
               <div className="setting-group">
                 <label htmlFor={`${fieldIds}-field-12`} className="setting-title">
-                  Tint Opacity ({Math.round(bgOpacity * 100)}%)
+                  {bgSource === "color" ? "Tint Opacity" : "Opacity"} ({Math.round(bgOpacity * 100)}
+                  %)
                 </label>
                 <input
                   id={`${fieldIds}-field-12`}
                   type="range"
                   min="0.05"
-                  max="0.8"
+                  max={bgSource === "file" ? "1" : "0.8"}
                   step="0.05"
                   value={bgOpacity}
                   onChange={(e) => setBgOpacity(Number(e.target.value))}

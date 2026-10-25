@@ -40,6 +40,9 @@ import {
   Replace,
   HardDrive,
   Frame,
+  Tags,
+  FileCheck2,
+  ListChecks,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 
@@ -275,6 +278,24 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc,
     },
     {
+      id: "tags",
+      label: "Tags and Reading Order",
+      description: "Tag automatically, edit tag types and text, reorder tags, mark artifacts",
+      category: "review",
+      icon: Tags,
+      action: () => s.set({ activeModal: "tags" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
+      id: "standards",
+      label: "PDF/A and Standards",
+      description: "Check or convert to PDF/A, add an output intent, see declared standards",
+      category: "review",
+      icon: FileCheck2,
+      action: () => s.set({ activeModal: "standards" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
       id: "compare",
       label: "Compare PDF Versions",
       description: "Compare text, images and page additions locally",
@@ -410,6 +431,14 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: Scan,
       action: () => s.set({ activeModal: "ocr" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "actions",
+      label: "Guided Actions",
+      description: "Run a sequence of steps on this document or on several files at once",
+      category: "convert",
+      icon: ListChecks,
+      action: () => s.set({ activeModal: "actions" }),
     },
     {
       id: "ocr-batch",

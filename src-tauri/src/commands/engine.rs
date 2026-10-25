@@ -2,7 +2,7 @@
 //! while small typed command metadata stays in JSON and passwords never travel in headers.
 
 use super::{document, payload, AppState};
-use crate::engine::{compress, coverup, discard, edit, protect, prune, redact, sign};
+use crate::engine::{compress, coverup, discard, edit, pdfa, protect, prune, redact, sign, tags};
 use crate::{filesystem, logging};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -325,6 +325,93 @@ pub async fn engine_edit(
     Ok(EngineOutcome { output_id, report })
 }
 
+/// Lists the staged document's structure tree.
+#[tauri::command]
+pub async fn engine_tags(app: AppHandle, input_id: String) -> Result<tags::TagTree, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    tauri::async_runtime::spawn_blocking(move || tags::list(&bytes))
+        .await
+        .map_err(|_| "The tags could not be read.")?
+}
+
+/// Finds content and annotations in the staged document that have no tags.
+#[tauri::command]
+pub async fn engine_untagged(
+    app: AppHandle,
+    input_id: String,
+) -> Result<tags::UntaggedReport, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    tauri::async_runtime::spawn_blocking(move || tags::untagged(&bytes))
+        .await
+        .map_err(|_| "Untagged content could not be found.")?
+}
+
+/// Applies one tag edit to the staged document and stages the result.
+#[tauri::command]
+pub async fn engine_tag_edit(
+    app: AppHandle,
+    input_id: String,
+    edit: tags::TagEdit,
+) -> Result<EngineOutcome<tags::TagReport>, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || tags::apply(&bytes, &edit))
+        .await
+        .map_err(|_| "The tags could not be changed. The document is unchanged.")?;
+    logging::record(&state.root, "engine_tag_edit", result.is_err());
+    let (output, report) = result?;
+    Ok(EngineOutcome {
+        output_id: Some(state.engine.stage(output)?),
+        report,
+    })
+}
+
+/// Checks the staged document against a PDF/A level.
+#[tauri::command]
+pub async fn engine_pdfa_validate(
+    app: AppHandle,
+    input_id: String,
+    level: String,
+) -> Result<pdfa::ValidationReport, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    tauri::async_runtime::spawn_blocking(move || pdfa::validate(&bytes, &level))
+        .await
+        .map_err(|_| "The PDF/A check could not run.")?
+}
+
+/// Lists the standards the staged document declares and its output intents.
+#[tauri::command]
+pub async fn engine_standards(app: AppHandle, input_id: String) -> Result<pdfa::Standards, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    tauri::async_runtime::spawn_blocking(move || pdfa::standards(&bytes))
+        .await
+        .map_err(|_| "The document's standards could not be read.")?
+}
+
+/// Converts to PDF/A, adds an output intent or removes standards identification.
+#[tauri::command]
+pub async fn engine_standards_edit(
+    app: AppHandle,
+    input_id: String,
+    edit: pdfa::StandardsEdit,
+) -> Result<EngineOutcome<pdfa::StandardsReport>, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || pdfa::apply(&bytes, &edit))
+        .await
+        .map_err(|_| "The document could not be changed. It is unchanged.")?;
+    logging::record(&state.root, "engine_standards_edit", result.is_err());
+    let (output, report) = result?;
+    Ok(EngineOutcome {
+        output_id: Some(state.engine.stage(output)?),
+        report,
+    })
+}
+
 /// Encrypts the staged document and writes it through the native Save As picker with a
 /// password-aware validator. The open working document itself stays unencrypted.
 #[tauri::command]
@@ -542,12 +629,36 @@ pub async fn engine_verify_signatures(
     let state = app.state::<AppState>();
     let doc = document(&state, &document_id)?;
     let original = doc._snapshot.path().to_path_buf();
+    let root = state.root.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = fs::read(&original).map_err(|_| "The opened PDF could not be read.")?;
-        sign::verify(&bytes)
+        sign::verify_with(&bytes, &super::trust::load(&root))
     })
     .await
     .map_err(|_| "The signatures could not be checked.")?
+}
+
+/// Stages the revision of the opened file that a signature covers, to open it as signed.
+#[tauri::command]
+pub async fn engine_signed_revision(
+    app: AppHandle,
+    document_id: String,
+    field: String,
+) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let doc = document(&state, &document_id)?;
+    if *doc.source_encrypted.lock().map_err(|_| STATE_UNAVAILABLE)? {
+        return Err("Signed versions of password-protected PDFs cannot be opened yet.".into());
+    }
+    let original = doc._snapshot.path().to_path_buf();
+    let revision = tauri::async_runtime::spawn_blocking(move || {
+        let bytes = fs::read(&original).map_err(|_| "The opened PDF could not be read.")?;
+        sign::signed_revision(&bytes, &field)
+    })
+    .await
+    .map_err(|_| "The signed version could not be read.")?;
+    logging::record(&state.root, "engine_signed_revision", revision.is_err());
+    state.engine.stage(revision?)
 }
 
 #[cfg(test)]

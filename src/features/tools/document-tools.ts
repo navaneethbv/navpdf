@@ -21,6 +21,9 @@ import { FileCommentDialog, TextEditProposalDialog } from "../annotations/Commen
 import { FieldPropertiesDialog, FormAssistDialog } from "../forms/FormToolsDialogs";
 import { OcrBatchDialog } from "../ocr/OcrBatchDialog";
 import { CoverUpDialog } from "../redact/CoverUpDialog";
+import { TagsDialog } from "../document/TagsDialog";
+import { StandardsDialog } from "../document/StandardsDialog";
+import { ActionsDialog } from "../actions/ActionsDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -51,4 +54,7 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   "form-assist": FormAssistDialog,
   "cover-ups": CoverUpDialog,
   "ocr-batch": OcrBatchDialog,
+  tags: TagsDialog,
+  standards: StandardsDialog,
+  actions: ActionsDialog,
 };

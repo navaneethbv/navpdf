@@ -72,6 +72,7 @@ pub fn run() {
                 .text("combine-pdf", "Combine Files...")
                 .separator()
                 .items(&[&save, &save_as])
+                .text("revert", "Revert")
                 .item(&export)
                 .text("compress", "Compress a PDF...")
                 .text("protect", "Protect Using Password...")
@@ -135,6 +136,8 @@ pub fn run() {
                 .text("actual-size", "Actual Size")
                 .text("fit-page", "Fit Page")
                 .text("fit-width", "Fit Width")
+                .text("fit-visible", "Fit Visible")
+                .text("marquee-zoom", "Marquee Zoom")
                 .build()?;
             let panels = SubmenuBuilder::new(app, "Show/Hide")
                 .text("all-tools", "All Tools")
@@ -142,6 +145,8 @@ pub fn run() {
                 .text("panel-pages", "Page Thumbnails")
                 .text("panel-bookmarks", "Bookmarks")
                 .text("panel-comments", "Comments")
+                .separator()
+                .text("toggle-comments", "Hide or Show All Comments")
                 .build()?;
             let read_aloud = SubmenuBuilder::new(app, "Read Out Loud")
                 .text("read-page", "Read This Page Only")
@@ -168,6 +173,9 @@ pub fn run() {
                 .minimize()
                 .maximize()
                 .fullscreen()
+                .separator()
+                .text("next-tab", "Show Next Tab")
+                .text("previous-tab", "Show Previous Tab")
                 .build()?;
             // The predefined macOS Quit item calls NSApplication.terminate directly,
             // bypassing the runtime's cancellable exit event.
@@ -175,6 +183,8 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+Q")
                 .build(app)?;
             let settings = SubmenuBuilder::new(app, "NavPDF")
+                .text("about", "About NavPDF")
+                .separator()
                 .text("settings", "Settings...")
                 .separator()
                 .hide()
@@ -255,6 +265,9 @@ pub fn run() {
             discard_recovery,
             mark_dirty,
             close_window,
+            commands::lifecycle::source_status,
+            commands::lifecycle::reopen_document,
+            commands::lifecycle::reopen_session,
             load_signatures,
             save_signature,
             delete_signature,
@@ -277,7 +290,18 @@ pub fn run() {
             commands::engine::engine_choose_certificate,
             commands::engine::engine_forget_certificate,
             commands::engine::engine_save_signed,
-            commands::engine::engine_verify_signatures
+            commands::engine::engine_verify_signatures,
+            commands::engine::engine_signed_revision,
+            commands::engine::engine_tags,
+            commands::engine::engine_untagged,
+            commands::engine::engine_tag_edit,
+            commands::engine::engine_pdfa_validate,
+            commands::engine::engine_standards,
+            commands::engine::engine_standards_edit,
+            commands::trust::trust_list,
+            commands::trust::trust_import,
+            commands::trust::trust_signature_certificate,
+            commands::trust::trust_remove
         ])
         .build(tauri::generate_context!());
     match result {

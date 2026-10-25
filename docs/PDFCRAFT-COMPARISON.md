@@ -61,8 +61,10 @@ The user asked for every gap, including the decision items, delivered in batches
 | 4 | List box, date and image fields; date picker; rename and lock; duplicate across pages; tab order; tooltip and appearance properties; naming from nearby labels; field detection; form preview | Implemented; see the fourth batch mapping |
 | 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Implemented; see the fifth batch mapping |
 | 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Implemented; see the sixth batch mapping |
-| 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Planned |
-| 8 to 10 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance; tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
+| 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Implemented; see the seventh batch mapping |
+| 8 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance | Implemented; see the eighth batch mapping |
+| 9 | Tags panel, reading order, autotagging, artifacts, untagged content | Implemented; see the ninth batch mapping |
+| 10 | Guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Implemented; see the tenth batch mapping |
 | 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
 
 ## Third batch mapping
@@ -127,6 +129,76 @@ Showing or hiding all comments moved to batch 7 because PDF.js fixes its annotat
 | `ocr.recognize-multiple` | OCR Multiple Files | Up to 50 PDFs of up to 200 MB each, saved as searchable copies in a ZIP archive with a per-file result; password-protected files are reported as failures. |
 | `ocr.skip-renderable-text` | Scan & OCR and OCR Multiple Files, Skip pages that already have text | Uses the existing digital-text check, which ignores earlier NavPDF OCR layers. |
 | `ocr.despeckle`, `ocr.background-removal` | Scan & OCR and OCR Multiple Files, image cleanup | Grayscale, percentile contrast stretch, Otsu black and white (which drops light backgrounds) and isolated-speck removal, applied only to the image sent for recognition. Deskew, edge shadow and perspective correction are not provided. |
+
+## Seventh batch mapping
+
+Batch 7 is delivered in three parts on a new draft PR after PR 71 merged: viewer, document lifecycle and editing.
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `comment.show-hide-comments` | View options and View, Show/Hide, Hide or Show All Comments | Pages are drawn from a copy without comments and pop-ups, keeping fields and links; the copy is never saved. Fields cannot be filled while comments are hidden, page-view drawing tools show comments first, and any edit shows them again. Per-type hiding is not provided, and thumbnails still show comments. |
+| `a11y.replace-page-colors` | Settings, Page colours | Off by default; four high-contrast presets or custom text and page colours with a contrast warning below 4.5:1. PDF.js draws text and line art in the text colour and fills pages with the page colour; images keep their colours. The document is unchanged. |
+| `view.zoom-fit-visible` | View options, View, Zoom, Fit Visible and Command-3 | The current page's inked area, found by a render of at most 480 pixels with view rotation, spans the window width with a small margin; a blank page fits its width. |
+| `view.marquee-zoom` | View options and View, Zoom, Marquee Zoom | Drag an area to fill the window with it, click to zoom in by 25% or Option-click to zoom out, both around the pointer, within the 25% to 500% zoom range. |
+| `view.column-select` | Alt-drag (Option-drag) with the Select tool | Copies the text inside the rectangle, line by line, with Copy or the context menu. Characters of a span crossing the rectangle are chosen by position assuming even widths. Text markup from a column selection is not provided. |
+| `view.copy-image` | Right-click an image, Copy image or Save image as PNG | The topmost image XObject under the pointer, following page, save and form matrices, is copied or saved as PNG at its own resolution. Inline images, image masks and shading are not found; the original JPEG bytes are not kept. |
+| `view.page-size-hover` | Page size label | While the pointer is in the lower-left quarter of the page view, a label shows the current page's size after /Rotate and /UserUnit in inches and millimetres. |
+| `view.about-dialog` | NavPDF, About NavPDF and the command palette | Application version, PDF.js version and a statement that PDF scripts are never run. |
+| `view.document-tabs` | Tabs in the title bar, Window, Show Next or Previous Tab, and Control-Tab | Opening a document adds a tab and keeps the others open with their own undo history, page, zoom, rotation, view position and layer visibility; a new tab starts at the top. Closing a tab shows its neighbour, a background tab with unsaved changes is shown before it can close, and closing the window lists unsaved background tabs. Tabs cannot be reordered or moved to another window. |
+| `core.revert` | File, Revert and the command palette | Asks first, then opens the saved file again at the same page with a new undo history. Unsaved imports and recovery copies have no saved file to revert to. |
+| `core.reload-changed-files` | Settings, Reload a document when another app changes its file | On by default. Every 2 seconds the file's size and modification time are compared, and only a difference leads to comparing its SHA-256 hash with the version opened or saved. A document without unsaved changes reloads at the same page; one with unsaved changes asks whether to reload or keep it, and a moved or deleted file is reported once. A change that keeps the size and modification time is not noticed. |
+| `core.reopen-last-session` | Settings, Reopen documents from the last session at startup | Off by default. Closing NavPDF records the saved files open in its tabs and their pages, and the next start reopens them in tabs once, skipping files that are gone. Unsaved imports and recovery copies are not recorded, and a password-protected file asks for its password again. |
+| `comment.stamps-sign-here` | Add Stamp, Sign here | Sign Here, Initial Here, Witness, Accepted and Rejected as filled tags pointing left as the page is displayed, upright on rotated pages, named /NavPDFSignHere and so on. |
+| `comment.stamps-custom` | Add Stamp, Picture or PDF page | A PNG, JPEG or a page of another PDF becomes a stamp appearance at the chosen size, keeping its shape and upright on rotated pages. Pictures are chosen each time; a saved stamp library is not provided. |
+| `edit.watermark-add-file`, `edit.background-add` | Document Decorations, Watermark or Background, Picture or PDF page | Centred on the visible page at 10% to 100% of its displayed width, upright on rotated pages, with opacity and rotation; a watermark can go in front of or behind the content, a background always behind. Remove Decorations takes them away. There is no offset from the centre. |
+| `comment.eraser` | Annotation toolbar, Ink eraser | Cuts freehand ink strokes where the eraser passes, 4 to 72 pixels across on screen, adding points along long segments so a cut falls between stored points; an emptied drawing and its pop-up are deleted. Each drag is one undo step. The remaining strokes are redrawn as straight segments, not curves. |
+| `comment.line-endings` | Annotation properties, Start and End, Border | All ten /LE styles on lines and connected lines, and solid, dashed or cloudy borders (cloudy for rectangles, ovals and polygons), with an appearance NavPDF draws and redraws after later edits. Connected lines and polygons now appear in the comment list so they can be selected. |
+| `comment.default-properties` | Annotation properties, Use this style for new ... annotations | Colour, width and opacity become the starting style for that shape kind, kept in settings. |
+| `edit.action-set-ocg-state`, `edit.action-show-hide-field` | Add Link, Layers and Form Fields | Links that show, hide or toggle layers, show or hide form fields, or reset fields to their defaults. PDF.js runs the layer and reset actions; NavPDF runs show or hide on screen, reading the document only for pages with such links, and that change is not saved. Push-button field actions and other triggers are not provided, and scripts are never created. |
+| Link appearance | Add Link, Border and When clicked | Invisible, solid, dashed or underline borders in a chosen colour, and invert, outline, push or no highlight on click. |
+
+## Eighth batch mapping
+
+Batch 8 extends the certificate signature dialog under [ADR 0018](adr/0018-local-signature-trust-and-inspection.md).
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `sign.trusted-certificates` | Certificate Signature, Trusted certificates | Up to 64 certificates added from a DER or PEM file or from a signature in the open document, kept on this device; Stop Trusting removes one. A signature is trusted when its verified chain reaches one of them and each certificate up to it was valid at the stated signing time. Platform certificate stores, revocation and timestamps are not used. |
+| `sign.certificate-viewer` | Certificate details in each signature | Subject, issuer, validity dates, serial number and SHA-256 fingerprint for the signer and each issuer found, with trust buttons. Extensions and policies are not shown. |
+| `sign.changes-after-signing` | Changes after this signature | Page count and content changes, comments, form field values and signatures added after a signature, at most 20, with whether a certified document's permission level allows them. Unexplained bytes are listed as other changes. |
+| `sign.view-signed-version` | Open Signed Version | Opens the file as it was when that signature was applied, as an unsaved document in a new tab; refused for encrypted documents and for signatures that do not verify. |
+| `sign.signature-appearance` | Appearance, Show the signature on a page | A framed Helvetica block with the signer's name, UTC time and reason in a chosen corner of a chosen page, upright on rotated pages. Non-Latin-1 characters print as "?", and images or handwritten marks are not offered. |
+
+## Ninth batch mapping
+
+Batch 9 adds Tags and Reading Order to the Tools catalog under [ADR 0019](adr/0019-tag-editing-and-autotagging.md).
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `a11y.tags-panel` | Tags and Reading Order list | Indirect tags reachable from the root as a collapsible hierarchy with page, content and annotation counts; finding by type or title keeps ancestors; selecting a tag goes to its page. Up to 20,000 tags are read and 400 rows drawn at once. New tags and deletion are not offered. |
+| `a11y.tag-properties` | Selected tag fields | Type with standard suggestions, title, alternate text, actual text and language, one undoable change. Role-mapped types show their standard type. |
+| `a11y.order-panel`, `a11y.reading-order-tool` | Move Earlier and Move Later | Moves a tag one place among its parent's children; moving across parents and a visual page order view are not provided. |
+| `a11y.content-panel` | Content line under the selected tag | Text inside the tag's own marked content on its page, read through PDF.js. |
+| `a11y.artifact-marking` | Mark as Artifact | For a tag that directly owns content on its page, the content becomes an artifact, its parent-tree slots are cleared and the tag is removed. Tags with child tags, annotations or content in form XObjects are refused. |
+| `a11y.autotag`, `a11y.autotag-fields` | Tag Automatically | For an untagged document: P for text objects, Figure for images and forms, artifacts for other drawing, and Form, Link and Annot tags for annotations in drawing order, with a parent tree and structure tab order. No headings, lists or tables are detected. |
+| `a11y.find-untagged` | Find Untagged Content | Per page, drawing operations outside tags and artifacts, and comments, links or fields without tags; up to 500 pages listed. |
+
+## Tenth batch mapping
+
+Batch 10 adds PDF/A and Standards under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md) and Guided Actions to the Tools catalog.
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `optimize.pdfa-validate` | PDF/A and Standards, Check | PDF/A-2 and PDF/A-3 at levels b, u and a against the structural rules in ADR 0020, with counts, examples and a list of what is not checked. Not a certified validator; PDF/A-1 and PDF/A-4 are not offered. |
+| `optimize.pdfa-convert` | Convert to PDF/A | Fixes metadata, identification, actions, annotation flags and appearance states, images, LZW, layers and attachments, adds an sRGB output intent, and keeps the result only when the check passes. Refused when fonts are not embedded, text lacks Unicode mapping, level a needs tags or language, or CMYK needs a CMYK intent. |
+| `optimize.pdfa-accessible-levels` | Levels 2a and 3a, 2u and 3u | Level a also requires tags and a language; level u requires Unicode mapping for fonts that need it. |
+| `optimize.output-intents` | Add sRGB Output Intent | A generated sRGB ICC profile as a GTS_PDFA1 intent; other conditions are not offered. |
+| `optimize.standards-panel` | Standards this document declares | Declared PDF/A, PDF/UA and PDF/X with each output intent's condition and colour components. |
+| `optimize.remove-standards-id` | Remove Standards Identification | Removes PDF/A and PDF/UA identification from XMP and PDF/X keys from the document information, keeping other metadata and output intents. |
+| `misc.action-wizard-run` | Guided Actions, Run on This Document or Several files | Runs the steps in order on the open document as one undoable change, or on up to 50 files of up to 200 MB each, saved as copies in a ZIP archive with a result per file. A failing step stops that file and names the step; cancelling stops after the current step and saves nothing. Results are not written to a chosen folder. |
+| `misc.action-wizard-create` | New Action, Copy and Edit | Up to 20 steps from nine kinds: text watermark, header and footer with page tokens, document properties, flattening, removing hidden information, compression, OCR (macOS), automatic tagging and PDF/A conversion. Watermark and header steps replace NavPDF decorations added before the action. Scripts and form detection are not offered. |
+| `misc.action-wizard-manage` | Edit and Delete, kept in settings | Up to 50 saved actions, checked natively before they are stored; four built-in actions can be run or copied but not changed. Actions cannot be exported or shared. |
+| `optimize.batch-optimize` | Guided Actions with a Reduce file size step | Any action, including compression and hidden-information removal, runs over several files at once. |
 
 ## Acceptance boundary
 

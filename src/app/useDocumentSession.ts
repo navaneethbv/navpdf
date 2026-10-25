@@ -7,7 +7,21 @@ import * as desktop from "../services/native";
 import { loadPdf } from "../services/pdf";
 import type { DocumentDescriptor } from "../types/document";
 import { useNativeOpenRequests } from "./useNativeOpenRequests";
-import type { ViewerController } from "../features/viewer/controller";
+import { mapInOrder } from "../utils/async-sequence";
+import type { ParkedDocument, ViewerController } from "../features/viewer/controller";
+import type { DocumentState } from "../stores/workspace";
+import { documentState, neighborTab, placeTab, stepTab } from "./document-tabs";
+/** Destroys a loading task, ignoring a failure because its document is being closed anyway. */
+function destroyQuietly(task: PDFDocumentLoadingTask | null | undefined) {
+  return task?.destroy().catch(() => {});
+}
+
+/** A document open in a tab other than the shown one. */
+interface BackgroundTab {
+  task: PDFDocumentLoadingTask | null;
+  parked: ParkedDocument;
+  state: DocumentState;
+}
 type PasswordPrompt = {
   name: string;
   reason: number;
@@ -56,7 +70,10 @@ async function restoreAfterLoadFailure(options: LoadFailureOptions): Promise<voi
     setPassword,
     report,
   } = options;
-  if (candidate !== activeTask) {
+  // A document that never became the shown one is released, including when PDF.js could not
+  // start loading it, unless it is the shown document itself.
+  const committed = candidate !== null && candidate === activeTask;
+  if (!committed && descriptor.id !== previousState.document?.id) {
     await candidate?.destroy().catch(report);
     await desktop.releaseDocument(descriptor.id).catch(report);
   }
@@ -173,6 +190,15 @@ export function useDocumentSession(controller: ViewerController | null) {
   const confirmationPending = useRef(false);
   const confirmationCancelled = useRef<(() => void) | null>(null);
   const [confirm, setConfirm] = useState<(() => void) | null>(null);
+  const [revertPending, setRevertPending] = useState(false);
+  /** A document whose file changed on disk while it had unsaved edits. */
+  const [externalChange, setExternalChange] = useState<string | null>(null);
+  /** Documents already reported as changed or missing, so each is reported once. */
+  const reportedSources = useRef(new Set<string>());
+  const sessionRestored = useRef(false);
+  const background = useRef(new Map<string, BackgroundTab>());
+  /** Names of background tabs with unsaved changes, shown when closing the window. */
+  const [unsavedTabs, setUnsavedTabs] = useState<string[] | null>(null);
   const task = useRef<PDFDocumentLoadingTask | null>(null),
     loading = useRef<PDFDocumentLoadingTask | null>(null),
     lock = useRef(false),
@@ -238,6 +264,7 @@ export function useDocumentSession(controller: ViewerController | null) {
         return false;
       }
       const previousState = useWorkspace.getState();
+      const previousId = previousState.document?.id ?? null;
       lock.current = true;
       openingCancelled.current = false;
       useWorkspace.getState().set({ busy: true, error: "", status: "Opening PDF..." });
@@ -276,6 +303,9 @@ export function useDocumentSession(controller: ViewerController | null) {
           refreshLocal,
           report,
         });
+        // Loading resets the workspace; the tabs open before it are kept.
+        const shown = useWorkspace.getState();
+        shown.set({ tabs: placeTab(previousState.tabs, previousId, descriptor, shown.dirty) });
         return true;
       } catch (error) {
         await restoreAfterLoadFailure({
@@ -376,28 +406,165 @@ export function useDocumentSession(controller: ViewerController | null) {
       setConfirm(() => action);
     } else action();
   }, []);
+  const syncBackgroundDirty = useCallback(() => {
+    desktop.setBackgroundDirty([...background.current.values()].some((tab) => tab.state.dirty));
+  }, []);
+  /** Keeps a recovery copy of a document with unsaved changes as it moves to the background. */
+  const keepRecovery = useCallback(async (state: DocumentState, parked: ParkedDocument) => {
+    const { document: descriptor, dirty, info } = state;
+    if (
+      !descriptor ||
+      !dirty ||
+      info?.encrypted ||
+      info?.protectedSource ||
+      !useWorkspace.getState().local.preferences.autosave
+    )
+      return;
+    const bytes = await parked.pdf.saveDocument();
+    await desktop.writeRecovery(descriptor, bytes, parked.pdf.numPages);
+  }, []);
+  /**
+   * Moves the shown document to a background tab. The workspace is emptied for a new document,
+   * or kept, so the viewer stays visible, when another tab is shown next.
+   */
+  const parkShown = useCallback(
+    async (empty = true) => {
+      if (!controller) return false;
+      await afterAutosave();
+      const descriptor = useWorkspace.getState().document;
+      if (!descriptor) return true;
+      const parked = await controller.park();
+      if (!parked) return false;
+      const state = documentState(useWorkspace.getState());
+      background.current.set(descriptor.id, { task: task.current, parked, state });
+      task.current = null;
+      const current = useWorkspace.getState();
+      current.set({ tabs: placeTab(current.tabs, descriptor.id, descriptor, state.dirty) });
+      syncBackgroundDirty();
+      await keepRecovery(state, parked).catch(() => {
+        // The tab keeps its changes in memory; the next autosave retries once it is shown.
+      });
+      if (empty) {
+        const { tabs } = useWorkspace.getState();
+        useWorkspace.getState().reset();
+        useWorkspace.getState().set({ tabs });
+      }
+      return true;
+    },
+    [afterAutosave, controller, keepRecovery, syncBackgroundDirty],
+  );
+  /** Shows a background tab's document again with its own state. */
+  const showBackground = useCallback(
+    async (id: string) => {
+      const tab = background.current.get(id);
+      if (!tab || !controller) return false;
+      background.current.delete(id);
+      syncBackgroundDirty();
+      task.current = tab.task;
+      useWorkspace.getState().set({ ...tab.state, busy: false, status: "Ready" });
+      await controller.resume(tab.parked);
+      // Restores what attaching the document recomputed, such as layer visibility.
+      useWorkspace.getState().set({ ...tab.state, busy: false, status: "Ready" });
+      await desktop.markDirty(tab.state.dirty).catch(report);
+      return true;
+    },
+    [controller, report, syncBackgroundDirty],
+  );
+  const switchTab = useCallback(
+    async (id: string) => {
+      const state = useWorkspace.getState();
+      if (state.document?.id === id || state.busy || lock.current) return;
+      if (!background.current.has(id)) return;
+      lock.current = true;
+      try {
+        if (await parkShown(false)) await showBackground(id);
+      } catch (error) {
+        report(error);
+      } finally {
+        lock.current = false;
+      }
+    },
+    [parkShown, report, showBackground],
+  );
+  const stepTabs = useCallback(
+    (step: number) => {
+      const state = useWorkspace.getState();
+      const next = state.document ? stepTab(state.tabs, state.document.id, step) : null;
+      if (next) void switchTab(next);
+    },
+    [switchTab],
+  );
+  /**
+   * Opens a document in a new tab, keeping the shown one open in the background. When the new
+   * document cannot be opened, the previous one is shown again.
+   */
+  const openInTab = useCallback(
+    async (descriptor: DocumentDescriptor, initialPage = 1, recovering = false) => {
+      const shown = useWorkspace.getState().document;
+      if (!shown) return load(descriptor, initialPage, recovering);
+      if (lock.current || !controller) {
+        await desktop.releaseDocument(descriptor.id).catch(report);
+        useWorkspace.getState().set({ error: "Open is already in progress." });
+        return false;
+      }
+      lock.current = true;
+      let parked: boolean;
+      try {
+        parked = await parkShown();
+      } finally {
+        lock.current = false;
+      }
+      if (!parked) {
+        await desktop.releaseDocument(descriptor.id).catch(report);
+        return false;
+      }
+      const opened = await load(descriptor, initialPage, recovering);
+      if (!opened) await showBackground(shown.id).catch(report);
+      return opened;
+    },
+    [controller, load, parkShown, report, showBackground],
+  );
+  /** Closes a background tab, or shows it first when it has unsaved changes so Close can ask. */
+  const closeBackground = useCallback(
+    async (id: string) => {
+      const tab = background.current.get(id);
+      if (!tab) return false;
+      if (tab.state.dirty) {
+        await switchTab(id);
+        return false;
+      }
+      background.current.delete(id);
+      syncBackgroundDirty();
+      const state = useWorkspace.getState();
+      state.set({ tabs: state.tabs.filter((entry) => entry.id !== id) });
+      await tab.parked.revisionTask?.destroy().catch(() => {});
+      await tab.task?.destroy().catch(() => {});
+      await desktop.releaseDocument(id).catch(report);
+      await desktop.discardRecovery(id).catch(report);
+      return true;
+    },
+    [report, switchTab, syncBackgroundDirty],
+  );
   const open = useCallback(
-    (file?: File) =>
-      guard(() => {
-        if (pendingOpen.current) {
-          useWorkspace.getState().set({
-            error: "Open is already in progress.",
-            status: "Open is already in progress.",
-          });
-          return;
-        }
-        pendingOpen.current = true;
-        void desktop
-          .openDocument(file)
-          .then((descriptor) => {
-            if (descriptor) return load(descriptor);
-          })
-          .catch(report)
-          .finally(() => {
-            pendingOpen.current = false;
-          });
-      }),
-    [guard, load, report],
+    (file?: File) => {
+      if (useWorkspace.getState().busy || lock.current || confirmationPending.current) return;
+      if (pendingOpen.current) {
+        useWorkspace.getState().set({
+          error: "Open is already in progress.",
+          status: "Open is already in progress.",
+        });
+        return;
+      }
+      pendingOpen.current = true;
+      void desktop
+        .openDocument(file)
+        .then((descriptor) => (descriptor ? openInTab(descriptor) : false))
+        .catch(report)
+        .finally(() => {
+          pendingOpen.current = false;
+        });
+    },
+    [openInTab, report],
   );
   const canOpenToken = useCallback(() => {
     const state = useWorkspace.getState();
@@ -419,62 +586,61 @@ export function useDocumentSession(controller: ViewerController | null) {
             resolve();
           }, reject);
         };
-        const action = () => {
-          pendingOpen.current = true;
-          void desktop
-            .openDocumentFromToken(token)
-            .then((descriptor) => load(descriptor))
-            .catch(report)
-            .finally(() => {
-              pendingOpen.current = false;
-              finish();
-            });
-        };
-        if (useWorkspace.getState().dirty) {
-          confirmationPending.current = true;
-          confirmationCancelled.current = finish;
-          setConfirm(() => action);
-        } else action();
+        pendingOpen.current = true;
+        void desktop
+          .openDocumentFromToken(token)
+          .then((descriptor) => openInTab(descriptor))
+          .catch(report)
+          .finally(() => {
+            pendingOpen.current = false;
+            finish();
+          });
       }),
-    [load, report],
+    [openInTab, report],
   );
   useNativeOpenRequests(!!controller && preferencesReady, canOpenToken, openToken, report);
   const recent = useCallback(
-    (id: string, page: number) =>
-      guard(() => {
-        void desktop
-          .openRecent(id)
-          .then((descriptor) =>
-            load(descriptor, useWorkspace.getState().local.preferences.rememberPage ? page : 1),
-          )
-          .catch(report);
-      }),
-    [guard, load, report],
+    (id: string, page: number) => {
+      if (useWorkspace.getState().busy || lock.current || confirmationPending.current) return;
+      void desktop
+        .openRecent(id)
+        .then((descriptor) =>
+          openInTab(descriptor, useWorkspace.getState().local.preferences.rememberPage ? page : 1),
+        )
+        .catch(report);
+    },
+    [openInTab, report],
   );
+  /** Closes the shown document; its neighbouring tab is shown, or Home after the last one. */
+  const closeShown = useCallback(async () => {
+    await afterAutosave();
+    const doc = useWorkspace.getState().document;
+    const next = doc ? neighborTab(useWorkspace.getState().tabs, doc.id) : null;
+    await controller?.detach();
+    await destroyQuietly(task.current);
+    task.current = null;
+    if (doc) await desktop.releaseDocument(doc.id);
+    const tabs = useWorkspace.getState().tabs.filter((tab) => tab.id !== doc?.id);
+    useWorkspace.getState().reset();
+    useWorkspace.getState().set({ tabs });
+    await desktop.markDirty(false);
+    if (doc) await desktop.discardRecovery(doc.id);
+    if (next) await showBackground(next);
+    await refreshLocal();
+  }, [afterAutosave, controller, refreshLocal, showBackground]);
   const home = useCallback(
     () =>
       guard(() => {
-        void (async () => {
-          await afterAutosave();
-          const doc = useWorkspace.getState().document;
-          await controller?.detach();
-          await task.current?.destroy().catch(() => {});
-          task.current = null;
-          if (doc) await desktop.releaseDocument(doc.id);
-          useWorkspace.getState().reset();
-          await desktop.markDirty(false);
-          if (doc) await desktop.discardRecovery(doc.id);
-          await refreshLocal();
-        })().catch(report);
+        void closeShown().catch(report);
       }),
-    [afterAutosave, controller, guard, report, refreshLocal],
+    [closeShown, guard, report],
   );
   const recover = useCallback(
     (id: string) =>
       guard(() => {
         void desktop
           .openRecovery(id)
-          .then((descriptor) => load(descriptor, 1, true))
+          .then((descriptor) => openInTab(descriptor, 1, true))
           .then((opened) => {
             if (!opened) return;
             useWorkspace.getState().set({
@@ -486,7 +652,7 @@ export function useDocumentSession(controller: ViewerController | null) {
           })
           .catch(report);
       }),
-    [controller, guard, load, report],
+    [controller, guard, openInTab, report],
   );
   useEffect(() => {
     if (!desktop.native) return;
@@ -524,23 +690,141 @@ export function useDocumentSession(controller: ViewerController | null) {
     }, 10000);
     return () => clearInterval(interval);
   }, [controller]);
+  /** Replaces the open document with its saved file, keeping the current page. */
+  const reloadFromDisk = useCallback(
+    async (status: string) => {
+      const state = useWorkspace.getState();
+      const descriptor = state.document;
+      if (!descriptor) return false;
+      const page = state.page;
+      const reopened = await desktop.reopenDocument(descriptor.id);
+      // Loading starts a fresh undo history, so earlier edits cannot be restored by Undo.
+      const loaded = await load(reopened, page);
+      if (loaded) useWorkspace.getState().set({ status });
+      return loaded;
+    },
+    [load],
+  );
+  /** Revert asks first: it discards unsaved edits and undo history. */
+  const revert = useCallback(() => {
+    const state = useWorkspace.getState();
+    if (!state.document || state.busy || lock.current) return;
+    setRevertPending(true);
+  }, []);
+  const cancelRevert = useCallback(() => setRevertPending(false), []);
+  const confirmRevert = useCallback(async () => {
+    setRevertPending(false);
+    await reloadFromDisk("Reverted to the last saved version").catch(report);
+  }, [reloadFromDisk, report]);
+  const reloadExternalChange = useCallback(async () => {
+    setExternalChange(null);
+    await reloadFromDisk("Reloaded the version on disk").catch(report);
+  }, [reloadFromDisk, report]);
+  const keepExternalChange = useCallback(() => {
+    setExternalChange(null);
+    useWorkspace.getState().set({
+      status: "Kept your version. Saving will ask before replacing the changed file.",
+    });
+  }, []);
+  // Watches the open document's file for changes made by other applications.
+  useEffect(() => {
+    if (!desktop.native || !controller) return undefined;
+    const checkSource = async (descriptor: DocumentDescriptor) => {
+      const source = await desktop.sourceStatus(descriptor.id).catch(() => null);
+      // A failed check is retried at the next interval.
+      const current = useWorkspace.getState();
+      if (
+        !source ||
+        current.document?.id !== descriptor.id ||
+        reportedSources.current.has(descriptor.id)
+      )
+        return;
+      if (source.missing) {
+        reportedSources.current.add(descriptor.id);
+        current.set({
+          error: `${descriptor.name} was moved or deleted. Use Save As to keep this document.`,
+        });
+      } else if (source.changed) {
+        reportedSources.current.add(descriptor.id);
+        if (current.dirty || current.activeModal || current.settingsOpen)
+          setExternalChange(descriptor.name);
+        else await reloadFromDisk(`Reloaded ${descriptor.name} because it changed on disk`);
+      }
+    };
+    const interval = setInterval(() => {
+      const state = useWorkspace.getState();
+      const descriptor = state.document;
+      if (
+        !descriptor ||
+        !state.local.preferences.reloadChangedFiles ||
+        state.busy ||
+        lock.current ||
+        reportedSources.current.has(descriptor.id)
+      )
+        return;
+      void checkSource(descriptor).catch(report);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [controller, reloadFromDisk, report]);
+  /** Opens each document in its own tab, one at a time, then shows the first. */
+  const openSessionDocuments = useCallback(
+    async (documents: { descriptor: DocumentDescriptor; page: number }[]) => {
+      const openOne = async ({ descriptor, page }: (typeof documents)[number]) =>
+        (await openInTab(descriptor, page)) ? descriptor.id : null;
+      const opened: string[] = [];
+      for await (const id of mapInOrder(documents, openOne)) if (id) opened.push(id);
+      if (opened.length > 1) await switchTab(opened[0]);
+    },
+    [openInTab, switchTab],
+  );
+  // Reopens the last session's documents once, after preferences and the viewer are ready.
+  useEffect(() => {
+    if (!desktop.native || !controller || !preferencesReady || sessionRestored.current) return;
+    sessionRestored.current = true;
+    if (!useWorkspace.getState().local.preferences.reopenSession) return;
+    void desktop
+      .reopenSession()
+      .then(async ({ documents, skipped }) => {
+        await openSessionDocuments(documents);
+        if (skipped)
+          useWorkspace.getState().set({
+            status: `${skipped} document(s) from the last session could not be reopened`,
+          });
+      })
+      .catch(report);
+  }, [controller, openSessionDocuments, preferencesReady, report]);
   const closeWindow = useCallback(async () => {
     await afterAutosave();
-    const id = useWorkspace.getState().document?.id;
-    try {
-      if (id) await desktop.discardRecovery(id);
-    } catch {
-      // Closing proceeds even when the recovery copy cannot be removed.
-    }
+    const shown = useWorkspace.getState().document?.id;
+    const ids = [...(shown ? [shown] : []), ...background.current.keys()];
+    // Closing proceeds even when a recovery copy cannot be removed.
+    await Promise.all(ids.map((id) => desktop.discardRecovery(id).catch(() => {})));
     await invoke("close_window").catch(report);
   }, [afterAutosave, report]);
+  /** Closing the window first asks about background tabs with unsaved changes. */
+  const requestClose = useCallback(() => {
+    if (useWorkspace.getState().busy) return;
+    const unsaved = [...background.current.values()]
+      .filter((tab) => tab.state.dirty)
+      .map((tab) => tab.state.document?.name ?? "Document");
+    if (unsaved.length) setUnsavedTabs(unsaved);
+    else guard(() => void closeWindow());
+  }, [closeWindow, guard]);
+  const cancelClose = useCallback(() => setUnsavedTabs(null), []);
+  const reviewUnsaved = useCallback(() => {
+    setUnsavedTabs(null);
+    const first = [...background.current.entries()].find(([, tab]) => tab.state.dirty)?.[0];
+    if (first) void switchTab(first);
+  }, [switchTab]);
+  const discardUnsavedAndClose = useCallback(() => {
+    setUnsavedTabs(null);
+    guard(() => void closeWindow());
+  }, [closeWindow, guard]);
   useEffect(() => {
     if (!desktop.native) return;
     let unlisten: (() => void) | undefined;
     let disposed = false;
-    void listen("close-requested", () => {
-      if (!useWorkspace.getState().busy) guard(() => void closeWindow());
-    }).then((fn) => {
+    void listen("close-requested", requestClose).then((fn) => {
       if (disposed) fn();
       else unlisten = fn;
     });
@@ -548,7 +832,7 @@ export function useDocumentSession(controller: ViewerController | null) {
       disposed = true;
       unlisten?.();
     };
-  }, [closeWindow, guard]);
+  }, [requestClose]);
   const cancelPassword = useCallback(() => {
     openingCancelled.current = true;
     setPassword(null);
@@ -592,8 +876,36 @@ export function useDocumentSession(controller: ViewerController | null) {
       cancelConfirm,
       discardAndContinue,
       saveAndContinue,
+      revert,
+      revertPending,
+      cancelRevert,
+      confirmRevert,
+      externalChange,
+      reloadExternalChange,
+      keepExternalChange,
+      switchTab,
+      stepTabs,
+      closeBackground,
+      unsavedTabs,
+      cancelClose,
+      reviewUnsaved,
+      discardUnsavedAndClose,
     }),
     [
+      switchTab,
+      stepTabs,
+      closeBackground,
+      unsavedTabs,
+      cancelClose,
+      reviewUnsaved,
+      discardUnsavedAndClose,
+      revert,
+      revertPending,
+      cancelRevert,
+      confirmRevert,
+      externalChange,
+      reloadExternalChange,
+      keepExternalChange,
       open,
       recent,
       save,

@@ -6,6 +6,7 @@ import { savePreferences } from "../../services/native";
 import type { Preferences } from "../../types/document";
 import { applyTheme, colorPalettes } from "../../services/theme";
 import { CustomColors } from "./CustomColors";
+import { contrastRatio, PAGE_COLOR_LABELS, pageColorsFor } from "../viewer/page-colors";
 export function Settings() {
   const initial = useWorkspace((s) => s.local.preferences),
     set = useWorkspace((s) => s.set);
@@ -40,6 +41,9 @@ export function Settings() {
     },
     [],
   );
+  const replaced = pageColorsFor(preferences);
+  const ratio = replaced ? contrastRatio(replaced.foreground, replaced.background) : 21;
+  const lowContrast = ratio < 4.5 ? ratio.toFixed(1) : null;
   const patch = (value: Partial<Preferences>) => {
     setPreferences({ ...preferences, ...value });
   };
@@ -194,6 +198,75 @@ export function Settings() {
               }}
             />{" "}
             Remember last page
+          </label>
+          <label>
+            Page colours{" "}
+            <select
+              value={preferences.pageColors}
+              onChange={(e) => {
+                patch({ pageColors: e.target.value as Preferences["pageColors"] });
+              }}
+            >
+              {(Object.keys(PAGE_COLOR_LABELS) as Preferences["pageColors"][]).map((scheme) => (
+                <option key={scheme} value={scheme}>
+                  {PAGE_COLOR_LABELS[scheme]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {preferences.pageColors === "custom" && (
+            <div className="form-columns">
+              <label>
+                Text colour{" "}
+                <input
+                  type="color"
+                  value={preferences.pageForeground}
+                  onChange={(e) => {
+                    patch({ pageForeground: e.target.value });
+                  }}
+                />
+              </label>
+              <label>
+                Page colour{" "}
+                <input
+                  type="color"
+                  value={preferences.pageBackground}
+                  onChange={(e) => {
+                    patch({ pageBackground: e.target.value });
+                  }}
+                />
+              </label>
+            </div>
+          )}
+          {lowContrast && (
+            <output className="muted contrast-warning">
+              These colours have a contrast ratio of {lowContrast}:1; 4.5:1 or more is easier to
+              read.
+            </output>
+          )}
+          <p className="muted">
+            Page colours change only how pages look on screen, not the document. Images keep their
+            colours.
+          </p>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.reloadChangedFiles}
+              onChange={(e) => {
+                patch({ reloadChangedFiles: e.target.checked });
+              }}
+            />{" "}
+            Reload a document when another app changes its file
+          </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.reopenSession}
+              onChange={(e) => {
+                patch({ reopenSession: e.target.checked });
+              }}
+            />{" "}
+            Reopen documents from the last session at startup
           </label>
           <h3>General & privacy</h3>
           <label>

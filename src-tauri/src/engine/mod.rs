@@ -8,11 +8,14 @@ pub mod discard;
 pub mod edit;
 pub mod fonts;
 pub mod geometry;
+pub mod icc;
 pub mod images;
+pub mod pdfa;
 pub mod protect;
 pub mod prune;
 pub mod redact;
 pub mod sign;
+pub mod tags;
 #[rustfmt::skip]
 mod standard_fonts;
 

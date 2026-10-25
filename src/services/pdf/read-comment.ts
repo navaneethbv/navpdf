@@ -32,6 +32,8 @@ const supported = new Set([
   "Square",
   "Circle",
   "Line",
+  "PolyLine",
+  "Polygon",
   "Stamp",
 ]);
 
@@ -74,6 +76,15 @@ function reviewState(value: string | undefined): Comment["reviewState"] {
     : undefined;
 }
 
+/** A cloudy or dashed border, or undefined for a solid one. */
+function storedBorderStyle(dict: PDFDict): Comment["borderStyle"] {
+  const style = (key: string) =>
+    dict.lookupMaybe(PDFName.of(key), PDFDict)?.lookupMaybe(PDFName.of("S"), PDFName)?.decodeText();
+  if (style("BE") === "C") return "cloudy";
+  if (style("BS") === "D") return "dashed";
+  return undefined;
+}
+
 function storedAnnotation(annotations: PDFArray | undefined, id: string) {
   if (!annotations) return {};
   for (let i = 0; i < annotations.size(); i++) {
@@ -96,6 +107,7 @@ function storedAnnotation(annotations: PDFArray | undefined, id: string) {
         ? storedText(parent, "NM") || annotationIdentifier(parentRef)
         : undefined;
     return {
+      borderStyle: storedBorderStyle(dict),
       line: rectangle(numberArray(dict, "L")),
       quads: quadBounds(numberArray(dict, "QuadPoints")),
       endings,
@@ -155,6 +167,7 @@ export function readComment(raw: unknown, page: number, annotations?: PDFArray):
     parsePdfDate(stored.creationDate ?? "");
   if (modified) comment.modified = modified;
   if (stored.replyTo) comment.replyTo = stored.replyTo;
+  if (stored.borderStyle) comment.borderStyle = stored.borderStyle;
   if (!comment.reviewState && stored.reviewState) comment.reviewState = stored.reviewState;
   return comment;
 }

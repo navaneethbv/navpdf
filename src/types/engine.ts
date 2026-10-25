@@ -182,10 +182,42 @@ export interface EngineResult<R> {
 /** DocMDP choices for a certifying signature; "none" makes an approval signature. */
 export type Certification = "none" | "noChanges" | "formFilling" | "formFillingAndComments";
 
+export type SignatureCorner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+
+/** A visible signature box in a displayed corner of a page. */
+export interface SignatureAppearance {
+  /** 1-based page number. */
+  page: number;
+  corner: SignatureCorner;
+}
+
 export interface SignRequest {
   reason: string;
   location: string;
   certification: Certification;
+  /** Omitted for a signature with no visible appearance. */
+  appearance?: SignatureAppearance;
+}
+
+export interface CertificateDetails {
+  subject: string;
+  issuer: string;
+  /** Serial number in hexadecimal. */
+  serial: string;
+  notBefore: string;
+  notAfter: string;
+  /** SHA-256 of the certificate as colon-separated hexadecimal pairs. */
+  fingerprint: string;
+  selfSigned: boolean;
+  /** The certificate is one the user chose to trust on this device. */
+  trusted: boolean;
+}
+
+export type TrustStatus = "trusted" | "notTrusted" | "notValidAtSigning" | "brokenChain";
+
+export interface RevisionChange {
+  kind: "pages" | "comments" | "formFields" | "signatures" | "other";
+  description: string;
 }
 
 export interface CertificateSummary {
@@ -216,4 +248,116 @@ export interface SignatureInfo {
   message: string;
   coversWholeDocument: boolean;
   certification: number | null;
+  /** The signer's certificate first, then each issuer found for it. */
+  certificates: CertificateDetails[];
+  trust: TrustStatus | null;
+  trustMessage: string;
+  /** Length of the file as signed, which is the signed revision. */
+  revisionLength: number | null;
+  /** What changed after this signature when it does not cover the whole file. */
+  changes: RevisionChange[];
+  /** Whether a certified document allows those changes; null when not certified. */
+  changesPermitted: boolean | null;
 }
+
+/** One indirect structure element in a tagged document. */
+export interface TagNode {
+  /** Object number and generation, such as "12 0". */
+  id: string;
+  parent: string | null;
+  depth: number;
+  /** Structure type, such as P, H1 or Figure. */
+  role: string;
+  /** The standard type a custom role maps to, when the role map names one. */
+  standardRole: string | null;
+  title: string;
+  alt: string;
+  actualText: string;
+  lang: string;
+  /** 1-based page of the tag or its first content. */
+  page: number | null;
+  mcids: number[];
+  /** Annotations the tag owns directly. */
+  objects: number;
+  /** Child tags, including inline ones that are not listed. */
+  children: number;
+}
+
+export interface TagTree {
+  tagged: boolean;
+  nodes: TagNode[];
+  truncated: boolean;
+}
+
+/** Text properties; an empty string removes the entry and an omitted one is unchanged. */
+export interface TagProperties {
+  role?: string;
+  title?: string;
+  alt?: string;
+  actualText?: string;
+  lang?: string;
+}
+
+export type TagEdit =
+  | { action: "setProperties"; id: string; properties: TagProperties }
+  | { action: "move"; id: string; offset: number }
+  | { action: "markArtifact"; id: string }
+  | { action: "autotag" };
+
+export interface TagReport {
+  message: string;
+}
+
+export interface UntaggedPage {
+  page: number;
+  /** Painting operations outside tagged content and artifacts. */
+  content: number;
+  annotations: number;
+  widgets: number;
+}
+
+export interface UntaggedReport {
+  tagged: boolean;
+  pages: UntaggedPage[];
+  truncated: boolean;
+}
+
+export type PdfaLevel = "2b" | "2u" | "2a" | "3b" | "3u" | "3a";
+
+export interface PdfaFinding {
+  rule: string;
+  message: string;
+  count: number;
+  examples: string[];
+  /** Conversion fixes this rule. */
+  fixable: boolean;
+}
+
+export interface PdfaReport {
+  level: string;
+  declared: string | null;
+  passed: boolean;
+  findings: PdfaFinding[];
+  /** Requirements the checks do not read. */
+  notChecked: string[];
+}
+
+export interface OutputIntentInfo {
+  subtype: string;
+  condition: string;
+  info: string;
+  hasProfile: boolean;
+  components: number | null;
+}
+
+export interface DocumentStandards {
+  pdfa: string | null;
+  pdfua: string | null;
+  pdfx: string | null;
+  outputIntents: OutputIntentInfo[];
+}
+
+export type StandardsEdit =
+  | { action: "convert"; level: PdfaLevel }
+  | { action: "addOutputIntent" }
+  | { action: "removeIdentification" };

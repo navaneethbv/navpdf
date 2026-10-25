@@ -45,6 +45,26 @@ beforeEach(() => {
         return { name: "signed.pdf", size: 20 };
       case "engine_verify_signatures":
         return [];
+      case "engine_signed_revision":
+        return "revision-1";
+      case "trust_list":
+      case "trust_signature_certificate":
+      case "trust_remove":
+        return [{ fingerprint: "AA" }];
+      case "trust_import":
+        return null;
+      case "engine_tags":
+        return { tagged: false, nodes: [], truncated: false };
+      case "engine_untagged":
+        return { tagged: false, pages: [], truncated: false };
+      case "engine_pdfa_validate":
+        return { level: "PDF/A-2b", passed: true, findings: [], declared: null, notChecked: [] };
+      case "engine_standards":
+        return { pdfa: null, pdfua: null, pdfx: null, outputIntents: [] };
+      case "engine_standards_edit":
+        return { outputId: "out-pdfa", report: { message: "Converted" } };
+      case "engine_tag_edit":
+        return { outputId: "out-tags", report: { message: "Added 3 tags." } };
       default:
         return undefined;
     }
@@ -158,6 +178,56 @@ describe("engine service", () => {
     expect(invoke).toHaveBeenCalledWith("engine_verify_signatures", { documentId: "doc" });
     await service.forgetCertificate();
     expect(invoke).toHaveBeenCalledWith("engine_forget_certificate");
+
+    expect([...(await service.signedRevision("doc", "Signature1"))]).toEqual([9, 8, 7]);
+    expect(invoke).toHaveBeenCalledWith("engine_signed_revision", {
+      documentId: "doc",
+      field: "Signature1",
+    });
+    expect(invoke).toHaveBeenCalledWith("engine_take", { id: "revision-1" });
+    expect(await service.trustedCertificates()).toEqual([{ fingerprint: "AA" }]);
+    expect(await service.importTrustedCertificate()).toBeNull();
+    expect(await service.trustSignatureCertificate("doc", "AA")).toHaveLength(1);
+    expect(invoke).toHaveBeenCalledWith("trust_signature_certificate", {
+      documentId: "doc",
+      fingerprint: "AA",
+    });
+    await service.untrustCertificate("AA");
+    expect(invoke).toHaveBeenCalledWith("trust_remove", { fingerprint: "AA" });
+  });
+
+  it("stages documents for PDF/A checks, standards and conversion", async () => {
+    const service = await engine();
+    const bytes = new Uint8Array([1]);
+    expect((await service.validatePdfa(bytes, "2b")).passed).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("engine_pdfa_validate", {
+      inputId: expect.any(String),
+      level: "2b",
+    });
+    expect((await service.readStandards(bytes)).outputIntents).toEqual([]);
+    const converted = await service.editStandards(bytes, { action: "convert", level: "3b" });
+    expect(invoke).toHaveBeenCalledWith("engine_standards_edit", {
+      inputId: expect.any(String),
+      edit: { action: "convert", level: "3b" },
+    });
+    expect(converted.report.message).toBe("Converted");
+    expect(invoke).toHaveBeenCalledWith("engine_take", { id: "out-pdfa" });
+  });
+
+  it("stages documents for tag listing, untagged content and tag edits", async () => {
+    const service = await engine();
+    const bytes = new Uint8Array([1]);
+    expect((await service.readTags(bytes)).tagged).toBe(false);
+    expect(invoke).toHaveBeenCalledWith("engine_tags", { inputId: expect.any(String) });
+    expect((await service.findUntagged(bytes)).pages).toEqual([]);
+    const edited = await service.editTags(bytes, { action: "autotag" });
+    expect(invoke).toHaveBeenCalledWith("engine_tag_edit", {
+      inputId: expect.any(String),
+      edit: { action: "autotag" },
+    });
+    expect(invoke).toHaveBeenCalledWith("engine_take", { id: "out-tags" });
+    expect(edited.report.message).toBe("Added 3 tags.");
+    expect([...edited.bytes!]).toEqual([9, 8, 7]);
   });
 
   it("refuses engine work outside the desktop app", async () => {

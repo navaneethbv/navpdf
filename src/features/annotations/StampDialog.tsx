@@ -5,13 +5,25 @@ import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { useDocumentEdit } from "../document/use-document-edit";
 import {
+  SIGN_HERE_STAMPS,
   STAMP_POSITIONS,
   STANDARD_STAMPS,
+  addImageStamp,
   addStamp,
+  type SignHereStampName,
   type StampPosition,
   type StampTone,
   type StandardStampName,
 } from "../../services/pdf/stamps";
+import { decorationSourceType } from "../../services/pdf/decoration-images";
+
+type StampChoice = StandardStampName | SignHereStampName | "Custom" | "Image";
+
+interface StampPicture {
+  name: string;
+  bytes: Uint8Array;
+  type: "png" | "jpg" | "pdf";
+}
 
 const POSITION_LABELS: Record<StampPosition, string> = {
   "top-left": "Top left",
@@ -32,7 +44,11 @@ export function StampDialog({
   const ids = useId();
   const page = useWorkspace((state) => state.page);
   const pages = useWorkspace((state) => state.info?.pages ?? 1);
-  const [stamp, setStamp] = useState<StandardStampName | "Custom">("Approved");
+  const [stamp, setStamp] = useState<StampChoice>("Approved");
+  const [picture, setPicture] = useState<StampPicture | null>(null);
+  const [pictureError, setPictureError] = useState("");
+  const [pictureLabel, setPictureLabel] = useState("");
+  const [picturePage, setPicturePage] = useState(1);
   const [label, setLabel] = useState("");
   const [tone, setTone] = useState<StampTone>("blue");
   const [reviewer, setReviewer] = useState("");
@@ -46,19 +62,32 @@ export function StampDialog({
     .filter(Boolean)
     .join(", ");
   const customMissing = stamp === "Custom" && !label.trim();
+  const pictureMissing = stamp === "Image" && !picture;
+  const signHere = Object.hasOwn(SIGN_HERE_STAMPS, stamp);
 
   const submit = async () => {
     const applied = await apply(`Stamp added to page ${target}`, (bytes) =>
-      addStamp(bytes, {
-        page: target,
-        stamp,
-        label,
-        tone: stamp === "Custom" ? tone : undefined,
-        detail,
-        position,
-        width: SIZES[size],
-        author: reviewer,
-      }),
+      stamp === "Image" && picture
+        ? addImageStamp(bytes, {
+            page: target,
+            bytes: picture.bytes,
+            type: picture.type,
+            pageNumber: picturePage,
+            position,
+            width: SIZES[size],
+            label: pictureLabel || picture.name.replace(/\.[^.]+$/, ""),
+            author: reviewer,
+          })
+        : addStamp(bytes, {
+            page: target,
+            stamp: stamp as Exclude<StampChoice, "Image">,
+            label,
+            tone: stamp === "Custom" ? tone : undefined,
+            detail,
+            position,
+            width: SIZES[size],
+            author: reviewer,
+          }),
     );
     if (applied) onClose();
   };
@@ -72,7 +101,7 @@ export function StampDialog({
       error={error}
       primaryLabel="Add Stamp"
       busyLabel="Adding…"
-      primaryDisabled={customMissing || !controller?.pdf}
+      primaryDisabled={customMissing || pictureMissing || !controller?.pdf}
       onPrimary={() => void submit()}
     >
       <div className="setting-group">
@@ -83,16 +112,81 @@ export function StampDialog({
           id={`${ids}-stamp`}
           className="text-input"
           value={stamp}
-          onChange={(event) => setStamp(event.target.value as StandardStampName | "Custom")}
+          onChange={(event) => setStamp(event.target.value as StampChoice)}
         >
-          {Object.entries(STANDARD_STAMPS).map(([name, { label: text }]) => (
-            <option key={name} value={name}>
-              {text}
-            </option>
-          ))}
+          <optgroup label="Standard">
+            {Object.entries(STANDARD_STAMPS).map(([name, { label: text }]) => (
+              <option key={name} value={name}>
+                {text}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Sign here">
+            {Object.entries(SIGN_HERE_STAMPS).map(([name, { label: text }]) => (
+              <option key={name} value={name}>
+                {text}
+              </option>
+            ))}
+          </optgroup>
           <option value="Custom">Custom text…</option>
+          <option value="Image">Picture or PDF page…</option>
         </select>
       </div>
+      {stamp === "Image" && (
+        <div className="setting-group">
+          <label className="setting-title" htmlFor={`${ids}-picture`}>
+            Stamp picture
+          </label>
+          <input
+            id={`${ids}-picture`}
+            type="file"
+            accept="image/png,image/jpeg,application/pdf,.png,.jpg,.jpeg,.pdf"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              void file.arrayBuffer().then((buffer) => {
+                const bytes = new Uint8Array(buffer);
+                const type = decorationSourceType(bytes);
+                setPictureError(type ? "" : "Choose a PNG, JPEG or PDF file.");
+                setPicture(type ? { name: file.name, bytes, type } : null);
+              });
+            }}
+          />
+          {picture && <p className="field-hint">{picture.name}</p>}
+          {pictureError && (
+            <p className="field-error" role="alert">
+              {pictureError}
+            </p>
+          )}
+          {picture?.type === "pdf" && (
+            <>
+              <label className="setting-title" htmlFor={`${ids}-picture-page`}>
+                Page of that PDF
+              </label>
+              <input
+                id={`${ids}-picture-page`}
+                className="text-input"
+                type="number"
+                min={1}
+                value={picturePage}
+                onChange={(event) => setPicturePage(Math.max(1, Number(event.target.value) || 1))}
+              />
+            </>
+          )}
+          <label className="setting-title" htmlFor={`${ids}-picture-label`}>
+            Name in the comment list
+          </label>
+          <input
+            id={`${ids}-picture-label`}
+            className="text-input"
+            value={pictureLabel}
+            maxLength={80}
+            onChange={(event) => setPictureLabel(event.target.value)}
+            placeholder={picture?.name ?? "Image stamp"}
+          />
+        </div>
+      )}
       {stamp === "Custom" && (
         <div className="setting-group">
           <label className="setting-title" htmlFor={`${ids}-label`}>
@@ -121,27 +215,29 @@ export function StampDialog({
           </select>
         </div>
       )}
-      <div className="setting-group">
-        <label className="setting-title" htmlFor={`${ids}-reviewer`}>
-          Reviewer name (optional)
-        </label>
-        <input
-          id={`${ids}-reviewer`}
-          className="text-input"
-          value={reviewer}
-          maxLength={60}
-          onChange={(event) => setReviewer(event.target.value)}
-        />
-        <label className="checkbox-row">
+      {!signHere && stamp !== "Image" && (
+        <div className="setting-group">
+          <label className="setting-title" htmlFor={`${ids}-reviewer`}>
+            Reviewer name (optional)
+          </label>
           <input
-            type="checkbox"
-            checked={includeDate}
-            onChange={(event) => setIncludeDate(event.target.checked)}
+            id={`${ids}-reviewer`}
+            className="text-input"
+            value={reviewer}
+            maxLength={60}
+            onChange={(event) => setReviewer(event.target.value)}
           />
-          <span>Add today&apos;s date</span>
-        </label>
-        {detail && <p className="field-hint">Second line: {detail}</p>}
-      </div>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={includeDate}
+              onChange={(event) => setIncludeDate(event.target.checked)}
+            />
+            <span>Add today&apos;s date</span>
+          </label>
+          {detail && <p className="field-hint">Second line: {detail}</p>}
+        </div>
+      )}
       <div className="setting-group">
         <label className="setting-title" htmlFor={`${ids}-position`}>
           Position

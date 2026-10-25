@@ -5,6 +5,140 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 25 PDFCraft gap batch 10, guided actions
+
+The [tenth batch mapping](PDFCRAFT-COMPARISON.md#tenth-batch-mapping) lists the guided action entries and their limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,134 tests across 153 files, with 85.77% statements, 77.89% branches, 84.53% functions and 88.87% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` on Rust 1.97 and 1.99 pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests check that saved actions round-trip through their JSON shape and that empty actions, empty or multi-line watermarks, out-of-range opacity, unknown presets and levels, malformed OCR languages, empty headers, more than 20 steps, blank names, unsafe identifiers and duplicate identifiers are refused.
+An integration test runs a watermark, header and footer, properties and flattening action on a two-page pdf-lib document and reads the result with PDF.js: the watermark, title header, page footer, author, keywords and flattened field value are all present.
+Writing it found that a header step erased the watermark drawn by the step before, because each decoration call replaces NavPDF's earlier decorations; one run's decorations are now drawn together, and the step descriptions say they replace decorations added before the action.
+With the native engine replaced by recorders, it also checks that each step receives the previous step's output, that unchanged compression and an already tagged document are noted rather than failing, that a failing step is named with its number and that cancelling stops the action.
+Dialog tests cover a built-in action's guide, running on the open document as one change with its notes, copying, editing, reordering and removing steps, saving and deleting through preferences, running on two files with one failure and saving a ZIP, and a refused save.
+Native runs of OCR, compression, tagging and PDF/A steps through the packaged app were not run.
+
+## October 25 PDFCraft gap batch 10, PDF/A and standards
+
+The [tenth batch mapping](PDFCRAFT-COMPARISON.md#tenth-batch-mapping) lists each addition and its limits, and [ADR 0020](adr/0020-pdfa-validation-and-conversion.md) records the rules.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,126 tests across 151 files, with 85.81% statements, 78% branches, 84.83% functions and 88.94% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests check level parsing, PDF date conversion, conversion of a plain RGB document to PDF/A-2b and PDF/A-3b with escaped XMP from its document information, refusal for an unembedded Helvetica and for a level a document without tags or language, and the fixes for a launch action, a JavaScript link, document JavaScript, additional actions, a hidden annotation with a down appearance, an interpolated image and a plain-text attachment, which PDF/A-2 refuses and PDF/A-3 completes.
+They also check that device CMYK is refused without a CMYK intent, that an sRGB intent does not cover CMYK, that a second intent is refused, that PDF/A, PDF/UA and PDF/X declarations are listed and removed while the intent stays, and that the generated ICC profile has a consistent header, tag table and sRGB curve.
+Dialog tests cover the declared standards, checking at a chosen level, converting and showing the new declaration, withholding conversion when a problem cannot be fixed, adding an intent, a refused removal and a passing check.
+
+veraPDF 1.28.2, fetched from Maven Central into a scratch directory and run with Java, validated samples written by a temporary local test that was removed afterwards.
+It passed `plain-2b.pdf` (`b83b57e3ec8bd2a1`), `plain-3b.pdf` (`d714751c111e6d82`), `plain-2u.pdf` (`3a988bed21e32e72`), `font-2b.pdf` (`94a239acf0e10d6e`), `font-2u.pdf` (`81e131dc137aec57`), `font-3u.pdf` (`3ca6cbbca592e8dc`), `actions-3b.pdf` (`4adea84623c1c071`), `tagged-2a.pdf` (`6bd0795ebeb1be99`) in `output/batch-ten/`, at the level in each name, and failed the unconverted sources.
+The samples are a plain RGB page, a ReportLab page with an embedded DejaVu Sans subset, the actions and attachment fixture, and that ReportLab page tagged automatically with a language set, which also checks batch 9's tags against PDF/A-2a.
+veraPDF found that PDF/A-3 attachments got a MIME type escaped twice, so readers saw `application#2Foctet-stream`; the name is now written plainly and NavPDF's own check rejects MIME types without a slash.
+It also showed that a font selected without drawing text needs no embedding, so the font check now follows the fonts that draw visible text.
+Preview and Acrobat review of converted files were not run.
+Hosted Clippy on Rust 1.99 rejected `chunks_exact(2)` in the batch 9 text decoder, which the container's Rust 1.97 accepts; both decoders now use `as_chunks`, and Clippy from a local Rust 1.99 toolchain passes with `-D warnings`.
+
+## October 25 PDFCraft gap batch 9, tags and reading order
+
+The [ninth batch mapping](PDFCRAFT-COMPARISON.md#ninth-batch-mapping) lists each addition and its limits, and [ADR 0019](adr/0019-tag-editing-and-autotagging.md) records the rules.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,122 tests across 150 files, with 85.81% statements, 77.94% branches, 84.78% functions and 88.93% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests build synthetic pages with lopdf.
+On a page with two text objects, a rule, an image, an empty text object, a link, a field and a pop-up, Find Untagged Content reports four drawing operations, one link and one field; Tag Automatically adds P, P, Figure, Link and Form tags under a Document tag in that order, writes the MCIDs into the content, makes the rule an artifact, sets StructParents and structure tab order, leaves nothing untagged and refuses to tag again.
+Renaming a tag to H1 with a title, non-ASCII actual text and a language reads back, invalid types, languages and control characters are refused, and an empty title removes it.
+Moving the heading later swaps it with the next paragraph, and moving it earlier at the start is refused.
+Marking the figure as an artifact keeps the image drawn, removes its MCID and its tag, and leaves nothing untagged; the Document tag, a Link tag, unknown and malformed ids, and a second attempt are refused.
+A tag whose content uses a named property list, a role-mapped type and a parent tree with number tree kids is read, retired with its parent-tree slot cleared, and existing tags block automatic tagging; earlier MCIDs without a tree and pages with nothing to tag are refused.
+An integration test reads a tag's text through PDF.js, telling MCID 1 from MCID 11, and filtering keeps ancestors while collapsing hides descendants.
+Dialog tests cover automatic tagging, editing type and language, moving, retiring, finding untagged content with page links, collapsing, filtering and reporting a refused move.
+Screen reader, Preview and Acrobat review of automatically tagged output were not run.
+
+## October 25 quality follow-up for batches 7 and 8
+
+The check-runs API exposes the annotations that the SonarCloud, Codacy and CodeQL pages hold, which the container cannot reach directly.
+CodeQL reported one high alert: a new Rust test printed the trust message, which names a synthetic certificate's subject, when an assertion failed; the assertion no longer prints it.
+Codacy reported six header-injection findings on dictionary writes in the ink eraser and link appearance, where a rule written for HTTP responses matches `.set` on a parameter; both now build entries and write them in their caller, so no behavior changes.
+SonarCloud reported 10 issues: event listeners on the marquee zoom and eraser overlays, a redundant block and nested promises in the document session, a complex decorations handler, ambiguous spacing in the signature dialog, an array used as a set, an in-place sort inside a chain, a status role where `output` fits, and two length assertions; each is fixed, the overlays now attach native listeners through a shared hook, and their tests still pass.
+
+## October 25 PDFCraft gap batch 8, signatures
+
+The [eighth batch mapping](PDFCRAFT-COMPARISON.md#eighth-batch-mapping) lists each addition and its limits, and [ADR 0018](adr/0018-local-signature-trust-and-inspection.md) records the trust and inspection rules.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,116 tests across 148 files, with 85.72% statements, 77.89% branches, 84.59% functions and 88.82% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests sign synthetic PDFs with generated P-256 certificates.
+A leaf issued by a generated root is trusted only with that root in the list, is not trusted when the root is only embedded, reports a broken chain against a different root with the same name, and reports not valid when signed for a time after its validity.
+A signed file is not trusted until its own certificate is trusted, the certificate found by fingerprint is byte-identical to the one signed with, and DER and PEM files with surrounding text are read while other and oversized input is refused.
+After a form-filling certification, filling the text field is listed as one allowed form field change, adding a Text comment is listed and not allowed, and appended bytes alone are an unexplained change that is not allowed.
+A countersignature is listed as an allowed signature change, and the signed version of the first signature is byte-identical to the certified file.
+A visible appearance verifies, has a non-empty rectangle and draws the signer's name and an escaped reason, and placement keeps the box in the displayed corner for all four rotations and an offset crop box; a page that does not exist is refused.
+PDF dates with time zone offsets and partial dates convert to the expected UTC seconds.
+Dialog tests cover the certificate details, trusting an issuer and checking again, stopping trust, opening the signed version with its name, the changes list and permission message, and the appearance page being kept within the document.
+Native signing with a visible appearance, Preview and Acrobat validation of these files, and acceptance of the trust list in the packaged app were not run.
+
+## October 24 PDFCraft gap batch 7, editing
+
+The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists the editing additions and their limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,114 tests across 148 files, with 85.7% statements, 77.88% branches, 84.52% functions and 88.8% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests; a new Rust test checks that saved shape styles accept only known kinds, six-digit colours, widths from 0.5 to 20 and opacities from 0.1 to 1.
+
+Integration tests read the output with PDF.js.
+A picture watermark covers half the page width at the page centre after the page text, a background is drawn before it from a first content stream, Remove Decorations leaves the text, a page of another PDF draws as a form, and the placement matrix keeps a picture upright on a page turned 90 degrees.
+A sign-here stamp is a filled tag without a detail line, and picture and PDF-page stamps keep their shape, centred, and are turned with a rotated page.
+Every line ending style draws, a diamond and a reversed closed arrow are filled, a dashed line sets a dash pattern, the rectangle grows to hold the endings, and a later colour change redraws the appearance in the new colour; a cloudy line and an unknown ending are refused, and a rectangle's cloudy border and a connected line's endings read back.
+The eraser cuts a stroke between stored points, keeps untouched strokes, redraws the remaining three strokes and deletes a wholly erased drawing with its pop-up.
+Layer, show or hide and reset links read back through PDF.js with their states, a dashed border and an outline highlight, the show or hide action reads back for NavPDF, and unknown layers or fields are refused.
+Writing these found that a parent field name such as "contact" was refused although Hide covers the fields below it, which is fixed.
+Dialog and controller tests cover choosing pictures and refusing other files, the sign-here and picture stamp names, picture watermark and missing background files, a show or hide field link, line ending and border choices, saving a shape style, the eraser's path and page-unit radius, and running a show or hide link on screen.
+
+SonarCloud reported 6 new issues on `4af554e`; its issue list cannot be read here, so the Sonar JavaScript rules were run locally on the lines this PR adds.
+They found loops awaiting each step, two functions over the complexity limit, inconsistent returns in effects, functions nested five deep, `window` where `globalThis` works, functions that belong at module scope and a `forEach`; all are now restructured without changing behavior.
+The object-injection rule matching Codacy's critical findings flagged two indexed function arguments in the eraser, which now read points without computed indexes.
+In the Chromium browser preview, a Sign Here tag, a picture stamp and a picture watermark drew on the reader fixture, as `output/batch-seven/15-stamps-watermark.png` shows.
+Native WebKit, Preview and Acrobat comparison of the new appearances and actions were not run.
+
+## October 24 PDFCraft gap batch 7, document lifecycle
+
+The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists tabs, Revert, reloading changed files and session reopening with their limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,094 tests across 146 files, with 85.52% statements, 77.7% branches, 84.46% functions and 88.59% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests check that a rewritten file with identical bytes counts as unchanged while edited content counts as changed and a deleted file as missing, that Revert reopens the saved file with its page and refuses an unsaved import, and that sessions are recorded only while the preference is on, in opening order with pages, and restored once while skipping a missing file.
+Session tests check that Revert asks first, keeps the document when there is no saved file, reloads an unchanged document automatically, asks before replacing unsaved edits and reports each change once, warns once about a missing file and opens a restored session in tabs.
+Tab tests check that each tab keeps its own unsaved state and page, writes a recovery copy and keeps quitting guarded while a background tab has unsaved changes, closes clean background tabs, shows an edited one before closing it, shows the neighbour after closing the shown tab and lists unsaved tabs before closing the window.
+Controller tests check that parking keeps the undo and view histories and that resuming returns to the same PDF point, rotation and layer visibility.
+
+Opening another document now adds a tab instead of asking to discard unsaved edits, so six earlier session tests that expected that prompt were rewritten to assert that the edited document stays open in a background tab with its recovery copy, and that a document that fails to open shows the edited one again.
+Writing them found that loading reset the tab list and that a document PDF.js could not start loading was never released when no other document was shown; both are fixed.
+In the Chromium browser preview, two documents opened in tabs, switching back returned to scroll offset 3000 and Control-Tab and closing a tab worked.
+That check found that the viewer restored the previous document's offset when a hidden viewer reappeared, so parking now clears it and a new tab starts at the top, and that resuming while the viewer was hidden lost the zoom, so switching keeps the viewer shown.
+Native file watching, Revert from the macOS menu, quitting with unsaved background tabs and session reopening at launch were not exercised natively.
+
+## October 24 PDFCraft gap batch 7, viewer
+
+The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists each addition and its limits.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,075 tests across 143 files, with 85.5% statements, 77.71% branches, 84.55% functions and 88.55% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+A Rust test checks that page colour preferences default to off, accept custom six-digit colours and reject unknown schemes or malformed colours without changing saved settings.
+
+Controller tests check that hiding comments shows a copy filtered to fields and links at the same page, rotation and layer visibility, that showing them again restores the document and releases the copy, and that a drawing tool or an attached revision shows comments again.
+They also check that a read-only encrypted document refuses hiding, that page colours redraw only on change, and that unsaved page-view edits are committed as a revision instead of being drawn over.
+Marquee zoom tests cover a click keeping the page point under the pointer, a drag filling the window and Option-click zooming out.
+An integration test reads a pdf-lib document through PDF.js and finds two drawn images at their page bounds, the topmost first, and decodes the first one's pixels.
+It found that PDF.js can deliver decoded image data after the operator list, so image lookup now waits for the image instead of failing.
+Other tests cover inked bounds, column text, page size labels, image data expansion, the page colour settings and contrast warning, the About dialog, column copying, the image context menu and the page size label.
+
+In the Chromium browser preview, hiding comments removed the sticky note and kept the form field at the same scroll position, Fit Visible zoomed to 228%, a marquee drag zoomed to 219%, yellow-on-black page colours drew the reader fixture, Alt-drag selected a column and the page size label read 8.5 × 11 in.
+Screenshots are in `output/batch-seven/`.
+The check found unreadable text on pressed rail buttons under the pointer, because the hover background replaced the pressed background; pressed buttons now keep their colours.
+Native WebKit rendering, clipboard image writing in WebKit, Preview and Acrobat comparison were not run.
+
 ## October 24 PR 71 conflict and quality review
 
 Merged the current main dependency update into the PDFCraft branch, retaining SHA-2 0.11.1 and the branch's stringprep test dependency in Cargo.lock.

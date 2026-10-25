@@ -16,7 +16,15 @@ import type {
 import type { ReadAloudState } from "../features/viewer/read-aloud";
 import { defaultPreferences } from "../types/document";
 import { ACTUAL_SIZE, type MeasureKind, type MeasureScale } from "../services/pdf/measure";
+/** An open document's tab: its name and whether it has unsaved changes. */
+export interface DocumentTab {
+  id: string;
+  name: string;
+  dirty: boolean;
+}
 interface Workspace {
+  /** Open documents in tab order; the shown one is `document`, whose own fields are current. */
+  tabs: DocumentTab[];
   document: DocumentDescriptor | null;
   info: DocumentInfo | null;
   page: number;
@@ -26,6 +34,8 @@ interface Workspace {
   spread: "none" | "odd" | "even";
   readMode: boolean;
   nightMode: boolean;
+  /** Comments and pop-ups are hidden on screen; fields and links still draw. */
+  commentsHidden: boolean;
   pageLabels: string[] | null;
   tool: Tool;
   sidebar: SidebarTab;
@@ -66,6 +76,8 @@ interface Workspace {
   inkColor: string;
   inkWidth: number;
   inkOpacity: number;
+  /** The ink eraser's width in screen pixels. */
+  eraserSize: number;
   shapeKind: ShapeKind;
   /** Text placed in the next callout drawn on the page. */
   calloutText: string;
@@ -96,6 +108,7 @@ const cleanDocument = {
   spread: "none",
   readMode: false,
   nightMode: false,
+  commentsHidden: false,
   pageLabels: null,
   editingAllowed: true,
   dirty: false,
@@ -119,8 +132,12 @@ const cleanDocument = {
   selectedPages: [],
   activeSnapshot: false,
 } satisfies Partial<Workspace>;
+/** The state that belongs to one document, kept with a tab while another tab is shown. */
+export type DocumentState = Pick<Workspace, keyof typeof cleanDocument>;
+export const DOCUMENT_STATE_KEYS = Object.keys(cleanDocument) as (keyof DocumentState)[];
 export const useWorkspace = create<Workspace>((set) => ({
   ...cleanDocument,
+  tabs: [],
   zoom: 100,
   layout: "continuous",
   tool: "select",
@@ -142,6 +159,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   inkColor: "#25604b",
   inkWidth: 2,
   inkOpacity: 1,
+  eraserSize: 16,
   shapeKind: "Square",
   calloutText: "",
   textEditSelection: [],
@@ -154,6 +172,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   reset: () =>
     set({
       ...cleanDocument,
+      tabs: [],
       tool: "select",
       toolMode: null,
       activeModal: null,

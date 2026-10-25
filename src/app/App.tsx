@@ -8,6 +8,8 @@ import {
   Info,
   LoaderCircle,
   LockKeyhole,
+  RefreshCw,
+  RotateCcw,
   Save,
   X,
   FileText,
@@ -53,6 +55,8 @@ import { ExportOptions } from "../features/convert/ExportOptions";
 import { DOCUMENT_TOOL_DIALOGS } from "../features/tools/document-tools";
 import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
+import { pageColorsFor } from "../features/viewer/page-colors";
+import { AboutDialog } from "../features/help/AboutDialog";
 /** Menu and modal identifiers for the editable export dialog and the format each selects. */
 const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
   ["office-export", "docx"],
@@ -155,6 +159,14 @@ function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController 
 }
 
 type WorkspaceState = ReturnType<typeof useWorkspace.getState>;
+
+function toggleComments(state: WorkspaceState, controller: ViewerController | null) {
+  void controller
+    ?.setCommentsHidden(!state.commentsHidden)
+    .catch((error: unknown) =>
+      state.set({ error: error instanceof Error ? error.message : String(error) }),
+    );
+}
 type SessionActions = ReturnType<typeof useDocumentSession>;
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -229,10 +241,12 @@ function handleShortcut(
     ["w", () => session.home()],
     ["z", () => (event.shiftKey ? controller?.redo() : controller?.undo())],
     ["y", () => controller?.redo()],
+    ["tab", () => session.stepTabs(event.shiftKey ? -1 : 1)],
     ["[", () => controller?.goBack()],
     ["]", () => controller?.goForward()],
     [",", () => state.set({ settingsOpen: true })],
     ["0", () => controller?.zoom("page-fit")],
+    ["3", () => void controller?.fitVisible()],
     ["+", () => controller?.zoom((state.zoom / 100) * 1.15)],
     ["=", () => controller?.zoom((state.zoom / 100) * 1.15)],
     ["-", () => controller?.zoom(state.zoom / 100 / 1.15)],
@@ -349,6 +363,12 @@ function menuActions(
       },
     ],
     [
+      "toggle-comments",
+      () => {
+        if (state.document) toggleComments(state, controller);
+      },
+    ],
+    [
       "night-mode",
       () => {
         if (state.document) state.set({ nightMode: !state.nightMode });
@@ -360,12 +380,20 @@ function menuActions(
     ["save", () => void session.save()],
     ["save-as", () => void session.save(true)],
     [
+      "revert",
+      () => {
+        if (state.document) session.revert();
+      },
+    ],
+    [
       "print",
       () => {
         if (state.document) state.set({ activeModal: "print" });
       },
     ],
     ["home", () => session.home()],
+    ["next-tab", () => session.stepTabs(1)],
+    ["previous-tab", () => session.stepTabs(-1)],
     [
       "organize",
       () => {
@@ -414,6 +442,9 @@ function menuActions(
     ],
     ["fit-page", () => controller?.zoom("page-fit")],
     ["fit-width", () => controller?.zoom("page-width")],
+    ["fit-visible", () => void controller?.fitVisible()],
+    ["marquee-zoom", () => controller?.setTool("marquee")],
+    ["about", () => state.set({ activeModal: "about" })],
     ["zoom-in", () => controller?.zoom((state.zoom / 100) * 1.15)],
     ["zoom-out", () => controller?.zoom(state.zoom / 100 / 1.15)],
   ]);
@@ -481,6 +512,10 @@ export default function App() {
   useEffect(() => {
     if (controller?.pdf) controller.setLayout(s.layout);
   }, [controller, s.layout]);
+  const { pageColors, pageForeground, pageBackground } = s.local.preferences;
+  useEffect(() => {
+    controller?.setPageColors(pageColorsFor({ pageColors, pageForeground, pageBackground }));
+  }, [controller, pageColors, pageForeground, pageBackground]);
   useEffect(() => {
     function key(event: KeyboardEvent) {
       const state = useWorkspace.getState();
@@ -545,6 +580,8 @@ export default function App() {
         open={open}
         save={(as) => void session.save(as)}
         home={session.home}
+        switchTab={(id) => void session.switchTab(id)}
+        closeTab={(id) => void session.closeBackground(id)}
       />
       {s.error && (
         <div className="error-banner" role="alert">
@@ -695,6 +732,77 @@ export default function App() {
           </form>
         </Dialog>
       )}
+      {session.unsavedTabs && (
+        <Dialog
+          title="Close with unsaved documents?"
+          icon={<Save size={18} />}
+          onClose={session.cancelClose}
+          priority
+        >
+          <p>These open documents have unsaved changes: {session.unsavedTabs.join(", ")}.</p>
+          <div className="dialog-actions">
+            <button type="button" className="button" onClick={session.cancelClose}>
+              Keep editing
+            </button>
+            <button type="button" className="button" onClick={session.discardUnsavedAndClose}>
+              Discard them and close
+            </button>
+            <button type="button" className="button primary" onClick={session.reviewUnsaved}>
+              Show the first one
+            </button>
+          </div>
+        </Dialog>
+      )}
+      {session.revertPending && (
+        <Dialog
+          title="Revert to the saved version?"
+          icon={<RotateCcw size={18} />}
+          onClose={session.cancelRevert}
+          priority
+        >
+          <p>
+            NavPDF opens the saved file again. Unsaved changes and undo history for this document
+            are discarded and cannot be restored.
+          </p>
+          <div className="dialog-actions">
+            <button type="button" className="button" onClick={session.cancelRevert}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button primary"
+              onClick={() => void session.confirmRevert()}
+            >
+              Revert
+            </button>
+          </div>
+        </Dialog>
+      )}
+      {session.externalChange && (
+        <Dialog
+          title="The file changed on disk"
+          icon={<RefreshCw size={18} />}
+          onClose={session.keepExternalChange}
+          priority
+        >
+          <p>
+            Another app changed {session.externalChange} while it has unsaved edits here. Reload the
+            version on disk and discard your edits, or keep your version.
+          </p>
+          <div className="dialog-actions">
+            <button type="button" className="button" onClick={session.keepExternalChange}>
+              Keep my version
+            </button>
+            <button
+              type="button"
+              className="button primary"
+              onClick={() => void session.reloadExternalChange()}
+            >
+              Reload from disk
+            </button>
+          </div>
+        </Dialog>
+      )}
       {session.confirm && (
         <Dialog
           title="Save your changes?"
@@ -745,7 +853,8 @@ export default function App() {
             (s.tool === "highlight" ||
               s.tool === "draw" ||
               s.tool === "text" ||
-              s.tool === "shape"))) && (
+              s.tool === "shape" ||
+              s.tool === "eraser"))) && (
           <AnnotationToolbar
             controller={controller}
             onClose={() => {
@@ -754,7 +863,8 @@ export default function App() {
                 s.tool === "highlight" ||
                 s.tool === "draw" ||
                 s.tool === "text" ||
-                s.tool === "shape"
+                s.tool === "shape" ||
+                s.tool === "eraser"
               ) {
                 s.set({ tool: "select" });
                 controller?.setTool("select");
@@ -797,6 +907,15 @@ export default function App() {
                 disabled: !s.document,
               },
               {
+                id: "revert",
+                label: "Revert",
+                description: "Go back to the last saved version",
+                category: "edit",
+                icon: RotateCcw,
+                action: session.revert,
+                disabled: !s.document || !!s.document.unsaved,
+              },
+              {
                 id: "undo",
                 label: "Undo",
                 description: "Undo the last document change",
@@ -833,6 +952,14 @@ export default function App() {
                 category: "review",
                 icon: FileText,
                 action: () => s.set({ activeModal: "shortcuts" }),
+              },
+              {
+                id: "about",
+                label: "About NavPDF",
+                description: "Version and components",
+                category: "review",
+                icon: Info,
+                action: () => s.set({ activeModal: "about" }),
               },
             ]}
           />
@@ -929,12 +1056,14 @@ export default function App() {
           <CertificateSignature
             controller={controller}
             onClose={() => s.set({ activeModal: null })}
+            onOpen={(file) => session.open(file)}
           />
         )}
         {s.activeModal === "design" && (
           <DesignTools controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
         {s.activeModal === "export-options" && <ExportOptions />}
+        {s.activeModal === "about" && <AboutDialog onClose={() => s.set({ activeModal: null })} />}
         {s.activeModal === "properties" && (
           <PropertiesDialog controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}

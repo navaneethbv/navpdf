@@ -1,7 +1,10 @@
+pub mod actions;
 pub mod engine;
 pub mod export;
+pub mod lifecycle;
 pub mod open_queue;
 mod recovery;
+pub mod trust;
 
 use crate::{
     engine::redact,
@@ -55,6 +58,23 @@ pub struct Preferences {
     pub annotation_stroke_width: f32,
     pub ocr_language: String,
     pub ocr_scope: String,
+    pub page_colors: String,
+    pub page_foreground: String,
+    pub page_background: String,
+    pub reload_changed_files: bool,
+    pub reopen_session: bool,
+    /// Colour, width and opacity new annotations of each kind start with.
+    pub annotation_defaults: std::collections::BTreeMap<String, AnnotationDefault>,
+    /// Guided actions the user saved.
+    pub actions: Vec<actions::SavedAction>,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AnnotationDefault {
+    pub color: String,
+    pub width: f32,
+    pub opacity: f32,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -78,6 +98,13 @@ impl Default for Preferences {
             annotation_stroke_width: 2.0,
             ocr_language: "en-US".into(),
             ocr_scope: "current".into(),
+            page_colors: "off".into(),
+            page_foreground: "#000000".into(),
+            page_background: "#ffffff".into(),
+            reload_changed_files: true,
+            reopen_session: false,
+            annotation_defaults: std::collections::BTreeMap::new(),
+            actions: Vec::new(),
         }
     }
 }
@@ -95,6 +122,9 @@ pub struct Recent {
 pub struct LocalData {
     pub preferences: Preferences,
     pub recents: Vec<Recent>,
+    /// Documents open when NavPDF last closed, kept only while session reopening is on.
+    #[serde(default)]
+    pub session: Vec<lifecycle::SessionEntry>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -143,6 +173,12 @@ pub struct Opened {
     /// Set when the source file was encrypted when opened.
     pub source_encrypted: Mutex<bool>,
     pub redaction_audit: Mutex<RedactionAudit>,
+    /// Size and modification time of the source when it was last known to match `source`.
+    pub stamp: Mutex<Option<lifecycle::SourceStamp>>,
+    /// The page last shown, for reopening the session.
+    pub page: Mutex<u32>,
+    /// Opening order, so a reopened session keeps its document order.
+    pub sequence: u64,
 }
 /// Redaction audits that a save must pass, because the renderer re-serializes redacted output.
 #[derive(Default)]
@@ -215,6 +251,8 @@ pub fn refuse_plaintext_overwrite(doc: &Opened, target: &std::path::Path) -> Res
     Ok(())
 }
 fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor, String> {
+    // Taken before the snapshot, so a change during it is reported later rather than missed.
+    let stamp = lifecycle::stamp(&path);
     let (snapshot, hash, length) = filesystem::snapshot(&path)?;
     let file = snapshot
         .reopen()
@@ -248,6 +286,9 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
         force_save_as: Mutex::new(false),
         source_encrypted: Mutex::new(source_encrypted),
         redaction_audit: Mutex::new(RedactionAudit::default()),
+        stamp: Mutex::new(stamp),
+        page: Mutex::new(1),
+        sequence: lifecycle::next_sequence(),
     });
     state
         .documents
@@ -599,6 +640,9 @@ pub async fn save_document(
             *doc.source
                 .lock()
                 .map_err(|_| "Document state unavailable.")? = (target.clone(), new_hash);
+            if let Ok(mut stamp) = doc.stamp.lock() {
+                *stamp = lifecycle::stamp(&target);
+            }
             let target_name = target
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -841,17 +885,46 @@ fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result
     {
         return Err("Invalid preference value.".into());
     }
-    for overrides in [&preferences.light_overrides, &preferences.dark_overrides] {
-        for color in [&overrides.background, &overrides.accent]
-            .into_iter()
-            .flatten()
+    const PAGE_COLORS: [&str; 6] = [
+        "off",
+        "white-on-black",
+        "yellow-on-black",
+        "green-on-black",
+        "black-on-white",
+        "custom",
+    ];
+    if !PAGE_COLORS.contains(&preferences.page_colors.as_str()) {
+        return Err("Invalid preference value.".into());
+    }
+    const ANNOTATION_KINDS: [&str; 8] = [
+        "Square", "Circle", "Line", "Arrow", "Cloud", "Callout", "Polygon", "PolyLine",
+    ];
+    for (kind, default) in &preferences.annotation_defaults {
+        if !ANNOTATION_KINDS.contains(&kind.as_str())
+            || !(0.5..=20.0).contains(&default.width)
+            || !(0.1..=1.0).contains(&default.opacity)
         {
-            if color.len() != 7
-                || !color.starts_with('#')
-                || !color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
-            {
-                return Err("Custom colors must use six-digit hexadecimal values.".into());
-            }
+            return Err("Invalid annotation default.".into());
+        }
+    }
+    actions::validate(&preferences.actions)?;
+    let custom = [&preferences.light_overrides, &preferences.dark_overrides]
+        .into_iter()
+        .flat_map(|overrides| [&overrides.background, &overrides.accent])
+        .flatten()
+        .chain([&preferences.page_foreground, &preferences.page_background])
+        .chain(
+            preferences
+                .annotation_defaults
+                .values()
+                .map(|default| &default.color),
+        );
+    for color in custom {
+        if color.len() != 7
+            || !color.starts_with('#')
+            || !color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
+        {
+            return Err("Custom colors must use six-digit hexadecimal values.".into());
         }
     }
     preferences.network_access = false;
@@ -881,6 +954,7 @@ fn persist_cleared_recents(state: &AppState) -> Result<(), String> {
 #[tauri::command]
 pub fn remember_page(state: State<AppState>, id: String, page: u32) -> Result<(), String> {
     let doc = document(&state, &id)?;
+    *doc.page.lock().map_err(|_| "Document unavailable.")? = page.max(1);
     let source = doc
         .source
         .lock()
@@ -980,6 +1054,8 @@ pub fn mark_dirty(state: State<AppState>, dirty: bool) -> Result<(), String> {
 }
 #[tauri::command]
 pub fn close_window(window: WebviewWindow, state: State<AppState>) -> Result<(), String> {
+    // A session that cannot be recorded must not stop the window from closing.
+    let _ = lifecycle::record_session(&state);
     *state
         .dirty
         .lock()
@@ -1311,6 +1387,96 @@ mod tests {
             );
             assert_eq!(state.local.lock().unwrap().preferences.theme, "light");
         }
+    }
+
+    #[test]
+    fn annotation_defaults_are_validated_per_kind() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let default = AnnotationDefault {
+            color: "#3366cc".into(),
+            width: 3.0,
+            opacity: 0.5,
+        };
+        let mut preferences = Preferences::default();
+        preferences
+            .annotation_defaults
+            .insert("Square".into(), default.clone());
+        persist_preferences(&state, preferences.clone()).unwrap();
+        let saved: LocalData =
+            serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
+        assert_eq!(saved.preferences.annotation_defaults["Square"], default);
+        let invalid = [
+            ("Script", default.clone()),
+            (
+                "Line",
+                AnnotationDefault {
+                    color: "blue".into(),
+                    ..default.clone()
+                },
+            ),
+            (
+                "Line",
+                AnnotationDefault {
+                    width: 40.0,
+                    ..default.clone()
+                },
+            ),
+            (
+                "Line",
+                AnnotationDefault {
+                    opacity: 0.0,
+                    ..default.clone()
+                },
+            ),
+        ];
+        for (kind, value) in invalid {
+            let mut candidate = preferences.clone();
+            candidate.annotation_defaults.insert(kind.into(), value);
+            assert!(persist_preferences(&state, candidate).is_err());
+        }
+    }
+
+    #[test]
+    fn page_colour_preferences_default_off_and_reject_invalid_values() {
+        let legacy: LocalData =
+            serde_json::from_str(r#"{"preferences":{"theme":"light"},"recents":[]}"#).unwrap();
+        assert_eq!(legacy.preferences.page_colors, "off");
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let custom = Preferences {
+            page_colors: "custom".into(),
+            page_foreground: "#FFEE00".into(),
+            page_background: "#101010".into(),
+            ..Preferences::default()
+        };
+        persist_preferences(&state, custom.clone()).unwrap();
+        let original = fs::read(root.path().join("settings.json")).unwrap();
+        let invalid = [
+            Preferences {
+                page_colors: "sepia".into(),
+                ..custom.clone()
+            },
+            Preferences {
+                page_foreground: "yellow".into(),
+                ..custom.clone()
+            },
+            Preferences {
+                page_background: "#12345".into(),
+                ..custom.clone()
+            },
+        ];
+        for preferences in invalid {
+            assert!(persist_preferences(&state, preferences).is_err());
+            assert_eq!(
+                fs::read(root.path().join("settings.json")).unwrap(),
+                original
+            );
+        }
+        assert_eq!(
+            state.local.lock().unwrap().preferences.page_colors,
+            "custom"
+        );
     }
 
     #[test]

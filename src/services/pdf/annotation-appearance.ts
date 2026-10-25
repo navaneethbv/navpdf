@@ -146,11 +146,39 @@ function textMarkup(dict: PDFDict, subtype: string, color: [number, number, numb
   ];
 }
 
-function arrowHead(tip: Point, from: Point, size: number, closed: boolean): PDFOperator[] {
+/** The ten line ending styles of ISO 32000, in the order Acrobat lists them. */
+export const LINE_ENDINGS = [
+  "None",
+  "Square",
+  "Circle",
+  "Diamond",
+  "OpenArrow",
+  "ClosedArrow",
+  "Butt",
+  "ROpenArrow",
+  "RClosedArrow",
+  "Slash",
+] as const;
+export type LineEnding = (typeof LINE_ENDINGS)[number];
+
+/** How far a line ending reaches from its point, for a line of `width`. */
+export function lineEndingSize(width: number) {
+  return Math.max(9, width * 3);
+}
+
+function arrowHead(
+  tip: Point,
+  from: Point,
+  size: number,
+  closed: boolean,
+  reversed = false,
+): PDFOperator[] {
   const angle = Math.atan2(tip[1] - from[1], tip[0] - from[0]);
+  // A reversed arrow opens away from the line, so its wings reach past the end point.
+  const direction = reversed ? -1 : 1;
   const wing = (offset: number): Point => [
-    tip[0] - size * Math.cos(angle + offset),
-    tip[1] - size * Math.sin(angle + offset),
+    tip[0] - direction * size * Math.cos(angle + offset),
+    tip[1] - direction * size * Math.sin(angle + offset),
   ];
   return [
     ...polyline([wing(Math.PI / 6), tip, wing(-Math.PI / 6)], closed),
@@ -158,23 +186,120 @@ function arrowHead(tip: Point, from: Point, size: number, closed: boolean): PDFO
   ];
 }
 
+/** Draws one line ending at `tip` for a segment arriving from `from`. */
+function lineEnding(name: string, tip: Point, from: Point, size: number): PDFOperator[] {
+  const angle = Math.atan2(tip[1] - from[1], tip[0] - from[0]);
+  const half = size / 3;
+  const across = (length: number, turn: number): Point[] => [
+    [tip[0] + length * Math.cos(angle + turn), tip[1] + length * Math.sin(angle + turn)],
+    [tip[0] - length * Math.cos(angle + turn), tip[1] - length * Math.sin(angle + turn)],
+  ];
+  switch (name) {
+    case "OpenArrow":
+    case "ClosedArrow":
+      return arrowHead(tip, from, size, name === "ClosedArrow");
+    case "ROpenArrow":
+    case "RClosedArrow":
+      return arrowHead(tip, from, size, name === "RClosedArrow", true);
+    case "Square":
+      return [
+        ...polyline(
+          [
+            [tip[0] - half, tip[1] - half],
+            [tip[0] + half, tip[1] - half],
+            [tip[0] + half, tip[1] + half],
+            [tip[0] - half, tip[1] + half],
+          ],
+          true,
+        ),
+        fillAndStroke(),
+      ];
+    case "Circle":
+      return [
+        ...ellipse([tip[0] - half, tip[1] - half, tip[0] + half, tip[1] + half]),
+        fillAndStroke(),
+      ];
+    case "Diamond":
+      return [
+        ...polyline(
+          [
+            [tip[0] - half, tip[1]],
+            [tip[0], tip[1] - half],
+            [tip[0] + half, tip[1]],
+            [tip[0], tip[1] + half],
+          ],
+          true,
+        ),
+        fillAndStroke(),
+      ];
+    case "Butt":
+      return [...polyline(across(half, Math.PI / 2)), stroke()];
+    case "Slash":
+      return [...polyline(across(half, Math.PI / 3)), stroke()];
+    default:
+      return [];
+  }
+}
+
 function lineEndings(dict: PDFDict, start: Point, end: Point, width: number): PDFOperator[] {
+  return lineEndingPair(dict, [start, end], [end, start], width);
+}
+
+/** Endings for the first and last segments: `first` is [start, next], `last` is [end, previous]. */
+function lineEndingPair(
+  dict: PDFDict,
+  first: [Point, Point],
+  last: [Point, Point],
+  width: number,
+): PDFOperator[] {
   const endings = dict.lookup(PDFName.of("LE"));
   if (!(endings instanceof PDFArray)) return [];
   const names = endings.asArray().map((name) => (name instanceof PDFName ? name.decodeText() : ""));
-  const size = Math.max(9, width * 3);
-  const draw = (name: string, tip: Point, from: Point) =>
-    name === "OpenArrow" || name === "ClosedArrow"
-      ? arrowHead(tip, from, size, name === "ClosedArrow")
-      : [];
-  return [...draw(names[0] ?? "", start, end), ...draw(names[1] ?? "", end, start)];
+  const size = lineEndingSize(width);
+  // Ending shapes are drawn solid even on a dashed line.
+  return [
+    setDashPattern([], 0),
+    ...lineEnding(names[0] ?? "", first[0], first[1], size),
+    ...lineEnding(names[1] ?? "", last[0], last[1], size),
+  ];
+}
+
+/** Points around an ellipse, counterclockwise, for a cloudy oval. */
+function ellipsePoints([x1, y1, x2, y2]: Rect, count: number): Point[] {
+  const cx = (x1 + x2) / 2;
+  const cy = (y1 + y2) / 2;
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * 2 * Math.PI;
+    return [cx + ((x2 - x1) / 2) * Math.cos(angle), cy + ((y2 - y1) / 2) * Math.sin(angle)];
+  });
 }
 
 function shape(dict: PDFDict, subtype: string, rect: Rect, color: [number, number, number]) {
   const width = borderWidth(dict);
   const interior = annotationColor(dict, "IC");
-  const inset = width / 2;
+  // A cloudy border bulges outward, so the shape under it is drawn further in.
+  const radius = cloudy(dict);
+  const inset = width / 2 + (radius ?? 0);
   const box: Rect = [rect[0] + inset, rect[1] + inset, rect[2] - inset, rect[3] - inset];
+  if (radius !== null) {
+    const corners: Point[] =
+      subtype === "Circle"
+        ? ellipsePoints(box, Math.max(8, Math.round((box[2] - box[0] + box[3] - box[1]) / radius)))
+        : [
+            [box[0], box[1]],
+            [box[2], box[1]],
+            [box[2], box[3]],
+            [box[0], box[3]],
+          ];
+    return [
+      setLineWidth(width),
+      setLineJoin(1),
+      setStrokingRgbColor(...color),
+      ...(interior ? [setFillingRgbColor(...interior)] : []),
+      ...cloudPath(corners, radius),
+      interior ? fillAndStroke() : stroke(),
+    ];
+  }
   const path =
     subtype === "Circle"
       ? ellipse(box)
@@ -231,7 +356,16 @@ function lines(dict: PDFDict, subtype: string, color: [number, number, number]) 
   }
   const vertices = pairs(numbersOf(dict, "Vertices"));
   if (vertices.length < 2) return null;
-  return [...common, ...polyline(vertices, subtype === "Polygon"), stroke()];
+  const endings =
+    subtype === "PolyLine"
+      ? lineEndingPair(
+          dict,
+          [vertices[0], vertices[1]],
+          [vertices.at(-1)!, vertices.at(-2)!],
+          width,
+        )
+      : [];
+  return [...common, ...polyline(vertices, subtype === "Polygon"), stroke(), ...endings];
 }
 
 /** Cloud radius in points for a border effect intensity, as readers draw cloudy borders. */
@@ -427,6 +561,8 @@ function drawing(dict: PDFDict, subtype: string, rect: Rect): PDFOperator[] | nu
   return lines(dict, subtype, color);
 }
 
+export const GENERATED_APPEARANCE = "NavPDFAppearance";
+
 /**
  * Builds and registers a normal appearance for a supported annotation without one.
  * Returns null for unsupported subtypes or unusable geometry.
@@ -460,6 +596,8 @@ export function generateAppearance(doc: PDFDocument, dict: PDFDict): PDFRef | nu
       BBox: rect,
       Matrix: [1, 0, 0, 1, 0, 0],
       ...(state ? { Resources: { ExtGState: { GS0: state } } } : {}),
+      // Marks an appearance NavPDF drew, which an edit may redraw.
+      [GENERATED_APPEARANCE]: true,
     },
   );
   return doc.context.register(stream);

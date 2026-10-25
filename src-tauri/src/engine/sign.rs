@@ -34,6 +34,14 @@ use x509_cert::ext::pkix::{KeyUsage, KeyUsages};
 use x509_cert::spki::AlgorithmIdentifierOwned;
 use x509_cert::Certificate;
 
+mod appearance;
+mod inspect;
+pub use appearance::{Corner, SignatureAppearance};
+pub use inspect::{
+    details as certificate_details, fingerprint, parse_certificate, CertificateDetails,
+    RevisionChange, TrustStatus, MAX_CERTIFICATE_BYTES,
+};
+
 /// Largest accepted PKCS #12 file.
 pub const MAX_IDENTITY_BYTES: usize = 1024 * 1024;
 const MIN_RSA_BITS: usize = 2048;
@@ -187,6 +195,8 @@ pub struct SignRequest {
     pub reason: String,
     pub location: String,
     pub certification: Certification,
+    /// Draw the signature on a page; without it the signature has no visible appearance.
+    pub appearance: Option<SignatureAppearance>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -213,6 +223,16 @@ pub struct SignatureInfo {
     pub message: String,
     pub covers_whole_document: bool,
     pub certification: Option<i64>,
+    /// The signer's certificate first, then each issuer found for it.
+    pub certificates: Vec<CertificateDetails>,
+    pub trust: Option<TrustStatus>,
+    pub trust_message: String,
+    /// The length of the file as signed, which is also the signed revision.
+    pub revision_length: Option<usize>,
+    /// What changed after this signature, when it does not cover the whole document.
+    pub changes: Vec<RevisionChange>,
+    /// Whether those changes are allowed by the document's certification, when certified.
+    pub changes_permitted: Option<bool>,
 }
 
 /// Opens a PKCS #12 identity and checks that its key matches a currently valid signing certificate.
@@ -316,7 +336,14 @@ pub fn sign(
     }
     let reason = optional_text(&request.reason)?;
     let location = optional_text(&request.location)?;
-    let page_id = *doc.get_pages().values().next().ok_or(UNREADABLE)?;
+    let pages = doc.get_pages();
+    let page_number = request
+        .appearance
+        .as_ref()
+        .map_or(1, |appearance| appearance.page);
+    let page_id = *pages
+        .get(&page_number)
+        .ok_or("The page for the signature appearance does not exist.")?;
     let catalog_id = doc
         .trailer
         .get(b"Root")
@@ -331,6 +358,11 @@ pub fn sign(
         .map_err(|_| CREATE_FAILED)?
         + SIGNATURE_OVERHEAD;
 
+    let placement = request
+        .appearance
+        .as_ref()
+        .map(|appearance| appearance::place(&doc, page_id, appearance.corner))
+        .transpose()?;
     let mut update = IncrementalDocument::create_from(bytes.to_vec(), doc);
     let mut signature = dictionary! {
         "Type" => "Sig",
@@ -366,7 +398,7 @@ pub fn sign(
         );
     }
     let signature_id = update.new_document.add_object(signature);
-    let widget_id = update.new_document.add_object(dictionary! {
+    let mut widget = dictionary! {
         "Type" => "Annot",
         "Subtype" => "Widget",
         "FT" => "Sig",
@@ -376,7 +408,29 @@ pub fn sign(
         "F" => Object::Integer(132),
         "Rect" => vec![Object::Integer(0); 4],
         "P" => page_id,
-    });
+    };
+    if let Some(placement) = &placement {
+        let (year, month, day, hour, minute, _) = utc_fields(
+            now.duration_since(UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_secs()),
+        );
+        let text = appearance::lines(
+            &identity.summary.subject,
+            &format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02} UTC"),
+            &request.reason,
+        );
+        let streams = appearance::build(&mut update.new_document, placement, &text);
+        widget.set(
+            "Rect",
+            placement
+                .rect
+                .iter()
+                .map(|value| Object::Real(*value as f32))
+                .collect::<Vec<_>>(),
+        );
+        widget.set("AP", streams);
+    }
+    let widget_id = update.new_document.add_object(widget);
 
     let page = update
         .get_prev_documents()
@@ -679,6 +733,11 @@ fn signed_data(identity: &SigningIdentity, digest: &[u8]) -> Result<Vec<u8>, Str
 
 /// Checks every signature field in the document against the bytes it claims to sign.
 pub fn verify(bytes: &[u8]) -> Result<Vec<SignatureInfo>, String> {
+    verify_with(bytes, &[])
+}
+
+/// Like `verify`, also checking each signer's chain against certificates the user trusts.
+pub fn verify_with(bytes: &[u8], anchors: &[Certificate]) -> Result<Vec<SignatureInfo>, String> {
     let doc =
         Document::load_mem(bytes).map_err(|_| "The PDF could not be read by the local engine.")?;
     if doc.trailer.has(b"Encrypt") {
@@ -702,17 +761,83 @@ pub fn verify(bytes: &[u8]) -> Result<Vec<SignatureInfo>, String> {
                 message: String::new(),
                 covers_whole_document: false,
                 certification: certification_level(&doc, &signature),
+                certificates: Vec::new(),
+                trust: None,
+                trust_message: String::new(),
+                revision_length: None,
+                changes: Vec::new(),
+                changes_permitted: None,
             };
-            match check_signature(bytes, &signature, &mut info) {
+            match check_signature(bytes, &signature, anchors, &mut info) {
                 Ok(message) => info.message = message,
                 Err((status, message)) => {
                     info.status = status;
                     info.message = message;
                 }
             }
+            describe_later_changes(bytes, &doc, &mut info);
             info
         })
         .collect())
+}
+
+/// Lists what changed after a signature that does not cover the whole file, and whether a
+/// certified document allows it.
+fn describe_later_changes(bytes: &[u8], current: &Document, info: &mut SignatureInfo) {
+    let Some(length) = info.revision_length.filter(|_| !info.covers_whole_document) else {
+        return;
+    };
+    let Ok(signed) = Document::load_mem(&bytes[..length]) else {
+        info.changes.push(RevisionChange {
+            kind: inspect::ChangeKind::Other,
+            description: "The signed revision could not be read to compare it.".into(),
+        });
+        return;
+    };
+    info.changes = inspect::revision_changes(&signed, current, true);
+    info.changes_permitted = document_certification(current)
+        .map(|level| inspect::changes_permitted(level, &info.changes));
+}
+
+/// The DER of a certificate carried in one of the document's signatures, by its fingerprint.
+pub fn embedded_certificate(bytes: &[u8], wanted: &str) -> Result<Vec<u8>, String> {
+    let doc =
+        Document::load_mem(bytes).map_err(|_| "The PDF could not be read by the local engine.")?;
+    signature_fields(&doc)
+        .iter()
+        .filter_map(|(_, signature)| signature.get(b"Contents").and_then(Object::as_str).ok())
+        .filter_map(der_element)
+        .filter_map(|der| ContentInfo::from_der(der).ok())
+        .filter_map(|info| info.content.decode_as::<SignedData>().ok())
+        .flat_map(|signed| {
+            signed
+                .certificates
+                .map(|set| set.0.into_vec())
+                .unwrap_or_default()
+        })
+        .filter_map(|choice| match choice {
+            CertificateChoices::Certificate(certificate) => certificate.to_der().ok(),
+            _ => None,
+        })
+        .find(|der| fingerprint(der) == wanted)
+        .ok_or_else(|| "That certificate is not in this document's signatures.".into())
+}
+
+/// The bytes of the revision a signature covers, for viewing the document as signed.
+pub fn signed_revision(bytes: &[u8], field: &str) -> Result<Vec<u8>, String> {
+    let signature = verify(bytes)?
+        .into_iter()
+        .find(|signature| signature.field == field)
+        .ok_or("That signature is no longer in the document.")?;
+    match (signature.revision_length, signature.status) {
+        (Some(length), SignatureStatus::Valid | SignatureStatus::Unsupported) => {
+            Ok(bytes[..length].to_vec())
+        }
+        (Some(_), _) => {
+            Err("The signed version cannot be shown because the signature does not verify.".into())
+        }
+        (None, _) => Err("The signature's byte range does not identify a signed version.".into()),
+    }
 }
 
 /// Accepts a saved candidate only when its newest signature is valid and covers the whole file.
@@ -736,6 +861,7 @@ type Failure = (SignatureStatus, String);
 fn check_signature(
     bytes: &[u8],
     signature: &Dictionary,
+    anchors: &[Certificate],
     info: &mut SignatureInfo,
 ) -> Result<String, Failure> {
     let invalid = |message: &str| (SignatureStatus::Invalid, message.to_string());
@@ -774,6 +900,7 @@ fn check_signature(
         return Err(invalid(MISPLACED));
     }
     info.covers_whole_document = second_end == bytes.len();
+    info.revision_length = Some(second_end);
 
     let der = der_element(contents).ok_or_else(|| unsupported(NOT_CMS))?;
     let content_info = ContentInfo::from_der(der).map_err(|_| unsupported(NOT_CMS))?;
@@ -793,6 +920,28 @@ fn check_signature(
         .ok_or_else(|| invalid("The signer's certificate is not included in the signature."))?;
     info.signer = Some(certificate.tbs_certificate.subject.to_string());
     info.issuer = Some(certificate.tbs_certificate.issuer.to_string());
+    let embedded: Vec<&Certificate> = signed
+        .certificates
+        .iter()
+        .flat_map(|set| set.0.iter())
+        .filter_map(|choice| match choice {
+            CertificateChoices::Certificate(certificate) => Some(certificate),
+            _ => None,
+        })
+        .collect();
+    let signed_at = info
+        .signed_at
+        .as_deref()
+        .and_then(inspect::parse_pdf_date)
+        .unwrap_or_else(|| {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_secs())
+        });
+    let chain = inspect::evaluate_chain(certificate, &embedded, anchors, signed_at);
+    info.certificates = chain.certificates;
+    info.trust = Some(chain.trust);
+    info.trust_message = chain.message;
     let digest = content_digest(
         signer.digest_alg.oid,
         &[&bytes[..first_end], &bytes[second_start..second_end]],
@@ -1323,6 +1472,7 @@ mod tests {
             reason: "Approved résumé".into(),
             location: "Test lab".into(),
             certification: Certification::None,
+            appearance: None,
         };
         let signed = sign(&source, &identity, &request, SystemTime::now()).unwrap();
         assert!(
@@ -1407,6 +1557,7 @@ mod tests {
             reason: "Approved".into(),
             location: "Test lab".into(),
             certification: Certification::None,
+            appearance: None,
         };
         let error = sign(&damaged, &identity, &request, SystemTime::now()).unwrap_err();
         assert!(error.contains("cross-reference"), "{error}");
@@ -1492,6 +1643,21 @@ mod tests {
             .all(|signature| signature.status == SignatureStatus::Valid));
         assert!(!report[0].covers_whole_document && report[1].covers_whole_document);
         validate_signed(&countersigned, 1).unwrap();
+        // The later signature is a change the form-filling certification allows.
+        assert!(report[0]
+            .changes
+            .iter()
+            .all(|change| change.kind == inspect::ChangeKind::Signatures));
+        assert!(!report[0].changes.is_empty());
+        assert_eq!(report[0].changes_permitted, Some(true));
+        assert!(report[1].changes.is_empty());
+        assert_eq!(report[1].changes_permitted, None);
+        assert_eq!(
+            signed_revision(&countersigned, "Signature1").unwrap(),
+            certified,
+            "the signed version is the file as it was certified"
+        );
+        assert!(signed_revision(&countersigned, "Missing").is_err());
 
         let locked = sign(
             &pdf(false),
@@ -1599,5 +1765,278 @@ mod tests {
         assert_eq!(calendar_date(0), "1970-01-01");
         assert_eq!(decode_hex(b"0a 1F"), Some(vec![0x0a, 0x1f]));
         assert_eq!(decode_hex(b"zz"), None);
+    }
+
+    /// Appends an incremental update that sets objects of the signed file.
+    fn amend(bytes: &[u8], change: impl FnOnce(&Document, &mut Document)) -> Vec<u8> {
+        let doc = Document::load_mem(bytes).unwrap();
+        let mut update = IncrementalDocument::create_from(bytes.to_vec(), doc);
+        let previous = update.get_prev_documents().clone();
+        change(&previous, &mut update.new_document);
+        let mut output = Vec::new();
+        update.save_to(&mut output).unwrap();
+        output
+    }
+
+    #[test]
+    fn lists_changes_after_a_certification_and_whether_they_are_allowed() {
+        let (identity_file, password) = p256_identity();
+        let identity = load_identity(&identity_file, &password, SystemTime::now()).unwrap();
+        let certified = sign(
+            &pdf(false),
+            &identity,
+            &SignRequest {
+                certification: Certification::FormFilling,
+                ..SignRequest::default()
+            },
+            SystemTime::now(),
+        )
+        .unwrap();
+        let page = |doc: &Document| *doc.get_pages().values().next().unwrap();
+        let text_field = |doc: &Document| {
+            let annots = doc
+                .get_dictionary(page(doc))
+                .unwrap()
+                .get(b"Annots")
+                .unwrap();
+            deref(doc, annots).as_array().unwrap()[0]
+                .as_reference()
+                .unwrap()
+        };
+
+        let filled = amend(&certified, |previous, next| {
+            let id = text_field(previous);
+            let mut field = previous.get_dictionary(id).unwrap().clone();
+            field.set("V", Object::string_literal("Ada"));
+            next.set_object(id, field);
+        });
+        let report = verify(&filled).unwrap();
+        assert_eq!(report[0].status, SignatureStatus::Valid);
+        assert_eq!(report[0].changes.len(), 1, "{:?}", report[0].changes);
+        assert_eq!(report[0].changes[0].kind, inspect::ChangeKind::FormFields);
+        assert!(report[0].changes[0].description.contains("Name"));
+        assert_eq!(report[0].changes_permitted, Some(true));
+
+        let commented = amend(&certified, |previous, next| {
+            let note = next.add_object(dictionary! {
+                "Type" => "Annot", "Subtype" => "Text",
+                "Rect" => vec![10.into(), 10.into(), 30.into(), 30.into()],
+                "Contents" => Object::string_literal("Later note"),
+            });
+            let id = page(previous);
+            let mut dictionary = previous.get_dictionary(id).unwrap().clone();
+            let annots = deref(previous, dictionary.get(b"Annots").unwrap())
+                .as_array()
+                .unwrap()
+                .iter()
+                .cloned()
+                .chain([Object::Reference(note)])
+                .collect::<Vec<_>>();
+            dictionary.set("Annots", annots);
+            next.set_object(id, dictionary);
+        });
+        let report = verify(&commented).unwrap();
+        assert!(report[0]
+            .changes
+            .iter()
+            .any(|change| change.kind == inspect::ChangeKind::Comments
+                && change.description.contains("Text comment added")));
+        assert_eq!(report[0].changes_permitted, Some(false));
+
+        let mut trailing = certified.clone();
+        trailing.extend_from_slice(b"\n% unexplained bytes\n");
+        let report = verify(&trailing).unwrap();
+        assert_eq!(report[0].changes[0].kind, inspect::ChangeKind::Other);
+        assert_eq!(report[0].changes_permitted, Some(false));
+    }
+
+    fn ca_name() -> Name {
+        Name::from_str("CN=Synthetic Root,O=NavPDF Tests").unwrap()
+    }
+
+    /// A self-signed root and a leaf it issued, both P-256.
+    fn issued_pair(validity: Validity) -> (Certificate, Certificate) {
+        use p256::elliptic_curve::Generate;
+        let root_key = p256::ecdsa::SigningKey::generate();
+        let root_signer = P256Signer(&root_key);
+        let root_spki =
+            SubjectPublicKeyInfoOwned::from_key(P256PublicKey(*root_key.verifying_key())).unwrap();
+        let root = CertificateBuilder::new(
+            Profile::Root,
+            SerialNumber::new(&[1]).unwrap(),
+            validity,
+            ca_name(),
+            root_spki,
+            &root_signer,
+        )
+        .unwrap()
+        .build::<P256Signature>()
+        .unwrap();
+        let leaf_key = p256::ecdsa::SigningKey::generate();
+        let leaf_spki =
+            SubjectPublicKeyInfoOwned::from_key(P256PublicKey(*leaf_key.verifying_key())).unwrap();
+        let leaf = CertificateBuilder::new(
+            Profile::Leaf {
+                issuer: ca_name(),
+                enable_key_agreement: false,
+                enable_key_encipherment: false,
+            },
+            SerialNumber::new(&[2]).unwrap(),
+            validity,
+            name(),
+            leaf_spki,
+            &root_signer,
+        )
+        .unwrap()
+        .build::<P256Signature>()
+        .unwrap();
+        (root, leaf)
+    }
+
+    #[test]
+    fn chains_reach_trusted_certificates_and_report_breaks_and_dates() {
+        let (root, leaf) = issued_pair(validity());
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let report = inspect::evaluate_chain(&leaf, &[], std::slice::from_ref(&root), now);
+        assert_eq!(report.trust, TrustStatus::Trusted);
+        assert_eq!(report.certificates.len(), 2);
+        assert!(report.certificates[1].trusted && !report.certificates[0].trusted);
+        assert!(report.certificates[1].self_signed);
+        assert_eq!(report.certificates[0].serial, "02");
+        assert_eq!(report.certificates[1].fingerprint.len(), 32 * 3 - 1);
+
+        let embedded = inspect::evaluate_chain(&leaf, &[&root], &[], now);
+        assert_eq!(embedded.trust, TrustStatus::NotTrusted);
+        assert_eq!(embedded.certificates.len(), 2);
+
+        let (impostor, _) = issued_pair(validity());
+        let broken =
+            inspect::evaluate_chain(&leaf, &[&impostor], std::slice::from_ref(&impostor), now);
+        assert_eq!(broken.trust, TrustStatus::BrokenChain);
+
+        let late = inspect::evaluate_chain(&leaf, &[], &[root], now + 7200);
+        assert_eq!(late.trust, TrustStatus::NotValidAtSigning);
+    }
+
+    #[test]
+    fn verification_reports_the_chain_and_trusts_chosen_certificates() {
+        let (key, certificate) = p256_parts();
+        let password = test_password();
+        let file = keystore(
+            p256::pkcs8::EncodePrivateKey::to_pkcs8_der(&key)
+                .unwrap()
+                .as_bytes(),
+            &certificate,
+            &password,
+        );
+        let identity = load_identity(&file, &password, SystemTime::now()).unwrap();
+        let signed = sign(
+            &pdf(false),
+            &identity,
+            &SignRequest::default(),
+            SystemTime::now(),
+        )
+        .unwrap();
+        let untrusted = &verify(&signed).unwrap()[0];
+        assert_eq!(untrusted.trust, Some(TrustStatus::NotTrusted));
+        assert_eq!(untrusted.certificates.len(), 1);
+        let wanted = untrusted.certificates[0].fingerprint.clone();
+        let trusted = &verify_with(&signed, std::slice::from_ref(&certificate)).unwrap()[0];
+        assert_eq!(trusted.trust, Some(TrustStatus::Trusted));
+        assert_eq!(trusted.status, SignatureStatus::Valid);
+        let der = embedded_certificate(&signed, &wanted).unwrap();
+        assert_eq!(der, certificate.to_der().unwrap());
+        assert!(embedded_certificate(&signed, "00").is_err());
+
+        let pem = der::EncodePem::to_pem(&certificate, der::pem::LineEnding::LF).unwrap();
+        let with_text = format!("Exported certificate\n{pem}\ntrailing notes");
+        assert_eq!(
+            parse_certificate(with_text.as_bytes()).unwrap(),
+            certificate
+        );
+        assert_eq!(parse_certificate(&der).unwrap(), certificate);
+        assert!(parse_certificate(b"not a certificate").is_err());
+        assert!(parse_certificate(&vec![0; MAX_CERTIFICATE_BYTES + 1]).is_err());
+    }
+
+    #[test]
+    fn draws_a_visible_appearance_on_the_chosen_page() {
+        let (identity_file, password) = p256_identity();
+        let identity = load_identity(&identity_file, &password, SystemTime::now()).unwrap();
+        let request = SignRequest {
+            reason: "Approved (final)".into(),
+            appearance: Some(SignatureAppearance {
+                page: 1,
+                corner: Corner::TopLeft,
+            }),
+            ..SignRequest::default()
+        };
+        let signed = sign(&pdf(false), &identity, &request, SystemTime::now()).unwrap();
+        assert_eq!(verify(&signed).unwrap()[0].status, SignatureStatus::Valid);
+        let doc = Document::load_mem(&signed).unwrap();
+        let page = *doc.get_pages().values().next().unwrap();
+        let annots = doc.get_dictionary(page).unwrap().get(b"Annots").unwrap();
+        let widget = deref(&doc, annots).as_array().unwrap()[1]
+            .as_reference()
+            .unwrap();
+        let widget = doc.get_dictionary(widget).unwrap();
+        let rect: Vec<f32> = widget
+            .get(b"Rect")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_float().unwrap())
+            .collect();
+        assert!(rect[2] > rect[0] && rect[3] > rect[1], "{rect:?}");
+        let normal = widget
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let stream = doc.get_object(normal).unwrap().as_stream().unwrap();
+        let text = String::from_utf8_lossy(&stream.content).into_owned();
+        assert!(
+            text.contains("Digitally signed by Synthetic Signer"),
+            "{text}"
+        );
+        assert!(text.contains("Reason: Approved \\(final\\)"), "{text}");
+
+        let missing = SignRequest {
+            appearance: Some(SignatureAppearance {
+                page: 2,
+                corner: Corner::BottomRight,
+            }),
+            ..SignRequest::default()
+        };
+        assert!(sign(&pdf(false), &identity, &missing, SystemTime::now())
+            .unwrap_err()
+            .contains("does not exist"));
+    }
+
+    #[test]
+    fn reads_pdf_dates_with_time_zones() {
+        assert_eq!(
+            inspect::parse_pdf_date("D:20260914000000Z"),
+            Some(1_789_344_000)
+        );
+        assert_eq!(
+            inspect::parse_pdf_date("D:20260914020000+02'00'"),
+            Some(1_789_344_000)
+        );
+        assert_eq!(
+            inspect::parse_pdf_date("D:20260913200000-04'00"),
+            Some(1_789_344_000)
+        );
+        assert_eq!(inspect::parse_pdf_date("D:2026"), Some(1_767_225_600));
+        assert_eq!(inspect::parse_pdf_date("D:20261340"), None);
+        assert_eq!(inspect::parse_pdf_date("yesterday"), None);
     }
 }

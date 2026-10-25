@@ -10,7 +10,9 @@ export type Tool =
   | "shape"
   | "measure"
   | "signature"
-  | "snapshot";
+  | "snapshot"
+  | "marquee"
+  | "eraser";
 export type ShapeKind =
   "Square" | "Circle" | "Line" | "Arrow" | "Cloud" | "Callout" | "Polygon" | "PolyLine";
 /** Shapes drawn by clicking their points rather than dragging. */
@@ -73,7 +75,45 @@ export interface Preferences {
   annotationStrokeWidth: number;
   ocrLanguage: string;
   ocrScope: "current" | "all";
+  /** Colours that replace page colours on screen; "off" shows the document's own colours. */
+  pageColors: PageColorScheme;
+  pageForeground: string;
+  pageBackground: string;
+  /** Reload a document whose file another application changed, when it has no unsaved edits. */
+  reloadChangedFiles: boolean;
+  /** Reopen the documents open when NavPDF last closed. */
+  reopenSession: boolean;
+  /** Colour, width and opacity new annotations of each shape kind start with. */
+  annotationDefaults: Partial<Record<ShapeKind, AnnotationDefault>>;
+  /** Guided actions the user saved. */
+  actions: SavedAction[];
 }
+
+/** One step of a guided action, applied to a document in order. */
+export type ActionStep =
+  | { kind: "watermark"; text: string; opacity: number; fontSize: number }
+  | { kind: "headerFooter"; header: string; footer: string }
+  /** Empty values leave the document's own value. */
+  | { kind: "metadata"; title: string; author: string; subject: string; keywords: string }
+  | { kind: "flatten" }
+  | { kind: "removeHidden" }
+  | { kind: "compress"; preset: "lossless" | "balanced" | "small" }
+  | { kind: "ocr"; language: string; skipTextPages: boolean }
+  | { kind: "autotag" }
+  | { kind: "pdfa"; level: "2b" | "2u" | "2a" | "3b" | "3u" | "3a" };
+
+export interface SavedAction {
+  id: string;
+  name: string;
+  steps: ActionStep[];
+}
+export interface AnnotationDefault {
+  color: string;
+  width: number;
+  opacity: number;
+}
+export type PageColorScheme =
+  "off" | "white-on-black" | "yellow-on-black" | "green-on-black" | "black-on-white" | "custom";
 export interface RecentDocument {
   id: string;
   name: string;
@@ -114,6 +154,8 @@ export interface Comment {
   rect?: [number, number, number, number];
   line?: [number, number, number, number];
   lineEndings?: [string, string];
+  /** Dashed or cloudy borders; absent for a solid border. */
+  borderStyle?: "dashed" | "cloudy";
   quads?: number[][];
   color?: [number, number, number];
   opacity?: number;
@@ -158,4 +200,11 @@ export const defaultPreferences: Preferences = {
   annotationStrokeWidth: 2,
   ocrLanguage: "en-US",
   ocrScope: "current",
+  pageColors: "off",
+  pageForeground: "#000000",
+  pageBackground: "#ffffff",
+  reloadChangedFiles: true,
+  reopenSession: false,
+  annotationDefaults: {},
+  actions: [],
 };

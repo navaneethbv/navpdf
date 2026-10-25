@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { native } from "./native";
 import type {
+  CertificateDetails,
   CertificateSummary,
   CompressionPreset,
   CompressionReport,
@@ -17,6 +18,14 @@ import type {
   SignatureInfo,
   SignedSave,
   SignRequest,
+  DocumentStandards,
+  PdfaLevel,
+  PdfaReport,
+  StandardsEdit,
+  TagEdit,
+  TagReport,
+  TagTree,
+  UntaggedReport,
 } from "../types/engine";
 
 export const ENGINE_UNAVAILABLE =
@@ -180,6 +189,87 @@ export async function saveSignedCopy(
 export async function verifySignatures(documentId: string): Promise<SignatureInfo[]> {
   requireEngine();
   return await invoke<SignatureInfo[]>("engine_verify_signatures", { documentId });
+}
+
+/** The revision of the opened file that a signature covers, to open as the signed version. */
+export async function signedRevision(
+  documentId: string,
+  field: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  requireEngine();
+  return take(await invoke<string>("engine_signed_revision", { documentId, field }));
+}
+
+/** Certificates trusted on this device for checking signatures. */
+export async function trustedCertificates(): Promise<CertificateDetails[]> {
+  requireEngine();
+  return await invoke<CertificateDetails[]>("trust_list");
+}
+
+/** Trusts a certificate file chosen in the native picker; null when cancelled. */
+export async function importTrustedCertificate(): Promise<CertificateDetails[] | null> {
+  requireEngine();
+  return await invoke<CertificateDetails[] | null>("trust_import");
+}
+
+/** Trusts a certificate carried in one of the open document's signatures. */
+export async function trustSignatureCertificate(
+  documentId: string,
+  fingerprint: string,
+): Promise<CertificateDetails[]> {
+  requireEngine();
+  return await invoke<CertificateDetails[]>("trust_signature_certificate", {
+    documentId,
+    fingerprint,
+  });
+}
+
+export async function untrustCertificate(fingerprint: string): Promise<CertificateDetails[]> {
+  requireEngine();
+  return await invoke<CertificateDetails[]>("trust_remove", { fingerprint });
+}
+
+/** The structure tree of the document bytes. */
+export async function readTags(bytes: Uint8Array): Promise<TagTree> {
+  requireEngine();
+  return await invoke<TagTree>("engine_tags", { inputId: await stage(bytes) });
+}
+
+/** Content and annotations without tags, page by page. */
+export async function findUntagged(bytes: Uint8Array): Promise<UntaggedReport> {
+  requireEngine();
+  return await invoke<UntaggedReport>("engine_untagged", { inputId: await stage(bytes) });
+}
+
+/** Applies one tag edit and returns the edited document. */
+export async function editTags(bytes: Uint8Array, edit: TagEdit): Promise<EngineResult<TagReport>> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return resolve(await invoke<Outcome<TagReport>>("engine_tag_edit", { inputId, edit }));
+}
+
+/** Checks the document bytes against a PDF/A level. */
+export async function validatePdfa(bytes: Uint8Array, level: PdfaLevel): Promise<PdfaReport> {
+  requireEngine();
+  return await invoke<PdfaReport>("engine_pdfa_validate", { inputId: await stage(bytes), level });
+}
+
+/** The standards a document declares and its output intents. */
+export async function readStandards(bytes: Uint8Array): Promise<DocumentStandards> {
+  requireEngine();
+  return await invoke<DocumentStandards>("engine_standards", { inputId: await stage(bytes) });
+}
+
+/** Converts to PDF/A, adds an output intent or removes standards identification. */
+export async function editStandards(
+  bytes: Uint8Array,
+  edit: StandardsEdit,
+): Promise<EngineResult<{ message: string }>> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return resolve(
+    await invoke<Outcome<{ message: string }>>("engine_standards_edit", { inputId, edit }),
+  );
 }
 
 /** Prunes unreferenced objects, renumbers objects, and compresses streams. */

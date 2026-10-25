@@ -186,3 +186,94 @@ it("fits the first visible document and preserves later user zoom", () => {
   resized();
   expect(zoom).toHaveBeenLastCalledWith("page-fit");
 });
+
+describe("ViewerHost viewer tools", () => {
+  it("copies an Alt-drag column of text instead of whole lines", () => {
+    const onReady = vi.fn();
+    render(<ViewerHost onReady={onReady} />);
+    const frame = screen.getByLabelText("PDF document");
+    const page = document.createElement("div");
+    page.className = "page";
+    page.innerHTML = '<div class="textLayer"><span>Left side</span><span>Right side</span></div>';
+    const [left, right] = page.querySelectorAll("span");
+    left.getBoundingClientRect = () =>
+      ({ left: 0, top: 10, width: 90, height: 10, right: 90, bottom: 20 }) as DOMRect;
+    right.getBoundingClientRect = () =>
+      ({ left: 200, top: 10, width: 100, height: 10, right: 300, bottom: 20 }) as DOMRect;
+    frame.firstElementChild!.append(page);
+    fireEvent.pointerDown(right, {
+      altKey: true,
+      button: 0,
+      pointerId: 4,
+      clientX: 190,
+      clientY: 0,
+    });
+    fireEvent.pointerMove(frame, { pointerId: 4, clientX: 320, clientY: 40 });
+    fireEvent.pointerUp(frame, { pointerId: 4, clientX: 320, clientY: 40 });
+    expect(useWorkspace.getState().status).toMatch(/Column selected/);
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    const setData = vi.fn();
+    Object.defineProperty(copy, "clipboardData", { value: { setData } });
+    document.dispatchEvent(copy);
+    expect(setData).toHaveBeenCalledWith("text/plain", "Right side");
+    expect(copy.defaultPrevented).toBe(true);
+    // A plain click clears the column, so copying falls back to the normal selection.
+    fireEvent.pointerDown(frame, { button: 0, pointerId: 5 });
+    setData.mockClear();
+    document.dispatchEvent(new Event("copy", { bubbles: true, cancelable: true }));
+    expect(setData).not.toHaveBeenCalled();
+  });
+
+  it("offers to copy or save the image under a right-click", async () => {
+    const onReady = vi.fn();
+    const view = render(<ViewerHost onReady={onReady} />);
+    const controller = onReady.mock.calls[0][0] as ViewerController;
+    view.rerender(<ViewerHost onReady={onReady} controller={controller} />);
+    const image = new Blob(["png"], { type: "image/png" });
+    const imageAt = vi.spyOn(controller, "imageAt").mockResolvedValue(image);
+    const frame = screen.getByLabelText("PDF document");
+    const page = document.createElement("div");
+    page.className = "page";
+    page.dataset.pageNumber = "2";
+    frame.firstElementChild!.append(page);
+    document.elementsFromPoint = () => [page];
+    const write = vi.fn(async () => {});
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        constructor(readonly items: Record<string, Blob>) {}
+      },
+    );
+    Object.defineProperty(navigator, "clipboard", { value: { write }, configurable: true });
+    fireEvent.contextMenu(page, { clientX: 30, clientY: 40 });
+    expect(imageAt).toHaveBeenCalledWith(2, 30, 40);
+    fireEvent.click(await screen.findByText("Copy image"));
+    expect(write).toHaveBeenCalledWith([{ items: { "image/png": image } }]);
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the current page size while the pointer is in the lower-left quarter", async () => {
+    const onReady = vi.fn();
+    const view = render(<ViewerHost onReady={onReady} />);
+    const controller = onReady.mock.calls[0][0] as ViewerController;
+    Object.assign(controller.viewer, {
+      pdfDocument: {
+        numPages: 1,
+        getPage: async () => ({ view: [0, 0, 612, 792], rotate: 90, userUnit: 1 }),
+      },
+    });
+    useWorkspace.getState().set({ document: { id: "d", name: "d.pdf", size: 10 }, page: 1 });
+    view.rerender(<ViewerHost onReady={onReady} controller={controller} />);
+    const frame = screen.getByLabelText("PDF document");
+    frame.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 400, height: 400, right: 400, bottom: 400 }) as DOMRect;
+    fireEvent.pointerMove(frame, { clientX: 300, clientY: 50 });
+    expect(screen.queryByLabelText("Page size")).toBeNull();
+    fireEvent.pointerMove(frame, { clientX: 50, clientY: 350 });
+    expect((await screen.findByLabelText("Page size")).textContent).toBe(
+      "11 × 8.5 in (279.4 × 215.9 mm)",
+    );
+    fireEvent.pointerLeave(frame);
+    expect(screen.queryByLabelText("Page size")).toBeNull();
+  });
+});
