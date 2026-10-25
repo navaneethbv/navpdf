@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { AlertTriangle, BadgeCheck, FileKey, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
@@ -8,10 +8,21 @@ import {
   ENGINE_UNAVAILABLE,
   forgetCertificate,
   saveSignedCopy,
+  signedRevision,
+  trustedCertificates,
+  trustSignatureCertificate,
   verifySignatures,
 } from "../../services/engine";
-import type { CertificateSummary, Certification, SignatureInfo } from "../../types/engine";
+import type {
+  CertificateDetails,
+  CertificateSummary,
+  Certification,
+  SignatureCorner,
+  SignatureInfo,
+} from "../../types/engine";
 import { FeatureDialog } from "../../components/FeatureDialog";
+import { SignatureDetails } from "./SignatureDetails";
+import { TrustedCertificates } from "./TrustedCertificates";
 
 const CERTIFICATION_OPTIONS: [Certification, string][] = [
   ["none", "Do not certify"],
@@ -20,12 +31,12 @@ const CERTIFICATION_OPTIONS: [Certification, string][] = [
   ["noChanges", "Certify: allow no changes"],
 ];
 
-const STATUS_LABELS: Record<SignatureInfo["status"], string> = {
-  valid: "Valid",
-  modified: "Changed after signing",
-  invalid: "Invalid",
-  unsupported: "Not checked",
-};
+const CORNER_OPTIONS: [SignatureCorner, string][] = [
+  ["bottomRight", "Bottom right"],
+  ["bottomLeft", "Bottom left"],
+  ["topRight", "Top right"],
+  ["topLeft", "Top left"],
+];
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -35,9 +46,12 @@ const releaseCertificate = () => void forgetCertificate().catch(() => {});
 export function CertificateSignature({
   controller,
   onClose,
+  onOpen,
 }: Readonly<{
   controller: ViewerController | null;
   onClose: () => void;
+  /** Opens a file in a new tab, used for a signature's signed version. */
+  onOpen: (file: File) => void;
 }>) {
   const s = useWorkspace();
   const ids = useId();
@@ -47,13 +61,20 @@ export function CertificateSignature({
   const [reason, setReason] = useState("");
   const [location, setLocation] = useState("");
   const [certification, setCertification] = useState<Certification>("none");
+  const [visible, setVisible] = useState(false);
+  const [appearancePage, setAppearancePage] = useState(s.page || 1);
+  const [corner, setCorner] = useState<SignatureCorner>("bottomRight");
   const [signatures, setSignatures] = useState<SignatureInfo[] | null>(null);
+  const [trusted, setTrusted] = useState<CertificateDetails[] | null>(null);
+  // Bumped when the user changes the trust list, so the signatures are checked again.
+  const [trustVersion, setTrustVersion] = useState(0);
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState("");
   const alreadySigned = (signatures?.length ?? 0) > 0;
+  const pageCount = controller?.pdf?.numPages ?? 1;
 
   useEffect(() => {
-    if (!native || !documentId) return;
+    if (!native || !documentId) return undefined;
     let current = true;
     verifySignatures(documentId)
       .then((result) => current && setSignatures(result))
@@ -61,7 +82,59 @@ export function CertificateSignature({
     return () => {
       current = false;
     };
-  }, [documentId]);
+  }, [documentId, trustVersion]);
+
+  useEffect(() => {
+    if (!native) return undefined;
+    let current = true;
+    trustedCertificates()
+      .then((result) => current && setTrusted(result))
+      .catch((error) => current && setProblem(errorText(error)));
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  const changeTrust = useCallback((list: CertificateDetails[]) => {
+    setTrusted(list);
+    setTrustVersion((version) => version + 1);
+  }, []);
+
+  const trust = async (fingerprint: string) => {
+    if (!documentId) return;
+    setWorking(true);
+    setProblem("");
+    try {
+      changeTrust(await trustSignatureCertificate(documentId, fingerprint));
+    } catch (error) {
+      setProblem(errorText(error));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const openSigned = async (signature: SignatureInfo) => {
+    const doc = s.document;
+    if (!doc) return;
+    setWorking(true);
+    setProblem("");
+    try {
+      const bytes = await signedRevision(doc.id, signature.field);
+      const base = doc.name.replace(/\.pdf$/i, "");
+      onOpen(
+        new File([bytes], `${base} (signed version, ${signature.field}).pdf`, {
+          type: "application/pdf",
+        }),
+      );
+      onClose();
+    } catch (error) {
+      setProblem(errorText(error));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const reportProblem = useCallback((message: string) => setProblem(message), []);
 
   useEffect(() => releaseCertificate, []);
 
@@ -92,6 +165,12 @@ export function CertificateSignature({
         reason,
         location,
         certification: alreadySigned ? "none" : certification,
+        ...(visible && {
+          appearance: {
+            page: Math.min(Math.max(1, Math.round(appearancePage)), pdf.numPages),
+            corner,
+          },
+        }),
       });
       if (!result) {
         s.set({ status: "Save cancelled" });
@@ -162,9 +241,9 @@ export function CertificateSignature({
           )}
           <p className="field-hint">
             A certificate signature binds a saved copy to the certificate in your .p12 or .pfx file,
-            so readers can detect later changes. It has no visible appearance on the page. NavPDF
-            adds no timestamp or revocation data, does not check whether readers trust your
-            certificate, and sends nothing over the network.
+            so readers can detect later changes. A visible box on the page is optional and is only a
+            picture of the signature. NavPDF adds no timestamp or revocation data, cannot decide
+            whether other readers trust your certificate, and sends nothing over the network.
           </p>
 
           <section className="setting-group" aria-labelledby={`${ids}-existing`}>
@@ -181,27 +260,27 @@ export function CertificateSignature({
               <>
                 <ul className="signature-list">
                   {signatures!.map((signature) => (
-                    <li key={signature.field} className={`signature-row ${signature.status}`}>
-                      <span>
-                        <strong>{STATUS_LABELS[signature.status]}</strong> ·{" "}
-                        {signature.signer ?? signature.field}
-                      </span>
-                      <span className="field-hint">{signature.message}</span>
-                      {signature.certification !== null && (
-                        <span className="field-hint">
-                          Certifying signature, permission level {signature.certification}.
-                        </span>
-                      )}
-                    </li>
+                    <SignatureDetails
+                      key={signature.field}
+                      signature={signature}
+                      busy={working}
+                      onTrust={(fingerprint) => void trust(fingerprint)}
+                      onOpenSigned={() => void openSigned(signature)}
+                    />
                   ))}
                 </ul>
                 <p className="field-hint">
                   Valid means the signed bytes match the signature and the certificate it carries.
-                  Certificate trust and revocation are not checked.
+                  Trust means that certificate, or one that issued it, is in your trusted list.
+                  Revocation and timestamps are not checked.
                 </p>
               </>
             )}
           </section>
+
+          {trusted && (
+            <TrustedCertificates list={trusted} onChange={changeTrust} onProblem={reportProblem} />
+          )}
 
           {certificate ? (
             <>
@@ -218,6 +297,51 @@ export function CertificateSignature({
               </div>
               {textField("reason", "Reason", reason, setReason)}
               {textField("location", "Location", location, setLocation)}
+              <fieldset className="setting-group signature-appearance">
+                <legend className="setting-title">Appearance</legend>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={visible}
+                    disabled={working}
+                    onChange={(event) => setVisible(event.target.checked)}
+                  />
+                  Show the signature on a page
+                </label>
+                {visible && (
+                  <div className="signature-appearance-options">
+                    <label htmlFor={`${ids}-appearance-page`}>Page</label>
+                    <input
+                      id={`${ids}-appearance-page`}
+                      type="number"
+                      className="text-input"
+                      min={1}
+                      max={pageCount}
+                      value={appearancePage}
+                      disabled={working}
+                      onChange={(event) => setAppearancePage(Number(event.target.value))}
+                    />
+                    <label htmlFor={`${ids}-appearance-corner`}>Corner</label>
+                    <select
+                      id={`${ids}-appearance-corner`}
+                      className="text-input"
+                      value={corner}
+                      disabled={working}
+                      onChange={(event) => setCorner(event.target.value as SignatureCorner)}
+                    >
+                      {CORNER_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <p className="field-hint">
+                  The box names the signer, the signing time and the reason in a standard font;
+                  characters outside Western European text appear as question marks.
+                </p>
+              </fieldset>
               <div className="setting-group">
                 <label className="setting-title" htmlFor={`${ids}-certification`}>
                   Certification

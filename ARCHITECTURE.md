@@ -126,6 +126,7 @@ Users can disable recents and clear their history.
 Reusable signature appearances use AES-256-GCM with random nonces and a random key stored in macOS Keychain; session-only use is available.
 Other platforms have no persistent signature store until OS-protected storage is implemented.
 Local PKCS #12 certificate signing is a separate Rust engine path with incremental output, DocMDP options and integrity verification.
+Verification also follows the signer's chain to a local trusted-certificate list and compares each signed revision with the current file under ADR 0018; the list holds public certificates only.
 Certificate trust, revocation, timestamping and long-term validation are not supplied by the local verifier.
 
 ## Performance model
@@ -150,7 +151,7 @@ This table records roles and licensing boundaries rather than a second version i
 | pdf-lib | MIT; limited existing-content/encryption support | Annotation/form writers, page composition, decorations, OCR layers and metadata under ADR 0011. |
 | lopdf | MIT | Structural validation, protection, compression, scoped existing-object edits, redaction and certificate-signature integration under ADR 0006. |
 | Apple Vision and ImageIO | Apple system frameworks | Local macOS OCR and HEIC/TIFF decoding through compiled Swift bridges; unavailable elsewhere. |
-| RustCrypto and security-framework | Component-specific MIT/Apache-2.0 licenses | Authenticated signature-asset encryption, macOS Keychain access and local certificate cryptography under ADRs 0003 and 0009. |
+| RustCrypto and security-framework | Component-specific MIT/Apache-2.0 licenses | Authenticated signature-asset encryption, macOS Keychain access and local certificate cryptography under ADRs 0003, 0009 and 0018. |
 | @xmldom/xmldom | MIT | Strict form-XFDF parsing under ADR 0016; no DOM execution. |
 | Vendored GLib | MIT | Linux GTK-compatible string-iterator security backport under ADR 0012. |
 

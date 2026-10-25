@@ -542,12 +542,36 @@ pub async fn engine_verify_signatures(
     let state = app.state::<AppState>();
     let doc = document(&state, &document_id)?;
     let original = doc._snapshot.path().to_path_buf();
+    let root = state.root.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = fs::read(&original).map_err(|_| "The opened PDF could not be read.")?;
-        sign::verify(&bytes)
+        sign::verify_with(&bytes, &super::trust::load(&root))
     })
     .await
     .map_err(|_| "The signatures could not be checked.")?
+}
+
+/// Stages the revision of the opened file that a signature covers, to open it as signed.
+#[tauri::command]
+pub async fn engine_signed_revision(
+    app: AppHandle,
+    document_id: String,
+    field: String,
+) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let doc = document(&state, &document_id)?;
+    if *doc.source_encrypted.lock().map_err(|_| STATE_UNAVAILABLE)? {
+        return Err("Signed versions of password-protected PDFs cannot be opened yet.".into());
+    }
+    let original = doc._snapshot.path().to_path_buf();
+    let revision = tauri::async_runtime::spawn_blocking(move || {
+        let bytes = fs::read(&original).map_err(|_| "The opened PDF could not be read.")?;
+        sign::signed_revision(&bytes, &field)
+    })
+    .await
+    .map_err(|_| "The signed version could not be read.")?;
+    logging::record(&state.root, "engine_signed_revision", revision.is_err());
+    state.engine.stage(revision?)
 }
 
 #[cfg(test)]

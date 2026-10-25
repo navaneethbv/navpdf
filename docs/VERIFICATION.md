@@ -5,6 +5,23 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 25 PDFCraft gap batch 8, signatures
+
+The [eighth batch mapping](PDFCRAFT-COMPARISON.md#eighth-batch-mapping) lists each addition and its limits, and [ADR 0018](adr/0018-local-signature-trust-and-inspection.md) records the trust and inspection rules.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,116 tests across 148 files, with 85.72% statements, 77.89% branches, 84.59% functions and 88.82% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests sign synthetic PDFs with generated P-256 certificates.
+A leaf issued by a generated root is trusted only with that root in the list, is not trusted when the root is only embedded, reports a broken chain against a different root with the same name, and reports not valid when signed for a time after its validity.
+A signed file is not trusted until its own certificate is trusted, the certificate found by fingerprint is byte-identical to the one signed with, and DER and PEM files with surrounding text are read while other and oversized input is refused.
+After a form-filling certification, filling the text field is listed as one allowed form field change, adding a Text comment is listed and not allowed, and appended bytes alone are an unexplained change that is not allowed.
+A countersignature is listed as an allowed signature change, and the signed version of the first signature is byte-identical to the certified file.
+A visible appearance verifies, has a non-empty rectangle and draws the signer's name and an escaped reason, and placement keeps the box in the displayed corner for all four rotations and an offset crop box; a page that does not exist is refused.
+PDF dates with time zone offsets and partial dates convert to the expected UTC seconds.
+Dialog tests cover the certificate details, trusting an issuer and checking again, stopping trust, opening the signed version with its name, the changes list and permission message, and the appearance page being kept within the document.
+Native signing with a visible appearance, Preview and Acrobat validation of these files, and acceptance of the trust list in the packaged app were not run.
+
 ## October 24 PDFCraft gap batch 7, editing
 
 The [seventh batch mapping](PDFCRAFT-COMPARISON.md#seventh-batch-mapping) lists the editing additions and their limits.

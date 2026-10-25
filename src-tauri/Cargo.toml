@@ -36,10 +36,10 @@ der = { version = "0.7", features = ["alloc", "derive", "oid"] }
 p12-keystore = "0.1.5"
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 rsa = { version = "0.9.10", features = ["sha2", "getrandom"] }
-x509-cert = "0.2.5"
+x509-cert = { version = "0.2.5", features = ["pem"] }
 
 [dev-dependencies]
-x509-cert = { version = "0.2.5", features = ["builder"] }
+x509-cert = { version = "0.2.5", features = ["builder", "pem"] }
 stringprep = "0.1.5"
 
 [patch.crates-io]

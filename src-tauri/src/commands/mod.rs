@@ -3,6 +3,7 @@ pub mod export;
 pub mod lifecycle;
 pub mod open_queue;
 mod recovery;
+pub mod trust;
 
 use crate::{
     engine::redact,

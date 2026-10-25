@@ -45,6 +45,14 @@ beforeEach(() => {
         return { name: "signed.pdf", size: 20 };
       case "engine_verify_signatures":
         return [];
+      case "engine_signed_revision":
+        return "revision-1";
+      case "trust_list":
+      case "trust_signature_certificate":
+      case "trust_remove":
+        return [{ fingerprint: "AA" }];
+      case "trust_import":
+        return null;
       default:
         return undefined;
     }
@@ -158,6 +166,22 @@ describe("engine service", () => {
     expect(invoke).toHaveBeenCalledWith("engine_verify_signatures", { documentId: "doc" });
     await service.forgetCertificate();
     expect(invoke).toHaveBeenCalledWith("engine_forget_certificate");
+
+    expect([...(await service.signedRevision("doc", "Signature1"))]).toEqual([9, 8, 7]);
+    expect(invoke).toHaveBeenCalledWith("engine_signed_revision", {
+      documentId: "doc",
+      field: "Signature1",
+    });
+    expect(invoke).toHaveBeenCalledWith("engine_take", { id: "revision-1" });
+    expect(await service.trustedCertificates()).toEqual([{ fingerprint: "AA" }]);
+    expect(await service.importTrustedCertificate()).toBeNull();
+    expect(await service.trustSignatureCertificate("doc", "AA")).toHaveLength(1);
+    expect(invoke).toHaveBeenCalledWith("trust_signature_certificate", {
+      documentId: "doc",
+      fingerprint: "AA",
+    });
+    await service.untrustCertificate("AA");
+    expect(invoke).toHaveBeenCalledWith("trust_remove", { fingerprint: "AA" });
   });
 
   it("refuses engine work outside the desktop app", async () => {

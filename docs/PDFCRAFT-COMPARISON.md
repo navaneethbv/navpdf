@@ -62,7 +62,8 @@ The user asked for every gap, including the decision items, delivered in batches
 | 5 | Encryption level and unencrypted metadata choices; password strength; whole-page redaction; redaction fill, overlay text and codes; faux-redaction audit | Implemented; see the fifth batch mapping |
 | 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Implemented; see the sixth batch mapping |
 | 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Implemented; see the seventh batch mapping |
-| 8 to 10 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance; tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
+| 8 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance | Implemented; see the eighth batch mapping |
+| 9 and 10 | Tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
 | 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
 
 ## Third batch mapping
@@ -154,6 +155,18 @@ Batch 7 is delivered in three parts on a new draft PR after PR 71 merged: viewer
 | `comment.default-properties` | Annotation properties, Use this style for new ... annotations | Colour, width and opacity become the starting style for that shape kind, kept in settings. |
 | `edit.action-set-ocg-state`, `edit.action-show-hide-field` | Add Link, Layers and Form Fields | Links that show, hide or toggle layers, show or hide form fields, or reset fields to their defaults. PDF.js runs the layer and reset actions; NavPDF runs show or hide on screen, reading the document only for pages with such links, and that change is not saved. Push-button field actions and other triggers are not provided, and scripts are never created. |
 | Link appearance | Add Link, Border and When clicked | Invisible, solid, dashed or underline borders in a chosen colour, and invert, outline, push or no highlight on click. |
+
+## Eighth batch mapping
+
+Batch 8 extends the certificate signature dialog under [ADR 0018](adr/0018-local-signature-trust-and-inspection.md).
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `sign.trusted-certificates` | Certificate Signature, Trusted certificates | Up to 64 certificates added from a DER or PEM file or from a signature in the open document, kept on this device; Stop Trusting removes one. A signature is trusted when its verified chain reaches one of them and each certificate up to it was valid at the stated signing time. Platform certificate stores, revocation and timestamps are not used. |
+| `sign.certificate-viewer` | Certificate details in each signature | Subject, issuer, validity dates, serial number and SHA-256 fingerprint for the signer and each issuer found, with trust buttons. Extensions and policies are not shown. |
+| `sign.changes-after-signing` | Changes after this signature | Page count and content changes, comments, form field values and signatures added after a signature, at most 20, with whether a certified document's permission level allows them. Unexplained bytes are listed as other changes. |
+| `sign.view-signed-version` | Open Signed Version | Opens the file as it was when that signature was applied, as an unsaved document in a new tab; refused for encrypted documents and for signatures that do not verify. |
+| `sign.signature-appearance` | Appearance, Show the signature on a page | A framed Helvetica block with the signer's name, UTC time and reason in a chosen corner of a chosen page, upright on rotated pages. Non-Latin-1 characters print as "?", and images or handwritten marks are not offered. |
 
 ## Acceptance boundary
 

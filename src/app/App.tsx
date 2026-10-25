@@ -1056,6 +1056,7 @@ export default function App() {
           <CertificateSignature
             controller={controller}
             onClose={() => s.set({ activeModal: null })}
+            onOpen={(file) => session.open(file)}
           />
         )}
         {s.activeModal === "design" && (

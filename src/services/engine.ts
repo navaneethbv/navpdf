@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { native } from "./native";
 import type {
+  CertificateDetails,
   CertificateSummary,
   CompressionPreset,
   CompressionReport,
@@ -180,6 +181,44 @@ export async function saveSignedCopy(
 export async function verifySignatures(documentId: string): Promise<SignatureInfo[]> {
   requireEngine();
   return await invoke<SignatureInfo[]>("engine_verify_signatures", { documentId });
+}
+
+/** The revision of the opened file that a signature covers, to open as the signed version. */
+export async function signedRevision(
+  documentId: string,
+  field: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  requireEngine();
+  return take(await invoke<string>("engine_signed_revision", { documentId, field }));
+}
+
+/** Certificates trusted on this device for checking signatures. */
+export async function trustedCertificates(): Promise<CertificateDetails[]> {
+  requireEngine();
+  return await invoke<CertificateDetails[]>("trust_list");
+}
+
+/** Trusts a certificate file chosen in the native picker; null when cancelled. */
+export async function importTrustedCertificate(): Promise<CertificateDetails[] | null> {
+  requireEngine();
+  return await invoke<CertificateDetails[] | null>("trust_import");
+}
+
+/** Trusts a certificate carried in one of the open document's signatures. */
+export async function trustSignatureCertificate(
+  documentId: string,
+  fingerprint: string,
+): Promise<CertificateDetails[]> {
+  requireEngine();
+  return await invoke<CertificateDetails[]>("trust_signature_certificate", {
+    documentId,
+    fingerprint,
+  });
+}
+
+export async function untrustCertificate(fingerprint: string): Promise<CertificateDetails[]> {
+  requireEngine();
+  return await invoke<CertificateDetails[]>("trust_remove", { fingerprint });
 }
 
 /** Prunes unreferenced objects, renumbers objects, and compresses streams. */

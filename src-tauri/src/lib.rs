@@ -290,7 +290,12 @@ pub fn run() {
             commands::engine::engine_choose_certificate,
             commands::engine::engine_forget_certificate,
             commands::engine::engine_save_signed,
-            commands::engine::engine_verify_signatures
+            commands::engine::engine_verify_signatures,
+            commands::engine::engine_signed_revision,
+            commands::trust::trust_list,
+            commands::trust::trust_import,
+            commands::trust::trust_signature_certificate,
+            commands::trust::trust_remove
         ])
         .build(tauri::generate_context!());
     match result {
