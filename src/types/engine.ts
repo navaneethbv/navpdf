@@ -259,3 +259,65 @@ export interface SignatureInfo {
   /** Whether a certified document allows those changes; null when not certified. */
   changesPermitted: boolean | null;
 }
+
+/** One indirect structure element in a tagged document. */
+export interface TagNode {
+  /** Object number and generation, such as "12 0". */
+  id: string;
+  parent: string | null;
+  depth: number;
+  /** Structure type, such as P, H1 or Figure. */
+  role: string;
+  /** The standard type a custom role maps to, when the role map names one. */
+  standardRole: string | null;
+  title: string;
+  alt: string;
+  actualText: string;
+  lang: string;
+  /** 1-based page of the tag or its first content. */
+  page: number | null;
+  mcids: number[];
+  /** Annotations the tag owns directly. */
+  objects: number;
+  /** Child tags, including inline ones that are not listed. */
+  children: number;
+}
+
+export interface TagTree {
+  tagged: boolean;
+  nodes: TagNode[];
+  truncated: boolean;
+}
+
+/** Text properties; an empty string removes the entry and an omitted one is unchanged. */
+export interface TagProperties {
+  role?: string;
+  title?: string;
+  alt?: string;
+  actualText?: string;
+  lang?: string;
+}
+
+export type TagEdit =
+  | { action: "setProperties"; id: string; properties: TagProperties }
+  | { action: "move"; id: string; offset: number }
+  | { action: "markArtifact"; id: string }
+  | { action: "autotag" };
+
+export interface TagReport {
+  message: string;
+}
+
+export interface UntaggedPage {
+  page: number;
+  /** Painting operations outside tagged content and artifacts. */
+  content: number;
+  annotations: number;
+  widgets: number;
+}
+
+export interface UntaggedReport {
+  tagged: boolean;
+  pages: UntaggedPage[];
+  truncated: boolean;
+}

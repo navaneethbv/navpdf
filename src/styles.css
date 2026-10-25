@@ -4102,3 +4102,57 @@ p {
   gap: 6px 10px;
   margin: 6px 0;
 }
+
+/* Tags and reading order. */
+.tag-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.tag-tree li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.tag-toggle {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+}
+.tag-row {
+  flex: 1;
+  min-width: 0;
+  text-align: start;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  color: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.tag-row:hover {
+  background: var(--surface-2);
+}
+.tag-row.selected {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+}
+.tag-properties {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+.tag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag-untagged {
+  margin: 4px 0;
+  padding-left: 18px;
+}

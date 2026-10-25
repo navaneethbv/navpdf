@@ -13,6 +13,7 @@ pub mod protect;
 pub mod prune;
 pub mod redact;
 pub mod sign;
+pub mod tags;
 #[rustfmt::skip]
 mod standard_fonts;
 

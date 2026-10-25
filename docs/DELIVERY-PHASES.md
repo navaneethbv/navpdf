@@ -28,6 +28,7 @@ Batch 7's viewer part adds hiding all comments, replacement page colours, Fit Vi
 Batch 7's lifecycle part adds document tabs, Revert, reloading a document whose file changed on disk and reopening the last session's documents.
 Batch 7's editing part adds sign-here and picture stamps, watermarks and backgrounds from a picture or PDF page, an ink eraser, all ten line endings with dashed and cloudy borders, saved shape styles, and links that change layers or form fields with chosen borders.
 Batch 8 adds a local trusted-certificate list, certificate details, changes after signing with certification checks, opening a signed version and visible signature appearances under [ADR 0018](adr/0018-local-signature-trust-and-inspection.md).
+Batch 9 adds a Tags and Reading Order dialog with tag properties, reordering, artifacts, untagged content and automatic tagging under [ADR 0019](adr/0019-tag-editing-and-autotagging.md).
 
 ## Phase status and remaining gates
 

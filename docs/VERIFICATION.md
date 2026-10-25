@@ -5,6 +5,30 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 25 PDFCraft gap batch 9, tags and reading order
+
+The [ninth batch mapping](PDFCRAFT-COMPARISON.md#ninth-batch-mapping) lists each addition and its limits, and [ADR 0019](adr/0019-tag-editing-and-autotagging.md) records the rules.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,122 tests across 150 files, with 85.81% statements, 77.94% branches, 84.78% functions and 88.93% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests build synthetic pages with lopdf.
+On a page with two text objects, a rule, an image, an empty text object, a link, a field and a pop-up, Find Untagged Content reports four drawing operations, one link and one field; Tag Automatically adds P, P, Figure, Link and Form tags under a Document tag in that order, writes the MCIDs into the content, makes the rule an artifact, sets StructParents and structure tab order, leaves nothing untagged and refuses to tag again.
+Renaming a tag to H1 with a title, non-ASCII actual text and a language reads back, invalid types, languages and control characters are refused, and an empty title removes it.
+Moving the heading later swaps it with the next paragraph, and moving it earlier at the start is refused.
+Marking the figure as an artifact keeps the image drawn, removes its MCID and its tag, and leaves nothing untagged; the Document tag, a Link tag, unknown and malformed ids, and a second attempt are refused.
+A tag whose content uses a named property list, a role-mapped type and a parent tree with number tree kids is read, retired with its parent-tree slot cleared, and existing tags block automatic tagging; earlier MCIDs without a tree and pages with nothing to tag are refused.
+An integration test reads a tag's text through PDF.js, telling MCID 1 from MCID 11, and filtering keeps ancestors while collapsing hides descendants.
+Dialog tests cover automatic tagging, editing type and language, moving, retiring, finding untagged content with page links, collapsing, filtering and reporting a refused move.
+Screen reader, Preview and Acrobat review of automatically tagged output were not run.
+
+## October 25 quality follow-up for batches 7 and 8
+
+The check-runs API exposes the annotations that the SonarCloud, Codacy and CodeQL pages hold, which the container cannot reach directly.
+CodeQL reported one high alert: a new Rust test printed the trust message, which names a synthetic certificate's subject, when an assertion failed; the assertion no longer prints it.
+Codacy reported six header-injection findings on dictionary writes in the ink eraser and link appearance, where a rule written for HTTP responses matches `.set` on a parameter; both now build entries and write them in their caller, so no behavior changes.
+SonarCloud reported 10 issues: event listeners on the marquee zoom and eraser overlays, a redundant block and nested promises in the document session, a complex decorations handler, ambiguous spacing in the signature dialog, an array used as a set, an in-place sort inside a chain, a status role where `output` fits, and two length assertions; each is fixed, the overlays now attach native listeners through a shared hook, and their tests still pass.
+
 ## October 25 PDFCraft gap batch 8, signatures
 
 The [eighth batch mapping](PDFCRAFT-COMPARISON.md#eighth-batch-mapping) lists each addition and its limits, and [ADR 0018](adr/0018-local-signature-trust-and-inspection.md) records the trust and inspection rules.

@@ -18,6 +18,10 @@ import type {
   SignatureInfo,
   SignedSave,
   SignRequest,
+  TagEdit,
+  TagReport,
+  TagTree,
+  UntaggedReport,
 } from "../types/engine";
 
 export const ENGINE_UNAVAILABLE =
@@ -219,6 +223,25 @@ export async function trustSignatureCertificate(
 export async function untrustCertificate(fingerprint: string): Promise<CertificateDetails[]> {
   requireEngine();
   return await invoke<CertificateDetails[]>("trust_remove", { fingerprint });
+}
+
+/** The structure tree of the document bytes. */
+export async function readTags(bytes: Uint8Array): Promise<TagTree> {
+  requireEngine();
+  return await invoke<TagTree>("engine_tags", { inputId: await stage(bytes) });
+}
+
+/** Content and annotations without tags, page by page. */
+export async function findUntagged(bytes: Uint8Array): Promise<UntaggedReport> {
+  requireEngine();
+  return await invoke<UntaggedReport>("engine_untagged", { inputId: await stage(bytes) });
+}
+
+/** Applies one tag edit and returns the edited document. */
+export async function editTags(bytes: Uint8Array, edit: TagEdit): Promise<EngineResult<TagReport>> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return resolve(await invoke<Outcome<TagReport>>("engine_tag_edit", { inputId, edit }));
 }
 
 /** Prunes unreferenced objects, renumbers objects, and compresses streams. */

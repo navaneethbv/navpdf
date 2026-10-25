@@ -53,6 +53,12 @@ beforeEach(() => {
         return [{ fingerprint: "AA" }];
       case "trust_import":
         return null;
+      case "engine_tags":
+        return { tagged: false, nodes: [], truncated: false };
+      case "engine_untagged":
+        return { tagged: false, pages: [], truncated: false };
+      case "engine_tag_edit":
+        return { outputId: "out-tags", report: { message: "Added 3 tags." } };
       default:
         return undefined;
     }
@@ -182,6 +188,22 @@ describe("engine service", () => {
     });
     await service.untrustCertificate("AA");
     expect(invoke).toHaveBeenCalledWith("trust_remove", { fingerprint: "AA" });
+  });
+
+  it("stages documents for tag listing, untagged content and tag edits", async () => {
+    const service = await engine();
+    const bytes = new Uint8Array([1]);
+    expect((await service.readTags(bytes)).tagged).toBe(false);
+    expect(invoke).toHaveBeenCalledWith("engine_tags", { inputId: expect.any(String) });
+    expect((await service.findUntagged(bytes)).pages).toEqual([]);
+    const edited = await service.editTags(bytes, { action: "autotag" });
+    expect(invoke).toHaveBeenCalledWith("engine_tag_edit", {
+      inputId: expect.any(String),
+      edit: { action: "autotag" },
+    });
+    expect(invoke).toHaveBeenCalledWith("engine_take", { id: "out-tags" });
+    expect(edited.report.message).toBe("Added 3 tags.");
+    expect([...edited.bytes!]).toEqual([9, 8, 7]);
   });
 
   it("refuses engine work outside the desktop app", async () => {

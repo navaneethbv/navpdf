@@ -40,6 +40,7 @@ import {
   Replace,
   HardDrive,
   Frame,
+  Tags,
 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 
@@ -273,6 +274,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: Accessibility,
       action: () => s.set({ activeModal: "accessibility" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "tags",
+      label: "Tags and Reading Order",
+      description: "Tag automatically, edit tag types and text, reorder tags, mark artifacts",
+      category: "review",
+      icon: Tags,
+      action: () => s.set({ activeModal: "tags" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
     },
     {
       id: "compare",

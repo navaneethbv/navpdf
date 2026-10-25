@@ -63,7 +63,8 @@ The user asked for every gap, including the decision items, delivered in batches
 | 6 | Print preview, grayscale, markups or fields only, print as image, odd/even/reverse; clipboard creation, batch conversion, GIF, BMP and JPEG 2000 input; multi-file OCR, skipping text pages, OCR preprocessing; finer optimizer discards | Implemented; see the sixth batch mapping |
 | 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Implemented; see the seventh batch mapping |
 | 8 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance | Implemented; see the eighth batch mapping |
-| 9 and 10 | Tags panel, reading order, autotagging, artifacts, untagged content; guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
+| 9 | Tags panel, reading order, autotagging, artifacts, untagged content | Implemented; see the ninth batch mapping |
+| 10 | Guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
 | 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
 
 ## Third batch mapping
@@ -167,6 +168,20 @@ Batch 8 extends the certificate signature dialog under [ADR 0018](adr/0018-local
 | `sign.changes-after-signing` | Changes after this signature | Page count and content changes, comments, form field values and signatures added after a signature, at most 20, with whether a certified document's permission level allows them. Unexplained bytes are listed as other changes. |
 | `sign.view-signed-version` | Open Signed Version | Opens the file as it was when that signature was applied, as an unsaved document in a new tab; refused for encrypted documents and for signatures that do not verify. |
 | `sign.signature-appearance` | Appearance, Show the signature on a page | A framed Helvetica block with the signer's name, UTC time and reason in a chosen corner of a chosen page, upright on rotated pages. Non-Latin-1 characters print as "?", and images or handwritten marks are not offered. |
+
+## Ninth batch mapping
+
+Batch 9 adds Tags and Reading Order to the Tools catalog under [ADR 0019](adr/0019-tag-editing-and-autotagging.md).
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `a11y.tags-panel` | Tags and Reading Order list | Indirect tags reachable from the root as a collapsible hierarchy with page, content and annotation counts; finding by type or title keeps ancestors; selecting a tag goes to its page. Up to 20,000 tags are read and 400 rows drawn at once. New tags and deletion are not offered. |
+| `a11y.tag-properties` | Selected tag fields | Type with standard suggestions, title, alternate text, actual text and language, one undoable change. Role-mapped types show their standard type. |
+| `a11y.order-panel`, `a11y.reading-order-tool` | Move Earlier and Move Later | Moves a tag one place among its parent's children; moving across parents and a visual page order view are not provided. |
+| `a11y.content-panel` | Content line under the selected tag | Text inside the tag's own marked content on its page, read through PDF.js. |
+| `a11y.artifact-marking` | Mark as Artifact | For a tag that directly owns content on its page, the content becomes an artifact, its parent-tree slots are cleared and the tag is removed. Tags with child tags, annotations or content in form XObjects are refused. |
+| `a11y.autotag`, `a11y.autotag-fields` | Tag Automatically | For an untagged document: P for text objects, Figure for images and forms, artifacts for other drawing, and Form, Link and Annot tags for annotations in drawing order, with a parent tree and structure tab order. No headings, lists or tables are detected. |
+| `a11y.find-untagged` | Find Untagged Content | Per page, drawing operations outside tags and artifacts, and comments, links or fields without tags; up to 500 pages listed. |
 
 ## Acceptance boundary
 
