@@ -22,6 +22,7 @@ The samples are a plain RGB page, a ReportLab page with an embedded DejaVu Sans 
 veraPDF found that PDF/A-3 attachments got a MIME type escaped twice, so readers saw `application#2Foctet-stream`; the name is now written plainly and NavPDF's own check rejects MIME types without a slash.
 It also showed that a font selected without drawing text needs no embedding, so the font check now follows the fonts that draw visible text.
 Preview and Acrobat review of converted files were not run.
+Hosted Clippy on Rust 1.99 rejected `chunks_exact(2)` in the batch 9 text decoder, which the container's Rust 1.97 accepts; both decoders now use `as_chunks`, and Clippy from a local Rust 1.99 toolchain passes with `-D warnings`.
 
 ## October 25 PDFCraft gap batch 9, tags and reading order
 
