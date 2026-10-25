@@ -21,6 +21,7 @@
 | [0017: Protection options, redaction labels and faux-redaction detection](0017-protection-options-and-redaction-labels.md) | Accepted for PDFCraft gap batch 5 |
 | [0018: Local signature trust, inspection and visible appearances](0018-local-signature-trust-and-inspection.md) | Accepted for PDFCraft gap batch 8 |
 | [0019: Tag editing, artifacts and automatic tagging](0019-tag-editing-and-autotagging.md) | Accepted for PDFCraft gap batch 9 |
+| [0020: PDF/A checks, conversion and output intents](0020-pdfa-validation-and-conversion.md) | Accepted for PDFCraft gap batch 10 |
 
 Use the [template](template.md) for a new decision.
 Dated context explains the original choice; later ADRs and the [delivery tracker](../DELIVERY-PHASES.md) determine current scope and acceptance.

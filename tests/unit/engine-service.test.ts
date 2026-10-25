@@ -57,6 +57,12 @@ beforeEach(() => {
         return { tagged: false, nodes: [], truncated: false };
       case "engine_untagged":
         return { tagged: false, pages: [], truncated: false };
+      case "engine_pdfa_validate":
+        return { level: "PDF/A-2b", passed: true, findings: [], declared: null, notChecked: [] };
+      case "engine_standards":
+        return { pdfa: null, pdfua: null, pdfx: null, outputIntents: [] };
+      case "engine_standards_edit":
+        return { outputId: "out-pdfa", report: { message: "Converted" } };
       case "engine_tag_edit":
         return { outputId: "out-tags", report: { message: "Added 3 tags." } };
       default:
@@ -188,6 +194,24 @@ describe("engine service", () => {
     });
     await service.untrustCertificate("AA");
     expect(invoke).toHaveBeenCalledWith("trust_remove", { fingerprint: "AA" });
+  });
+
+  it("stages documents for PDF/A checks, standards and conversion", async () => {
+    const service = await engine();
+    const bytes = new Uint8Array([1]);
+    expect((await service.validatePdfa(bytes, "2b")).passed).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("engine_pdfa_validate", {
+      inputId: expect.any(String),
+      level: "2b",
+    });
+    expect((await service.readStandards(bytes)).outputIntents).toEqual([]);
+    const converted = await service.editStandards(bytes, { action: "convert", level: "3b" });
+    expect(invoke).toHaveBeenCalledWith("engine_standards_edit", {
+      inputId: expect.any(String),
+      edit: { action: "convert", level: "3b" },
+    });
+    expect(converted.report.message).toBe("Converted");
+    expect(invoke).toHaveBeenCalledWith("engine_take", { id: "out-pdfa" });
   });
 
   it("stages documents for tag listing, untagged content and tag edits", async () => {

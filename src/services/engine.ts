@@ -18,6 +18,10 @@ import type {
   SignatureInfo,
   SignedSave,
   SignRequest,
+  DocumentStandards,
+  PdfaLevel,
+  PdfaReport,
+  StandardsEdit,
   TagEdit,
   TagReport,
   TagTree,
@@ -242,6 +246,30 @@ export async function editTags(bytes: Uint8Array, edit: TagEdit): Promise<Engine
   requireEngine();
   const inputId = await stage(bytes);
   return resolve(await invoke<Outcome<TagReport>>("engine_tag_edit", { inputId, edit }));
+}
+
+/** Checks the document bytes against a PDF/A level. */
+export async function validatePdfa(bytes: Uint8Array, level: PdfaLevel): Promise<PdfaReport> {
+  requireEngine();
+  return await invoke<PdfaReport>("engine_pdfa_validate", { inputId: await stage(bytes), level });
+}
+
+/** The standards a document declares and its output intents. */
+export async function readStandards(bytes: Uint8Array): Promise<DocumentStandards> {
+  requireEngine();
+  return await invoke<DocumentStandards>("engine_standards", { inputId: await stage(bytes) });
+}
+
+/** Converts to PDF/A, adds an output intent or removes standards identification. */
+export async function editStandards(
+  bytes: Uint8Array,
+  edit: StandardsEdit,
+): Promise<EngineResult<{ message: string }>> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return resolve(
+    await invoke<Outcome<{ message: string }>>("engine_standards_edit", { inputId, edit }),
+  );
 }
 
 /** Prunes unreferenced objects, renumbers objects, and compresses streams. */

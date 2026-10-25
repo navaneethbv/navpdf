@@ -2,7 +2,7 @@
 //! while small typed command metadata stays in JSON and passwords never travel in headers.
 
 use super::{document, payload, AppState};
-use crate::engine::{compress, coverup, discard, edit, protect, prune, redact, sign, tags};
+use crate::engine::{compress, coverup, discard, edit, pdfa, protect, prune, redact, sign, tags};
 use crate::{filesystem, logging};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -361,6 +361,50 @@ pub async fn engine_tag_edit(
         .await
         .map_err(|_| "The tags could not be changed. The document is unchanged.")?;
     logging::record(&state.root, "engine_tag_edit", result.is_err());
+    let (output, report) = result?;
+    Ok(EngineOutcome {
+        output_id: Some(state.engine.stage(output)?),
+        report,
+    })
+}
+
+/// Checks the staged document against a PDF/A level.
+#[tauri::command]
+pub async fn engine_pdfa_validate(
+    app: AppHandle,
+    input_id: String,
+    level: String,
+) -> Result<pdfa::ValidationReport, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    tauri::async_runtime::spawn_blocking(move || pdfa::validate(&bytes, &level))
+        .await
+        .map_err(|_| "The PDF/A check could not run.")?
+}
+
+/// Lists the standards the staged document declares and its output intents.
+#[tauri::command]
+pub async fn engine_standards(app: AppHandle, input_id: String) -> Result<pdfa::Standards, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    tauri::async_runtime::spawn_blocking(move || pdfa::standards(&bytes))
+        .await
+        .map_err(|_| "The document's standards could not be read.")?
+}
+
+/// Converts to PDF/A, adds an output intent or removes standards identification.
+#[tauri::command]
+pub async fn engine_standards_edit(
+    app: AppHandle,
+    input_id: String,
+    edit: pdfa::StandardsEdit,
+) -> Result<EngineOutcome<pdfa::StandardsReport>, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || pdfa::apply(&bytes, &edit))
+        .await
+        .map_err(|_| "The document could not be changed. It is unchanged.")?;
+    logging::record(&state.root, "engine_standards_edit", result.is_err());
     let (output, report) = result?;
     Ok(EngineOutcome {
         output_id: Some(state.engine.stage(output)?),

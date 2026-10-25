@@ -387,7 +387,7 @@ pub fn unlock(bytes: &[u8], password: &str) -> Result<Vec<u8>, String> {
     Ok(output)
 }
 
-fn ensure_file_id(doc: &mut Document) -> Result<(), String> {
+pub(crate) fn ensure_file_id(doc: &mut Document) -> Result<(), String> {
     if doc.trailer.has(b"ID") {
         return Ok(());
     }

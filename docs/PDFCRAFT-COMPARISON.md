@@ -64,7 +64,7 @@ The user asked for every gap, including the decision items, delivered in batches
 | 7 | Document tabs, revert, reload on external change, session reopening; marquee zoom, fit visible, column selection, image copy, page-size hover, About; show or hide comments; high-contrast page colours; link appearance, layer and field actions; watermark or background from a file; ink eraser; line endings and dashed or cloudy borders; tool defaults; sign-here and image stamps | Implemented; see the seventh batch mapping |
 | 8 | Trusted certificates, certificate viewer, changes after signing, signed-version view, signature appearance | Implemented; see the eighth batch mapping |
 | 9 | Tags panel, reading order, autotagging, artifacts, untagged content | Implemented; see the ninth batch mapping |
-| 10 | Guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | Planned |
+| 10 | Guided actions and batch processing; PDF/A validation and conversion, output intents, standards panel | PDF/A part implemented; see the tenth batch mapping. Guided actions and batch processing are planned |
 | 11 (decision) | Form JavaScript and formatting scripts, XFA, network timestamps and long-term validation, command-line and MCP control, update checks, encrypted saving and autosave, localization, platform certificate stores and installers | Requires ADRs before implementation |
 
 ## Third batch mapping
@@ -182,6 +182,19 @@ Batch 9 adds Tags and Reading Order to the Tools catalog under [ADR 0019](adr/00
 | `a11y.artifact-marking` | Mark as Artifact | For a tag that directly owns content on its page, the content becomes an artifact, its parent-tree slots are cleared and the tag is removed. Tags with child tags, annotations or content in form XObjects are refused. |
 | `a11y.autotag`, `a11y.autotag-fields` | Tag Automatically | For an untagged document: P for text objects, Figure for images and forms, artifacts for other drawing, and Form, Link and Annot tags for annotations in drawing order, with a parent tree and structure tab order. No headings, lists or tables are detected. |
 | `a11y.find-untagged` | Find Untagged Content | Per page, drawing operations outside tags and artifacts, and comments, links or fields without tags; up to 500 pages listed. |
+
+## Tenth batch mapping
+
+Batch 10's PDF/A part adds PDF/A and Standards to the Tools catalog under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md).
+
+| Upstream entry | NavPDF implementation | Scope and limits |
+| --- | --- | --- |
+| `optimize.pdfa-validate` | PDF/A and Standards, Check | PDF/A-2 and PDF/A-3 at levels b, u and a against the structural rules in ADR 0020, with counts, examples and a list of what is not checked. Not a certified validator; PDF/A-1 and PDF/A-4 are not offered. |
+| `optimize.pdfa-convert` | Convert to PDF/A | Fixes metadata, identification, actions, annotation flags and appearance states, images, LZW, layers and attachments, adds an sRGB output intent, and keeps the result only when the check passes. Refused when fonts are not embedded, text lacks Unicode mapping, level a needs tags or language, or CMYK needs a CMYK intent. |
+| `optimize.pdfa-accessible-levels` | Levels 2a and 3a, 2u and 3u | Level a also requires tags and a language; level u requires Unicode mapping for fonts that need it. |
+| `optimize.output-intents` | Add sRGB Output Intent | A generated sRGB ICC profile as a GTS_PDFA1 intent; other conditions are not offered. |
+| `optimize.standards-panel` | Standards this document declares | Declared PDF/A, PDF/UA and PDF/X with each output intent's condition and colour components. |
+| `optimize.remove-standards-id` | Remove Standards Identification | Removes PDF/A and PDF/UA identification from XMP and PDF/X keys from the document information, keeping other metadata and output intents. |
 
 ## Acceptance boundary
 

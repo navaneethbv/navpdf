@@ -5,6 +5,24 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## October 25 PDFCraft gap batch 10, PDF/A and standards
+
+The [tenth batch mapping](PDFCRAFT-COMPARISON.md#tenth-batch-mapping) lists each addition and its limits, and [ADR 0020](adr/0020-pdfa-validation-and-conversion.md) records the rules.
+With Node 24.22.0, lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,126 tests across 151 files, with 85.81% statements, 78% branches, 84.83% functions and 88.94% lines; the coverage gates pass.
+`cargo fmt --check` and Clippy with `-D warnings` pass, and every Rust test passes except the 2 root-only permission tests that fail in this container.
+
+Rust tests check level parsing, PDF date conversion, conversion of a plain RGB document to PDF/A-2b and PDF/A-3b with escaped XMP from its document information, refusal for an unembedded Helvetica and for a level a document without tags or language, and the fixes for a launch action, a JavaScript link, document JavaScript, additional actions, a hidden annotation with a down appearance, an interpolated image and a plain-text attachment, which PDF/A-2 refuses and PDF/A-3 completes.
+They also check that device CMYK is refused without a CMYK intent, that an sRGB intent does not cover CMYK, that a second intent is refused, that PDF/A, PDF/UA and PDF/X declarations are listed and removed while the intent stays, and that the generated ICC profile has a consistent header, tag table and sRGB curve.
+Dialog tests cover the declared standards, checking at a chosen level, converting and showing the new declaration, withholding conversion when a problem cannot be fixed, adding an intent, a refused removal and a passing check.
+
+veraPDF 1.28.2, fetched from Maven Central into a scratch directory and run with Java, validated samples written by a temporary local test that was removed afterwards.
+It passed `plain-2b.pdf` (`b83b57e3ec8bd2a1`), `plain-3b.pdf` (`d714751c111e6d82`), `plain-2u.pdf` (`3a988bed21e32e72`), `font-2b.pdf` (`94a239acf0e10d6e`), `font-2u.pdf` (`81e131dc137aec57`), `font-3u.pdf` (`3ca6cbbca592e8dc`), `actions-3b.pdf` (`4adea84623c1c071`), `tagged-2a.pdf` (`6bd0795ebeb1be99`) in `output/batch-ten/`, at the level in each name, and failed the unconverted sources.
+The samples are a plain RGB page, a ReportLab page with an embedded DejaVu Sans subset, the actions and attachment fixture, and that ReportLab page tagged automatically with a language set, which also checks batch 9's tags against PDF/A-2a.
+veraPDF found that PDF/A-3 attachments got a MIME type escaped twice, so readers saw `application#2Foctet-stream`; the name is now written plainly and NavPDF's own check rejects MIME types without a slash.
+It also showed that a font selected without drawing text needs no embedding, so the font check now follows the fonts that draw visible text.
+Preview and Acrobat review of converted files were not run.
+
 ## October 25 PDFCraft gap batch 9, tags and reading order
 
 The [ninth batch mapping](PDFCRAFT-COMPARISON.md#ninth-batch-mapping) lists each addition and its limits, and [ADR 0019](adr/0019-tag-editing-and-autotagging.md) records the rules.

@@ -4156,3 +4156,15 @@ p {
   margin: 4px 0;
   padding-left: 18px;
 }
+.standards-list {
+  margin: 4px 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+.pdfa-passed,
+.pdfa-failed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}

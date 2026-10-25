@@ -321,3 +321,43 @@ export interface UntaggedReport {
   pages: UntaggedPage[];
   truncated: boolean;
 }
+
+export type PdfaLevel = "2b" | "2u" | "2a" | "3b" | "3u" | "3a";
+
+export interface PdfaFinding {
+  rule: string;
+  message: string;
+  count: number;
+  examples: string[];
+  /** Conversion fixes this rule. */
+  fixable: boolean;
+}
+
+export interface PdfaReport {
+  level: string;
+  declared: string | null;
+  passed: boolean;
+  findings: PdfaFinding[];
+  /** Requirements the checks do not read. */
+  notChecked: string[];
+}
+
+export interface OutputIntentInfo {
+  subtype: string;
+  condition: string;
+  info: string;
+  hasProfile: boolean;
+  components: number | null;
+}
+
+export interface DocumentStandards {
+  pdfa: string | null;
+  pdfua: string | null;
+  pdfx: string | null;
+  outputIntents: OutputIntentInfo[];
+}
+
+export type StandardsEdit =
+  | { action: "convert"; level: PdfaLevel }
+  | { action: "addOutputIntent" }
+  | { action: "removeIdentification" };
