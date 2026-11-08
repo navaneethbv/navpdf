@@ -4249,3 +4249,6 @@ p {
   stroke-width: 2;
   stroke-dasharray: 4 3;
 }
+.ocr-suspect input {
+  border-color: var(--warning-ink, #b45309);
+}

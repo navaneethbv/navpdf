@@ -249,12 +249,14 @@ pub async fn engine_compress(
     job_id: String,
     preset: compress::CompressionPreset,
     discard: Option<discard::DiscardOptions>,
+    structure: Option<compress::StructureOptions>,
 ) -> Result<EngineOutcome<compress::CompressionReport>, String> {
     let state = app.state::<AppState>();
     let bytes = state.engine.take(&input_id)?;
     let discard = discard.unwrap_or_default();
+    let structure = structure.unwrap_or_default();
     let result = run_job(&app, &job_id, move |cancel| {
-        compress::compress_with(&bytes, preset, &discard, cancel)
+        compress::compress_with_structure(&bytes, preset, &discard, &structure, cancel)
     })
     .await;
     logging::record(&state.root, "engine_compress", result.is_err());

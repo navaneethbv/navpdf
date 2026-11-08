@@ -247,6 +247,7 @@ describe("measured compression", () => {
       "small",
       "job-1",
       undefined,
+      { objectStreams: true, version: null, monochrome: true },
     );
     expect(screen.getByText("Fonts: changed")).toBeTruthy();
     fireEvent.click(screen.getByText("Apply Compressed Version"));
@@ -641,6 +642,43 @@ describe("existing content editor", () => {
         18,
         -18,
       ),
+    );
+  });
+
+  it("passes the chosen PDF version and structure to the optimizer", async () => {
+    seed();
+    const view = controller();
+    engine.compressDocument.mockResolvedValueOnce({
+      bytes: new Uint8Array([1]),
+      report: {
+        preset: "lossless",
+        beforeBytes: 100,
+        afterBytes: 90,
+        useful: true,
+        unusedObjectsRemoved: 0,
+        duplicateStreamsMerged: 0,
+        imagesExamined: 0,
+        imagesRecompressed: 0,
+        imagesSkipped: 0,
+        checks: [],
+        message: "Saves 10 bytes.",
+        monochromeRecompressed: 2,
+        version: "1.4",
+      },
+    });
+    render(<CompressDialog controller={view as never} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Make compatible with"), { target: { value: "1.4" } });
+    const objectStreams = screen.getByLabelText(/object streams/) as HTMLInputElement;
+    expect(objectStreams.disabled && !objectStreams.checked).toBe(true);
+    fireEvent.click(screen.getByText("Analyze Compression"));
+    expect(await screen.findByText(/Written as PDF 1.4/)).toBeTruthy();
+    expect(screen.getByText(/Black-and-white images re-encoded: 2/)).toBeTruthy();
+    expect(engine.compressDocument).toHaveBeenLastCalledWith(
+      expect.any(Uint8Array),
+      expect.any(String),
+      "job-1",
+      undefined,
+      { objectStreams: true, version: "1.4", monochrome: true },
     );
   });
 });

@@ -2,6 +2,7 @@
 //! Scope, supported structures and rejection rules are recorded in ADR 0006.
 
 pub mod arrange;
+pub mod ccitt;
 pub mod compress;
 pub mod content;
 pub mod coverup;

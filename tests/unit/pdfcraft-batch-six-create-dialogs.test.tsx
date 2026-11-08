@@ -7,7 +7,7 @@ import { OcrBatchDialog, ocrFile } from "../../src/features/ocr/OcrBatchDialog";
 import { OcrPanel } from "../../src/features/ocr/OcrPanel";
 import { downloadBlob } from "../../src/utils/download";
 import { ocrRecognizePage } from "../../src/services/native";
-import { pageImage } from "../../src/features/ocr/ocr-pages";
+import { preparePageImage } from "../../src/features/ocr/ocr-pages";
 import { readOcrReview } from "../../src/services/pdf/ocr-review";
 import { useWorkspace } from "../../src/stores/workspace";
 import type { OcrPageResult } from "../../src/types/operations";
@@ -48,6 +48,14 @@ vi.mock("../../src/services/pdf", () => ({
 vi.mock("../../src/features/ocr/ocr-pages", async (original) => ({
   ...(await original<object>()),
   pageImage: vi.fn(async () => new Uint8Array([137, 80, 78, 71])),
+  preparePageImage: vi.fn(async () => ({
+    bytes: new Uint8Array([137, 80, 78, 71]),
+    prepared: { width: 10, height: 10 },
+    rendered: { width: 10, height: 10 },
+    map: null,
+    turn: 0,
+    skew: 0,
+  })),
 }));
 
 beforeEach(() => {
@@ -138,7 +146,7 @@ it("adds a searchable layer only to pages without text in batch OCR", async () =
   );
   expect(outcome).toMatchObject({ pages: 1, skipped: 1 });
   expect(vi.mocked(ocrRecognizePage)).toHaveBeenCalledOnce();
-  expect(vi.mocked(pageImage).mock.calls[0][3]).toMatchObject({ grayscale: true });
+  expect(vi.mocked(preparePageImage).mock.calls[0][3]).toMatchObject({ grayscale: true });
   const review = await readOcrReview(outcome.bytes!, [0, 1]);
   expect(review.map((page) => page.pageIndex)).toEqual([1]);
 });
@@ -181,6 +189,6 @@ it("skips pages with text in the OCR panel", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Apply Searchable Layer" }));
   expect(await screen.findByText("Review and correct recognized words")).toBeTruthy();
   expect(vi.mocked(ocrRecognizePage).mock.calls.map((call) => call[1].pageIndex)).toEqual([1]);
-  expect(vi.mocked(pageImage).mock.calls[0][3]).toMatchObject({ threshold: true });
+  expect(vi.mocked(preparePageImage).mock.calls[0][3]).toMatchObject({ threshold: true });
   expect(useWorkspace.getState().status).toMatch(/Skipping 1 page/);
 });

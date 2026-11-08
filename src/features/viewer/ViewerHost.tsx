@@ -13,6 +13,7 @@ import { EraserTool } from "../annotations/EraserTool";
 import { pageAt } from "../annotations/page-pointer";
 import { columnText, pageSizeLabel, type Box } from "./view-geometry";
 import { downloadBlob } from "../../utils/download";
+import { selectionHtml } from "./copy-layout";
 
 interface Point {
   x: number;
@@ -233,7 +234,17 @@ export function ViewerHost({
       "copy",
       (event) => {
         const text = selectedColumn.current;
-        if (!text || globalThis.getSelection()?.toString()) return;
+        const selection = globalThis.getSelection();
+        if (selection?.toString()) {
+          // Page text keeps its paragraphs, line breaks, sizes and fonts in rich text editors.
+          const html = selectionHtml(selection);
+          if (!html || !event.clipboardData) return;
+          event.preventDefault();
+          event.clipboardData.setData("text/plain", selection.toString());
+          event.clipboardData.setData("text/html", html);
+          return;
+        }
+        if (!text) return;
         event.preventDefault();
         event.clipboardData?.setData("text/plain", text);
         useWorkspace.getState().set({ status: "Column text copied" });

@@ -28,7 +28,7 @@ Each row's status changes from Planned to Implemented when its code and tests la
 | `organize.bookmark-appearance` | Bookmark colour and `/F` style flags in `src/services/pdf/bookmarks.ts` and the bookmark editor. |
 | `optimize.remove-standards-id` | PDF/A and Standards, Remove Standards Identification (batch 10). |
 | `misc.action-wizard-run`, `optimize.batch-optimize` | Guided Actions on several files (batch 10). Upstream lowered its own entry to partial for a failing step reported as success; NavPDF stops a file at the failing step and names it. |
-| `optimize.compress-structure` | Native saves already write object streams through the compression path; the new compatibility choice in batch 16 adds the explicit switch. |
+| `optimize.compress-structure` | Reduce File Size, Compress document structure (object streams), on by default and unavailable for PDF 1.4. | Implemented. |
 
 ## Batch 12: quick wins
 
@@ -80,13 +80,13 @@ Each row's status changes from Planned to Implemented when its code and tests la
 
 | Upstream entry | Planned NavPDF behaviour | Status |
 | --- | --- | --- |
-| `optimize.compatibility-level` | Compress dialog, Make compatible with PDF 1.4 to 2.0: writes the header version, clears the catalog `/Version`, unpacks object streams for 1.4, refuses encryption needing a newer version. Newer features are not converted. | Planned |
-| `optimize.compress-structure` | Explicit Compress document structure switch tied to object streams. | Planned |
-| `optimize.mono-compression` | Native CCITT Group 4 re-encoding of 1-bit images, kept only when smaller; JBIG2 is not provided. | Planned |
-| `ocr.deskew` | OCR image cleanup Straighten: skew within plus or minus 5 degrees estimated by projection profiles, corrected before recognition with boxes mapped back. | Planned |
-| `ocr.rotation-detection` | OCR image cleanup Detect page rotation: 0, 90, 180 or 270 degrees chosen by recognition confidence over a downscaled image; the page `/Rotate` is corrected. | Planned |
-| `ocr.correct-recognized-text` | OCR review lists low-confidence words first with next and previous suspect navigation and a per-page reviewed mark. | Planned |
-| `view.copy-with-layout` | Copying page text also places HTML with paragraphs, bold, italic, size and colour on the clipboard. | Planned |
+| `optimize.compatibility-level` | Reduce File Size, Structure and compatibility, Make compatible with PDF 1.4, 1.5, 1.6, 1.7 or 2.0: writes that header, removes the catalog `/Version`, and for PDF 1.4 writes a classic cross-reference table without object streams (removing trailer keys left by cross-reference streams). A version change alone counts as a useful result. | Implemented. Content newer than the chosen version is neither detected nor converted; encrypted files are refused by the engine as before. |
+| `optimize.compress-structure` | Reduce File Size, Compress document structure (object streams), on by default and unavailable for PDF 1.4. | Implemented. |
+| `optimize.mono-compression` | Reduce File Size, Re-encode black-and-white images with lossless CCITT Group 4, on by default in every preset: 1-bit DeviceGray images and image masks stored uncompressed or with plain Flate are re-encoded with NavPDF's own T.6 encoder and kept only when at least 10% smaller. The encoder's output matches libtiff byte for byte on the pinned test images and decodes exactly in poppler. | Implemented. JBIG2 is not provided; images with predictors or other filters are left alone. |
+| `ocr.deskew` | Scan & OCR and OCR Multiple Files, Straighten pages scanned askew: skew within 5 degrees is estimated from sheared projection profiles on a grayscale copy of at most 1,000 pixels, refined to 0.1 degrees, and the recognition image is rotated; word boxes map back exactly. | Implemented. Blank, tiny and nearly straight pages, and pages without a clear best angle, are left alone. |
+| `ocr.rotation-detection` | Scan & OCR and OCR Multiple Files, Detect pages scanned sideways or upside down: row-versus-column banding chooses between upright and sideways, and the third moment of each text line's ink (capitals and ascenders above, few descenders below) chooses between the two remaining turns. Only the recognition image is turned; word boxes map back exactly. | Implemented. The page's own /Rotate is not changed, and the upright test assumes scripts with ascenders, such as Latin; unclear pages are left alone. |
+| `ocr.correct-recognized-text` | OCR review: words below 80% confidence are marked, Next and Previous suspect (F8 and Shift-F8) move between them across pages, Show only low-confidence words filters the list, and each page has a Reviewed mark with a count. | Implemented. A user dictionary and spelling suggestions are not provided. |
+| `view.copy-with-layout` | Copying page text also places HTML on the clipboard: paragraphs, line breaks, font sizes and font families from the text layer, with markup escaped. | Implemented. Bold, italic and colour are not in the text layer and are not copied. |
 
 ## Batch 17: decision items
 

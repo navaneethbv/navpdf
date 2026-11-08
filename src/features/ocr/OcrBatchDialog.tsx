@@ -13,7 +13,8 @@ import type { OcrPageResult } from "../../types/operations";
 import {
   NO_PREPROCESSING,
   PREPROCESSING_LABELS,
-  pageImage,
+  preparePageImage,
+  resultOnPage,
   type OcrPreprocessing,
 } from "./ocr-pages";
 
@@ -59,8 +60,16 @@ export async function ocrFile(
       ensureCurrent();
       if (options.skipTextPages && (await detectExistingText(bytes, pageIndex))) return null;
       onPage(pageIndex + 1, pdf.numPages);
-      const image = await pageImage(pdf, pageIndex + 1, ensureCurrent, options.preprocessing);
-      return ocrRecognizePage(image, { pageIndex, language: options.language });
+      const prepared = await preparePageImage(
+        pdf,
+        pageIndex + 1,
+        ensureCurrent,
+        options.preprocessing,
+      );
+      return resultOnPage(
+        await ocrRecognizePage(prepared.bytes, { pageIndex, language: options.language }),
+        prepared,
+      );
     };
     const results: OcrPageResult[] = [];
     let skipped = 0;

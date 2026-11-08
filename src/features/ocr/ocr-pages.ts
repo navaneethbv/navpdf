@@ -2,12 +2,27 @@
 // preprocessing changes only the image sent for recognition; the PDF page is never altered.
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { OcrPageResult } from "../../types/operations";
+import {
+  detectTurn,
+  estimateSkew,
+  grayOf,
+  inverseMap,
+  mapOcrResult,
+  turnGray,
+  type PointMap,
+  type QuarterTurn,
+} from "./page-geometry";
 
 export interface OcrPreprocessing {
   grayscale: boolean;
   contrast: boolean;
   threshold: boolean;
   despeckle: boolean;
+  /** Turn a page scanned sideways or upside down so its text is upright. */
+  rotation?: boolean;
+  /** Straighten a page scanned up to 5 degrees askew. */
+  deskew?: boolean;
 }
 
 export const NO_PREPROCESSING: OcrPreprocessing = {
@@ -15,6 +30,8 @@ export const NO_PREPROCESSING: OcrPreprocessing = {
   contrast: false,
   threshold: false,
   despeckle: false,
+  rotation: false,
+  deskew: false,
 };
 
 export const PREPROCESSING_LABELS: Record<keyof OcrPreprocessing, string> = {
@@ -22,6 +39,8 @@ export const PREPROCESSING_LABELS: Record<keyof OcrPreprocessing, string> = {
   contrast: "Stretch contrast",
   threshold: "Black and white (removes light backgrounds)",
   despeckle: "Remove specks (with black and white)",
+  rotation: "Detect pages scanned sideways or upside down",
+  deskew: "Straighten pages scanned askew (up to 5 degrees)",
 };
 
 export function pageWithinOcrLimit(width: number, height: number): boolean {
@@ -131,6 +150,113 @@ export function despeckle(binary: Uint8ClampedArray, width: number, height: numb
         binary[y * width + x] = 255;
 }
 
+/** An image prepared for recognition and how to map its word boxes back onto the page. */
+export interface PreparedPage {
+  bytes: Uint8Array;
+  /** Size of the image sent for recognition. */
+  prepared: { width: number; height: number };
+  /** Size of the page as rendered, which word boxes are mapped back to. */
+  rendered: { width: number; height: number };
+  /** Null when the image was not turned or straightened. */
+  map: PointMap | null;
+  turn: QuarterTurn;
+  skew: number;
+}
+
+function encodePng(canvas: HTMLCanvasElement) {
+  const encoded = canvas.toDataURL("image/png").split(",")[1];
+  if (!encoded) throw new Error("Unable to encode the OCR page.");
+  return Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
+}
+
+/** Draws `source` turned clockwise by a quarter turn and then rotated by -`skew` degrees. */
+function transformCanvas(source: HTMLCanvasElement, turn: QuarterTurn, skew: number) {
+  const swap = turn === 90 || turn === 270;
+  const canvas = document.createElement("canvas");
+  canvas.width = swap ? source.height : source.width;
+  canvas.height = swap ? source.width : source.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Unable to prepare the OCR page.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  // Straightening turns the page by the skew about its centre, after the quarter turn.
+  context.translate(cx, cy);
+  context.rotate((skew * Math.PI) / 180);
+  context.translate(-cx, -cy);
+  if (turn === 90) context.translate(source.height, 0);
+  else if (turn === 180) context.translate(source.width, source.height);
+  else if (turn === 270) context.translate(0, source.width);
+  context.rotate((turn * Math.PI) / 180);
+  context.drawImage(source, 0, 0);
+  return canvas;
+}
+
+/**
+ * Renders a page at twice its size for recognition: optionally turned upright and straightened,
+ * then with the chosen pixel cleanup. Recognised boxes map back with `map`.
+ */
+export async function preparePageImage(
+  sourcePdf: Pick<PDFDocumentProxy, "getPage">,
+  pageNumber: number,
+  ensureCurrent: () => void,
+  preprocessing: OcrPreprocessing = NO_PREPROCESSING,
+): Promise<PreparedPage> {
+  const page = await sourcePdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 2, rotation: 0 });
+  if (!pageWithinOcrLimit(viewport.width, viewport.height)) {
+    throw new Error("This page exceeds the OCR image size limit.");
+  }
+  let canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const rendered = { width: canvas.width, height: canvas.height };
+  const canvases = [canvas];
+  try {
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Unable to render the OCR page.");
+    await page.render({ canvas, canvasContext: context, viewport }).promise;
+    ensureCurrent();
+    let turn: QuarterTurn = 0;
+    let skew = 0;
+    if (preprocessing.rotation || preprocessing.deskew) {
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let gray = grayOf(pixels, canvas.width, canvas.height);
+      if (preprocessing.rotation) {
+        turn = detectTurn(gray);
+        gray = turnGray(gray, turn);
+      }
+      if (preprocessing.deskew) skew = estimateSkew(gray);
+      if (turn || skew) {
+        canvas = transformCanvas(canvas, turn, skew);
+        canvases.push(canvas);
+      }
+    }
+    const cleanup = { ...preprocessing, rotation: false, deskew: false };
+    if (Object.values(cleanup).some(Boolean)) {
+      const target = canvas.getContext("2d");
+      if (!target) throw new Error("Unable to prepare the OCR page.");
+      const image = target.getImageData(0, 0, canvas.width, canvas.height);
+      preprocessPixels(image.data, canvas.width, canvas.height, cleanup);
+      target.putImageData(image, 0, 0);
+    }
+    return {
+      bytes: encodePng(canvas),
+      prepared: { width: canvas.width, height: canvas.height },
+      rendered,
+      map: turn || skew ? inverseMap(rendered.width, rendered.height, turn, skew) : null,
+      turn,
+      skew,
+    };
+  } finally {
+    for (const item of canvases) {
+      item.width = 0;
+      item.height = 0;
+    }
+  }
+}
+
 /** Renders a page at twice its size as PNG for recognition, with optional preprocessing. */
 export async function pageImage(
   sourcePdf: Pick<PDFDocumentProxy, "getPage">,
@@ -138,29 +264,12 @@ export async function pageImage(
   ensureCurrent: () => void,
   preprocessing: OcrPreprocessing = NO_PREPROCESSING,
 ): Promise<Uint8Array> {
-  const page = await sourcePdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: 2, rotation: 0 });
-  if (!pageWithinOcrLimit(viewport.width, viewport.height)) {
-    throw new Error("This page exceeds the OCR image size limit.");
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  try {
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Unable to render the OCR page.");
-    await page.render({ canvas, canvasContext: context, viewport }).promise;
-    ensureCurrent();
-    if (Object.values(preprocessing).some(Boolean)) {
-      const image = context.getImageData(0, 0, canvas.width, canvas.height);
-      preprocessPixels(image.data, canvas.width, canvas.height, preprocessing);
-      context.putImageData(image, 0, 0);
-    }
-    const encoded = canvas.toDataURL("image/png").split(",")[1];
-    if (!encoded) throw new Error("Unable to encode the OCR page.");
-    return Uint8Array.from(atob(encoded), (char) => char.codePointAt(0) ?? 0);
-  } finally {
-    canvas.width = 0;
-    canvas.height = 0;
-  }
+  return (await preparePageImage(sourcePdf, pageNumber, ensureCurrent, preprocessing)).bytes;
+}
+
+/** Maps a recognition result from a prepared image back onto the page as rendered. */
+export function resultOnPage(result: OcrPageResult, prepared: PreparedPage): OcrPageResult {
+  return prepared.map
+    ? mapOcrResult(result, prepared.map, prepared.prepared, prepared.rendered)
+    : result;
 }

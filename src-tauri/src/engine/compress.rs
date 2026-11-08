@@ -60,6 +60,88 @@ pub struct CompressionReport {
     /// One entry per chosen discard that changed the document.
     pub discarded: Vec<String>,
     pub message: String,
+    /// 1-bit images re-encoded with CCITT Group 4.
+    pub monochrome_recompressed: usize,
+    /// The PDF version written, when it changed.
+    pub version: Option<String>,
+}
+
+/// The packed samples of a 1-bit image whose bits can be re-encoded without changing them.
+fn monochrome_samples(doc: &Document, stream: &Stream) -> Option<(Vec<u8>, usize, usize)> {
+    let dict = &stream.dict;
+    let value = |key: &[u8]| dict.get(key).ok().map(|object| content::deref(doc, object));
+    if value(b"Subtype").and_then(|o| o.as_name().ok()) != Some(b"Image") {
+        return None;
+    }
+    let mask = value(b"ImageMask")
+        .and_then(|o| o.as_bool().ok())
+        .unwrap_or(false);
+    let gray = value(b"ColorSpace").and_then(|o| o.as_name().ok()) == Some(b"DeviceGray");
+    let one_bit = value(b"BitsPerComponent").and_then(|o| o.as_i64().ok()) == Some(1);
+    if !(mask || (gray && one_bit)) {
+        return None;
+    }
+    // Predictors and other filters would need decoding first; leave those images alone.
+    let filters = match value(b"Filter") {
+        None => Vec::new(),
+        Some(Object::Name(name)) => vec![name.clone()],
+        Some(Object::Array(items)) => items
+            .iter()
+            .filter_map(|item| content::deref(doc, item).as_name().ok().map(<[u8]>::to_vec))
+            .collect(),
+        Some(_) => return None,
+    };
+    if !(filters.is_empty() || filters == [b"FlateDecode".to_vec()]) || dict.has(b"DecodeParms") {
+        return None;
+    }
+    let dimension = |key: &[u8]| {
+        value(key)
+            .and_then(|o| o.as_i64().ok())
+            .and_then(|v| usize::try_from(v).ok())
+            .filter(|v| *v > 0)
+    };
+    let (width, height) = (dimension(b"Width")?, dimension(b"Height")?);
+    if width > super::ccitt::MAX_WIDTH || width.checked_mul(height)? > 400_000_000 {
+        return None;
+    }
+    let samples = super::stream_bytes(stream).ok()?;
+    (samples.len() >= width.div_ceil(8) * height).then_some((samples, width, height))
+}
+
+/// Re-encodes 1-bit images with lossless CCITT Group 4 where that is at least 10% smaller.
+fn recompress_monochrome(doc: &mut Document, cancel: &AtomicBool) -> Result<usize, String> {
+    let ids: Vec<ObjectId> = doc
+        .objects
+        .iter()
+        .filter(|(_, object)| matches!(object, Object::Stream(_)))
+        .map(|(id, _)| *id)
+        .collect();
+    let mut count = 0;
+    for id in ids {
+        super::check_cancelled(cancel)?;
+        let Some(Object::Stream(stream)) = doc.objects.get(&id) else {
+            continue;
+        };
+        let Some((samples, width, height)) = monochrome_samples(doc, stream) else {
+            continue;
+        };
+        let Some(encoded) = super::ccitt::encode_g4(&samples, width, height) else {
+            continue;
+        };
+        if encoded.len() as f64 >= stream.content.len() as f64 * MIN_IMAGE_SAVING {
+            continue;
+        }
+        let mut dict = stream.dict.clone();
+        dict.set("Filter", Object::Name(b"CCITTFaxDecode".to_vec()));
+        dict.set(
+            "DecodeParms",
+            lopdf::dictionary! { "K" => -1, "Columns" => width as i64, "Rows" => height as i64 },
+        );
+        let replacement = Stream::new(dict, encoded).with_compression(false);
+        doc.objects.insert(id, Object::Stream(replacement));
+        count += 1;
+    }
+    Ok(count)
 }
 
 /// Compresses a copy; returns output bytes only when the saving is useful and faithful.
@@ -71,6 +153,30 @@ pub fn compress(
     compress_with(bytes, preset, &DiscardOptions::default(), cancel)
 }
 
+/// How the compressed file's structure is written.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct StructureOptions {
+    /// Pack objects into object streams with a cross-reference stream (PDF 1.5 and later).
+    pub object_streams: bool,
+    /// Write this PDF version ("1.4" to "2.0"), or keep the document's own when absent.
+    pub version: Option<String>,
+    /// Re-encode 1-bit images with lossless CCITT Group 4 when that is smaller.
+    pub monochrome: bool,
+}
+
+impl Default for StructureOptions {
+    fn default() -> Self {
+        Self {
+            object_streams: true,
+            version: None,
+            monochrome: true,
+        }
+    }
+}
+
+const VERSIONS: [&str; 5] = ["1.4", "1.5", "1.6", "1.7", "2.0"];
+
 /// Applies the chosen discards, then compresses. Fidelity is checked against the document as it
 /// stands after the discards, so only the structures the user chose to remove may change.
 pub fn compress_with(
@@ -79,6 +185,24 @@ pub fn compress_with(
     discard: &DiscardOptions,
     cancel: &AtomicBool,
 ) -> Result<(Option<Vec<u8>>, CompressionReport), String> {
+    compress_with_structure(bytes, preset, discard, &StructureOptions::default(), cancel)
+}
+
+/// As `compress_with`, also choosing the PDF version, object streams and monochrome encoding.
+pub fn compress_with_structure(
+    bytes: &[u8],
+    preset: CompressionPreset,
+    discard: &DiscardOptions,
+    structure: &StructureOptions,
+    cancel: &AtomicBool,
+) -> Result<(Option<Vec<u8>>, CompressionReport), String> {
+    if let Some(version) = &structure.version {
+        if !VERSIONS.contains(&version.as_str()) {
+            return Err("Choose PDF 1.4, 1.5, 1.6, 1.7 or 2.0.".into());
+        }
+    }
+    // PDF 1.4 readers know neither object streams nor cross-reference streams.
+    let object_streams = structure.object_streams && structure.version.as_deref() != Some("1.4");
     let mut doc = super::load(bytes)?;
     let discarded = discard::apply(&mut doc, discard)?;
     let baseline = Fingerprint::of(&doc)?;
@@ -95,16 +219,47 @@ pub fn compress_with(
         images_skipped: 0,
         checks: Vec::new(),
         message: String::new(),
+        monochrome_recompressed: 0,
+        version: None,
     };
     super::check_cancelled(cancel)?;
+    if structure.monochrome {
+        report.monochrome_recompressed = recompress_monochrome(&mut doc, cancel)?;
+    }
+    if let Some(version) = &structure.version {
+        if *version != doc.version {
+            report.version = Some(version.clone());
+        }
+        doc.version = version.clone();
+        // A catalog /Version would override the header for readers.
+        if let Ok(catalog) = doc.catalog_mut() {
+            catalog.remove(b"Version");
+        }
+    }
     if let Some((dpi, quality)) = preset.image_target() {
         recompress_images(&mut doc, dpi, quality, cancel, &mut report)?;
     }
     doc.compress();
     let mut output = Vec::new();
+    if !object_streams {
+        doc.reference_table.cross_reference_type = lopdf::xref::XrefType::CrossReferenceTable;
+        // Keys a cross-reference stream left in the trailer do not belong in a classic one.
+        for key in [
+            &b"Type"[..],
+            b"W",
+            b"Index",
+            b"Filter",
+            b"DecodeParms",
+            b"Length",
+            b"XRefStm",
+            b"Prev",
+        ] {
+            doc.trailer.remove(key);
+        }
+    }
     let options = SaveOptions::builder()
-        .use_object_streams(true)
-        .use_xref_streams(true)
+        .use_object_streams(object_streams)
+        .use_xref_streams(object_streams)
         .build();
     doc.save_with_options(&mut output, options)
         .map_err(|_| "The compressed PDF could not be written.")?;
@@ -114,11 +269,17 @@ pub fn compress_with(
     let faithful = report.checks.iter().all(|check| check.passed);
     let saved = report.before_bytes.saturating_sub(report.after_bytes);
     let worthwhile = saved >= (report.before_bytes / 100).max(1024);
-    report.useful = faithful && (worthwhile || !report.discarded.is_empty());
+    report.useful =
+        faithful && (worthwhile || !report.discarded.is_empty() || report.version.is_some());
     report.message = if !faithful {
         "A fidelity check failed, so the original was kept.".into()
     } else if !report.useful {
         "Compression would not save a useful amount of space, so the original was kept.".into()
+    } else if !worthwhile && report.version.is_some() && report.discarded.is_empty() {
+        format!(
+            "Written as PDF {}; the file size barely changed.",
+            report.version.as_deref().unwrap_or_default()
+        )
     } else if !worthwhile {
         "The chosen items were discarded; the file size barely changed.".into()
     } else {
@@ -640,6 +801,111 @@ mod tests {
     use super::*;
     use crate::engine::content::tests::page_document;
     use lopdf::dictionary;
+
+    /// A page with an uncompressed 1-bit scan-like image of text lines.
+    fn monochrome_document() -> Vec<u8> {
+        let (mut doc, page) = page_document("q 400 0 0 200 50 50 cm /Scan Do Q", dictionary! {});
+        let (width, height) = (800usize, 400usize);
+        let stride = width.div_ceil(8);
+        let mut samples = vec![0xffu8; stride * height];
+        for y in 0..height {
+            for x in 0..width {
+                // Dark "words" on every eighth band of rows.
+                if (y / 6) % 3 == 0 && (x / 13 + y / 18) % 4 != 0 && (x * 31 + y * 7) % 11 != 0 {
+                    samples[y * stride + x / 8] &= !(0x80 >> (x % 8));
+                }
+            }
+        }
+        let image = doc.add_object(
+            Stream::new(
+                dictionary! {"Type" => "XObject", "Subtype" => "Image", "Width" => width as i64,
+                "Height" => height as i64, "ColorSpace" => "DeviceGray", "BitsPerComponent" => 1},
+                samples,
+            )
+            .with_compression(false),
+        );
+        doc.get_dictionary_mut(page)
+            .unwrap()
+            .get_mut(b"Resources")
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .set("XObject", dictionary! {"Scan" => image});
+        crate::engine::save(&mut doc).unwrap()
+    }
+
+    #[test]
+    fn one_bit_images_become_group4_and_versions_are_written() {
+        let source = monochrome_document();
+        let cancel = AtomicBool::new(false);
+        let structure = StructureOptions {
+            version: Some("1.4".into()),
+            ..StructureOptions::default()
+        };
+        let (output, report) = compress_with_structure(
+            &source,
+            CompressionPreset::Lossless,
+            &DiscardOptions::default(),
+            &structure,
+            &cancel,
+        )
+        .unwrap();
+        let output = output.expect("a useful result");
+        assert_eq!(report.monochrome_recompressed, 1);
+        assert_eq!(report.version.as_deref(), Some("1.4"));
+        assert!(output.starts_with(b"%PDF-1.4"));
+        // PDF 1.4 has neither object streams nor cross-reference streams.
+        let text = String::from_utf8_lossy(&output);
+        assert!(!text.contains("/ObjStm") && !text.contains("/XRef"));
+        let doc = crate::engine::load(&output).unwrap();
+        let image = doc
+            .objects
+            .values()
+            .filter_map(|object| object.as_stream().ok())
+            .find(|stream| stream.dict.has(b"BitsPerComponent"))
+            .unwrap();
+        assert_eq!(
+            image.dict.get(b"Filter").unwrap().as_name().unwrap(),
+            b"CCITTFaxDecode"
+        );
+        let parms = image.dict.get(b"DecodeParms").unwrap().as_dict().unwrap();
+        assert_eq!(parms.get(b"K").unwrap().as_i64().unwrap(), -1);
+        assert_eq!(parms.get(b"Columns").unwrap().as_i64().unwrap(), 800);
+        assert!(
+            report.after_bytes < report.before_bytes / 2,
+            "{} -> {}",
+            report.before_bytes,
+            report.after_bytes
+        );
+
+        let off = StructureOptions {
+            monochrome: false,
+            version: Some("2.0".into()),
+            object_streams: true,
+        };
+        let (output, report) = compress_with_structure(
+            &source,
+            CompressionPreset::Lossless,
+            &DiscardOptions::default(),
+            &off,
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(report.monochrome_recompressed, 0);
+        assert!(output.unwrap().starts_with(b"%PDF-2.0"));
+        let bad = StructureOptions {
+            version: Some("1.3".into()),
+            ..StructureOptions::default()
+        };
+        assert!(compress_with_structure(
+            &source,
+            CompressionPreset::Lossless,
+            &DiscardOptions::default(),
+            &bad,
+            &cancel
+        )
+        .is_err());
+    }
 
     fn image_document(side: usize, duplicate: bool) -> Vec<u8> {
         let (mut doc, page) = page_document("", dictionary! {});

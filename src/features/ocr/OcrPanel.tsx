@@ -23,7 +23,8 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 import {
   NO_PREPROCESSING,
   PREPROCESSING_LABELS,
-  pageImage,
+  preparePageImage,
+  resultOnPage,
   type OcrPreprocessing,
 } from "./ocr-pages";
 
@@ -36,6 +37,23 @@ function identifyReview(pages: OcrPageResult[]) {
       words: line.words.map((word) => ({ ...word, id: crypto.randomUUID() })),
     })),
   }));
+}
+
+/** Words recognised with less confidence than this are suspects to check first. */
+export const SUSPECT_CONFIDENCE = 0.8;
+
+/** Where each low-confidence word is, in reading order across the reviewed pages. */
+export function suspectWords(
+  pages: Pick<OcrPageResult, "lines">[],
+  threshold = SUSPECT_CONFIDENCE,
+): { page: number; line: number; word: number }[] {
+  return pages.flatMap((page, pi) =>
+    page.lines.flatMap((line, li) =>
+      line.words.flatMap((word, wi) =>
+        word.confidence < threshold ? [{ page: pi, line: li, word: wi }] : [],
+      ),
+    ),
+  );
 }
 
 type PdfDocument = NonNullable<ViewerController["pdf"]>;
@@ -72,8 +90,12 @@ async function recognizeOcrPages({
     const pageNumber = pageIndex + 1;
     onProgress(Math.round((index / targetIndices.length) * 85) + 5);
     onStatus(`Recognizing page ${pageNumber} of ${totalPages}...`);
-    const imageBytes = await pageImage(sourcePdf, pageNumber, ensureCurrent, preprocessing);
-    const result = await ocrRecognizePage(imageBytes, { pageIndex, language });
+    const prepared = await preparePageImage(sourcePdf, pageNumber, ensureCurrent, preprocessing);
+    // Boxes from a turned or straightened image are mapped back onto the page.
+    const result = resultOnPage(
+      await ocrRecognizePage(prepared.bytes, { pageIndex, language }),
+      prepared,
+    );
     ensureCurrent();
     return { result, pageNumber };
   };
@@ -479,6 +501,25 @@ export function OcrPanel({
   const [review, setReview] = useState<ReturnType<typeof identifyReview> | null>(null);
   const reviewSource = useRef<{ pdf: PdfDocument; bytes: Uint8Array } | null>(null);
   const [reviewPage, setReviewPage] = useState(0);
+  const [suspectsOnly, setSuspectsOnly] = useState(false);
+  const [suspectAt, setSuspectAt] = useState(-1);
+  const [reviewedPages, setReviewedPages] = useState<Set<number>>(new Set());
+  const suspects = review ? suspectWords(review) : [];
+  /** Move to the next or previous low-confidence word, switching pages as needed. */
+  const goToSuspect = (step: 1 | -1) => {
+    if (!suspects.length) return;
+    const next = (suspectAt + step + suspects.length) % suspects.length;
+    const target = suspects[next];
+    setSuspectAt(next);
+    setReviewPage(target.page);
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLInputElement>(
+          `[data-ocr-word="${target.page}:${target.line}:${target.word}"]`,
+        )
+        ?.focus(),
+    );
+  };
   const [reviewError, setReviewError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
 
@@ -575,6 +616,8 @@ export function OcrPanel({
       if (mode === "searchable") {
         reviewSource.current = { pdf: sourcePdf, bytes: pdfBytes };
         setReview(identifyReview(results));
+        setSuspectAt(-1);
+        setReviewedPages(new Set());
         setReviewPage(0);
         setProgress(100);
         setStatusText("Review recognized words before applying. The scan stays unchanged.");
@@ -628,6 +671,8 @@ export function OcrPanel({
         );
       reviewSource.current = { pdf, bytes };
       setReview(identifyReview(pages));
+      setSuspectAt(-1);
+      setReviewedPages(new Set());
       setReviewPage(0);
     } catch (error) {
       setReviewError(error instanceof Error ? error.message : String(error));
@@ -687,6 +732,67 @@ export function OcrPanel({
                   </select>
                 </label>
               )}
+              <div
+                className="property-row"
+                role="group"
+                aria-label="Low-confidence words"
+                onKeyDown={(event) => {
+                  if (event.key === "F8") {
+                    event.preventDefault();
+                    goToSuspect(event.shiftKey ? -1 : 1);
+                  }
+                }}
+              >
+                <output>
+                  {suspects.length
+                    ? `${suspects.length} word${suspects.length === 1 ? "" : "s"} below ${Math.round(
+                        SUSPECT_CONFIDENCE * 100,
+                      )}% confidence`
+                    : "No low-confidence words"}
+                  {review.length > 1
+                    ? `; ${reviewedPages.size} of ${review.length} pages reviewed`
+                    : ""}
+                </output>
+                <button
+                  type="button"
+                  disabled={!suspects.length}
+                  title="Previous low-confidence word (Shift-F8)"
+                  onClick={() => goToSuspect(-1)}
+                >
+                  Previous suspect
+                </button>
+                <button
+                  type="button"
+                  disabled={!suspects.length}
+                  title="Next low-confidence word (F8)"
+                  onClick={() => goToSuspect(1)}
+                >
+                  Next suspect
+                </button>
+                <label className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={suspectsOnly}
+                    onChange={(event) => setSuspectsOnly(event.target.checked)}
+                  />{" "}
+                  Show only low-confidence words
+                </label>
+                {review[reviewPage] && (
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={reviewedPages.has(reviewPage)}
+                      onChange={(event) => {
+                        const next = new Set(reviewedPages);
+                        if (event.target.checked) next.add(reviewPage);
+                        else next.delete(reviewPage);
+                        setReviewedPages(next);
+                      }}
+                    />{" "}
+                    Page {review[reviewPage].pageIndex + 1} reviewed
+                  </label>
+                )}
+              </div>
               {reviewSource.current && review[reviewPage] && (
                 <PdfPagePreview
                   pdf={reviewSource.current.pdf}
@@ -702,24 +808,38 @@ export function OcrPanel({
                         <legend>Page {page.pageIndex + 1}</legend>
                         {page.lines.map((line, li) => (
                           <div className="ocr-review-line" key={line.id}>
-                            {line.words.map((word, wi) => (
-                              <label key={word.id}>
-                                <span className="field-hint">
-                                  Word {li + 1}.{wi + 1}, confidence{" "}
-                                  {Math.round(word.confidence * 100)}%
-                                </span>
-                                <input
-                                  aria-label={`Page ${page.pageIndex + 1} line ${li + 1} word ${wi + 1}`}
-                                  value={word.text}
-                                  maxLength={500}
-                                  onChange={(event) => {
-                                    const next = structuredClone(review);
-                                    next[pi].lines[li].words[wi].text = event.target.value;
-                                    setReview(next);
-                                  }}
-                                />
-                              </label>
-                            ))}
+                            {line.words.map((word, wi) =>
+                              suspectsOnly && word.confidence >= SUSPECT_CONFIDENCE ? null : (
+                                <label
+                                  key={word.id}
+                                  className={
+                                    word.confidence < SUSPECT_CONFIDENCE ? "ocr-suspect" : undefined
+                                  }
+                                >
+                                  <span className="field-hint">
+                                    Word {li + 1}.{wi + 1}, confidence{" "}
+                                    {Math.round(word.confidence * 100)}%
+                                  </span>
+                                  <input
+                                    aria-label={`Page ${page.pageIndex + 1} line ${li + 1} word ${wi + 1}`}
+                                    data-ocr-word={`${pi}:${li}:${wi}`}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "F8") {
+                                        event.preventDefault();
+                                        goToSuspect(event.shiftKey ? -1 : 1);
+                                      }
+                                    }}
+                                    value={word.text}
+                                    maxLength={500}
+                                    onChange={(event) => {
+                                      const next = structuredClone(review);
+                                      next[pi].lines[li].words[wi].text = event.target.value;
+                                      setReview(next);
+                                    }}
+                                  />
+                                </label>
+                              ),
+                            )}
                           </div>
                         ))}
                       </fieldset>

@@ -18,6 +18,7 @@ import type {
   CompressionPreset,
   CompressionReport,
   DiscardOptions,
+  StructureOptions,
   EngineResult,
 } from "../../types/engine";
 import { FeatureDialog } from "../../components/FeatureDialog";
@@ -64,6 +65,11 @@ export function CompressDialog({
   const [measuredTarget, setMeasuredTarget] = useState<number | null>(null);
   const [discard, setDiscard] = useState<DiscardOptions>(NO_DISCARDS);
   const [flattenForms, setFlattenForms] = useState(false);
+  const [structure, setStructure] = useState<StructureOptions>({
+    objectStreams: true,
+    version: null,
+    monochrome: true,
+  });
   const chosen = Object.values(discard).filter(Boolean).length + (flattenForms ? 1 : 0);
   const [preview, setPreview] = useState<PDFDocumentProxy | null>(null);
   const [previewError, setPreviewError] = useState("");
@@ -126,10 +132,11 @@ export function CompressDialog({
           ? compressToTarget(
               input,
               target,
-              (original, candidate) => compressDocument(original, candidate, jobId, discards),
+              (original, candidate) =>
+                compressDocument(original, candidate, jobId, discards, structure),
               () => job.current !== jobId,
             )
-          : compressDocument(input, preset, jobId, discards),
+          : compressDocument(input, preset, jobId, discards, structure),
       );
       if (job.current === jobId) {
         resultSource.current = pdf;
@@ -311,6 +318,55 @@ export function CompressDialog({
           )}
 
           <details className="discard-options">
+            <summary>Structure and compatibility</summary>
+            <fieldset disabled={running || applying}>
+              <label>
+                Make compatible with{" "}
+                <select
+                  aria-label="Make compatible with"
+                  value={structure.version ?? ""}
+                  onChange={(event) =>
+                    setStructure({ ...structure, version: event.target.value || null })
+                  }
+                >
+                  <option value="">Retain existing version</option>
+                  {["1.4", "1.5", "1.6", "1.7", "2.0"].map((version) => (
+                    <option key={version} value={version}>
+                      PDF {version}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={structure.objectStreams && structure.version !== "1.4"}
+                  disabled={structure.version === "1.4"}
+                  onChange={(event) =>
+                    setStructure({ ...structure, objectStreams: event.target.checked })
+                  }
+                />{" "}
+                Compress document structure (object streams)
+              </label>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={structure.monochrome}
+                  onChange={(event) =>
+                    setStructure({ ...structure, monochrome: event.target.checked })
+                  }
+                />{" "}
+                Re-encode black-and-white images with lossless CCITT Group 4
+              </label>
+              <p className="field-hint">
+                Only the version number and file structure change: content newer than the chosen
+                version is not converted or checked. PDF 1.4 always uses a classic cross-reference
+                table.
+              </p>
+            </fieldset>
+          </details>
+
+          <details className="discard-options">
             <summary>Discard objects{chosen ? ` (${chosen} chosen)` : ""}</summary>
             <fieldset disabled={running || applying}>
               <legend className="field-hint">
@@ -407,6 +463,10 @@ export function CompressDialog({
                 left unchanged: {report.imagesSkipped}. Duplicate streams merged:{" "}
                 {report.duplicateStreamsMerged}. Unused objects removed:{" "}
                 {report.unusedObjectsRemoved}.
+                {report.monochromeRecompressed
+                  ? ` Black-and-white images re-encoded: ${report.monochromeRecompressed}.`
+                  : ""}
+                {report.version ? ` Written as PDF ${report.version}.` : ""}
               </p>
               {report.discarded && report.discarded.length > 0 && (
                 <ul className="field-hint" aria-label="Discarded items">
