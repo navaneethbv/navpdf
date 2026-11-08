@@ -33,6 +33,7 @@ import {
   Heading,
   Type as TextStylesIcon,
   Presentation as PresentIcon,
+  Box as ThreeDIcon,
   Droplets,
   Paperclip,
   Hash,
@@ -323,6 +324,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: PresentIcon,
       action: () => s.set({ activeModal: "present" }),
       disabled: !hasDoc,
+    },
+    {
+      id: "three-d",
+      label: "3D Models",
+      description: "Add a U3D or PRC model with a poster, or save the 3D models a PDF holds",
+      category: "edit",
+      icon: ThreeDIcon,
+      action: () => s.set({ activeModal: "three-d" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
     },
     {
       id: "heading-bookmarks",

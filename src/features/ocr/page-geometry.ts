@@ -260,7 +260,10 @@ export function inverseMap(
   };
 }
 
-/** A normalized [x, y, width, height] box mapped back, as the bounds of its four corners. */
+/**
+ * A normalized [x, y, width, height] box mapped back, as the bounds of its four corners. Boxes
+ * from recognition measure y from the bottom of the image, while images are drawn from the top.
+ */
 export function mapBox(
   box: [number, number, number, number],
   map: PointMap,
@@ -268,18 +271,21 @@ export function mapBox(
   to: { width: number; height: number },
 ): [number, number, number, number] {
   const [x, y, w, h] = box;
+  const top = 1 - y - h;
   const corners = [
-    [x, y],
-    [x + w, y],
-    [x, y + h],
-    [x + w, y + h],
+    [x, top],
+    [x + w, top],
+    [x, top + h],
+    [x + w, top + h],
   ].map(([u, v]) => map(u * from.width, v * from.height));
   const xs = corners.map((corner) => corner[0] / to.width);
   const ys = corners.map((corner) => corner[1] / to.height);
   const clamp = (value: number) => Math.min(1, Math.max(0, value));
   const left = clamp(Math.min(...xs));
-  const top = clamp(Math.min(...ys));
-  return [left, top, clamp(Math.max(...xs)) - left, clamp(Math.max(...ys)) - top];
+  const right = clamp(Math.max(...xs));
+  const upper = clamp(Math.min(...ys));
+  const lower = clamp(Math.max(...ys));
+  return [left, 1 - lower, right - left, lower - upper];
 }
 
 /** A recognition result with every line and word box mapped back onto the rendered page. */

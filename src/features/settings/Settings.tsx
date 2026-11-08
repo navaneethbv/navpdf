@@ -394,6 +394,50 @@ export function Settings() {
             Keep drawing tools selected after each shape
           </label>
           <h3>OCR</h3>
+          <label>
+            Recognition engine{" "}
+            <select
+              value={preferences.ocrEngine}
+              onChange={(e) => {
+                patch({ ocrEngine: e.target.value as Preferences["ocrEngine"] });
+              }}
+            >
+              <option value="system">Built in (Apple Vision)</option>
+              <option value="tesseract">Tesseract installed on this computer</option>
+            </select>
+          </label>
+          {preferences.ocrEngine === "tesseract" && (
+            <div className="form-columns">
+              <label>
+                Tesseract program{" "}
+                <input
+                  value={preferences.tesseractPath}
+                  placeholder="Found on the search path"
+                  maxLength={4096}
+                  onChange={(e) => {
+                    patch({ tesseractPath: e.target.value });
+                  }}
+                />
+              </label>
+              <label>
+                Tesseract languages{" "}
+                <input
+                  value={preferences.tesseractLanguage}
+                  maxLength={64}
+                  pattern="[a-z]{3}(_[a-z]+)?(\+[a-z]{3}(_[a-z]+)?)*"
+                  onChange={(e) => {
+                    patch({ tesseractLanguage: e.target.value.trim() });
+                  }}
+                />
+              </label>
+              <p className="muted">
+                NavPDF runs the program you installed for each page, with a private copy of the page
+                image and no network access of its own. It downloads nothing; install Tesseract and
+                its language data yourself. Give the program&apos;s full path, or leave it empty to
+                use the one on the search path.
+              </p>
+            </div>
+          )}
           <div className="form-columns">
             <label>
               Default language{" "}

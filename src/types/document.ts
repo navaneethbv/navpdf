@@ -97,6 +97,12 @@ export interface Preferences {
   keepAnnotationTool: boolean;
   /** Tools pinned to the toolbar, in order. */
   pinnedTools: string[];
+  /** "system" (Apple Vision) or "tesseract", a program installed on this computer. */
+  ocrEngine: "system" | "tesseract";
+  /** The Tesseract program's full path, or empty to find it on the search path. */
+  tesseractPath: string;
+  /** Tesseract language codes such as "eng" or "eng+deu". */
+  tesseractLanguage: string;
 }
 
 /** The most recent files that can be kept. */
@@ -239,4 +245,7 @@ export const defaultPreferences: Preferences = {
   restoreLastView: true,
   keepAnnotationTool: false,
   pinnedTools: [],
+  ocrEngine: "system",
+  tesseractPath: "",
+  tesseractLanguage: "eng",
 };

@@ -25,6 +25,7 @@ import { CoverUpDialog } from "../redact/CoverUpDialog";
 import { TagsDialog } from "../document/TagsDialog";
 import { StandardsDialog } from "../document/StandardsDialog";
 import { ActionsDialog } from "../actions/ActionsDialog";
+import { ThreeDDialog } from "../document/ThreeDDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -48,6 +49,7 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   "link-tools": LinkToolsDialog,
   "heading-bookmarks": HeadingBookmarksDialog,
   "style-bookmarks": StyleBookmarksDialog,
+  "three-d": ThreeDDialog,
   "space-audit": SpaceAuditDialog,
   "page-properties": PagePropertiesDialog,
   "text-edit-proposal": TextEditProposalDialog,

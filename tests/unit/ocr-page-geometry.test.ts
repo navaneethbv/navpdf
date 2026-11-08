@@ -109,10 +109,11 @@ describe("Mapping word boxes back", () => {
 
   it("maps a box turned a quarter back onto the rendered page", () => {
     const back = inverseMap(600, 800, 90, 0);
-    // In the turned image (800 wide, 600 high) a box at the top left came from the bottom left.
+    // Boxes measure y from the bottom. In the turned image (800 wide, 600 high) the lower-left
+    // quarter came from the lower right of the page as rendered.
     expect(
       mapBox([0, 0, 0.25, 0.5], back, { width: 800, height: 600 }, { width: 600, height: 800 }),
-    ).toEqual([0, 0.75, 0.5, 0.25]);
+    ).toEqual([0.5, 0, 0.5, 0.25]);
     const result = mapOcrResult(
       {
         pageIndex: 0,
@@ -132,6 +133,6 @@ describe("Mapping word boxes back", () => {
       { width: 800, height: 600 },
       { width: 600, height: 800 },
     );
-    expect(result.lines[0].words[0].bbox).toEqual([0, 0.75, 0.5, 0.25]);
+    expect(result.lines[0].words[0].bbox).toEqual([0.5, 0, 0.5, 0.25]);
   });
 });

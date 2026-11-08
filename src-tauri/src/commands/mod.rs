@@ -75,6 +75,12 @@ pub struct Preferences {
     pub keep_annotation_tool: bool,
     /// Tools pinned to the toolbar, in order.
     pub pinned_tools: Vec<String>,
+    /// "system" (Apple Vision) or "tesseract", an installed program run for each page.
+    pub ocr_engine: String,
+    /// The Tesseract program's full path, or empty to find `tesseract` on the search path.
+    pub tesseract_path: String,
+    /// Tesseract language codes such as "eng" or "eng+deu".
+    pub tesseract_language: String,
 }
 
 /// The most recent files that can be kept.
@@ -122,6 +128,9 @@ impl Default for Preferences {
             restore_last_view: true,
             keep_annotation_tool: false,
             pinned_tools: Vec::new(),
+            ocr_engine: "system".into(),
+            tesseract_path: String::new(),
+            tesseract_language: "eng".into(),
         }
     }
 }
@@ -1020,6 +1029,14 @@ fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result
         })
     {
         return Err("Invalid pinned tools.".into());
+    }
+    if !["system", "tesseract"].contains(&preferences.ocr_engine.as_str())
+        || !crate::ocr::tesseract::valid_language(&preferences.tesseract_language)
+        || preferences.tesseract_path.len() > 4096
+        || (!preferences.tesseract_path.is_empty()
+            && !std::path::Path::new(&preferences.tesseract_path).is_absolute())
+    {
+        return Err("Invalid OCR engine settings.".into());
     }
     preferences.network_access = false;
     let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
@@ -1922,19 +1939,44 @@ pub async fn print_document(app: AppHandle, request: Request<'_>) -> Result<bool
     }).await.map_err(|_| "Preparing the print copy failed.")?
 }
 
-#[tauri::command]
-pub async fn ocr_recognize_page(request: Request<'_>) -> Result<crate::ocr::OcrPageResult, String> {
-    let image_bytes = payload(&request).map_err(|_| "Invalid OCR image payload.".to_string())?;
-    let options: crate::ocr::OcrOptions = serde_json::from_str(&header(&request, "x-ocr-options")?)
-        .map_err(|_| "Invalid OCR options.".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || crate::ocr::recognize_page(&image_bytes, &options))
-        .await
-        .map_err(|_| "OCR recognition task failed.".to_string())?
+/// The OCR engine chosen in Settings.
+fn ocr_engine(state: &AppState) -> Result<crate::ocr::Engine, String> {
+    let local = state.local.lock().map_err(|_| "Settings unavailable.")?;
+    let preferences = &local.preferences;
+    Ok(if preferences.ocr_engine == "tesseract" {
+        crate::ocr::Engine::Tesseract {
+            program: preferences.tesseract_path.clone(),
+            language: preferences.tesseract_language.clone(),
+        }
+    } else {
+        crate::ocr::Engine::System
+    })
 }
 
 #[tauri::command]
-pub fn ocr_get_engine_info() -> Result<crate::ocr::OcrEngineInfo, String> {
-    crate::ocr::get_engine_info()
+pub async fn ocr_recognize_page(
+    state: State<'_, AppState>,
+    request: Request<'_>,
+) -> Result<crate::ocr::OcrPageResult, String> {
+    let image_bytes = payload(&request).map_err(|_| "Invalid OCR image payload.".to_string())?;
+    let options: crate::ocr::OcrOptions = serde_json::from_str(&header(&request, "x-ocr-options")?)
+        .map_err(|_| "Invalid OCR options.".to_string())?;
+    let engine = ocr_engine(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ocr::recognize_with(&engine, &image_bytes, &options)
+    })
+    .await
+    .map_err(|_| "OCR recognition task failed.".to_string())?
+}
+
+#[tauri::command]
+pub async fn ocr_get_engine_info(
+    state: State<'_, AppState>,
+) -> Result<crate::ocr::OcrEngineInfo, String> {
+    let engine = ocr_engine(&state)?;
+    tauri::async_runtime::spawn_blocking(move || crate::ocr::engine_info(&engine))
+        .await
+        .map_err(|_| "The OCR engine could not be described.".to_string())?
 }
 
 #[tauri::command]

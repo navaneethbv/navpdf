@@ -90,15 +90,15 @@ Each row's status changes from Planned to Implemented when its code and tests la
 
 ## Batch 17: decision items
 
-Each item needs an ADR before implementation and stays off by default where it changes the safety boundary.
+[ADR 0021](adr/0021-presentation-pinned-tools-3d-and-external-ocr.md) records the decisions; the installed OCR engine is off by default.
 
 | Upstream entry | Planned NavPDF behaviour | Status |
 | --- | --- | --- |
-| `view.full-screen-presentation` | Present mode: full screen, one page at a time, click or arrow to advance, optional auto-advance every N seconds and looping. Page transitions are not animated. | Planned |
-| `view.customize-quick-tools` | Pin tools from the Tools catalog to the toolbar and Home, with order kept in settings. | Planned |
-| `misc.3d-add` | Add a 3D model: a U3D or PRC file detected from its header embedded as a 3D annotation with a poster from an image or a labelled frame. Supersedes the 3D authoring part of ADR 0010. | Planned |
-| `misc.3d-view` | 3D content list: each 3D annotation's format, size and poster, with extraction of the model file. Interactive 3D rendering is not provided. | Planned |
-| `ocr.ocr-engines` | Optional Tesseract engine: an installed `tesseract` binary chosen by the user, run with fixed arguments, allow-listed languages, a private temporary folder, a timeout and an output limit. Off by default; no model downloads. | Planned |
+| `view.full-screen-presentation` | View options and Tools, Present: one page at a time on black, full screen where allowed; click, Space, Page Down or the right arrow to advance, Shift-click, Backspace, Page Up or the left arrow to go back, Home and End, Escape to stop; advance every 3 to 60 seconds and loop. | Implemented under ADR 0021. Page transitions are not animated. |
+| `view.customize-quick-tools` | All Tools, a pin on each tool card: up to 12 pinned tools appear first in All Tools and as toolbar buttons in the order pinned, reordered with Alt-Left and Alt-Right, kept in settings. | Implemented under ADR 0021. Button size and docking are not offered. |
+| `misc.3d-add` | Tools, 3D Models: a U3D or PRC file (checked from its contents, up to 100 MB) is stored as a 3D annotation activated by a click or on page open, with a chosen PNG or JPEG poster fitted in the box or a labelled frame. No 3D JavaScript or views are added. | Implemented under ADR 0021. Posters are not rendered from the model and are not counter-rotated on turned pages. |
+| `misc.3d-view` | Tools, 3D Models: the document's 3D annotations with page, format, stored size, named views and whether the model asks for JavaScript, and Save model to a file NavPDF never opens. | Implemented under ADR 0021. Models are not displayed or rotated; readers show the poster. |
+| `ocr.ocr-engines` | Settings, Recognition engine: built in (Apple Vision) or a Tesseract installed by the user, run per page with fixed arguments, allow-listed languages, a private temporary folder, an empty environment, a two-minute limit and a 16 MB output cap; TSV words become the usual lines, words and confidences. Verified with Tesseract 5.3.4 on a rendered sample. | Implemented under ADR 0021. Nothing is downloaded; an ensemble of engines is not provided. |
 
 ## Robustness review
 
