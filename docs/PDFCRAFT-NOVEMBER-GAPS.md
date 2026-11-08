@@ -59,11 +59,11 @@ Each row's status changes from Planned to Implemented when its code and tests la
 
 | Upstream entry | Planned NavPDF behaviour | Status |
 | --- | --- | --- |
-| `organize.bookmark-clipboard` | Bookmark editor Cut, Copy and Paste of a bookmark with its subtree, within a document or into another tab; destinations are page numbers, and a page the target lacks leaves the bookmark without a destination. | Planned |
-| `organize.bookmarks-from-text-styles` | New bookmarks from text styles: lists the document's font and size combinations with samples; choosing up to four styles for levels 1 to 4 creates nested bookmarks from matching lines. | Planned |
-| `organize.bookmarks-import-export` | Export the outline as JSON (titles, nesting, open state, colour, style, page and view) and import it in place of or under the current outline as one undo step. | Planned |
-| `comment.import-from-pdf` | Import comments accepts a PDF: each markup annotation, with its pop-up and replies, is copied to the same page number; pages past the end are skipped; redaction marks and password-protected sources are refused. | Planned |
-| `comment.export-selected` | Export selected comments as NavPDF comment JSON or XFDF. | Planned |
+| `organize.bookmark-clipboard` | Edit Bookmarks, Cut, Copy, Paste inside and Paste bookmarks at top level carry a bookmark with its subtree, within a document or into another tab, saved with the other edits. | Implemented. A bookmark whose page the target lacks keeps its place without a destination, and the editor says how many. |
+| `organize.bookmarks-from-text-styles` | Tools, Bookmarks from Text Styles: the document's font, size, bold and italic combinations, largest first, with line counts and a sample; one style per level for up to four levels. Every line in a chosen style becomes a bookmark nested under the nearest higher level, consecutive lines of one heading are joined, and the new bookmarks replace or follow the existing ones. | Implemented. Fonts are read from each page's operator list, so large documents take a while; colour is not part of a style. |
+| `organize.bookmarks-import-export` | Edit Bookmarks, Export all as JSON or Export on one bookmark for its subtree, and Import JSON to add at top level or replace all: titles, nesting, open state, colour, bold and italic, and page with view. Imports are validated (2 MB, 10,000 bookmarks, 32 levels, views and colours) before any is added. | Implemented. Only NavPDF's own JSON format is read. |
+| `comment.import-from-pdf` | Comments panel, Import accepts a PDF as well as comment JSON: each comment goes onto the page with the same number at the same place on the visible page, with its appearance, pop-up and replies; a same-named comment is replaced. | Implemented. Pages past the end, redaction marks, links, form fields and media are left out and counted; a password-protected PDF is refused. |
+| `comment.export-selected` | Comments panel, Export selected writes the selected comments and their replies as NavPDF comment JSON; Copy puts them on the comment clipboard. | Implemented. Annotation XFDF export is not provided; form XFDF is separate. |
 
 ## Batch 15: editing
 

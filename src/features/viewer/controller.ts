@@ -44,6 +44,7 @@ import { pruneDocument } from "../../services/engine";
 import {
   copyAnnotations,
   deleteAnnotations,
+  importCommentsFromPdf,
   moveAnnotations,
   pasteAnnotations,
   reshapeAnnotation,
@@ -1408,14 +1409,21 @@ export class ViewerController {
       this.setTool("select");
     });
   }
-  exportComments() {
+  /** Comments as NavPDF comment JSON; with `ids`, only those comments and their replies. */
+  exportComments(ids?: string[]) {
     const state = useWorkspace.getState();
     if (!state.document || !this.pdf) throw new Error("Open a PDF before exporting comments.");
+    const chosen = ids ? new Set(ids) : null;
+    const comments = chosen
+      ? state.comments.filter(
+          (comment) => chosen.has(comment.id) || (comment.replyTo && chosen.has(comment.replyTo)),
+        )
+      : state.comments;
     return JSON.stringify(
       createCommentExchange(
         state.document.id,
         this.pdf.numPages,
-        state.comments,
+        comments,
         this.identity ?? `${state.document.id}:${this.pdf.numPages}`,
       ),
       null,
@@ -1466,6 +1474,23 @@ export class ViewerController {
    * Select a comment. "toggle" adds it to or takes it out of the selection, and "range" selects
    * the comments listed from the one with the handles to this one.
    */
+  /** Copy every comment from another PDF onto the same page numbers, as one undo step. */
+  async importCommentsFromPdf(sourceBytes: Uint8Array) {
+    if (!this.pdf) throw new Error("Open a PDF before importing comments.");
+    return this.mutate("Importing comments", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const result = await importCommentsFromPdf(bytes, sourceBytes);
+      const notes = [
+        result.outside ? `${result.outside} on pages this document lacks were left out` : "",
+        result.redactions ? `${result.redactions} redaction marks were not copied` : "",
+      ].filter(Boolean);
+      const label = `${result.imported} comment${result.imported === 1 ? "" : "s"} imported${
+        notes.length ? `; ${notes.join("; ")}` : ""
+      }`;
+      await this.replaceWithBytes(result.bytes, label, { preMutationBytes: bytes });
+      return result.imported;
+    });
+  }
   selectAnnotation(id: string, mode: "replace" | "toggle" | "range" = "replace") {
     const state = useWorkspace.getState();
     const comment = state.comments.find((item) => item.id === id);

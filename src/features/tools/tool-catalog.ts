@@ -31,6 +31,7 @@ import {
   Images,
   Ruler,
   Heading,
+  Type as TextStylesIcon,
   Droplets,
   Paperclip,
   Hash,
@@ -320,6 +321,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       category: "edit",
       icon: Heading,
       action: () => s.set({ activeModal: "heading-bookmarks" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
+      id: "style-bookmarks",
+      label: "Bookmarks from Text Styles",
+      description: "Make nested bookmarks from lines in chosen fonts and sizes",
+      category: "edit",
+      icon: TextStylesIcon,
+      action: () => s.set({ activeModal: "style-bookmarks" }),
       disabled: !hasDoc || !!s.info?.encrypted,
     },
     // Review

@@ -265,6 +265,24 @@ function relatedEntries(annots: PDFArray, roots: Set<string>) {
   return keep;
 }
 
+/**
+ * Cut links from the comments to copy to anything outside them, so the copier does not pull in
+ * the source page tree, structure tree or unrelated comments.
+ */
+function detachForCopy(source: PDFDocument, refs: PDFRef[], keep: Set<string>) {
+  for (const ref of refs) {
+    const dict = source.context.lookup(ref, PDFDict);
+    dict.delete(PDFName.of("P"));
+    dict.delete(PDFName.of("StructParent"));
+    const parent = refKey(dict.get(PDFName.of("Parent")));
+    if (parent && !keep.has(parent)) dict.delete(PDFName.of("Parent"));
+    const irt = refKey(dict.get(PDFName.of("IRT")));
+    if (irt && !keep.has(irt)) dict.delete(PDFName.of("IRT"));
+    const popup = refKey(dict.get(PDFName.of("Popup")));
+    if (popup && !keep.has(popup)) dict.delete(PDFName.of("Popup"));
+  }
+}
+
 function textOf(annotation: PDFDict) {
   return (
     annotation.lookupMaybe(PDFName.of("Contents"), PDFString, PDFHexString)?.decodeText() ?? ""
@@ -306,18 +324,7 @@ export async function copyAnnotations(
   const refs = annots
     .asArray()
     .filter((entry): entry is PDFRef => entry instanceof PDFRef && keep.has(entry.toString()));
-  // Links outside the copied comments are cut so the copier does not pull in the page tree.
-  for (const ref of refs) {
-    const dict = source.context.lookup(ref, PDFDict);
-    dict.delete(PDFName.of("P"));
-    dict.delete(PDFName.of("StructParent"));
-    const parent = refKey(dict.get(PDFName.of("Parent")));
-    if (parent && !keep.has(parent)) dict.delete(PDFName.of("Parent"));
-    const irt = refKey(dict.get(PDFName.of("IRT")));
-    if (irt && !keep.has(irt)) dict.delete(PDFName.of("IRT"));
-    const popup = refKey(dict.get(PDFName.of("Popup")));
-    if (popup && !keep.has(popup)) dict.delete(PDFName.of("Popup"));
-  }
+  detachForCopy(source, refs, keep);
   const clip = await PDFDocument.create();
   const box = visibleBox(page);
   // Same box and rotation as the source, so a render of the clip lines up with the page.
@@ -443,4 +450,117 @@ export async function pasteAnnotations(
   if (existing) for (const ref of pasted) existing.push(ref);
   else page.node.set(PDFName.of("Annots"), doc.context.obj(pasted));
   return { bytes: await doc.save(), ids };
+}
+
+/** Annotations that are not review comments, or that importing must not copy. */
+const NOT_COMMENTS = new Set([
+  "Link",
+  "Widget",
+  "Popup",
+  "Screen",
+  "Movie",
+  "Sound",
+  "3D",
+  "RichMedia",
+  "PrinterMark",
+  "TrapNet",
+  "Watermark",
+]);
+
+export interface ImportedComments {
+  bytes: Uint8Array;
+  /** Comments added or replaced, not counting pop-ups and replies. */
+  imported: number;
+  /** Comments on pages past the end of this document. */
+  outside: number;
+  /** Redaction marks, which are not copied. */
+  redactions: number;
+}
+
+function nameOf(dict: PDFDict) {
+  return dict.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ?? "";
+}
+
+/**
+ * Copy every comment from another PDF onto the page with the same number, at the same place
+ * relative to the visible page, with its appearance, pop-up and replies. A comment whose name is
+ * already used here replaces that comment. Redaction marks are left out, and a PDF that needs a
+ * password is refused.
+ */
+export async function importCommentsFromPdf(
+  bytes: Uint8Array,
+  sourceBytes: Uint8Array,
+): Promise<ImportedComments> {
+  let source: PDFDocument;
+  try {
+    source = await PDFDocument.load(sourceBytes);
+  } catch (error) {
+    if (error instanceof Error && /encrypt/i.test(error.message))
+      throw new Error("Comments cannot be imported from a password-protected PDF.", {
+        cause: error,
+      });
+    throw new Error("Choose a valid PDF to import comments from.", { cause: error });
+  }
+  if (source.isEncrypted)
+    throw new Error("Comments cannot be imported from a password-protected PDF.");
+  const doc = await PDFDocument.load(bytes);
+  const copier = PDFObjectCopier.for(source.context, doc.context);
+  let imported = 0;
+  let outside = 0;
+  let redactions = 0;
+  let total = 0;
+  for (const [index, sourcePage] of source.getPages().entries()) {
+    const annots = sourcePage.node.Annots();
+    if (!annots) continue;
+    const roots = new Set<string>();
+    for (let i = 0; i < annots.size(); i++) {
+      const entry = annots.get(i);
+      const dict = annots.lookupMaybe(i, PDFDict);
+      if (!(entry instanceof PDFRef) || !dict) continue;
+      const subtype = subtypeOf(dict);
+      if (subtype === "Redact") {
+        redactions++;
+        continue;
+      }
+      if (NOT_COMMENTS.has(subtype) || dict.has(PDFName.of("IRT"))) continue;
+      if (index >= doc.getPageCount()) {
+        outside++;
+        continue;
+      }
+      roots.add(entry.toString());
+    }
+    if (!roots.size) continue;
+    if ((total += roots.size) > MAX_BATCH_COMMENTS * 20)
+      throw new Error("The PDF has too many comments to import at once.");
+    const keep = relatedEntries(annots, roots);
+    const refs = annots
+      .asArray()
+      .filter((entry): entry is PDFRef => entry instanceof PDFRef && keep.has(entry.toString()));
+    detachForCopy(source, refs, keep);
+    const page = doc.getPage(index);
+    const from = visibleBox(sourcePage);
+    const to = visibleBox(page);
+    for (const ref of refs) {
+      const name = nameOf(source.context.lookup(ref, PDFDict));
+      // Same-named comments are replaced, with their own pop-ups and replies.
+      while (name && deleteAnnotationIn(doc, name, index + 1)) {
+        // Each pass removes one comment of that name.
+      }
+    }
+    for (const ref of refs) {
+      const copied = copier.copy(ref);
+      const dict = doc.context.lookup(copied, PDFDict);
+      shiftGeometry(dict, doc.context, to.x - from.x, to.y - from.y);
+      dict.set(PDFName.of("P"), page.ref);
+      page.node.addAnnot(copied);
+      if (roots.has(ref.toString())) imported++;
+    }
+  }
+  if (imported === 0)
+    throw new Error(
+      outside
+        ? "Every comment in that PDF is on a page this document does not have."
+        : "That PDF has no comments to import.",
+    );
+  return { bytes: await doc.save(), imported, outside, redactions };
 }

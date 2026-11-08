@@ -9,7 +9,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useWorkspace } from "../../stores/workspace";
+import { selectedCommentIds, useWorkspace } from "../../stores/workspace";
 import { Thumbnails } from "./Thumbnails";
 import { SearchPanel } from "../search/SearchPanel";
 import type { ViewerController } from "./controller";
@@ -32,9 +32,14 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
     layers = useWorkspace((s) => s.layers),
     set = useWorkspace((s) => s.set);
   const importInput = useRef<HTMLInputElement>(null);
-  const exportComments = async () => {
+  const selectedIds = useWorkspace((s) => s.selectedAnnotationIds);
+  const selection = selectedCommentIds({
+    selectedAnnotationId: selectedId,
+    selectedAnnotationIds: selectedIds,
+  });
+  const exportComments = async (ids?: string[]) => {
     try {
-      const source = controller.exportComments();
+      const source = controller.exportComments(ids);
       const name = useWorkspace.getState().document?.name || "document.pdf";
       const saved = await downloadBlob(
         new Blob([source], { type: "application/json" }),
@@ -126,6 +131,17 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
           >
             <Download size={14} /> Export
           </button>
+          <button
+            type="button"
+            className="button"
+            disabled={selection.length === 0}
+            title="Export only the selected comments and their replies"
+            onClick={() => {
+              void exportComments(selection);
+            }}
+          >
+            <Download size={14} /> Export selected
+          </button>
           <button type="button" className="button" onClick={() => importInput.current?.click()}>
             <Upload size={14} /> Import
           </button>
@@ -133,15 +149,24 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
             ref={importInput}
             hidden
             type="file"
-            accept="application/json,.json"
+            accept="application/json,.json,application/pdf,.pdf"
+            aria-label="Comment file or PDF to import comments from"
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
               if (!file) return;
-              void file
-                .text()
-                .then((source) => controller.importComments(source))
-                .then((count) => set({ status: `${count} comments imported` }))
+              const fromPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+              void (
+                fromPdf
+                  ? file
+                      .arrayBuffer()
+                      .then((buffer) => controller.importCommentsFromPdf(new Uint8Array(buffer)))
+                  : file.text().then((source) => controller.importComments(source))
+              )
+                .then((count) => {
+                  // Importing from a PDF reports what was left out in its own status.
+                  if (!fromPdf) set({ status: `${count} comments imported` });
+                })
                 .catch((error: unknown) =>
                   set({ error: error instanceof Error ? error.message : String(error) }),
                 );
