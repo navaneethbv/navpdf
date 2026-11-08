@@ -95,6 +95,8 @@ export interface Preferences {
   restoreLastView: boolean;
   /** Keep a drawing tool selected after each shape, instead of returning to Select. */
   keepAnnotationTool: boolean;
+  /** Tools pinned to the toolbar, in order. */
+  pinnedTools: string[];
 }
 
 /** The most recent files that can be kept. */
@@ -236,4 +238,5 @@ export const defaultPreferences: Preferences = {
   recentLimit: 15,
   restoreLastView: true,
   keepAnnotationTool: false,
+  pinnedTools: [],
 };

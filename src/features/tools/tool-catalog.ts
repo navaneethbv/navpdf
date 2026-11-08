@@ -32,6 +32,7 @@ import {
   Ruler,
   Heading,
   Type as TextStylesIcon,
+  Presentation as PresentIcon,
   Droplets,
   Paperclip,
   Hash,
@@ -313,6 +314,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       icon: FileText,
       action: () => s.set({ activeModal: "bookmarks-edit" }),
       disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
+      id: "present",
+      label: "Present",
+      description: "Show one page at a time full screen, with optional auto-advance and looping",
+      category: "review",
+      icon: PresentIcon,
+      action: () => s.set({ activeModal: "present" }),
+      disabled: !hasDoc,
     },
     {
       id: "heading-bookmarks",

@@ -58,6 +58,8 @@ import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
 import { pageColorsFor } from "../features/viewer/page-colors";
 import { AboutDialog } from "../features/help/AboutDialog";
+import { Presentation } from "../features/viewer/Presentation";
+
 /** Menu and modal identifiers for the editable export dialog and the format each selects. */
 const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
   ["office-export", "docx"],
@@ -525,7 +527,9 @@ export default function App() {
         state.settingsOpen ||
         session.password ||
         session.confirm ||
-        ["help", "tour", "tips", "shortcuts", "command-palette"].includes(state.activeModal ?? "")
+        ["help", "tour", "tips", "shortcuts", "command-palette", "present"].includes(
+          state.activeModal ?? "",
+        )
       )
         return;
       if (state.busy) {
@@ -997,6 +1001,9 @@ export default function App() {
               },
             ]}
           />
+        )}
+        {s.activeModal === "present" && controller?.pdf && (
+          <Presentation controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
         {s.activeModal === "page-workspace" && (
           <PageWorkspace controller={controller} onClose={() => s.set({ activeModal: null })} />

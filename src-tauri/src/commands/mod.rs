@@ -73,6 +73,8 @@ pub struct Preferences {
     pub restore_last_view: bool,
     /// Keep a drawing tool selected after each shape.
     pub keep_annotation_tool: bool,
+    /// Tools pinned to the toolbar, in order.
+    pub pinned_tools: Vec<String>,
 }
 
 /// The most recent files that can be kept.
@@ -119,6 +121,7 @@ impl Default for Preferences {
             recent_limit: 15,
             restore_last_view: true,
             keep_annotation_tool: false,
+            pinned_tools: Vec::new(),
         }
     }
 }
@@ -1005,6 +1008,19 @@ fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result
     if preferences.recent_limit > MAX_RECENTS {
         return Err("Invalid preference value.".into());
     }
+    let mut seen = std::collections::HashSet::new();
+    if preferences.pinned_tools.len() > 12
+        || !preferences.pinned_tools.iter().all(|id| {
+            !id.is_empty()
+                && id.len() <= 64
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                && seen.insert(id.clone())
+        })
+    {
+        return Err("Invalid pinned tools.".into());
+    }
     preferences.network_access = false;
     let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
     let mut candidate = local.clone();
@@ -1280,6 +1296,7 @@ mod tests {
         assert_eq!(parsed.recent_limit, 15);
         assert!(parsed.restore_last_view);
         assert!(!parsed.keep_annotation_tool);
+        assert!(parsed.pinned_tools.is_empty());
         let local: LocalData = serde_json::from_str(r#"{"preferences":{},"recents":[]}"#).unwrap();
         assert!(local.views.is_empty());
     }
@@ -1525,6 +1542,35 @@ mod tests {
             serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
         assert!(saved.recents.is_empty());
         assert_eq!(saved.preferences.theme, "dark");
+    }
+
+    #[test]
+    fn pinned_tools_and_recent_limits_are_validated_and_trim_recents() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let mut preferences = Preferences {
+            pinned_tools: vec!["present".into(), "compress-pdf".into()],
+            ..Preferences::default()
+        };
+        persist_preferences(&state, preferences.clone()).unwrap();
+        for invalid in [
+            vec!["Bad Id".to_string()],
+            vec!["same".into(), "same".into()],
+            (0..13).map(|i| format!("tool-{i}")).collect(),
+            vec![String::new()],
+        ] {
+            let candidate = Preferences {
+                pinned_tools: invalid,
+                ..preferences.clone()
+            };
+            assert!(persist_preferences(&state, candidate).is_err());
+        }
+        preferences.recent_limit = MAX_RECENTS + 1;
+        assert!(persist_preferences(&state, preferences.clone()).is_err());
+        seed_recent(&state);
+        preferences.recent_limit = 0;
+        persist_preferences(&state, preferences).unwrap();
+        assert!(state.local.lock().unwrap().recents.is_empty());
     }
 
     #[test]

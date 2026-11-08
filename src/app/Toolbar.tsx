@@ -34,6 +34,7 @@ import {
   Settings,
   Download,
   Eye,
+  Presentation,
   EyeOff,
   RotateCw,
   Moon,
@@ -49,6 +50,7 @@ import { useWorkspace } from "../stores/workspace";
 import type { ViewerController } from "../features/viewer/controller";
 import type { Layout, ToolMode } from "../types/document";
 import { formatBytes } from "../features/compress/CompressDialog";
+import { PinnedTools } from "./PinnedTools";
 
 type ControllerProps = { controller: ViewerController | null };
 export function Toolbar({
@@ -135,6 +137,7 @@ export function Toolbar({
         >
           <Search size={18} />
         </button>
+        <PinnedTools />
         <div className="toolbar-space" />
         <button
           className="icon-button"
@@ -574,6 +577,13 @@ export function NavigationRail({ controller }: Readonly<ControllerProps>) {
               onClick={() => s.set({ readMode: !s.readMode })}
             >
               <Eye size={18} /> Read mode
+            </button>
+            <button
+              aria-label="Present from this page"
+              disabled={!s.document}
+              onClick={() => s.set({ activeModal: "present" })}
+            >
+              <Presentation size={18} /> Present
             </button>
             {controller?.readAloud.supported && (
               <>
