@@ -162,7 +162,7 @@ export function Presentation({
           aria-label={`Page ${page}`}
           onClick={(event) => step(event.shiftKey ? -1 : 1)}
         >
-          <canvas ref={canvas} aria-hidden="true" />
+          <canvas ref={canvas} />
         </button>
         {error && (
           <p role="alert" className="presentation-error">

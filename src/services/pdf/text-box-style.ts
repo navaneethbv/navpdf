@@ -76,9 +76,9 @@ function appearanceOperands(
   count: number,
 ): number[] | undefined {
   // The first operand can end a token with a nonnumeric prefix. Other operands must be whole tokens.
-  for (let index = count; index < tokens.length; index++) {
-    if (!operator.test(tokens[index])) continue;
-    const first = numericSuffix(tokens[index - count]);
+  for (const [index, token] of tokens.entries()) {
+    if (index < count || !operator.test(token)) continue;
+    const first = numericSuffix(tokens.at(index - count) ?? "");
     const rest = tokens.slice(index - count + 1, index);
     if (first && rest.every((token) => NUMBER_TOKEN.test(token)))
       return [first, ...rest].map(Number);
