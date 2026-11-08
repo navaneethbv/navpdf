@@ -46,6 +46,7 @@ export function DecorationsDialog({
   const [footerLeft, setFooterLeft] = useState("");
   const [footerCenter, setFooterCenter] = useState("{date}");
   const [footerRight, setFooterRight] = useState("");
+  const [shrinkToFit, setShrinkToFit] = useState(false);
 
   // Bates Numbering
   const [batesPrefix, setBatesPrefix] = useState("DOC-");
@@ -153,6 +154,7 @@ export function DecorationsDialog({
         center: footerCenter.trim() || undefined,
         right: footerRight.trim() || undefined,
       };
+      options.shrinkToFit = shrinkToFit;
     }
     return options;
   };
@@ -449,6 +451,21 @@ export function DecorationsDialog({
                 Available tokens: &#123;page&#125;, &#123;total&#125;, &#123;date&#125;,
                 &#123;title&#125;, &#123;author&#125;
               </p>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={shrinkToFit}
+                  onChange={(e) => setShrinkToFit(e.target.checked)}
+                />{" "}
+                Shrink page content to avoid overwriting it
+              </label>
+              {shrinkToFit && (
+                <p className="field-hint">
+                  The page&apos;s own drawing is scaled evenly into the space between the header and
+                  footer. Comments, links and form fields keep their places. Remove Decorations
+                  undoes the scaling.
+                </p>
+              )}
             </>
           )}
 

@@ -125,6 +125,37 @@ ${sections}
 `;
 }
 
+/** Characters CommonMark could read as markup anywhere in a line. */
+const MARKDOWN_INLINE = /[\\`*_[\]<>|~&!]/g;
+
+/**
+ * Escape text taken from a PDF so CommonMark shows it literally: inline markup characters
+ * are backslash-escaped, and a line that would start a heading, list, quote, rule or numbered
+ * item has its leading marker escaped too.
+ */
+export function escapeMarkdown(text: string) {
+  const inline = text.replaceAll(MARKDOWN_INLINE, (match) => `\\${match}`);
+  return inline.replace(/^(\s*)([#>+=-])/, "$1\\$2").replace(/^(\s*\d+)([.)])/, "$1\\$2");
+}
+
+/**
+ * CommonMark with one heading per document, headings and paragraphs rebuilt from the text
+ * layer, and a thematic break between pages. Like the other text exports, images, tables,
+ * lists and inline styles are not carried over.
+ */
+export function buildMarkdown(layouts: PageLayout[], title: string) {
+  const pages = layouts.map((layout) =>
+    layout.paragraphs
+      .map((item) => {
+        const text = escapeMarkdown(item.text.replaceAll(/\s+/g, " ").trim());
+        return item.heading ? `${"#".repeat(item.heading + 1)} ${text}` : text;
+      })
+      .filter((block) => block.replace(/^#+ /, "") !== "")
+      .join("\n\n"),
+  );
+  return `# ${escapeMarkdown(title)}\n\n${pages.join("\n\n---\n\n")}\n`;
+}
+
 const hundredths = (value: number) => Math.round(value * 100) / 100;
 
 /** A structured XML 1.0 document of pages, headings and paragraphs. */

@@ -173,7 +173,13 @@ async function commitLoadedCandidate(options: CommitLoadedCandidateOptions): Pro
     status: "Ready",
     busy: false,
   });
-  controller.goTo(initialPage);
+  // A file's remembered view (page, zoom and layout) wins over a remembered page alone.
+  const view =
+    !recovering && useWorkspace.getState().local.preferences.restoreLastView
+      ? descriptor.lastView
+      : undefined;
+  if (view) controller.applyView(view);
+  else controller.goTo(initialPage);
   await desktop.markDirty(recovering || !!descriptor.unsaved).catch(report);
   await refreshLocal().catch(report);
   if (previous && previous.id !== descriptor.id) {

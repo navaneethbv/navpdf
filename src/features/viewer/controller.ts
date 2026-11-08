@@ -27,12 +27,19 @@ import type {
   ShapeKind,
   SelectedTextGeometry,
   DocumentLayer,
+  LastView,
 } from "../../types/document";
 import type { DocumentRevision } from "../../types/operations";
 import { useWorkspace } from "../../stores/workspace";
 import { positionSearchCursor } from "../search/select-result";
 import { boundedZoom, snippet, searchCriteriaKey } from "../../utils/search";
-import { commitWorkingRevision, markDirty, native, rememberPage } from "../../services/native";
+import {
+  commitWorkingRevision,
+  markDirty,
+  native,
+  rememberPage,
+  rememberView,
+} from "../../services/native";
 import { pruneDocument } from "../../services/engine";
 import { loadPdfFromBytes } from "../../services/pdf";
 import { RevisionHistory } from "../../services/revision-history";
@@ -301,6 +308,7 @@ export class ViewerController {
   private started = 0;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
   private pageTimer: ReturnType<typeof setTimeout> | undefined;
+  private viewTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly contexts = new Map<number, string>();
   private readonly abort = new AbortController();
   private searchGeneration = 0;
@@ -426,10 +434,12 @@ export class ViewerController {
             useWorkspace.getState().set({ error: "The last viewed page could not be remembered." }),
           );
       }, 500);
+      this.scheduleViewRecord();
     });
-    on("scalechanging", ({ scale }: { scale: number }) =>
-      useWorkspace.getState().set({ zoom: Math.round(scale * 100) }),
-    );
+    on("scalechanging", ({ scale }: { scale: number }) => {
+      useWorkspace.getState().set({ zoom: Math.round(scale * 100) });
+      this.scheduleViewRecord();
+    });
     on(
       "annotationlayerrendered",
       ({ source }: { source: { div: HTMLElement; pdfPage?: PDFPageProxy | null } }) => {
@@ -597,6 +607,7 @@ export class ViewerController {
     await this.readComments().catch(() => {});
   }
   async detach() {
+    this.flushViewRecord();
     this.generation++;
     this.searchGeneration++;
     clearTimeout(this.searchTimer);
@@ -869,6 +880,7 @@ export class ViewerController {
     this.searchGeneration++;
     clearTimeout(this.searchTimer);
     clearTimeout(this.pageTimer);
+    clearTimeout(this.viewTimer);
   }
   destroy() {
     this.suspendView();
@@ -972,6 +984,7 @@ export class ViewerController {
     await this.foldViewEdits();
     const pdf = this.pdf;
     if (!pdf) return null;
+    this.flushViewRecord();
     const parked: ParkedDocument = {
       pdf,
       revisionTask: this.revisionTask,
@@ -1083,6 +1096,35 @@ export class ViewerController {
     const spread = layout === "spread" && configured === "none" ? "odd" : configured;
     this.viewer.spreadMode = layout === "spread" ? this.spreadMode(spread) : SpreadMode.NONE;
     useWorkspace.getState().set({ layout, spread });
+    this.scheduleViewRecord();
+  }
+  /** The page, zoom and layout shown now, for restoring this file's view later. */
+  currentView(): LastView | null {
+    if (!this.pdf) return null;
+    const { page, layout } = useWorkspace.getState();
+    const zoom = String(this.viewer.currentScaleValue);
+    return page > 0 && zoom ? { page, zoom, layout } : null;
+  }
+  private scheduleViewRecord() {
+    clearTimeout(this.viewTimer);
+    this.viewTimer = setTimeout(() => this.flushViewRecord(), 800);
+  }
+  /** Remember the shown file's view now, when restoring views is on. */
+  private flushViewRecord() {
+    clearTimeout(this.viewTimer);
+    const state = useWorkspace.getState();
+    const document = state.document;
+    const view = this.currentView();
+    if (!document || document.unsaved || !view || !state.local.preferences.restoreLastView) return;
+    void rememberView(document.id, view).catch(() => {
+      // Losing a remembered view only means the file opens at its own initial view.
+    });
+  }
+  /** Show a remembered view: its layout and zoom first, then its page. */
+  applyView(view: LastView) {
+    this.setLayout(view.layout);
+    this.zoom(view.zoom);
+    this.goTo(view.page);
   }
   private spreadMode(spread: "none" | "odd" | "even") {
     if (spread === "even") return SpreadMode.EVEN;
@@ -1886,6 +1928,21 @@ export class ViewerController {
     config.setVisibility(id, visible);
     this.viewer.optionalContentConfigPromise = Promise.resolve(config);
     await this.refreshLayers(this.generation);
+  }
+  /** Show every layer as the document's default configuration has it. */
+  async resetLayers() {
+    if (!this.pdf) return;
+    const generation = this.generation;
+    const [config, initial] = await Promise.all([
+      this.viewer.optionalContentConfigPromise,
+      // Each call builds a new configuration from the document's own defaults.
+      this.pdf.getOptionalContentConfig(),
+    ]);
+    if (!config || generation !== this.generation) return;
+    for (const [id, group] of initial as unknown as Iterable<[string, { visible: boolean }]>)
+      config.setVisibility(id, group.visible);
+    this.viewer.optionalContentConfigPromise = Promise.resolve(config);
+    await this.refreshLayers(generation);
   }
   private async refreshLayers(generation: number) {
     let layers: Array<{ id: string; name: string; visible: boolean }> = [];

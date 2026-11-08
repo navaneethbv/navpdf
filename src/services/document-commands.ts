@@ -24,6 +24,7 @@ import {
   drawLinesOfText,
   drawRectangle,
   pushGraphicsState,
+  concatTransformationMatrix,
   popGraphicsState,
   PDFOperator,
   PDFForm,
@@ -1992,6 +1993,8 @@ export interface DocumentDecorationsOptions {
     image?: DecorationImage;
   };
   pageRange?: number[]; // 1-based page numbers; all if omitted
+  /** Scale each page's original content into the band the header and footer leave free. */
+  shrinkToFit?: boolean;
   metadata?: {
     title?: string;
     author?: string;
@@ -2249,6 +2252,61 @@ function renderDecorationPage(
   if (ops.length > 2) appendTaggedStream(doc, page, "NavPDF_Decoration", ops);
 }
 
+/** Header and footer text size, baselines from the page edge, and clearance from the content. */
+const HEADER_FOOTER_SIZE = 10;
+const HEADER_BASELINE = 30;
+const FOOTER_BASELINE = 25;
+const HEADER_FOOTER_CLEARANCE = HEADER_FOOTER_SIZE / 2;
+
+function slotUsed(slot: DecorationHeaderFooterSlot | undefined) {
+  return !!(slot?.left?.trim() || slot?.center?.trim() || slot?.right?.trim());
+}
+
+/**
+ * The matrix that scales a page's content evenly into the band between the footer and the
+ * header, centred across, or null when neither is drawn.
+ */
+export function shrinkMatrix(
+  box: { x: number; y: number; width: number; height: number },
+  header: boolean,
+  footer: boolean,
+): [number, number, number, number, number, number] | null {
+  if (!header && !footer) return null;
+  // The footer's text sits above its baseline and the header's descenders a little below it.
+  const bottom = footer ? FOOTER_BASELINE + HEADER_FOOTER_SIZE + HEADER_FOOTER_CLEARANCE : 0;
+  const top = header
+    ? box.height - HEADER_BASELINE - HEADER_FOOTER_SIZE * 0.25 - HEADER_FOOTER_CLEARANCE
+    : box.height;
+  const scale = (top - bottom) / box.height;
+  if (!(scale > 0.1) || scale >= 1) return null;
+  return [
+    scale,
+    0,
+    0,
+    scale,
+    box.x + (box.width * (1 - scale)) / 2 - scale * box.x,
+    box.y + bottom - scale * box.y,
+  ];
+}
+
+/** Wrap the page's existing content in a scaling matrix with removable decoration streams. */
+function shrinkPageContent(
+  doc: PDFDocument,
+  page: PDFPage,
+  matrix: [number, number, number, number, number, number],
+) {
+  const open = appendTaggedStream(doc, page, "NavPDF_Decoration", [
+    pushGraphicsState(),
+    concatTransformationMatrix(...matrix),
+  ]);
+  const contents = page.node.Contents();
+  if (contents instanceof PDFArray && contents.size() > 1) {
+    contents.remove(contents.size() - 1);
+    contents.insert(0, open);
+  }
+  appendTaggedStream(doc, page, "NavPDF_Decoration", [popGraphicsState()]);
+}
+
 export async function applyDocumentDecorations(
   pdfBytes: Uint8Array,
   options: DocumentDecorationsOptions,
@@ -2296,6 +2354,10 @@ export async function applyDocumentDecorations(
 
   for (const pageIndex of targetIndices) {
     const page = doc.getPage(pageIndex);
+    const matrix = options.shrinkToFit
+      ? shrinkMatrix(page.getMediaBox(), slotUsed(options.header), slotUsed(options.footer))
+      : null;
+    if (matrix) shrinkPageContent(doc, page, matrix);
     for (const picture of embedded)
       drawDecorationImage(doc, page, picture.embedded, picture.image, picture.key);
     renderDecorationPage(doc, page, drawn, font, fontBold, pageIndex + 1, formatTokens);

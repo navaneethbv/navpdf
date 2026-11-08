@@ -4205,3 +4205,12 @@ p {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   margin: 6px 0;
 }
+
+.compare-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

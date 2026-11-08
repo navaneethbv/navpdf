@@ -34,12 +34,12 @@ Each row's status changes from Planned to Implemented when its code and tests la
 
 | Upstream entry | Planned NavPDF behaviour | Status |
 | --- | --- | --- |
-| `create.export-markdown` | Export dialog gains Markdown: headings from font size, paragraphs, bold and italic runs, a rule between pages, escaped markup characters. Built on the existing text reconstruction used for Word and HTML export. | Planned |
-| `misc.prefs-documents` | Settings, Recent files to keep, 0 to 50, default 12; 0 hides recents. | Planned |
-| `view.layers-reset` | Layers panel, Reset to initial visibility, restoring each group to the document's default configuration; a filter for layers used on the current page. | Planned |
-| `core.restore-last-view` | Settings, Restore last view, on by default: page, zoom and layout remembered per file for the last 100 files and applied after the document's initial view. | Planned |
-| `misc.compare-filters` | Compare dialog, Show text changes and Show visual changes checkboxes filtering the list and highlights. | Planned |
-| `edit.header-footer-shrink` | Header and footer option that scales the original page content into the band the header and footer leave free. Annotations are not moved, matching upstream's stated limit. | Planned |
+| `create.export-markdown` | Export to Office and Other Formats, Markdown (.md): CommonMark headings and paragraphs from the existing text reconstruction, a rule between pages, and backslash escapes for markup characters and line-start markers. | Implemented. Images, tables, lists and bold or italic runs are not carried over; the text reconstruction has no style information. |
+| `misc.prefs-documents` | Settings, Recent files to keep, 0 to 50, default 15 (the previous fixed count); the native store trims to the limit. | Implemented. The autosave interval is not a setting. |
+| `view.layers-reset` | Layers panel, Reset to initial visibility, applying a fresh PDF.js configuration built from the document's default `/D` settings. | Implemented. Listing only the current page's layers is not provided, as upstream. |
+| `core.restore-last-view` | Settings, Restore each file's last page, zoom and layout, on by default. The native store keeps the last 100 files by path, written 0.8 seconds after a change and when a tab is parked or closed; opening applies layout, zoom and page. Turning the setting off deletes the records. | Implemented. Imported documents without a file and recovery copies are not recorded; view rotation and the scroll offset within a page are not kept. |
+| `misc.compare-filters` | Compare dialog, Show Text changes and Visual changes. A changed pair whose text is identical counts as visual; hiding a kind removes those pairs from the list and hides the text span or the highlight picture. | Implemented. Added and removed pages are always listed. |
+| `edit.header-footer-shrink` | Header and footer, Shrink page content to avoid overwriting it: the page's existing content is wrapped in tagged `q cm ... Q` streams that scale it evenly into the band between footer and header, centred across. Remove Decorations removes the scaling with the header and footer. | Implemented. Annotations, links and fields are not moved; the band uses the MediaBox, as the existing header placement does. |
 
 ## Batch 13: comment interaction
 
@@ -103,7 +103,10 @@ Each item needs an ADR before implementation and stays off by default where it c
 ## Robustness review
 
 Upstream fixed crashes from deep nesting and large inputs in the same period, including a CMap `<<` run overflowing the stack and XFDF export of a field name made of periods.
-NavPDF's XFDF export, field-name splitting, CMap handling and recursive outline walks are reviewed for the same patterns as part of batch 12.
+NavPDF's equivalents were reviewed in batch 12.
+Form XFDF export writes flat field names and never nests, and XFDF import, outline reading and writing, page labels and form merging all stop at 32 levels.
+CMaps are parsed by PDF.js and lopdf, not by NavPDF code.
+No change was needed.
 
 ## Acceptance boundary
 

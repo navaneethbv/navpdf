@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../../components/Dialog";
 import { useWorkspace } from "../../stores/workspace";
 import { savePreferences } from "../../services/native";
-import type { Preferences } from "../../types/document";
+import { MAX_RECENT_LIMIT, type Preferences } from "../../types/document";
 import { applyTheme, colorPalettes } from "../../services/theme";
 import { CustomColors } from "./CustomColors";
 import { contrastRatio, PAGE_COLOR_LABELS, pageColorsFor } from "../viewer/page-colors";
@@ -69,7 +69,7 @@ export function Settings() {
               local: {
                 ...local,
                 preferences: committed,
-                recents: committed.recentFiles ? local.recents : [],
+                recents: committed.recentFiles ? local.recents.slice(0, committed.recentLimit) : [],
               },
               settingsOpen: false,
               layout: committed.layout,
@@ -199,6 +199,16 @@ export function Settings() {
             />{" "}
             Remember last page
           </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.restoreLastView}
+              onChange={(e) => {
+                patch({ restoreLastView: e.target.checked });
+              }}
+            />{" "}
+            Restore each file's last page, zoom and layout when it opens again
+          </label>
           <label>
             Page colours{" "}
             <select
@@ -310,6 +320,22 @@ export function Settings() {
               }}
             />{" "}
             Keep recent document history
+          </label>
+          <label>
+            Recent files to keep{" "}
+            <input
+              type="number"
+              min={0}
+              max={MAX_RECENT_LIMIT}
+              step={1}
+              disabled={!preferences.recentFiles}
+              value={preferences.recentLimit}
+              onChange={(e) => {
+                const value = Math.round(Number(e.target.value));
+                if (Number.isFinite(value))
+                  patch({ recentLimit: Math.min(MAX_RECENT_LIMIT, Math.max(0, value)) });
+              }}
+            />
           </label>
           <label className="check-label">
             <input type="checkbox" checked={false} disabled /> Allow network access

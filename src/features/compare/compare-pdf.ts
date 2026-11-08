@@ -132,6 +132,41 @@ export function alignPages(before: PageSignature[], after: PageSignature[]): Com
   return rows;
 }
 
+/** Which kinds of change the comparison shows. */
+export interface ChangeFilter {
+  text: boolean;
+  visual: boolean;
+}
+
+/**
+ * Whether a changed page pair differs in its text or only in how it looks. Added and removed
+ * pages are neither: they are always listed.
+ */
+export function changeKind(
+  row: ComparedPage,
+  signatures: [PageSignature[], PageSignature[]],
+): "text" | "visual" | null {
+  if (row.status !== "changed" || !row.before || !row.after) return null;
+  const before = signatures[0][row.before - 1]?.text ?? "";
+  const after = signatures[1][row.after - 1]?.text ?? "";
+  return before === after ? "visual" : "text";
+}
+
+/** The page pairs to list: changes of the shown kinds, and unchanged pages unless hidden. */
+export function filterComparison(
+  rows: ComparedPage[],
+  signatures: [PageSignature[], PageSignature[]],
+  filter: ChangeFilter,
+  onlyChanges: boolean,
+): ComparedPage[] {
+  return rows.filter((row) => {
+    if (row.status === "unchanged") return !onlyChanges;
+    if (row.status !== "changed") return true;
+    const kind = changeKind(row, signatures);
+    return kind === "text" ? filter.text : filter.visual;
+  });
+}
+
 export function changedText(
   before: string,
   after: string,

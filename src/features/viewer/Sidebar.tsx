@@ -82,6 +82,19 @@ export function Sidebar({ controller }: Readonly<{ controller: ViewerController 
           ) : (
             <p className="empty-message">This PDF has no layers.</p>
           )}
+          {layers.length > 0 && (
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => {
+                void controller.resetLayers().catch(() => {
+                  set({ error: "The layers could not be reset." });
+                });
+              }}
+            >
+              Reset to initial visibility
+            </button>
+          )}
           <p className="empty-message">
             Layer visibility changes this view only, not the saved PDF.
           </p>

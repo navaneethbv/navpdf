@@ -250,6 +250,7 @@ pub fn run() {
             import_document,
             print_document,
             open_recent,
+            remember_view,
             read_range,
             close_document,
             save_document,
