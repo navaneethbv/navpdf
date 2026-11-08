@@ -4,6 +4,7 @@ import { ToolDialog } from "../../components/ToolDialog";
 import { addFormFields } from "../../services/document-commands";
 import {
   colorFromHex,
+  createFieldGrid,
   duplicateFieldToPages,
   hexFromColor,
   readFieldProperties,
@@ -152,6 +153,33 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
       )
     )
       changed(`Added "${field.name}" to ${pages.length} page(s); all copies share one value.`);
+  };
+
+  const [grid, setGrid] = useState({
+    rows: "3",
+    columns: "2",
+    gapX: "4",
+    gapY: "4",
+    pattern: "{name}_{row}_{column}",
+  });
+  const makeGrid = async () => {
+    if (!field) return;
+    const options = {
+      rows: Number(grid.rows),
+      columns: Number(grid.columns),
+      gapX: Number(grid.gapX),
+      gapY: Number(grid.gapY),
+      pattern: grid.pattern,
+    };
+    let added = 0;
+    if (
+      await apply(`Grid of "${field.name}" created`, async (bytes) => {
+        const result = await createFieldGrid(bytes, field.name, options);
+        added = result.added;
+        return result.bytes;
+      })
+    )
+      changed(`Added ${added} fields in a ${options.rows} by ${options.columns} grid.`);
   };
 
   const saveTabOrder = async (order: TabOrder) => {
@@ -339,6 +367,52 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
               </button>
             </div>
           </fieldset>
+          {(field?.kind === "text" || field?.kind === "checkbox") && (
+            <fieldset className="preset-list">
+              <legend className="setting-title">Copy into a grid</legend>
+              <div className="inline-field">
+                {(
+                  [
+                    ["rows", "Rows"],
+                    ["columns", "Columns"],
+                    ["gapX", "Space across (pt)"],
+                    ["gapY", "Space down (pt)"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key}>
+                    {label}{" "}
+                    <input
+                      className="text-input"
+                      type="number"
+                      min={0}
+                      value={grid[key]}
+                      onChange={(event) => setGrid({ ...grid, [key]: event.target.value })}
+                    />
+                  </label>
+                ))}
+              </div>
+              <label>
+                Name pattern{" "}
+                <input
+                  className="text-input"
+                  value={grid.pattern}
+                  onChange={(event) => setGrid({ ...grid, pattern: event.target.value })}
+                />
+              </label>
+              <p className="field-hint">
+                This field is the top-left cell; the others are new fields of the same size, named
+                with &#123;name&#125;, &#123;row&#125; and &#123;column&#125;.
+              </p>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={busy}
+                onClick={() => void makeGrid()}
+              >
+                Create grid
+              </button>
+            </fieldset>
+          )}
           <fieldset className="preset-list">
             <legend className="setting-title">Tab order on every page</legend>
             <select

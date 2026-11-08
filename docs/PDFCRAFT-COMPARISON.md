@@ -10,6 +10,7 @@ This family-level comparison is a starting inventory, not a completed assessment
 [ADR 0016](adr/0016-pdfcraft-capability-integration.md) records the architecture decision.
 The two batches merged in PR 68 as `c09576f`; this comparison still describes a partial inventory.
 The [delivery tracker](DELIVERY-PHASES.md) owns progress; the [verification ledger](VERIFICATION.md) owns acceptance evidence.
+The [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) compares upstream `5644d56` and plans batches 12 to 17.
 
 | Family | Shipped or partial upstream entries | Source comparison and remaining work |
 | --- | ---: | --- |

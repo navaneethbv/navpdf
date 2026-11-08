@@ -6,6 +6,7 @@ import type {
   CompressionPreset,
   CompressionReport,
   DiscardOptions,
+  StructureOptions,
   EditReport,
   EditRequest,
   EngineResult,
@@ -87,6 +88,7 @@ export async function compressDocument(
   preset: CompressionPreset,
   jobId: string,
   discard?: DiscardOptions,
+  structure?: StructureOptions,
 ): Promise<EngineResult<CompressionReport>> {
   requireEngine();
   const inputId = await stage(bytes);
@@ -96,6 +98,7 @@ export async function compressDocument(
       jobId,
       preset,
       ...(discard && { discard }),
+      ...(structure && { structure }),
     }),
   );
 }
@@ -104,6 +107,27 @@ export async function inspectPage(bytes: Uint8Array, page: number): Promise<Page
   requireEngine();
   const inputId = await stage(bytes);
   return invoke<PageObjects>("engine_inspect_page", { inputId, page });
+}
+
+/** A one-page PDF holding only the chosen image, for pasting with `pasteImage`. */
+export async function copyImage(bytes: Uint8Array, page: number, objectId: string) {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return take(await invoke<string>("engine_copy_image", { inputId, page, objectId }));
+}
+
+/** Adds a copied image to a page, moved by (`dx`, `dy`) points. */
+export async function pasteImage(
+  bytes: Uint8Array,
+  page: number,
+  clip: Uint8Array,
+  dx: number,
+  dy: number,
+) {
+  requireEngine();
+  const inputId = await stage(bytes);
+  const clipId = await stage(clip);
+  return take(await invoke<string>("engine_paste_image", { inputId, page, clipId, dx, dy }));
 }
 
 export async function editPage(

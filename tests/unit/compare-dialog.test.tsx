@@ -67,6 +67,13 @@ describe("comparison workflow", () => {
     expect(screen.getByText("Original page 2")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Only changes"));
     expect(screen.getByText("Original page 1")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Text changes"));
+    expect(document.querySelector("del")).toBeNull();
+    expect(screen.queryByText("Original page 1")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Text changes"));
+    fireEvent.click(screen.getByLabelText("Visual changes"));
+    expect(screen.queryByAltText("Revised page with changed regions highlighted")).toBeNull();
+    expect(document.querySelector("del")?.textContent).toBe("1");
   });
   it("explains an empty changes filter and restores matching page previews", async () => {
     vi.mocked(pageSignatures)

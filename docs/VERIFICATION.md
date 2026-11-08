@@ -5,6 +5,39 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## PR #75 quality follow-up
+
+The GitHub check annotations listed 45 SonarCloud findings and one Codacy finding on `d0c1fff`.
+The follow-up refactors the flagged PDF and UI code, replaces the default appearance regex scans with linear token scanning, and reports a missing 3D model in the dialog without attempting a download.
+Focused checks exercise malformed default appearance input, 3D extraction, OCR review shortcuts and presentation keyboard controls.
+Local SonarJS checks for cognitive complexity, nested template literals and slow regexes report no findings on changed lines in the touched source files.
+Hosted quality analysis is separate from these local checks.
+
+The cancelled macOS job reported that the `macos-14-arm64-us-default` configuration is no longer supported.
+Both macOS jobs use `macos-15`; the required Rust gate still requires Linux and macOS success, and the native acceptance job still depends on the macOS Rust job.
+Packaged NavPDF and independent-reader acceptance were not run for this follow-up.
+Browser fullscreen could not be exercised locally because Chromium could not launch in the sandbox.
+
+## November 8 PDFCraft November gap batches 12 to 17
+
+The [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) compares upstream `5644d56` with `1cbacab` and records each addition's scope and limits; [ADR 0021](adr/0021-presentation-pinned-tools-3d-and-external-ocr.md) records batch 17's decisions.
+This container has Node 22.23.4, not the Node 24 used by CI, and Rust 1.97.
+Lint, typecheck, formatting, the production build and `git diff --check` pass.
+The frontend suite passes 1,215 tests across 165 files, with 84.42% statements, 76.35% branches, 82.85% functions and 87.47% lines; the coverage gates pass.
+`cargo fmt` and Clippy with `-D warnings` pass for application code; the vendored `glib` warnings are unchanged.
+Every Rust test passes except the 2 root-only permission tests; both pass when the same test binary runs as the unprivileged `nobody` user.
+
+Saved-output checks read results back through pdf-lib and, where it reports positions, PDF.js: header and footer shrinking keeps the page's own text inside the free band and Remove Decorations restores it; moved, deleted, reshaped, copied and pasted comments keep their pop-ups and replies and stay on the page; part opacity writes separate stroking and non-stroking alpha; text-box shapes keep the text area through `/RD`; superscript and subscript runs are raised or lowered and smaller; comments imported from another PDF replace same-named ones and skip redactions and pages past the end; and bookmark JSON round-trips through a saved outline.
+Rust tests check image arranging, copying and pasting between documents with positions, PDF version 1.4 output with a classic cross-reference table and no object streams, Group 4 re-encoding of a 1-bit image, field-name and preference validation, last-view records capped at 100 files, and the Tesseract runner's arguments, empty environment, language allow-list, TSV parsing and failure handling.
+
+The CCITT Group 4 encoder's output was compared with libtiff's, through Pillow 12.3 with libtiff, for a 61 by 23 mixed pattern and a 3,000 by 4 image with runs longer than 2,560 pixels: both are identical byte for byte and are pinned in `engine::ccitt` tests.
+A PDF holding the first stream as `/CCITTFaxDecode` with `/K -1` rendered through poppler's `pdftoppm` at 720 dpi with every one of 1,403 cells matching the source pixels.
+Tesseract 5.3.4, installed from the distribution's packages, read a rendered two-line sample through NavPDF's runner in the ignored `an_installed_tesseract_reads_a_page` test, which also confirmed `eng` in its language list.
+OCR straightening and turn detection were checked on synthetic text pages at several skews and all four quarter turns, with box mapping inverted exactly for each turn.
+
+Writing these checks found three problems, now fixed: recognised word boxes are measured from the bottom of the image, so mapping them through a turned image first gave wrong places; pdf-lib grows each new widget by its border width, so grid copies first came out a point larger; and lopdf keeps cross-reference stream keys in the trailer when writing a classic table, which PDF 1.4 output now removes.
+Native runs in the packaged app, Preview or Acrobat reopening of saved output, a 3D-capable reader for added models, and Windows or Linux use of the Tesseract engine were not run.
+
 ## October 25 PDFCraft gap batch 10, guided actions
 
 The [tenth batch mapping](PDFCRAFT-COMPARISON.md#tenth-batch-mapping) lists the guided action entries and their limits.

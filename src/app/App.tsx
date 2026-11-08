@@ -14,7 +14,8 @@ import {
   X,
   FileText,
 } from "lucide-react";
-import { useWorkspace } from "../stores/workspace";
+import { selectedCommentIds, useWorkspace } from "../stores/workspace";
+import { pastesComments } from "../features/annotations/comment-clipboard";
 import { ViewerController } from "../features/viewer/controller";
 import { ViewerHost } from "../features/viewer/ViewerHost";
 import { Sidebar } from "../features/viewer/Sidebar";
@@ -57,6 +58,8 @@ import { PropertiesDialog } from "../features/document/PropertiesDialog";
 import { applyTheme } from "../services/theme";
 import { pageColorsFor } from "../features/viewer/page-colors";
 import { AboutDialog } from "../features/help/AboutDialog";
+import { Presentation } from "../features/viewer/Presentation";
+
 /** Menu and modal identifiers for the editable export dialog and the format each selects. */
 const OFFICE_EXPORT_FORMATS = new Map<string, OfficeFormat>([
   ["office-export", "docx"],
@@ -129,20 +132,20 @@ function handleWorkspaceNavigation(event: KeyboardEvent, controller: ViewerContr
 }
 
 function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController | null): boolean {
-  let dx = 0;
-  let dy = 0;
+  let right = 0;
+  let down = 0;
   switch (event.key) {
     case "ArrowLeft":
-      dx = -1;
+      right = -1;
       break;
     case "ArrowRight":
-      dx = 1;
+      right = 1;
       break;
     case "ArrowDown":
-      dy = -1;
+      down = 1;
       break;
     case "ArrowUp":
-      dy = 1;
+      down = -1;
       break;
     case "Delete":
     case "Backspace":
@@ -153,8 +156,9 @@ function handleAnnotationKey(event: KeyboardEvent, controller: ViewerController 
       return false;
   }
   event.preventDefault();
-  const distance = event.shiftKey ? 10 : 1;
-  void controller?.moveSelectedAnnotation(dx * distance, dy * distance);
+  // Each press is one undo step: 1 point, or 10 with Shift or Command (Control).
+  const distance = event.shiftKey || event.metaKey || event.ctrlKey ? 10 : 1;
+  void controller?.nudgeSelected(right * distance, down * distance);
   return true;
 }
 
@@ -523,7 +527,9 @@ export default function App() {
         state.settingsOpen ||
         session.password ||
         session.confirm ||
-        ["help", "tour", "tips", "shortcuts", "command-palette"].includes(state.activeModal ?? "")
+        ["help", "tour", "tips", "shortcuts", "command-palette", "present"].includes(
+          state.activeModal ?? "",
+        )
       )
         return;
       if (state.busy) {
@@ -556,6 +562,38 @@ export default function App() {
       window.removeEventListener("beforeunload", warn);
     };
   }, [session, controller, open]);
+  useEffect(() => {
+    // Copy and Paste in the Edit menu reach the page as copy and paste events.
+    function copy(event: ClipboardEvent) {
+      const state = useWorkspace.getState();
+      if (!controller?.pdf || state.activeModal || isEditableTarget(event.target)) return;
+      if (selectedCommentIds(state).length === 0) return;
+      if (window.getSelection()?.toString()) return;
+      event.preventDefault();
+      // The system clipboard must be written during the event; the copy itself follows.
+      const marker = controller.commentClipboardText();
+      event.clipboardData?.setData("text/plain", marker);
+      void controller
+        .copySelectedComments(marker)
+        .catch((error: unknown) => state.set({ error: String(error) }));
+    }
+    function paste(event: ClipboardEvent) {
+      const state = useWorkspace.getState();
+      if (!controller?.pdf || state.activeModal || isEditableTarget(event.target)) return;
+      const text = event.clipboardData ? event.clipboardData.getData("text/plain") : null;
+      if (!pastesComments(text)) return;
+      event.preventDefault();
+      void controller
+        .pasteComments()
+        .catch((error: unknown) => state.set({ error: String(error) }));
+    }
+    document.addEventListener("copy", copy);
+    document.addEventListener("paste", paste);
+    return () => {
+      document.removeEventListener("copy", copy);
+      document.removeEventListener("paste", paste);
+    };
+  }, [controller]);
   useEffect(() => {
     if (!native) return;
     let cleanup: (() => void) | undefined;
@@ -963,6 +1001,9 @@ export default function App() {
               },
             ]}
           />
+        )}
+        {s.activeModal === "present" && controller?.pdf && (
+          <Presentation controller={controller} onClose={() => s.set({ activeModal: null })} />
         )}
         {s.activeModal === "page-workspace" && (
           <PageWorkspace controller={controller} onClose={() => s.set({ activeModal: null })} />

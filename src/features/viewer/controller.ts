@@ -27,13 +27,36 @@ import type {
   ShapeKind,
   SelectedTextGeometry,
   DocumentLayer,
+  LastView,
 } from "../../types/document";
 import type { DocumentRevision } from "../../types/operations";
-import { useWorkspace } from "../../stores/workspace";
+import { selectedCommentIds, useWorkspace } from "../../stores/workspace";
 import { positionSearchCursor } from "../search/select-result";
 import { boundedZoom, snippet, searchCriteriaKey } from "../../utils/search";
-import { commitWorkingRevision, markDirty, native, rememberPage } from "../../services/native";
+import {
+  commitWorkingRevision,
+  markDirty,
+  native,
+  rememberPage,
+  rememberView,
+} from "../../services/native";
 import { pruneDocument } from "../../services/engine";
+import {
+  copyAnnotations,
+  deleteAnnotations,
+  importCommentsFromPdf,
+  moveAnnotations,
+  pasteAnnotations,
+  reshapeAnnotation,
+} from "../../services/pdf/comment-batch";
+import { screenToPageOffset } from "../annotations/nudge";
+import { styleTextBox, type TextBoxStyle } from "../../services/pdf/text-box-style";
+import {
+  clipboardText,
+  getCommentClipboard,
+  nextPasteOffset,
+  setCommentClipboard,
+} from "../annotations/comment-clipboard";
 import { loadPdfFromBytes } from "../../services/pdf";
 import { RevisionHistory } from "../../services/revision-history";
 import { MutationQueue } from "../../services/mutation-queue";
@@ -301,6 +324,7 @@ export class ViewerController {
   private started = 0;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
   private pageTimer: ReturnType<typeof setTimeout> | undefined;
+  private viewTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly contexts = new Map<number, string>();
   private readonly abort = new AbortController();
   private searchGeneration = 0;
@@ -426,10 +450,12 @@ export class ViewerController {
             useWorkspace.getState().set({ error: "The last viewed page could not be remembered." }),
           );
       }, 500);
+      this.scheduleViewRecord();
     });
-    on("scalechanging", ({ scale }: { scale: number }) =>
-      useWorkspace.getState().set({ zoom: Math.round(scale * 100) }),
-    );
+    on("scalechanging", ({ scale }: { scale: number }) => {
+      useWorkspace.getState().set({ zoom: Math.round(scale * 100) });
+      this.scheduleViewRecord();
+    });
     on(
       "annotationlayerrendered",
       ({ source }: { source: { div: HTMLElement; pdfPage?: PDFPageProxy | null } }) => {
@@ -597,6 +623,7 @@ export class ViewerController {
     await this.readComments().catch(() => {});
   }
   async detach() {
+    this.flushViewRecord();
     this.generation++;
     this.searchGeneration++;
     clearTimeout(this.searchTimer);
@@ -869,6 +896,7 @@ export class ViewerController {
     this.searchGeneration++;
     clearTimeout(this.searchTimer);
     clearTimeout(this.pageTimer);
+    clearTimeout(this.viewTimer);
   }
   destroy() {
     this.suspendView();
@@ -972,6 +1000,7 @@ export class ViewerController {
     await this.foldViewEdits();
     const pdf = this.pdf;
     if (!pdf) return null;
+    this.flushViewRecord();
     const parked: ParkedDocument = {
       pdf,
       revisionTask: this.revisionTask,
@@ -1083,6 +1112,35 @@ export class ViewerController {
     const spread = layout === "spread" && configured === "none" ? "odd" : configured;
     this.viewer.spreadMode = layout === "spread" ? this.spreadMode(spread) : SpreadMode.NONE;
     useWorkspace.getState().set({ layout, spread });
+    this.scheduleViewRecord();
+  }
+  /** The page, zoom and layout shown now, for restoring this file's view later. */
+  currentView(): LastView | null {
+    if (!this.pdf) return null;
+    const { page, layout } = useWorkspace.getState();
+    const zoom = String(this.viewer.currentScaleValue);
+    return page > 0 && zoom ? { page, zoom, layout } : null;
+  }
+  private scheduleViewRecord() {
+    clearTimeout(this.viewTimer);
+    this.viewTimer = setTimeout(() => this.flushViewRecord(), 800);
+  }
+  /** Remember the shown file's view now, when restoring views is on. */
+  private flushViewRecord() {
+    clearTimeout(this.viewTimer);
+    const state = useWorkspace.getState();
+    const document = state.document;
+    const view = this.currentView();
+    if (!document || document.unsaved || !view || !state.local.preferences.restoreLastView) return;
+    void rememberView(document.id, view).catch(() => {
+      // Losing a remembered view only means the file opens at its own initial view.
+    });
+  }
+  /** Show a remembered view: its layout and zoom first, then its page. */
+  applyView(view: LastView) {
+    this.setLayout(view.layout);
+    this.zoom(view.zoom);
+    this.goTo(view.page);
   }
   private spreadMode(spread: "none" | "odd" | "even") {
     if (spread === "even") return SpreadMode.EVEN;
@@ -1351,14 +1409,21 @@ export class ViewerController {
       this.setTool("select");
     });
   }
-  exportComments() {
+  /** Comments as NavPDF comment JSON; with `ids`, only those comments and their replies. */
+  exportComments(ids?: string[]) {
     const state = useWorkspace.getState();
     if (!state.document || !this.pdf) throw new Error("Open a PDF before exporting comments.");
+    const chosen = ids ? new Set(ids) : null;
+    const comments = chosen
+      ? state.comments.filter(
+          (comment) => chosen.has(comment.id) || (comment.replyTo && chosen.has(comment.replyTo)),
+        )
+      : state.comments;
     return JSON.stringify(
       createCommentExchange(
         state.document.id,
         this.pdf.numPages,
-        state.comments,
+        comments,
         this.identity ?? `${state.document.id}:${this.pdf.numPages}`,
       ),
       null,
@@ -1405,11 +1470,57 @@ export class ViewerController {
       useWorkspace.getState().set({ busy: false });
     }
   }
-  selectAnnotation(id: string) {
-    const comment = useWorkspace.getState().comments.find((item) => item.id === id);
+  /**
+   * Select a comment. "toggle" adds it to or takes it out of the selection, and "range" selects
+   * the comments listed from the one with the handles to this one.
+   */
+  /** Copy every comment from another PDF onto the same page numbers, as one undo step. */
+  async importCommentsFromPdf(sourceBytes: Uint8Array) {
+    if (!this.pdf) throw new Error("Open a PDF before importing comments.");
+    return this.mutate("Importing comments", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const result = await importCommentsFromPdf(bytes, sourceBytes);
+      const notes = [
+        result.outside ? `${result.outside} on pages this document lacks were left out` : "",
+        result.redactions ? `${result.redactions} redaction marks were not copied` : "",
+      ].filter(Boolean);
+      const label = `${result.imported} comment${result.imported === 1 ? "" : "s"} imported${
+        notes.length ? `; ${notes.join("; ")}` : ""
+      }`;
+      await this.replaceWithBytes(result.bytes, label, { preMutationBytes: bytes });
+      return result.imported;
+    });
+  }
+  selectAnnotation(id: string, mode: "replace" | "toggle" | "range" = "replace") {
+    const state = useWorkspace.getState();
+    const comment = state.comments.find((item) => item.id === id);
     if (!comment) return;
-    useWorkspace.getState().set({
+    if (mode !== "replace" && state.selectedAnnotationId) {
+      const current = selectedCommentIds(state);
+      let next: string[];
+      if (mode === "toggle") {
+        next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      } else {
+        const order = state.comments.map((item) => item.id);
+        const from = order.indexOf(state.selectedAnnotationId);
+        const to = order.indexOf(id);
+        next =
+          from < 0 || to < 0
+            ? [id]
+            : order.slice(Math.min(from, to), Math.max(from, to) + 1).filter((item) => item !== id);
+        next.push(id);
+      }
+      const primary = next.includes(id) ? id : (next.at(-1) ?? null);
+      state.set({
+        selectedAnnotationIds: next,
+        selectedAnnotationId: primary,
+        hasSelection: primary !== null,
+      });
+      return;
+    }
+    state.set({
       selectedAnnotationId: id,
+      selectedAnnotationIds: [id],
       hasSelection: true,
       sidebar: "comments",
       page: comment.page,
@@ -1417,6 +1528,10 @@ export class ViewerController {
     });
     this.setTool("select");
     this.goTo(comment.page);
+  }
+  /** Every selected comment, the one with the handles last. */
+  selectedIds() {
+    return selectedCommentIds(useWorkspace.getState());
   }
   private async applyAnnotationEdit(input: Parameters<typeof updateAnnotation>[1], status: string) {
     if (!this.pdf) throw new Error("Open a PDF before editing an annotation.");
@@ -1436,10 +1551,16 @@ export class ViewerController {
     await this.applyAnnotationEdit({ id, ...patch }, "Annotation properties updated");
   }
   async moveSelectedAnnotation(dx: number, dy: number) {
-    const selected = useWorkspace
-      .getState()
-      .comments.find((item) => item.id === useWorkspace.getState().selectedAnnotationId);
-    if (!selected?.rect) return;
+    const state = useWorkspace.getState();
+    const ids = selectedCommentIds(state);
+    const selected = state.comments.find((item) => item.id === state.selectedAnnotationId);
+    if (!selected) return;
+    // Rectangles, ovals and lines move through their own geometry; anything else, or several
+    // comments, moves every stored point together.
+    if (ids.length > 1 || !selected.rect || selected.vertices || selected.type === "Ink") {
+      await this.moveAnnotations(ids, dx, dy);
+      return;
+    }
     const [x1, y1, x2, y2] = selected.rect;
     if (selected.line) {
       const [sx, sy, ex, ey] = selected.line;
@@ -1452,6 +1573,98 @@ export class ViewerController {
         rect: [x1 + dx, y1 + dy, x2 + dx, y2 + dy],
       });
     }
+  }
+  /** Move the selected comments by screen directions, so up is up however the page is turned. */
+  async nudgeSelected(right: number, down: number) {
+    const state = useWorkspace.getState();
+    const selected = state.comments.find((item) => item.id === state.selectedAnnotationId);
+    if (!selected || !this.pdf) return;
+    const page = await this.pdf.getPage(selected.page);
+    const rotation = (page.rotate ?? 0) + (this.viewer.pagesRotation ?? 0);
+    const [dx, dy] = screenToPageOffset(right, down, rotation);
+    await this.moveSelectedAnnotation(dx, dy);
+  }
+  /** Move comments by an offset in PDF points as one undo step. */
+  async moveAnnotations(ids: string[], dx: number, dy: number) {
+    if (!this.pdf || ids.length === 0) return;
+    const state = useWorkspace.getState();
+    const primary = state.selectedAnnotationId;
+    const selection = state.selectedAnnotationIds;
+    return this.mutate("Comments moved", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const result = await moveAnnotations(bytes, ids, dx, dy);
+      let label = result.moved === 1 ? "Comment moved" : `${result.moved} comments moved`;
+      if (result.skipped > 0)
+        label = `${result.moved} moved; text markup and locked comments stay in place`;
+      await this.replaceWithBytes(result.bytes, label, { preMutationBytes: bytes });
+      useWorkspace.getState().set({
+        selectedAnnotationId: primary,
+        selectedAnnotationIds: selection,
+        hasSelection: !!primary,
+      });
+    });
+  }
+  /** Change the selected text box's border shape or the opacity of its parts. */
+  async styleSelectedTextBox(style: TextBoxStyle) {
+    const id = useWorkspace.getState().selectedAnnotationId;
+    if (!id || !this.pdf) return;
+    return this.mutate("Text box style updated", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const updated = await styleTextBox(bytes, id, style);
+      await this.replaceWithBytes(updated, "Text box style updated", { preMutationBytes: bytes });
+      useWorkspace.getState().set({ selectedAnnotationId: id, hasSelection: true });
+    });
+  }
+  /** Move one end of a line or one corner of a polygon as one undo step. */
+  async reshapeSelectedAnnotation(index: number, point: [number, number]) {
+    const id = useWorkspace.getState().selectedAnnotationId;
+    if (!id || !this.pdf) return;
+    return this.mutate("Comment reshaped", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const updated = await reshapeAnnotation(bytes, id, index, point);
+      await this.replaceWithBytes(updated, "Comment reshaped", { preMutationBytes: bytes });
+      useWorkspace.getState().set({ selectedAnnotationId: id, hasSelection: true });
+    });
+  }
+  /**
+   * The text for the system clipboard when the selected comments are copied, available at once
+   * so a copy event can set it before the copy itself completes.
+   */
+  commentClipboardText() {
+    const state = useWorkspace.getState();
+    const ids = selectedCommentIds(state);
+    const texts = ids.map((id) => state.comments.find((item) => item.id === id)?.text ?? "");
+    return clipboardText(ids.length, texts);
+  }
+  /** Copy the selected comments with their pop-ups and replies to the comment clipboard. */
+  async copySelectedComments(marker = this.commentClipboardText()) {
+    const ids = this.selectedIds();
+    if (!this.pdf || ids.length === 0) return;
+    const clip = await copyAnnotations(await this.pdf.saveDocument(), ids);
+    setCommentClipboard(clip, marker);
+    useWorkspace.getState().set({
+      status: `${clip.count} comment${clip.count === 1 ? "" : "s"} copied`,
+      commentClipboardCount: clip.count,
+    });
+  }
+  /** Paste copied comments on the current page, each paste stepped 18 points further along. */
+  async pasteComments() {
+    const clip = getCommentClipboard();
+    const state = useWorkspace.getState();
+    if (!this.pdf || !clip || !state.document) return;
+    const page = state.page;
+    const offset = nextPasteOffset(state.document.id, page);
+    return this.mutate("Comments pasted", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const result = await pasteAnnotations(bytes, clip, page, offset);
+      const label = `${clip.count} comment${clip.count === 1 ? "" : "s"} pasted`;
+      await this.replaceWithBytes(result.bytes, label, { preMutationBytes: bytes });
+      useWorkspace.getState().set({
+        selectedAnnotationIds: result.ids,
+        selectedAnnotationId: result.ids.at(-1) ?? null,
+        hasSelection: result.ids.length > 0,
+      });
+    });
   }
   async resizeSelectedAnnotation(dw: number, dh: number) {
     const selected = useWorkspace
@@ -1478,11 +1691,16 @@ export class ViewerController {
     }
   }
   async deleteSelectedAnnotation() {
+    const ids = this.selectedIds();
     const id = useWorkspace.getState().selectedAnnotationId;
     if (!id || !this.pdf) return;
-    return this.mutate("Annotation deleted", async () => {
+    const label = ids.length > 1 ? `${ids.length} comments deleted` : "Annotation deleted";
+    return this.mutate(label, async () => {
       const bytes = await this.pdf!.saveDocument();
-      let deleted = await deleteAnnotation(bytes, id);
+      let deleted =
+        ids.length > 1
+          ? (await deleteAnnotations(bytes, ids)).bytes
+          : await deleteAnnotation(bytes, id);
       if (native) {
         try {
           deleted = await pruneDocument(deleted);
@@ -1494,11 +1712,12 @@ export class ViewerController {
           status: "Deleted objects remain in the file until saved from the desktop app.",
         });
       }
-      await this.replaceWithBytes(deleted, "Annotation deleted", {
+      await this.replaceWithBytes(deleted, label, {
         preMutationBytes: bytes,
       });
       useWorkspace.getState().set({
         selectedAnnotationId: null,
+        selectedAnnotationIds: [],
         hasSelection: false,
       });
     });
@@ -1886,6 +2105,21 @@ export class ViewerController {
     config.setVisibility(id, visible);
     this.viewer.optionalContentConfigPromise = Promise.resolve(config);
     await this.refreshLayers(this.generation);
+  }
+  /** Show every layer as the document's default configuration has it. */
+  async resetLayers() {
+    if (!this.pdf) return;
+    const generation = this.generation;
+    const [config, initial] = await Promise.all([
+      this.viewer.optionalContentConfigPromise,
+      // Each call builds a new configuration from the document's own defaults.
+      this.pdf.getOptionalContentConfig(),
+    ]);
+    if (!config || generation !== this.generation) return;
+    for (const [id, group] of initial as unknown as Iterable<[string, { visible: boolean }]>)
+      config.setVisibility(id, group.visible);
+    this.viewer.optionalContentConfigPromise = Promise.resolve(config);
+    await this.refreshLayers(generation);
   }
   private async refreshLayers(generation: number) {
     let layers: Array<{ id: string; name: string; visible: boolean }> = [];

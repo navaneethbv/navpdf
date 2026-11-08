@@ -1,7 +1,7 @@
 # ADR-0010: Hosted and specialist integrations declined for this release
 
 Date: 2026-09-14
-Status: Accepted for Phase 10 (scope decision)
+Status: Accepted for Phase 10 (scope decision); 3D authoring superseded by [ADR 0021](0021-presentation-pinned-tools-3d-and-external-ocr.md) on November 8, 2026
 
 ## Context
 

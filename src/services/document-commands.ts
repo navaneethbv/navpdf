@@ -24,6 +24,7 @@ import {
   drawLinesOfText,
   drawRectangle,
   pushGraphicsState,
+  concatTransformationMatrix,
   popGraphicsState,
   PDFOperator,
   PDFForm,
@@ -48,6 +49,7 @@ import { stripExternalPageLinks } from "./pdf/link-targets.ts";
 import { walkEmbeddedFiles } from "./pdf/name-tree.ts";
 import { mergePreservingStructure } from "./pdf/merge.ts";
 import { visibleBox, clampRectToBox } from "./pdf/page-box.ts";
+import { FILL_OPACITY, STROKE_OPACITY } from "./pdf/annotation-appearance.ts";
 import type { ShapeKind } from "../types/document";
 import type { MergeInputItem, OperationManifestItem, OcrPageResult } from "../types/operations";
 
@@ -425,6 +427,51 @@ export interface AnnotationUpdateInput {
   lineEndings?: [LineEnding, LineEnding];
   /** Cloudy applies to rectangles, ovals and polygons. */
   borderStyle?: "solid" | "dashed" | "cloudy";
+  /** Interior colour of a rectangle, oval or polygon; null removes the fill. */
+  fillColor?: [number, number, number] | null;
+  /** Separate opacity of a rectangle's, oval's or polygon's line and fill. */
+  strokeOpacity?: number;
+  fillOpacity?: number;
+}
+
+/** Shapes with a line and a fill that NavPDF can draw at an opacity each. */
+export const PART_OPACITY_SUBTYPES = new Set(["Square", "Circle", "Polygon"]);
+
+/** Applies a shape's fill colour and part opacities. Returns true when one changed. */
+function updatePartStyle(
+  annotation: PDFDict,
+  context: PDFContext,
+  input: AnnotationUpdateInput,
+): boolean {
+  if (
+    input.fillColor === undefined &&
+    input.strokeOpacity === undefined &&
+    input.fillOpacity === undefined
+  )
+    return false;
+  const subtype = annotation.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() ?? "";
+  if (!PART_OPACITY_SUBTYPES.has(subtype))
+    throw new Error("Only rectangles, ovals and polygons have a fill.");
+  if (input.fillColor === null) annotation.delete(PDFName.of("IC"));
+  else if (input.fillColor) {
+    if (!input.fillColor.every(finite)) throw new Error("Fill color is invalid.");
+    annotation.set(
+      PDFName.of("IC"),
+      context.obj(input.fillColor.map((channel) => clamp(channel, 0, 1))),
+    );
+  }
+  for (const [value, key] of [
+    [input.strokeOpacity, STROKE_OPACITY],
+    [input.fillOpacity, FILL_OPACITY],
+  ] as const) {
+    if (value === undefined) continue;
+    if (!finite(value)) throw new Error("Annotation opacity is invalid.");
+    annotation.set(PDFName.of(key), PDFNumber.of(clamp(value, 0, 1)));
+  }
+  // Readers that draw the shape themselves use /CA for all of it; the line's value is closest.
+  const stroke = annotation.lookupMaybe(PDFName.of(STROKE_OPACITY), PDFNumber)?.asNumber();
+  if (stroke !== undefined) annotation.set(PDFName.of("CA"), PDFNumber.of(stroke));
+  return true;
 }
 
 export function annotationIdentifier(value: unknown): string {
@@ -641,6 +688,8 @@ function updateAnnotationAppearance(
   if (input.opacity !== undefined) {
     if (!finite(input.opacity)) throw new Error("Annotation opacity is invalid.");
     annotation.set(PDFName.of("CA"), PDFNumber.of(clamp(input.opacity, 0, 1)));
+    annotation.delete(PDFName.of(STROKE_OPACITY));
+    annotation.delete(PDFName.of(FILL_OPACITY));
   }
   if (input.width !== undefined) {
     if (!finite(input.width)) throw new Error("Annotation width is invalid.");
@@ -753,9 +802,10 @@ export async function updateAnnotation(
   updateLine(found.annotation, context, box, input.line, input.width);
   updateAnnotationAppearance(found.annotation, context, input);
   const restyled = updateAnnotationStyle(found.annotation, context, input);
+  const reparted = updatePartStyle(found.annotation, context, input);
   // Endings and dashed or cloudy borders need an appearance to show alike in every reader; one
   // NavPDF drew earlier is redrawn so it follows every later change.
-  if (restyled || hasGeneratedAppearance(found.annotation)) {
+  if (restyled || reparted || hasGeneratedAppearance(found.annotation)) {
     if (restyled) fitAnnotationRect(found.annotation, context, box);
     const appearance = generateAppearance(doc, found.annotation);
     if (appearance) found.annotation.set(PDFName.of("AP"), context.obj({ N: appearance }));
@@ -822,8 +872,15 @@ export async function deleteAnnotation(
   page?: number,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(pdfBytes);
+  if (!deleteAnnotationIn(doc, id, page))
+    throw new Error("The selected annotation no longer exists.");
+  return doc.save();
+}
+
+/** Remove one annotation with its pop-up and replies from a loaded document. */
+export function deleteAnnotationIn(doc: PDFDocument, id: string, page?: number): boolean {
   const found = findAnnotation(doc, id, page);
-  if (!found) throw new Error("The selected annotation no longer exists.");
+  if (!found) return false;
 
   const annots = found.annots;
   const targetEntry = annots.get(found.index);
@@ -838,7 +895,7 @@ export async function deleteAnnotation(
   }
 
   if (annots.size() === 0) found.page.node.delete(PDFName.of("Annots"));
-  return doc.save();
+  return true;
 }
 
 export async function rotatePages(
@@ -1794,13 +1851,21 @@ function textOffset(
   return 0;
 }
 
+type TextLineDraw = {
+  x: number;
+  y: number;
+  size: number;
+  color: ReturnType<typeof rgb>;
+  opacity: number;
+};
+
 /** Draws one line word by word so the gaps fill the container; returns the drawn width. */
 function drawJustifiedLine(
   page: PDFPage,
   font: PDFFont,
   words: string[],
   containerWidth: number,
-  draw: { x: number; y: number; size: number; color: ReturnType<typeof rgb>; opacity: number },
+  draw: TextLineDraw,
 ): number {
   const wordWidths = words.map((word) => font.widthOfTextAtSize(word, draw.size));
   const gap =
@@ -1811,6 +1876,63 @@ function drawJustifiedLine(
     cursor += wordWidths[index] + gap;
   }
   return containerWidth;
+}
+
+/** A run of placed text: normal, superscript or subscript. */
+export interface ScriptRun {
+  text: string;
+  script: "normal" | "super" | "sub";
+}
+
+/** Superscript and subscript size and baseline shift, as fractions of the font size. */
+const SCRIPT_SCALE = 0.62;
+const SCRIPT_RISE = { normal: 0, super: 0.36, sub: -0.16 } as const;
+
+/**
+ * Splits text marked with `^{...}` for superscript and `_{...}` for subscript into runs. A marker
+ * without its closing brace is kept as typed.
+ */
+export function parseScriptRuns(text: string): ScriptRun[] {
+  const runs: ScriptRun[] = [];
+  const push = (value: string, script: ScriptRun["script"]) => {
+    if (!value) return;
+    const last = runs.at(-1);
+    if (last?.script === script) last.text += value;
+    else runs.push({ text: value, script });
+  };
+  let index = 0;
+  while (index < text.length) {
+    const marker = text.slice(index, index + 2);
+    const close = marker === "^{" || marker === "_{" ? text.indexOf("}", index + 2) : -1;
+    if (close > index + 2) {
+      push(text.slice(index + 2, close), marker === "^{" ? "super" : "sub");
+      index = close + 1;
+    } else {
+      push(text[index], "normal");
+      index++;
+    }
+  }
+  return runs;
+}
+
+function runsWidth(runs: ScriptRun[], font: PDFFont, size: number) {
+  return runs.reduce(
+    (total, run) =>
+      total +
+      font.widthOfTextAtSize(run.text, run.script === "normal" ? size : size * SCRIPT_SCALE),
+    0,
+  );
+}
+
+/** Draws script runs smaller on a raised or lowered baseline. */
+function drawScriptRuns(page: PDFPage, font: PDFFont, runs: ScriptRun[], draw: TextLineDraw) {
+  let x = draw.x;
+  for (const run of runs) {
+    const size = run.script === "normal" ? draw.size : draw.size * SCRIPT_SCALE;
+    const y = draw.y + SCRIPT_RISE[run.script] * draw.size;
+    page.drawText(run.text, { ...draw, x, y, size, font });
+    x += font.widthOfTextAtSize(run.text, size);
+  }
 }
 
 function drawTextContent(
@@ -1832,9 +1954,17 @@ function drawTextContent(
     if (!line.text) continue;
     const lineY = y - index * lineHeight;
     const words = line.text.trim().split(/\s+/);
+    const runs = parseScriptRuns(line.text);
+    const hasScripts = runs.some((run) => run.script !== "normal");
     let lineX = x;
     let drawnWidth: number;
-    if (options.alignment === "justify" && wrapWidth && !line.paragraphEnd && words.length > 1) {
+    if (
+      options.alignment === "justify" &&
+      wrapWidth &&
+      !line.paragraphEnd &&
+      words.length > 1 &&
+      !hasScripts
+    ) {
       drawnWidth = drawJustifiedLine(page, font, words, wrapWidth, {
         x,
         y: lineY,
@@ -1842,6 +1972,10 @@ function drawTextContent(
         color,
         opacity,
       });
+    } else if (hasScripts) {
+      drawnWidth = runsWidth(runs, font, fontSize);
+      lineX = x + textOffset(options.alignment, wrapWidth ?? drawnWidth, drawnWidth);
+      drawScriptRuns(page, font, runs, { x: lineX, y: lineY, size: fontSize, color, opacity });
     } else {
       drawnWidth = font.widthOfTextAtSize(line.text, fontSize);
       lineX = x + textOffset(options.alignment, wrapWidth ?? drawnWidth, drawnWidth);
@@ -1885,7 +2019,12 @@ export async function insertTextContent(
   const font = await doc.embedFont(standardTextFont(options));
   const fontSize = clamp(options.fontSize ?? 14, 4, 144);
   const wrapWidth = options.maxWidth && options.maxWidth > 0 ? options.maxWidth : undefined;
-  const lines = wrapText(options.text, font, fontSize, wrapWidth);
+  // Script markers take no width, and script runs are measured at their own size.
+  const measured = {
+    widthOfTextAtSize: (value: string, size: number) =>
+      runsWidth(parseScriptRuns(value), font, size),
+  };
+  const lines = wrapText(options.text, measured, fontSize, wrapWidth);
   drawTextContent(page, font, lines, options, box);
   return doc.save();
 }
@@ -1992,6 +2131,8 @@ export interface DocumentDecorationsOptions {
     image?: DecorationImage;
   };
   pageRange?: number[]; // 1-based page numbers; all if omitted
+  /** Scale each page's original content into the band the header and footer leave free. */
+  shrinkToFit?: boolean;
   metadata?: {
     title?: string;
     author?: string;
@@ -2249,6 +2390,61 @@ function renderDecorationPage(
   if (ops.length > 2) appendTaggedStream(doc, page, "NavPDF_Decoration", ops);
 }
 
+/** Header and footer text size, baselines from the page edge, and clearance from the content. */
+const HEADER_FOOTER_SIZE = 10;
+const HEADER_BASELINE = 30;
+const FOOTER_BASELINE = 25;
+const HEADER_FOOTER_CLEARANCE = HEADER_FOOTER_SIZE / 2;
+
+function slotUsed(slot: DecorationHeaderFooterSlot | undefined) {
+  return !!(slot?.left?.trim() || slot?.center?.trim() || slot?.right?.trim());
+}
+
+/**
+ * The matrix that scales a page's content evenly into the band between the footer and the
+ * header, centred across, or null when neither is drawn.
+ */
+export function shrinkMatrix(
+  box: { x: number; y: number; width: number; height: number },
+  header: boolean,
+  footer: boolean,
+): [number, number, number, number, number, number] | null {
+  if (!header && !footer) return null;
+  // The footer's text sits above its baseline and the header's descenders a little below it.
+  const bottom = footer ? FOOTER_BASELINE + HEADER_FOOTER_SIZE + HEADER_FOOTER_CLEARANCE : 0;
+  const top = header
+    ? box.height - HEADER_BASELINE - HEADER_FOOTER_SIZE * 0.25 - HEADER_FOOTER_CLEARANCE
+    : box.height;
+  const scale = (top - bottom) / box.height;
+  if (!Number.isFinite(scale) || scale <= 0.1 || scale >= 1) return null;
+  return [
+    scale,
+    0,
+    0,
+    scale,
+    box.x + (box.width * (1 - scale)) / 2 - scale * box.x,
+    box.y + bottom - scale * box.y,
+  ];
+}
+
+/** Wrap the page's existing content in a scaling matrix with removable decoration streams. */
+function shrinkPageContent(
+  doc: PDFDocument,
+  page: PDFPage,
+  matrix: [number, number, number, number, number, number],
+) {
+  const open = appendTaggedStream(doc, page, "NavPDF_Decoration", [
+    pushGraphicsState(),
+    concatTransformationMatrix(...matrix),
+  ]);
+  const contents = page.node.Contents();
+  if (contents instanceof PDFArray && contents.size() > 1) {
+    contents.remove(contents.size() - 1);
+    contents.insert(0, open);
+  }
+  appendTaggedStream(doc, page, "NavPDF_Decoration", [popGraphicsState()]);
+}
+
 export async function applyDocumentDecorations(
   pdfBytes: Uint8Array,
   options: DocumentDecorationsOptions,
@@ -2296,6 +2492,10 @@ export async function applyDocumentDecorations(
 
   for (const pageIndex of targetIndices) {
     const page = doc.getPage(pageIndex);
+    const matrix = options.shrinkToFit
+      ? shrinkMatrix(page.getMediaBox(), slotUsed(options.header), slotUsed(options.footer))
+      : null;
+    if (matrix) shrinkPageContent(doc, page, matrix);
     for (const picture of embedded)
       drawDecorationImage(doc, page, picture.embedded, picture.image, picture.key);
     renderDecorationPage(doc, page, drawn, font, fontBold, pageIndex + 1, formatTokens);

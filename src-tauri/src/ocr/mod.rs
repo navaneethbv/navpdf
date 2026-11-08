@@ -45,11 +45,70 @@ pub struct OcrOptions {
     pub fast_mode: Option<bool>,
 }
 
+pub mod tesseract;
 #[cfg(target_os = "macos")]
 mod vision;
 
+/// Which engine recognises text: the system's (Apple Vision) or an installed Tesseract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Engine {
+    System,
+    Tesseract { program: String, language: String },
+}
+
+/// Recognises a page with the chosen engine.
+pub fn recognize_with(
+    engine: &Engine,
+    image_bytes: &[u8],
+    options: &OcrOptions,
+) -> Result<OcrPageResult, String> {
+    match engine {
+        Engine::System => recognize_page(image_bytes, options),
+        Engine::Tesseract { program, language } => {
+            check_image(image_bytes)?;
+            let program = tesseract::program(program)?;
+            // A Tesseract language chosen for this run wins over the saved default.
+            let language = options
+                .language
+                .as_deref()
+                .filter(|chosen| tesseract::valid_language(chosen))
+                .unwrap_or(language);
+            tesseract::recognize(&program, image_bytes, language, options.page_index)
+        }
+    }
+}
+
+/// Describes the chosen engine and its languages.
+pub fn engine_info(engine: &Engine) -> Result<OcrEngineInfo, String> {
+    match engine {
+        Engine::System => get_engine_info(),
+        Engine::Tesseract { program, .. } => {
+            let program = tesseract::program(program)?;
+            Ok(OcrEngineInfo {
+                engine_name: "Tesseract (installed on this computer)".into(),
+                is_offline: true,
+                supported_languages: tesseract::languages(&program)?,
+            })
+        }
+    }
+}
+
 /// Recognition is unavailable on platforms without a real local engine.
 pub fn recognize_page(image_bytes: &[u8], options: &OcrOptions) -> Result<OcrPageResult, String> {
+    check_image(image_bytes)?;
+    #[cfg(target_os = "macos")]
+    {
+        vision::recognize(image_bytes, options)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = options;
+        Err("Local OCR is unavailable on this platform. Choose Tesseract in Settings.".into())
+    }
+}
+
+/// Checks a page image is a PNG within the size limits before any engine decodes it.
+fn check_image(image_bytes: &[u8]) -> Result<(), String> {
     if image_bytes.is_empty() || image_bytes.len() > 32 * 1024 * 1024 {
         return Err("OCR image must be between 1 byte and 32 MB.".into());
     }
@@ -70,15 +129,7 @@ pub fn recognize_page(image_bytes: &[u8], options: &OcrOptions) -> Result<OcrPag
     {
         return Err("This page exceeds the OCR image size limit.".into());
     }
-    #[cfg(target_os = "macos")]
-    {
-        vision::recognize(image_bytes, options)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = options;
-        Err("Local OCR is unavailable on this platform.".into())
-    }
+    Ok(())
 }
 
 pub fn get_engine_info() -> Result<OcrEngineInfo, String> {

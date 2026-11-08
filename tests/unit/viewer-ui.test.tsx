@@ -92,7 +92,7 @@ describe("Sidebar", () => {
     });
     render(<Sidebar controller={withExchange as never} />);
 
-    const exportBtn = screen.getByRole("button", { name: /Export/ });
+    const exportBtn = screen.getByRole("button", { name: /^Export$/ });
     fireEvent.click(exportBtn);
     expect(withExchange.exportComments).toHaveBeenCalled();
     await vi.waitFor(() => expect(useWorkspace.getState().status).toBe("Comments exported"));
@@ -128,7 +128,7 @@ describe("Sidebar", () => {
     });
     render(<Sidebar controller={withFailingExchange as never} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Export/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Export$/ }));
     expect(useWorkspace.getState().error).toBe("Export failed");
 
     const file = new File(["bad"], "comments.json");

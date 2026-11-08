@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import type { Comment } from "../../types/document";
 import type { ViewerController } from "./controller";
+import { selectedCommentIds, useWorkspace } from "../../stores/workspace";
 import {
   commentAuthor,
   defaultCommentFilters,
@@ -18,6 +19,14 @@ export function CommentPanel({
   controller: ViewerController;
 }>) {
   const id = useId();
+  const selectedIds = useWorkspace((s) => s.selectedAnnotationIds);
+  const selection = selectedCommentIds({
+    selectedAnnotationId: selectedId,
+    selectedAnnotationIds: selectedIds,
+  });
+  const clipCount = useWorkspace((s) => s.commentClipboardCount);
+  const report = (error: unknown) =>
+    useWorkspace.getState().set({ error: error instanceof Error ? error.message : String(error) });
   const [filters, setFilters] = useState(defaultCommentFilters);
   const displayed = useMemo(() => filterComments(comments, filters), [comments, filters]);
   const authors = useMemo(
@@ -124,17 +133,55 @@ export function CommentPanel({
       </div>
       <output className="empty-message">
         Showing {displayed.length} of {comments.length} comments
+        {selection.length > 1 ? `, ${selection.length} selected` : ""}
       </output>
+      <div className="comment-actions" aria-label="Selected comments">
+        <button
+          type="button"
+          className="button"
+          disabled={selection.length === 0 || typeof controller.copySelectedComments !== "function"}
+          title="Copy the selected comments with their replies (Command-C)"
+          onClick={() => {
+            const marker = controller.commentClipboardText();
+            void navigator.clipboard?.writeText(marker).catch(() => {});
+            void controller.copySelectedComments(marker).catch(report);
+          }}
+        >
+          Copy
+        </button>
+        <button
+          type="button"
+          className="button"
+          disabled={clipCount === 0 || typeof controller.pasteComments !== "function"}
+          title="Paste copied comments on the current page (Command-V)"
+          onClick={() => void controller.pasteComments().catch(report)}
+        >
+          Paste{clipCount ? ` ${clipCount}` : ""}
+        </button>
+        <button
+          type="button"
+          className="button"
+          disabled={selection.length === 0}
+          onClick={() => void controller.deleteSelectedAnnotation().catch(report)}
+        >
+          Delete{selection.length > 1 ? ` ${selection.length}` : ""}
+        </button>
+      </div>
       {displayed.map((comment) => (
         <button
           type="button"
           className="comment-row"
           key={`${comment.page}-${comment.id}`}
-          aria-pressed={selectedId === comment.id}
-          onClick={() => {
-            if (typeof controller.selectAnnotation === "function")
-              controller.selectAnnotation(comment.id);
-            else controller.goTo(comment.page);
+          aria-pressed={selection.includes(comment.id)}
+          title="Command-click adds to the selection; Shift-click selects a range."
+          onClick={(event) => {
+            if (typeof controller.selectAnnotation !== "function") {
+              controller.goTo(comment.page);
+              return;
+            }
+            if (event.metaKey || event.ctrlKey) controller.selectAnnotation(comment.id, "toggle");
+            else if (event.shiftKey) controller.selectAnnotation(comment.id, "range");
+            else controller.selectAnnotation(comment.id);
           }}
         >
           <strong>

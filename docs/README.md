@@ -14,6 +14,7 @@ A historical passing check does not establish acceptance of a later build.
 | [Product specification](PRODUCT-SPEC.txt) | Original requirements; later scope decisions are recorded in ADRs. |
 | [Architecture decisions](adr/README.md) | Accepted engines, dependency rationale and deferred capabilities. |
 | [PDFCraft comparison](PDFCRAFT-COMPARISON.md) | Pinned upstream inventory, implemented subsets and remaining comparisons. |
+| [PDFCraft November gaps](PDFCRAFT-NOVEMBER-GAPS.md) | Upstream changes since October 21 and the per-feature plan for batches 12 to 17. |
 | [Security policy](../SECURITY.md) | Vulnerability reporting and document-safety boundaries. |
 | [Fixture corpus](../tests/pdf-fixtures/README.md) | Synthetic inputs and regeneration. |
 | [Vendored GLib](../src-tauri/vendor/README.md) | Security patch provenance and removal criteria. |

@@ -200,3 +200,30 @@ it("allows incomplete hex edits while preventing invalid form submission", () =>
   expect(hex.checkValidity()).toBe(true);
   expect((screen.getByLabelText("Light accent color") as HTMLInputElement).value).toBe("#ff8800");
 });
+
+it("saves the OCR engine, recent-file limit, view restoring and drawing tool choices", async () => {
+  vi.mocked(savePreferences).mockResolvedValue(undefined);
+  render(<SettingsHost />);
+  expect(screen.queryByLabelText(/Tesseract program/)).toBeNull();
+  fireEvent.change(screen.getByLabelText(/Recognition engine/), { target: { value: "tesseract" } });
+  fireEvent.change(screen.getByLabelText(/Tesseract program/), {
+    target: { value: "/usr/bin/tesseract" },
+  });
+  fireEvent.change(screen.getByLabelText(/Tesseract languages/), { target: { value: "eng+deu" } });
+  fireEvent.change(screen.getByLabelText(/Recent files to keep/), { target: { value: "80" } });
+  fireEvent.click(screen.getByLabelText(/Restore each file's last page/));
+  fireEvent.click(screen.getByLabelText(/Keep drawing tools selected/));
+  await act(async () => {
+    fireEvent.submit(document.querySelector("form.settings-form")!);
+  });
+  expect(savePreferences).toHaveBeenCalledWith(
+    expect.objectContaining({
+      ocrEngine: "tesseract",
+      tesseractPath: "/usr/bin/tesseract",
+      tesseractLanguage: "eng+deu",
+      recentLimit: 50,
+      restoreLastView: false,
+      keepAnnotationTool: true,
+    }),
+  );
+});

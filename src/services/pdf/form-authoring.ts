@@ -19,11 +19,13 @@ import {
   TextAlignment,
   type PDFField,
   type PDFForm,
+  type PDFPage,
   type PDFWidgetAnnotation,
 } from "pdf-lib";
 import { parseHexColor } from "../../utils/color.ts";
 import { pdfText } from "./text-string.ts";
 import { listWidgets } from "./field-geometry.ts";
+import type { UserSpaceRect } from "./page-box.ts";
 
 type Color = [number, number, number];
 
@@ -330,4 +332,133 @@ export function hexFromColor(color: Color | null) {
         .padStart(2, "0"),
     )
     .join("")}`;
+}
+
+export interface FieldGridOptions {
+  rows: number;
+  columns: number;
+  /** Space between cells, in points. */
+  gapX: number;
+  gapY: number;
+  /** Name of each cell: {name}, {row} and {column} are replaced; row and column count from 1. */
+  pattern: string;
+}
+
+/** The most fields one grid adds. */
+export const MAX_GRID_FIELDS = 1000;
+
+/** The name of a grid cell from its pattern. */
+export function gridFieldName(pattern: string, name: string, row: number, column: number) {
+  return pattern
+    .replaceAll("{name}", () => name)
+    .replaceAll("{row}", () => String(row))
+    .replaceAll("{column}", () => String(column));
+}
+
+function validateGridOptions({ rows, columns, gapX, gapY }: FieldGridOptions) {
+  if (![rows, columns].every((value) => Number.isInteger(value) && value >= 1 && value <= 100))
+    throw new Error("Choose 1 to 100 rows and columns.");
+  if (rows * columns < 2) throw new Error("A grid needs more than one cell.");
+  if (rows * columns - 1 > MAX_GRID_FIELDS)
+    throw new Error(`A grid can add at most ${MAX_GRID_FIELDS.toLocaleString()} fields.`);
+  if (![gapX, gapY].every((value) => Number.isFinite(value) && value >= 0 && value <= 500))
+    throw new Error("Spacing must be from 0 to 500 points.");
+}
+
+function planGridCells(
+  { rows, columns, gapX, gapY, pattern }: FieldGridOptions,
+  {
+    name,
+    rect,
+    box,
+    pageNumber,
+  }: {
+    name: string;
+    rect: UserSpaceRect;
+    box: UserSpaceRect;
+    pageNumber: number;
+  },
+  existing: Set<string>,
+) {
+  const names = new Set<string>();
+  const cells: { name: string; x: number; y: number }[] = [];
+  // Cell zero is the existing field. Plan the rest in row order before creating any copies.
+  for (let index = 1; index < rows * columns; index++) {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    const cell = gridFieldName(pattern, name, row + 1, column + 1).trim();
+    if (!cell) throw new Error("Each grid field needs a name.");
+    if (cell.includes(".")) throw new Error(`"${cell}" contains a period, which nests fields.`);
+    if (names.has(cell))
+      throw new Error(`The name pattern repeats "${cell}". Use {row} and {column}.`);
+    if (existing.has(cell)) throw new Error(`A field named "${cell}" already exists.`);
+    names.add(cell);
+    const x = rect.x + column * (rect.width + gapX);
+    const y = rect.y - row * (rect.height + gapY);
+    if (x < box.x - 0.01 || x + rect.width > box.x + box.width + 0.01 || y < box.y - 0.01)
+      throw new Error(
+        `The grid does not fit on page ${pageNumber}. Use fewer rows, columns or less spacing.`,
+      );
+    cells.push({ name: cell, x, y });
+  }
+  return cells;
+}
+
+function addGridCells(
+  form: PDFForm,
+  field: PDFTextField | PDFCheckBox,
+  page: PDFPage,
+  rect: UserSpaceRect,
+  cells: ReturnType<typeof planGridCells>,
+) {
+  // pdf-lib grows a new widget by its border width, so the copy asks for that much less.
+  const borderWidth = field.acroField.getWidgets()[0].getBorderStyle()?.getWidth() ?? 1;
+  const placement = (cell: { x: number; y: number }) => ({
+    x: cell.x + borderWidth / 2,
+    y: cell.y + borderWidth / 2,
+    width: rect.width - borderWidth,
+    height: rect.height - borderWidth,
+    borderWidth,
+  });
+  for (const cell of cells) {
+    if (field instanceof PDFTextField) {
+      const copy = form.createTextField(cell.name);
+      if (field.isMultiline()) copy.enableMultiline();
+      const length = field.getMaxLength();
+      if (length !== undefined) copy.setMaxLength(length);
+      copy.addToPage(page, placement(cell));
+    } else {
+      form.createCheckBox(cell.name).addToPage(page, placement(cell));
+    }
+  }
+}
+
+/**
+ * Copies a text field or check box into a grid of separate fields of the same size, the source
+ * being the top-left cell. Rows go down the page and columns to the right. Refused whole when a
+ * cell would leave the page or a name is empty, repeated, already used or contains a period.
+ */
+export async function createFieldGrid(bytes: Uint8Array, name: string, options: FieldGridOptions) {
+  validateGridOptions(options);
+  const doc = await PDFDocument.load(bytes);
+  const form = doc.getForm();
+  const field = requireField(form, name);
+  if (!(field instanceof PDFTextField) && !(field instanceof PDFCheckBox))
+    throw new Error("Only text fields and check boxes can be copied into a grid.");
+  const fieldName = field.getName();
+  const source = listWidgets(doc).find(
+    (widget) => widget.field === fieldName && widget.widget === 0,
+  );
+  if (!source) throw new Error("The field is not placed on a page.");
+  const rect = field.acroField.getWidgets()[0].getRectangle();
+  if (rect.width < 4 || rect.height < 4) throw new Error("Each cell must be at least 4 points.");
+  const page = doc.getPage(source.page - 1);
+  const existing = new Set(form.getFields().map((item) => item.getName()));
+  const cells = planGridCells(
+    options,
+    { name: fieldName, rect, box: page.getCropBox(), pageNumber: source.page },
+    existing,
+  );
+  addGridCells(form, field, page, rect, cells);
+  return { bytes: await doc.save(), added: cells.length };
 }

@@ -90,6 +90,20 @@ export interface CompressionReport {
   /** One entry per chosen discard that changed the document. */
   discarded?: string[];
   message: string;
+  /** 1-bit images re-encoded with lossless CCITT Group 4. */
+  monochromeRecompressed?: number;
+  /** The PDF version written, when it changed. */
+  version?: string | null;
+}
+
+/** How the compressed file's structure is written. */
+export interface StructureOptions {
+  /** Object streams and a cross-reference stream (PDF 1.5 and later). */
+  objectStreams: boolean;
+  /** "1.4" to "2.0", or null to keep the document's own version. */
+  version: string | null;
+  /** Lossless CCITT Group 4 for 1-bit images when smaller. */
+  monochrome: boolean;
 }
 
 /** Structures the optimizer removes before compressing; every option defaults to off. */
@@ -164,7 +178,11 @@ export type EditRequest =
       type: "transformImage";
       objectId: string;
       cm: [number, number, number, number, number, number];
-    };
+    }
+  | { type: "arrangeImage"; objectId: string; order: ImageOrder };
+
+/** Stacking moves for an image placed on a page. */
+export type ImageOrder = "front" | "back" | "forward" | "backward";
 
 export interface EditReport {
   applied: boolean;

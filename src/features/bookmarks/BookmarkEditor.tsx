@@ -3,6 +3,14 @@ import { FeatureDialog } from "../../components/FeatureDialog";
 import { loadBookmarks, saveBookmarks, type EditableBookmark } from "../../services/pdf/bookmarks";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
+import { downloadBytes, safeFileName } from "../../utils/download";
+import {
+  bookmarksForDocument,
+  exportBookmarksJson,
+  getBookmarkClipboard,
+  parseBookmarksJson,
+  setBookmarkClipboard,
+} from "./bookmark-transfer";
 
 interface Row extends Omit<EditableBookmark, "children"> {
   parent: string;
@@ -37,6 +45,18 @@ function descendants(rows: Row[], id: string): Set<string> {
   }
   return result;
 }
+/** One bookmark with its subtree, from the editor's rows. */
+function subtree(rows: Row[], id: string): EditableBookmark | null {
+  const find = (nodes: EditableBookmark[]): EditableBookmark | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      const found = find(node.children);
+      if (found) return found;
+    }
+    return null;
+  };
+  return find(nestBookmarks(rows));
+}
 export function BookmarkEditor({
   controller,
   onClose,
@@ -49,6 +69,65 @@ export function BookmarkEditor({
     null,
   );
   const encrypted = useWorkspace((s) => s.info?.encrypted);
+  const [notice, setNotice] = useState("");
+  const [hasClip, setHasClip] = useState(() => !!getBookmarkClipboard());
+  const [importMode, setImportMode] = useState<"add" | "replace">("add");
+  const importInput = useRef<HTMLInputElement>(null);
+  const pageCount = () => source.current?.pdf.numPages ?? 0;
+  const copy = (id: string, cut: boolean) => {
+    const node = subtree(rows, id);
+    if (!node) return;
+    setBookmarkClipboard([node]);
+    setHasClip(true);
+    if (cut) {
+      const removed = descendants(rows, id);
+      setRows((current) => current.filter((row) => !removed.has(row.id)));
+    }
+    setNotice(`${cut ? "Cut" : "Copied"} "${node.title}" with its children.`);
+  };
+  /** Adds bookmarks under `parent` ("" for the top level), after its existing children. */
+  const insert = (nodes: EditableBookmark[], parent: string, what: string) => {
+    const { nodes: placed, unplaced } = bookmarksForDocument(nodes, pageCount());
+    setRows((current) => [...current, ...flattenBookmarks(placed, parent)]);
+    if (unplaced) {
+      const subject = unplaced === 1 ? "bookmark has" : "bookmarks have";
+      setNotice(
+        `${what}; ${unplaced} ${subject} no destination because this document has fewer pages.`,
+      );
+    } else {
+      setNotice(`${what}.`);
+    }
+  };
+  const paste = (parent: string) => {
+    const clip = getBookmarkClipboard();
+    if (clip) insert(clip, parent, "Pasted bookmarks");
+  };
+  const exportJson = async (id?: string) => {
+    try {
+      const tree = id ? [subtree(rows, id)!] : nestBookmarks(rows);
+      const name = useWorkspace.getState().document?.name ?? "document.pdf";
+      await downloadBytes(
+        new TextEncoder().encode(exportBookmarksJson(tree)),
+        safeFileName(`${name.replace(/\.pdf$/i, "")}-bookmarks.json`),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+  const importJson = async (file: File) => {
+    try {
+      const nodes = parseBookmarksJson(await file.text());
+      if (importMode === "replace") {
+        const { nodes: placed, unplaced } = bookmarksForDocument(nodes, pageCount());
+        setRows(flattenBookmarks(placed));
+        const destinations = unplaced ? `; ${unplaced} have no destination` : "";
+        setNotice(`Replaced the bookmarks with ${file.name}${destinations}. Save to keep them.`);
+      } else insert(nodes, "", `Added the bookmarks from ${file.name}. Save to keep them`);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
   useEffect(() => {
     let alive = true;
     const pdf = controller?.pdf;
@@ -122,6 +201,7 @@ export function BookmarkEditor({
         </div>
         <div className="modal-body">
           {error && <p role="alert">{error}</p>}
+          {notice && <output>{notice}</output>}
           <p>
             Add, rename, nest, reorder or delete bookmarks. Page numbers start at 1. Deleting a
             bookmark also deletes its children.
@@ -188,6 +268,25 @@ export function BookmarkEditor({
                   >
                     Down
                   </button>
+                  <button aria-label={`Cut ${row.title}`} onClick={() => copy(row.id, true)}>
+                    Cut
+                  </button>
+                  <button aria-label={`Copy ${row.title}`} onClick={() => copy(row.id, false)}>
+                    Copy
+                  </button>
+                  <button
+                    aria-label={`Paste inside ${row.title}`}
+                    disabled={!hasClip}
+                    onClick={() => paste(row.id)}
+                  >
+                    Paste inside
+                  </button>
+                  <button
+                    aria-label={`Export ${row.title}`}
+                    onClick={() => void exportJson(row.id)}
+                  >
+                    Export
+                  </button>
                   <button
                     aria-label={`Delete ${row.title}`}
                     onClick={() =>
@@ -215,6 +314,48 @@ export function BookmarkEditor({
             >
               Add bookmark at current page
             </button>
+          </fieldset>
+          <fieldset
+            disabled={busy || !loaded || !!encrypted}
+            className="bookmark-transfer"
+            aria-label="Copy, import and export bookmarks"
+          >
+            <button className="button-secondary" disabled={!hasClip} onClick={() => paste("")}>
+              Paste bookmarks at top level
+            </button>
+            <button
+              className="button-secondary"
+              disabled={!rows.length}
+              onClick={() => void exportJson()}
+            >
+              Export all as JSON
+            </button>
+            <label>
+              Import{" "}
+              <select
+                aria-label="How to import bookmarks"
+                value={importMode}
+                onChange={(event) => setImportMode(event.target.value as "add" | "replace")}
+              >
+                <option value="add">Add at top level</option>
+                <option value="replace">Replace all bookmarks</option>
+              </select>
+            </label>
+            <button className="button-secondary" onClick={() => importInput.current?.click()}>
+              Import JSON…
+            </button>
+            <input
+              ref={importInput}
+              hidden
+              type="file"
+              accept="application/json,.json"
+              aria-label="Bookmark JSON file"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void importJson(file);
+              }}
+            />
           </fieldset>
         </div>
         <div className="modal-footer">

@@ -67,7 +67,26 @@ pub struct Preferences {
     pub annotation_defaults: std::collections::BTreeMap<String, AnnotationDefault>,
     /// Guided actions the user saved.
     pub actions: Vec<actions::SavedAction>,
+    /// How many recent files to keep, from 0 to `MAX_RECENTS`.
+    pub recent_limit: u32,
+    /// Reopen a file at the page, zoom and layout it was last shown with.
+    pub restore_last_view: bool,
+    /// Keep a drawing tool selected after each shape.
+    pub keep_annotation_tool: bool,
+    /// Tools pinned to the toolbar, in order.
+    pub pinned_tools: Vec<String>,
+    /// "system" (Apple Vision) or "tesseract", an installed program run for each page.
+    pub ocr_engine: String,
+    /// The Tesseract program's full path, or empty to find `tesseract` on the search path.
+    pub tesseract_path: String,
+    /// Tesseract language codes such as "eng" or "eng+deu".
+    pub tesseract_language: String,
 }
+
+/// The most recent files that can be kept.
+pub const MAX_RECENTS: u32 = 50;
+/// The most files whose last view is remembered.
+pub const MAX_VIEWS: usize = 100;
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -105,6 +124,13 @@ impl Default for Preferences {
             reopen_session: false,
             annotation_defaults: std::collections::BTreeMap::new(),
             actions: Vec::new(),
+            recent_limit: 15,
+            restore_last_view: true,
+            keep_annotation_tool: false,
+            pinned_tools: Vec::new(),
+            ocr_engine: "system".into(),
+            tesseract_path: String::new(),
+            tesseract_language: "eng".into(),
         }
     }
 }
@@ -125,6 +151,52 @@ pub struct LocalData {
     /// Documents open when NavPDF last closed, kept only while session reopening is on.
     #[serde(default)]
     pub session: Vec<lifecycle::SessionEntry>,
+    /// The last view of recently shown files, newest first, kept while view restoring is on.
+    #[serde(default)]
+    pub views: Vec<ViewRecord>,
+}
+
+/// How a file was last shown: its page, zoom and page layout.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct LastView {
+    pub page: u32,
+    pub zoom: String,
+    pub layout: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewRecord {
+    pub path: PathBuf,
+    #[serde(flatten)]
+    pub view: LastView,
+}
+
+/// Zoom values the viewer accepts: named fits or a scale from 10% to 1000%.
+fn valid_zoom(zoom: &str) -> bool {
+    ["page-fit", "page-width", "page-actual", "auto"].contains(&zoom)
+        || zoom
+            .parse::<f64>()
+            .is_ok_and(|scale| scale.is_finite() && (0.1..=10.0).contains(&scale))
+}
+
+/// Validate a view before it is stored or applied.
+pub fn validate_view(view: &LastView) -> Result<(), String> {
+    if view.page == 0
+        || !valid_zoom(&view.zoom)
+        || !["continuous", "single", "spread"].contains(&view.layout.as_str())
+    {
+        return Err("Invalid view.".into());
+    }
+    Ok(())
+}
+
+/// Record a file's view, newest first, keeping at most `MAX_VIEWS` files.
+pub fn record_view(views: &mut Vec<ViewRecord>, path: PathBuf, view: LastView) {
+    views.retain(|record| record.path != path);
+    views.insert(0, ViewRecord { path, view });
+    views.truncate(MAX_VIEWS);
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,6 +282,9 @@ pub struct Descriptor {
     pub name: String,
     pub size: u64,
     pub revision_id: String,
+    /// How this file was last shown, when view restoring is on and it was shown before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_view: Option<LastView>,
 }
 fn time() -> u64 {
     SystemTime::now()
@@ -295,6 +370,15 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
         .lock()
         .map_err(|_| "Document state unavailable.")?
         .insert(id.clone(), entry);
+    let last_view = {
+        let local = state.local.lock().map_err(|_| "Settings unavailable.")?;
+        local
+            .preferences
+            .restore_last_view
+            .then(|| local.views.iter().find(|record| record.path == path))
+            .flatten()
+            .map(|record| record.view.clone())
+    };
     if remember {
         let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
         if local.preferences.recent_files {
@@ -315,7 +399,8 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
                     page,
                 },
             );
-            local.recents.truncate(15);
+            let limit = local.preferences.recent_limit as usize;
+            local.recents.truncate(limit);
             filesystem::private_json(&state.root.join("settings.json"), &*local)?;
         }
     }
@@ -326,6 +411,7 @@ fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor,
         name,
         size: length,
         revision_id,
+        last_view,
     })
 }
 // Generated documents have no user-selected destination. Keep the source
@@ -679,7 +765,8 @@ pub async fn save_document(
                             page,
                         },
                     );
-                    local.recents.truncate(15);
+                    let limit = local.preferences.recent_limit as usize;
+                    local.recents.truncate(limit);
                     let _ = filesystem::private_json(&state.root.join("settings.json"), &*local);
                 }
             }
@@ -927,12 +1014,42 @@ fn persist_preferences(state: &AppState, mut preferences: Preferences) -> Result
             return Err("Custom colors must use six-digit hexadecimal values.".into());
         }
     }
+    if preferences.recent_limit > MAX_RECENTS {
+        return Err("Invalid preference value.".into());
+    }
+    let mut seen = std::collections::HashSet::new();
+    if preferences.pinned_tools.len() > 12
+        || !preferences.pinned_tools.iter().all(|id| {
+            !id.is_empty()
+                && id.len() <= 64
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                && seen.insert(id.clone())
+        })
+    {
+        return Err("Invalid pinned tools.".into());
+    }
+    if !["system", "tesseract"].contains(&preferences.ocr_engine.as_str())
+        || !crate::ocr::tesseract::valid_language(&preferences.tesseract_language)
+        || preferences.tesseract_path.len() > 4096
+        || (!preferences.tesseract_path.is_empty()
+            && !std::path::Path::new(&preferences.tesseract_path).is_absolute())
+    {
+        return Err("Invalid OCR engine settings.".into());
+    }
     preferences.network_access = false;
     let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
     let mut candidate = local.clone();
     candidate.preferences = preferences;
     if !candidate.preferences.recent_files {
         candidate.recents.clear();
+    }
+    candidate
+        .recents
+        .truncate(candidate.preferences.recent_limit as usize);
+    if !candidate.preferences.restore_last_view {
+        candidate.views.clear();
     }
     filesystem::private_json(&state.root.join("settings.json"), &candidate)?;
     *local = candidate;
@@ -950,6 +1067,39 @@ fn persist_cleared_recents(state: &AppState) -> Result<(), String> {
     filesystem::private_json(&state.root.join("settings.json"), &candidate)?;
     *local = candidate;
     Ok(())
+}
+/// Remember how a saved file is shown, so opening it again restores the view.
+#[tauri::command]
+pub fn remember_view(state: State<AppState>, id: String, view: LastView) -> Result<(), String> {
+    validate_view(&view)?;
+    let doc = document(&state, &id)?;
+    // Imported documents have no file of the user's yet; their private source is not recorded.
+    if *doc
+        .force_save_as
+        .lock()
+        .map_err(|_| "Document unavailable.")?
+    {
+        return Ok(());
+    }
+    let source = doc
+        .source
+        .lock()
+        .map_err(|_| "Document unavailable.")?
+        .0
+        .clone();
+    let mut local = state.local.lock().map_err(|_| "Settings unavailable.")?;
+    if !local.preferences.restore_last_view {
+        return Ok(());
+    }
+    if local
+        .views
+        .first()
+        .is_some_and(|record| record.path == source && record.view == view)
+    {
+        return Ok(());
+    }
+    record_view(&mut local.views, source, view);
+    filesystem::private_json(&state.root.join("settings.json"), &*local)
 }
 #[tauri::command]
 pub fn remember_page(state: State<AppState>, id: String, page: u32) -> Result<(), String> {
@@ -1114,6 +1264,59 @@ pub fn emit_action(app: &AppHandle, action: &str) {
 mod tests {
     use super::*;
     use lopdf::dictionary;
+
+    fn view(page: u32, zoom: &str, layout: &str) -> LastView {
+        LastView {
+            page,
+            zoom: zoom.into(),
+            layout: layout.into(),
+        }
+    }
+
+    #[test]
+    fn last_views_are_validated_and_capped_newest_first() {
+        assert!(validate_view(&view(3, "page-width", "single")).is_ok());
+        assert!(validate_view(&view(1, "1.25", "continuous")).is_ok());
+        assert!(validate_view(&view(0, "1", "continuous")).is_err());
+        assert!(validate_view(&view(1, "11", "continuous")).is_err());
+        assert!(validate_view(&view(1, "NaN", "continuous")).is_err());
+        assert!(validate_view(&view(1, "1", "grid")).is_err());
+        let mut views = Vec::new();
+        for index in 0..(MAX_VIEWS + 5) {
+            record_view(
+                &mut views,
+                PathBuf::from(format!("/f{index}.pdf")),
+                view(1, "1", "single"),
+            );
+        }
+        assert_eq!(views.len(), MAX_VIEWS);
+        record_view(
+            &mut views,
+            PathBuf::from("/f50.pdf"),
+            view(9, "page-fit", "spread"),
+        );
+        assert_eq!(views.len(), MAX_VIEWS);
+        assert_eq!(views[0].path, PathBuf::from("/f50.pdf"));
+        assert_eq!(views[0].view.page, 9);
+        assert_eq!(
+            views
+                .iter()
+                .filter(|r| r.path == std::path::Path::new("/f50.pdf"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn preferences_without_new_fields_keep_defaults() {
+        let parsed: Preferences = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert_eq!(parsed.recent_limit, 15);
+        assert!(parsed.restore_last_view);
+        assert!(!parsed.keep_annotation_tool);
+        assert!(parsed.pinned_tools.is_empty());
+        let local: LocalData = serde_json::from_str(r#"{"preferences":{},"recents":[]}"#).unwrap();
+        assert!(local.views.is_empty());
+    }
 
     #[test]
     fn operating_system_open_tokens_accept_only_pdf_paths() {
@@ -1356,6 +1559,35 @@ mod tests {
             serde_json::from_slice(&fs::read(root.path().join("settings.json")).unwrap()).unwrap();
         assert!(saved.recents.is_empty());
         assert_eq!(saved.preferences.theme, "dark");
+    }
+
+    #[test]
+    fn pinned_tools_and_recent_limits_are_validated_and_trim_recents() {
+        let root = tempfile::tempdir().unwrap();
+        let state = test_state(root.path());
+        let mut preferences = Preferences {
+            pinned_tools: vec!["present".into(), "compress-pdf".into()],
+            ..Preferences::default()
+        };
+        persist_preferences(&state, preferences.clone()).unwrap();
+        for invalid in [
+            vec!["Bad Id".to_string()],
+            vec!["same".into(), "same".into()],
+            (0..13).map(|i| format!("tool-{i}")).collect(),
+            vec![String::new()],
+        ] {
+            let candidate = Preferences {
+                pinned_tools: invalid,
+                ..preferences.clone()
+            };
+            assert!(persist_preferences(&state, candidate).is_err());
+        }
+        preferences.recent_limit = MAX_RECENTS + 1;
+        assert!(persist_preferences(&state, preferences.clone()).is_err());
+        seed_recent(&state);
+        preferences.recent_limit = 0;
+        persist_preferences(&state, preferences).unwrap();
+        assert!(state.local.lock().unwrap().recents.is_empty());
     }
 
     #[test]
@@ -1707,19 +1939,44 @@ pub async fn print_document(app: AppHandle, request: Request<'_>) -> Result<bool
     }).await.map_err(|_| "Preparing the print copy failed.")?
 }
 
-#[tauri::command]
-pub async fn ocr_recognize_page(request: Request<'_>) -> Result<crate::ocr::OcrPageResult, String> {
-    let image_bytes = payload(&request).map_err(|_| "Invalid OCR image payload.".to_string())?;
-    let options: crate::ocr::OcrOptions = serde_json::from_str(&header(&request, "x-ocr-options")?)
-        .map_err(|_| "Invalid OCR options.".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || crate::ocr::recognize_page(&image_bytes, &options))
-        .await
-        .map_err(|_| "OCR recognition task failed.".to_string())?
+/// The OCR engine chosen in Settings.
+fn ocr_engine(state: &AppState) -> Result<crate::ocr::Engine, String> {
+    let local = state.local.lock().map_err(|_| "Settings unavailable.")?;
+    let preferences = &local.preferences;
+    Ok(if preferences.ocr_engine == "tesseract" {
+        crate::ocr::Engine::Tesseract {
+            program: preferences.tesseract_path.clone(),
+            language: preferences.tesseract_language.clone(),
+        }
+    } else {
+        crate::ocr::Engine::System
+    })
 }
 
 #[tauri::command]
-pub fn ocr_get_engine_info() -> Result<crate::ocr::OcrEngineInfo, String> {
-    crate::ocr::get_engine_info()
+pub async fn ocr_recognize_page(
+    state: State<'_, AppState>,
+    request: Request<'_>,
+) -> Result<crate::ocr::OcrPageResult, String> {
+    let image_bytes = payload(&request).map_err(|_| "Invalid OCR image payload.".to_string())?;
+    let options: crate::ocr::OcrOptions = serde_json::from_str(&header(&request, "x-ocr-options")?)
+        .map_err(|_| "Invalid OCR options.".to_string())?;
+    let engine = ocr_engine(&state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ocr::recognize_with(&engine, &image_bytes, &options)
+    })
+    .await
+    .map_err(|_| "OCR recognition task failed.".to_string())?
+}
+
+#[tauri::command]
+pub async fn ocr_get_engine_info(
+    state: State<'_, AppState>,
+) -> Result<crate::ocr::OcrEngineInfo, String> {
+    let engine = ocr_engine(&state)?;
+    tauri::async_runtime::spawn_blocking(move || crate::ocr::engine_info(&engine))
+        .await
+        .map_err(|_| "The OCR engine could not be described.".to_string())?
 }
 
 #[tauri::command]

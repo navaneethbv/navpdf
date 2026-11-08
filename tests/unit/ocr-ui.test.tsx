@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from "pdf-lib";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { OcrPanel } from "../../src/features/ocr/OcrPanel";
 import {
   applyOcrSearchableLayer,
@@ -216,6 +216,56 @@ describe("OcrPanel UI Component (P6.4)", () => {
       .join("\n");
     expect(decoded).toContain("496E766F69636520343536");
     expect(decoded).not.toContain("496E766F69636520313233");
+  });
+
+  it("walks low-confidence words and can show only them", async () => {
+    vi.mocked(ocrRecognizePage).mockResolvedValueOnce({
+      pageIndex: 0,
+      language: "en-US",
+      fullText: "Total due 42",
+      meanConfidence: 0.7,
+      lines: [
+        {
+          text: "Total due 42",
+          confidence: 0.7,
+          bbox: [0.1, 0.4, 0.6, 0.1],
+          words: [
+            { text: "Total", confidence: 0.99, bbox: [0.1, 0.4, 0.2, 0.1] },
+            { text: "dve", confidence: 0.4, bbox: [0.3, 0.4, 0.1, 0.1] },
+            { text: "42", confidence: 0.6, bbox: [0.5, 0.4, 0.1, 0.1] },
+          ],
+        },
+      ],
+    });
+    render(<OcrPanel controller={createMockController(samplePdf)} onClose={vi.fn()} />);
+    const applyBtn = screen.getByRole("button", { name: /Apply Searchable Layer/i });
+    await waitFor(() => expect(applyBtn.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(applyBtn);
+    expect(await screen.findByText(/2 words below 80% confidence/)).toBeTruthy();
+    const controls = within(screen.getByRole("group", { name: "Low-confidence words" }));
+    fireEvent.click(controls.getByRole("button", { name: "Next suspect" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "Page 1 line 1 word 2" }),
+      ),
+    );
+    fireEvent.keyDown(document.activeElement!, { key: "F8" });
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "Page 1 line 1 word 3" }),
+      ),
+    );
+    const showOnly = controls.getByRole("checkbox", { name: "Show only low-confidence words" });
+    showOnly.focus();
+    fireEvent.keyDown(showOnly, { key: "F8", shiftKey: true });
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "Page 1 line 1 word 2" }),
+      ),
+    );
+    fireEvent.click(showOnly);
+    expect(screen.queryByRole("textbox", { name: "Page 1 line 1 word 1" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Page 1 line 1 word 2" })).toBeTruthy();
   });
 
   it("can retry saved OCR review after cancellation", async () => {

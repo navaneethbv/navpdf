@@ -18,6 +18,7 @@ vi.mock("../../src/services/native", () => ({
   markDirty: vi.fn(async () => {}),
   discardRecovery: vi.fn(async () => {}),
   rememberPage: vi.fn(async () => {}),
+  rememberView: vi.fn(async () => {}),
   writeRecovery: vi.fn(async () => {}),
   sourceStatus: vi.fn(async () => ({ changed: false, missing: false })),
   reopenDocument: vi.fn(),

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../../components/Dialog";
 import { useWorkspace } from "../../stores/workspace";
 import { savePreferences } from "../../services/native";
-import type { Preferences } from "../../types/document";
+import { MAX_RECENT_LIMIT, type Preferences } from "../../types/document";
 import { applyTheme, colorPalettes } from "../../services/theme";
 import { CustomColors } from "./CustomColors";
 import { contrastRatio, PAGE_COLOR_LABELS, pageColorsFor } from "../viewer/page-colors";
@@ -69,7 +69,7 @@ export function Settings() {
               local: {
                 ...local,
                 preferences: committed,
-                recents: committed.recentFiles ? local.recents : [],
+                recents: committed.recentFiles ? local.recents.slice(0, committed.recentLimit) : [],
               },
               settingsOpen: false,
               layout: committed.layout,
@@ -199,6 +199,16 @@ export function Settings() {
             />{" "}
             Remember last page
           </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.restoreLastView}
+              onChange={(e) => {
+                patch({ restoreLastView: e.target.checked });
+              }}
+            />{" "}
+            Restore each file's last page, zoom and layout when it opens again
+          </label>
           <label>
             Page colours{" "}
             <select
@@ -311,6 +321,22 @@ export function Settings() {
             />{" "}
             Keep recent document history
           </label>
+          <label>
+            Recent files to keep{" "}
+            <input
+              type="number"
+              min={0}
+              max={MAX_RECENT_LIMIT}
+              step={1}
+              disabled={!preferences.recentFiles}
+              value={preferences.recentLimit}
+              onChange={(e) => {
+                const value = Math.round(Number(e.target.value));
+                if (Number.isFinite(value))
+                  patch({ recentLimit: Math.min(MAX_RECENT_LIMIT, Math.max(0, value)) });
+              }}
+            />
+          </label>
           <label className="check-label">
             <input type="checkbox" checked={false} disabled /> Allow network access
           </label>
@@ -357,7 +383,61 @@ export function Settings() {
               />
             </label>
           </div>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.keepAnnotationTool}
+              onChange={(e) => {
+                patch({ keepAnnotationTool: e.target.checked });
+              }}
+            />{" "}
+            Keep drawing tools selected after each shape
+          </label>
           <h3>OCR</h3>
+          <label>
+            Recognition engine{" "}
+            <select
+              value={preferences.ocrEngine}
+              onChange={(e) => {
+                patch({ ocrEngine: e.target.value as Preferences["ocrEngine"] });
+              }}
+            >
+              <option value="system">Built in (Apple Vision)</option>
+              <option value="tesseract">Tesseract installed on this computer</option>
+            </select>
+          </label>
+          {preferences.ocrEngine === "tesseract" && (
+            <div className="form-columns">
+              <label>
+                Tesseract program{" "}
+                <input
+                  value={preferences.tesseractPath}
+                  placeholder="Found on the search path"
+                  maxLength={4096}
+                  onChange={(e) => {
+                    patch({ tesseractPath: e.target.value });
+                  }}
+                />
+              </label>
+              <label>
+                Tesseract languages{" "}
+                <input
+                  value={preferences.tesseractLanguage}
+                  maxLength={64}
+                  pattern="[a-z]{3}(_[a-z]+)?(\+[a-z]{3}(_[a-z]+)?)*"
+                  onChange={(e) => {
+                    patch({ tesseractLanguage: e.target.value.trim() });
+                  }}
+                />
+              </label>
+              <p className="muted">
+                NavPDF runs the program you installed for each page, with a private copy of the page
+                image and no network access of its own. It downloads nothing; install Tesseract and
+                its language data yourself. Give the program&apos;s full path, or leave it empty to
+                use the one on the search path.
+              </p>
+            </div>
+          )}
           <div className="form-columns">
             <label>
               Default language{" "}

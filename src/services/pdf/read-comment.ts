@@ -2,6 +2,7 @@ import { PDFArray, PDFDict, PDFHexString, PDFName, PDFNumber, PDFString } from "
 import type { Comment } from "../../types/document";
 import { annotationIdentifier } from "../document-commands";
 import { parsePdfDate } from "../../utils/pdf-date";
+import { BORDER_SHAPE, FILL_OPACITY, STROKE_OPACITY } from "./annotation-appearance";
 
 interface AnnotationData {
   id: string;
@@ -51,6 +52,30 @@ function quadBounds(values: number[] = []): number[][] | undefined {
     bounds.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
   }
   return bounds.length ? bounds : undefined;
+}
+
+/** An RGB colour with channels from 0 to 1. */
+function colorTriple(values?: number[]): [number, number, number] | undefined {
+  if (values?.length === 3 && values.every((value) => Number.isFinite(value)))
+    return [values[0], values[1], values[2]].map((value) => Math.min(1, Math.max(0, value))) as [
+      number,
+      number,
+      number,
+    ];
+}
+
+function unitNumber(dict: PDFDict, key: string) {
+  const value = dict.lookupMaybe(PDFName.of(key), PDFNumber)?.asNumber();
+  return value !== undefined && Number.isFinite(value)
+    ? Math.min(1, Math.max(0, value))
+    : undefined;
+}
+
+/** A polygon's or connected lines' corners as [x, y] pairs. */
+function pointPairs(values?: number[]): number[][] | undefined {
+  if (!values || values.length < 4 || values.length % 2 || values.length > 20_000) return;
+  if (!values.every(Number.isFinite)) return;
+  return values.flatMap((value, index) => (index % 2 === 0 ? [[value, values[index + 1]]] : []));
 }
 
 function numberArray(dict: PDFDict, key: string): number[] | undefined {
@@ -109,6 +134,11 @@ function storedAnnotation(annotations: PDFArray | undefined, id: string) {
     return {
       borderStyle: storedBorderStyle(dict),
       line: rectangle(numberArray(dict, "L")),
+      vertices: pointPairs(numberArray(dict, "Vertices")),
+      fillColor: colorTriple(numberArray(dict, "IC")),
+      strokeOpacity: unitNumber(dict, STROKE_OPACITY),
+      fillOpacity: unitNumber(dict, FILL_OPACITY),
+      borderShape: dict.lookupMaybe(PDFName.of(BORDER_SHAPE), PDFName)?.decodeText(),
       quads: quadBounds(numberArray(dict, "QuadPoints")),
       endings,
       author: storedText(dict, "T"),
@@ -136,6 +166,15 @@ function applyAppearance(comment: Comment, data: AnnotationData) {
   if (state) comment.reviewState = state;
 }
 
+function applyStoredAppearance(comment: Comment, stored: ReturnType<typeof storedAnnotation>) {
+  if (stored.vertices) comment.vertices = stored.vertices;
+  if (stored.fillColor) comment.fillColor = stored.fillColor;
+  if (stored.strokeOpacity !== undefined) comment.strokeOpacity = stored.strokeOpacity;
+  if (stored.fillOpacity !== undefined) comment.fillOpacity = stored.fillOpacity;
+  if (stored.borderShape === "Oval" || stored.borderShape === "Circle")
+    comment.borderShape = stored.borderShape === "Oval" ? "oval" : "circle";
+}
+
 /** Merge PDF.js display data with saved geometry using decoded annotation identifiers. */
 export function readComment(raw: unknown, page: number, annotations?: PDFArray): Comment | null {
   const data = raw as AnnotationData;
@@ -157,6 +196,7 @@ export function readComment(raw: unknown, page: number, annotations?: PDFArray):
     lineEndings,
     quads: stored.quads ?? quadBounds(data.quadPoints),
   };
+  applyStoredAppearance(comment, stored);
   applyAppearance(comment, data);
   const author = data.titleObj?.str || data.title || stored.author;
   if (author) comment.author = author;

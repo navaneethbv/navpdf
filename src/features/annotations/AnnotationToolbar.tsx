@@ -17,7 +17,9 @@ import {
   TextCursorInput,
   Paperclip,
   Eraser,
+  Pin,
 } from "lucide-react";
+import { savePreferences } from "../../services/native";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import type { TextMarkupKind } from "../../services/document-commands";
@@ -41,6 +43,7 @@ export function AnnotationToolbar({
 }>) {
   const s = useWorkspace();
   const isBlocked = !controller || s.busy || !!s.info?.encrypted || !s.editingAllowed;
+  const keep = s.local.preferences.keepAnnotationTool;
 
   const handleSetTool = (tool: "highlight" | "draw" | "text" | "select" | "eraser") => {
     s.set({ tool, selectedAnnotationId: null, hasSelection: false });
@@ -248,6 +251,30 @@ export function AnnotationToolbar({
           />
         ))}
       </div>
+
+      <div className="divider-vert" />
+
+      <button
+        className={keep ? "active" : ""}
+        title={
+          keep
+            ? "Drawing tools stay selected after each use"
+            : "Keep drawing tools selected after each use"
+        }
+        aria-label="Keep annotation tool selected"
+        aria-pressed={keep}
+        onClick={() => {
+          const preferences = { ...s.local.preferences, keepAnnotationTool: !keep };
+          void savePreferences(preferences)
+            .then(() => {
+              const local = useWorkspace.getState().local;
+              useWorkspace.getState().set({ local: { ...local, preferences } });
+            })
+            .catch((error: unknown) => s.set({ error: String(error) }));
+        }}
+      >
+        <Pin size={16} />
+      </button>
 
       <button className="icon-button" onClick={onClose} aria-label="Close annotation tools">
         <X size={16} />

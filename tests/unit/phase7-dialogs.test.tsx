@@ -10,6 +10,8 @@ const engine = vi.hoisted(() => ({
   compressDocument: vi.fn(),
   inspectPage: vi.fn(),
   editPage: vi.fn(),
+  copyImage: vi.fn(),
+  pasteImage: vi.fn(),
   saveProtectedCopy: vi.fn(),
   unlockDocument: vi.fn(),
 }));
@@ -245,6 +247,7 @@ describe("measured compression", () => {
       "small",
       "job-1",
       undefined,
+      { objectStreams: true, version: null, monochrome: true },
     );
     expect(screen.getByText("Fonts: changed")).toBeTruthy();
     fireEvent.click(screen.getByText("Apply Compressed Version"));
@@ -590,6 +593,92 @@ describe("existing content editor", () => {
       1,
       expect.objectContaining({ type: "transformImage", objectId: "abc:9" }),
       undefined,
+    );
+  });
+
+  it("arranges an image and copies and pastes it", async () => {
+    seed();
+    const view = controller();
+    engine.inspectPage.mockResolvedValue(objects);
+    engine.editPage.mockResolvedValue({
+      bytes: new Uint8Array([3]),
+      report: {
+        applied: true,
+        message: "Image brought to the front.",
+        widthBefore: null,
+        widthAfter: null,
+        missingCharacters: [],
+      },
+    });
+    engine.copyImage.mockResolvedValue(new Uint8Array([7]));
+    engine.pasteImage.mockResolvedValue(new Uint8Array([8]));
+    render(<ObjectEditor controller={view as never} onClose={() => {}} />);
+    fireEvent.click(await screen.findByText("Image 2×2 px (shared)"));
+    fireEvent.click(screen.getByText("Bring to Front"));
+    await vi.waitFor(() =>
+      expect(engine.editPage).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        1,
+        { type: "arrangeImage", objectId: "abc:9", order: "front" },
+        undefined,
+      ),
+    );
+    await vi.waitFor(() => expect(screen.getByText("Image 2×2 px (shared)")).toBeTruthy());
+    fireEvent.click(screen.getByText("Image 2×2 px (shared)"));
+    fireEvent.click(screen.getByText("Copy Image"));
+    await vi.waitFor(() =>
+      expect(engine.copyImage).toHaveBeenCalledWith(expect.any(Uint8Array), 1, "abc:9"),
+    );
+    await vi.waitFor(() =>
+      expect((screen.getByText("Paste Image") as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(screen.getByText("Paste Image"));
+    // Pasting on the page it was copied from steps it 18 points down and to the right.
+    await vi.waitFor(() =>
+      expect(engine.pasteImage).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        1,
+        new Uint8Array([7]),
+        18,
+        -18,
+      ),
+    );
+  });
+
+  it("passes the chosen PDF version and structure to the optimizer", async () => {
+    seed();
+    const view = controller();
+    engine.compressDocument.mockResolvedValueOnce({
+      bytes: new Uint8Array([1]),
+      report: {
+        preset: "lossless",
+        beforeBytes: 100,
+        afterBytes: 90,
+        useful: true,
+        unusedObjectsRemoved: 0,
+        duplicateStreamsMerged: 0,
+        imagesExamined: 0,
+        imagesRecompressed: 0,
+        imagesSkipped: 0,
+        checks: [],
+        message: "Saves 10 bytes.",
+        monochromeRecompressed: 2,
+        version: "1.4",
+      },
+    });
+    render(<CompressDialog controller={view as never} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Make compatible with"), { target: { value: "1.4" } });
+    const objectStreams = screen.getByLabelText(/object streams/) as HTMLInputElement;
+    expect(objectStreams.disabled && !objectStreams.checked).toBe(true);
+    fireEvent.click(screen.getByText("Analyze Compression"));
+    expect(await screen.findByText(/Written as PDF 1.4/)).toBeTruthy();
+    expect(screen.getByText(/Black-and-white images re-encoded: 2/)).toBeTruthy();
+    expect(engine.compressDocument).toHaveBeenLastCalledWith(
+      expect.any(Uint8Array),
+      expect.any(String),
+      "job-1",
+      undefined,
+      { objectStreams: true, version: "1.4", monochrome: true },
     );
   });
 });

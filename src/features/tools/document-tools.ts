@@ -15,6 +15,7 @@ import { DocumentInsightsDialog } from "../document/DocumentInsightsDialog";
 import { InitialViewDialog } from "../document/InitialViewDialog";
 import { LinkToolsDialog } from "../editor/LinkToolsDialog";
 import { HeadingBookmarksDialog } from "../bookmarks/HeadingBookmarksDialog";
+import { StyleBookmarksDialog } from "../bookmarks/StyleBookmarksDialog";
 import { SpaceAuditDialog } from "../document/SpaceAuditDialog";
 import { PagePropertiesDialog } from "../pages/PagePropertiesDialog";
 import { FileCommentDialog, TextEditProposalDialog } from "../annotations/CommentDialogs";
@@ -24,6 +25,7 @@ import { CoverUpDialog } from "../redact/CoverUpDialog";
 import { TagsDialog } from "../document/TagsDialog";
 import { StandardsDialog } from "../document/StandardsDialog";
 import { ActionsDialog } from "../actions/ActionsDialog";
+import { ThreeDDialog } from "../document/ThreeDDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -46,6 +48,8 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   "document-insights": DocumentInsightsDialog,
   "link-tools": LinkToolsDialog,
   "heading-bookmarks": HeadingBookmarksDialog,
+  "style-bookmarks": StyleBookmarksDialog,
+  "three-d": ThreeDDialog,
   "space-audit": SpaceAuditDialog,
   "page-properties": PagePropertiesDialog,
   "text-edit-proposal": TextEditProposalDialog,

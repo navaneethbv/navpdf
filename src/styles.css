@@ -4028,6 +4028,12 @@ p {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+fieldset.property-row {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .property-row select {
   width: 100%;
 }
@@ -4204,4 +4210,146 @@ p {
 .action-add {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   margin: 6px 0;
+}
+
+.compare-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.annotation-move-ghost {
+  position: absolute;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.annotation-move-preview {
+  position: absolute;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.annotation-reshape-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface, #fff);
+  cursor: crosshair;
+  pointer-events: auto;
+}
+.annotation-reshape-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.annotation-reshape-preview polyline {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+.ocr-suspect input {
+  border-color: var(--warning-ink, #b45309);
+}
+
+/* Present mode: one page at a time on black. */
+.presentation {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.presentation-stage {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  outline: none;
+}
+.presentation-page {
+  max-width: 100%;
+  max-height: 100%;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: #fff;
+}
+.presentation-page canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+.presentation-controls {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius-md, 8px);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 0.35;
+  transform: translateX(-50%);
+  transition: opacity 0.2s;
+}
+.presentation-controls:hover,
+.presentation-controls:focus-within {
+  opacity: 1;
+}
+.presentation-controls button {
+  color: inherit;
+  background: transparent;
+  border: 0;
+}
+.presentation-error {
+  position: absolute;
+  top: 16px;
+  color: #fff;
+}
+
+.tool-card-wrap {
+  position: relative;
+}
+.tool-card-wrap .tool-card {
+  width: 100%;
+}
+.tool-pin {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--muted);
+  background: transparent;
+  opacity: 0;
+}
+.tool-card-wrap:hover .tool-pin,
+.tool-pin:focus-visible,
+.tool-pin.pinned {
+  opacity: 1;
+}
+.tool-pin.pinned {
+  color: var(--accent);
+}
+.pinned-tools {
+  display: flex;
+  gap: 2px;
+  align-items: center;
 }

@@ -314,3 +314,26 @@ it("closes the unsaved-changes prompt before a protected save asks how to protec
   expect(useWorkspace.getState()).toMatchObject({ activeModal: "protect", document: previous });
   expect(desktop.saveDocument).not.toHaveBeenCalled();
 });
+
+it("opens a file at its remembered page, zoom and layout", async () => {
+  vi.mocked(loadPdf).mockResolvedValue({
+    promise: Promise.resolve({ numPages: 9, getMetadata: async () => ({ info: {} }) }),
+    destroy: vi.fn(async () => {}),
+  } as unknown as Awaited<ReturnType<typeof loadPdf>>);
+  const applyView = vi.fn();
+  Object.assign(controller, { applyView });
+  const lastView = { page: 6, zoom: "page-width", layout: "single" as const };
+  await act(async () => expect(await session.load({ ...next, lastView })).toBe(true));
+  expect(applyView).toHaveBeenCalledWith(lastView);
+  expect(controller.goTo).not.toHaveBeenCalledWith(1);
+  applyView.mockClear();
+  useWorkspace.getState().set({
+    local: {
+      ...useWorkspace.getState().local,
+      preferences: { ...defaultPreferences, restoreLastView: false },
+    },
+  });
+  await act(async () => expect(await session.load({ ...next, id: "again", lastView })).toBe(true));
+  expect(applyView).not.toHaveBeenCalled();
+  expect(controller.goTo).toHaveBeenCalledWith(1);
+});

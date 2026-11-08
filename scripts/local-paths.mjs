@@ -40,6 +40,9 @@ export function localTool(name) {
     "/usr/local/bin",
     "/opt/homebrew/opt/nss/bin",
     "/usr/local/opt/nss/bin",
+    // Homebrew installs rustup keg-only, so its cargo is not linked into the bin directories.
+    "/opt/homebrew/opt/rustup/bin",
+    "/usr/local/opt/rustup/bin",
     path.join(homedir(), ".cargo", "bin"),
   ];
   for (const directory of directories) {

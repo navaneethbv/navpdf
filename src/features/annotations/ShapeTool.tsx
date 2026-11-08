@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 import { pageAt, pdfPoint } from "./page-pointer";
+import { orthoPoint } from "./ortho";
 
 interface Point {
   x: number;
@@ -76,20 +77,24 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
     });
   };
 
+  /** Lines and arrows run level or plumb from their start while Shift is held. */
+  const snaps = (event: PointerEvent) => event.shiftKey && (kind === "Line" || kind === "Arrow");
+
   const handleMove = (event: PointerEvent) => {
     const current = active.current;
     if (current?.pointerId !== event.pointerId || !draft) return;
-    setDraft({
-      ...draft,
-      currentClient: { x: event.clientX, y: event.clientY },
-    });
+    const [x, y] = snaps(event)
+      ? orthoPoint([draft.startClient.x, draft.startClient.y], [event.clientX, event.clientY])
+      : [event.clientX, event.clientY];
+    setDraft({ ...draft, currentClient: { x, y } });
   };
 
   const handleUp = async (event: PointerEvent) => {
     const current = active.current;
     if (current?.pointerId !== event.pointerId) return;
     const startPdf = draft?.startPdf ?? (await current.startPdf);
-    const endPdf = await pointFor(current.page, event);
+    const pointer = await pointFor(current.page, event);
+    const endPdf = snaps(event) ? orthoPoint(startPdf, pointer) : pointer;
     active.current = null;
     setDraft(null);
     if (
@@ -102,8 +107,11 @@ export function ShapeTool({ controller }: Readonly<{ controller: ViewerControlle
       else if (kind === "Callout")
         await controller.addCallout(startPdf, endPdf, useWorkspace.getState().calloutText, page);
       else await controller.addShape(kind, startPdf, endPdf, page);
-      useWorkspace.getState().set({ tool: "select" });
-      controller.setTool("select");
+      // With the tool kept, the next drag draws another shape of the same kind.
+      if (!useWorkspace.getState().local.preferences.keepAnnotationTool) {
+        useWorkspace.getState().set({ tool: "select" });
+        controller.setTool("select");
+      }
     } catch (error) {
       useWorkspace.getState().set({
         error: error instanceof Error ? error.message : String(error),

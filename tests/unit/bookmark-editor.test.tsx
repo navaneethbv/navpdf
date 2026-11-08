@@ -103,4 +103,35 @@ describe("bookmark editor", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(controller.replaceWithBytes).not.toHaveBeenCalled();
   });
+  it("cuts a bookmark, pastes it inside another and saves the nesting", async () => {
+    const { controller } = await setup();
+    fireEvent.click(screen.getByLabelText("Cut First"));
+    expect(screen.queryByDisplayValue("First")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Paste inside Second"));
+    expect(screen.getByDisplayValue("First")).toBeTruthy();
+    fireEvent.click(screen.getByText("Save bookmarks"));
+    await waitFor(() => expect(controller.replaceWithBytes).toHaveBeenCalled());
+    const saved = await loadBookmarks(vi.mocked(controller.replaceWithBytes).mock.calls[0][0]);
+    expect(saved.map((node) => node.title)).toEqual(["Second"]);
+    expect(saved[0].children.map((node) => node.title)).toEqual(["First"]);
+  });
+
+  it("replaces the bookmarks with an imported JSON file", async () => {
+    await setup();
+    fireEvent.change(screen.getByLabelText("How to import bookmarks"), {
+      target: { value: "replace" },
+    });
+    const json = JSON.stringify({
+      format: "navpdf-bookmarks",
+      version: 1,
+      bookmarks: [{ title: "Imported", page: 9 }],
+    });
+    fireEvent.change(screen.getByLabelText("Bookmark JSON file"), {
+      target: { files: [new File([json], "marks.json", { type: "application/json" })] },
+    });
+    expect(await screen.findByDisplayValue("Imported")).toBeTruthy();
+    expect(screen.queryByDisplayValue("First")).toBeNull();
+    // Page 9 is past the end of this two-page document, so it has no destination.
+    expect(screen.getByText(/1 have no destination/)).toBeTruthy();
+  });
 });

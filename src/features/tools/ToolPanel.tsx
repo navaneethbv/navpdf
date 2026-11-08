@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Search, X } from "lucide-react";
+import { Pin, PinOff, Search, X } from "lucide-react";
+import { savePinned, togglePinned } from "./pinned-tools";
 import { useWorkspace } from "../../stores/workspace";
 import type { ToolMode } from "../../types/document";
 import { documentTools } from "./tool-catalog";
@@ -9,6 +10,16 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
   const [expanded, setExpanded] = useState(false);
   const s = useWorkspace();
   const tools = documentTools(s);
+  const pinned = s.local.preferences.pinnedTools ?? [];
+  const togglePin = (id: string) => {
+    try {
+      void savePinned(togglePinned(pinned, id)).catch((error: unknown) =>
+        s.set({ error: String(error) }),
+      );
+    } catch (error) {
+      s.set({ error: error instanceof Error ? error.message : String(error) });
+    }
+  };
   const preferred = [
     "edit-existing",
     "export-pdf",
@@ -28,7 +39,10 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
   const ordered =
     mode === "all"
       ? [...tools].sort((a, b) => {
+          // Pinned tools come first, in the order they were pinned.
           const rank = (id: string) => {
+            const pin = pinned.indexOf(id);
+            if (pin >= 0) return pin - pinned.length;
             const index = preferred.indexOf(id);
             return index < 0 ? preferred.length : index;
           };
@@ -74,25 +88,39 @@ export function ToolPanel({ mode, onClose }: Readonly<{ mode: ToolMode; onClose:
       )}
 
       <div className="tool-grid">
-        {(mode === "all" && !search && !expanded ? filtered.slice(0, 12) : filtered).map((tool) => (
-          <button
-            key={tool.id}
-            className={`tool-card category-${tool.category} ${tool.disabled ? "disabled" : ""}`}
-            title={tool.description}
-            disabled={s.busy || tool.disabled}
-            onClick={() => {
-              tool.action();
-              if (mode !== "all") onClose();
-            }}
-          >
-            <div className="tool-card-icon">
-              <tool.icon size={20} />
+        {(mode === "all" && !search && !expanded ? filtered.slice(0, 12) : filtered).map((tool) => {
+          const isPinned = pinned.includes(tool.id);
+          return (
+            <div key={tool.id} className="tool-card-wrap">
+              <button
+                className={`tool-card category-${tool.category} ${tool.disabled ? "disabled" : ""}`}
+                title={tool.description}
+                disabled={s.busy || tool.disabled}
+                onClick={() => {
+                  tool.action();
+                  if (mode !== "all") onClose();
+                }}
+              >
+                <div className="tool-card-icon">
+                  <tool.icon size={20} />
+                </div>
+                <div className="tool-card-text">
+                  <span className="tool-card-label">{tool.label}</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className={`tool-pin ${isPinned ? "pinned" : ""}`}
+                aria-label={`${isPinned ? "Unpin" : "Pin"} ${tool.label} ${isPinned ? "from" : "to"} the toolbar`}
+                aria-pressed={isPinned}
+                title={isPinned ? "Unpin from the toolbar" : "Pin to the toolbar"}
+                onClick={() => togglePin(tool.id)}
+              >
+                {isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+              </button>
             </div>
-            <div className="tool-card-text">
-              <span className="tool-card-label">{tool.label}</span>
-            </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
       {mode === "all" && !search && (
         <button

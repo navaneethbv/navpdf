@@ -30,6 +30,8 @@ export interface DocumentDescriptor {
   name: string;
   size: number;
   revisionId?: string;
+  /** How this file was last shown, when view restoring is on. */
+  lastView?: LastView;
 }
 export interface SaveResult {
   name: string;
@@ -87,6 +89,31 @@ export interface Preferences {
   annotationDefaults: Partial<Record<ShapeKind, AnnotationDefault>>;
   /** Guided actions the user saved. */
   actions: SavedAction[];
+  /** How many recent files to keep, from 0 to `MAX_RECENT_LIMIT`. */
+  recentLimit: number;
+  /** Reopen a file at the page, zoom and layout it was last shown with. */
+  restoreLastView: boolean;
+  /** Keep a drawing tool selected after each shape, instead of returning to Select. */
+  keepAnnotationTool: boolean;
+  /** Tools pinned to the toolbar, in order. */
+  pinnedTools: string[];
+  /** "system" (Apple Vision) or "tesseract", a program installed on this computer. */
+  ocrEngine: "system" | "tesseract";
+  /** The Tesseract program's full path, or empty to find it on the search path. */
+  tesseractPath: string;
+  /** Tesseract language codes such as "eng" or "eng+deu". */
+  tesseractLanguage: string;
+}
+
+/** The most recent files that can be kept. */
+export const MAX_RECENT_LIMIT = 50;
+
+/** How a file was last shown. */
+export interface LastView {
+  page: number;
+  /** A named fit such as "page-width" or a scale such as "1.25". */
+  zoom: string;
+  layout: Layout;
 }
 
 /** One step of a guided action, applied to a document in order. */
@@ -161,6 +188,13 @@ export interface Comment {
   opacity?: number;
   width?: number;
   vertices?: number[][];
+  /** Interior colour of a rectangle, oval or polygon. */
+  fillColor?: [number, number, number];
+  /** Separate line and fill opacity, when set. */
+  strokeOpacity?: number;
+  fillOpacity?: number;
+  /** An oval or circle drawn around a text box's text. */
+  borderShape?: "oval" | "circle";
   callout?: number[];
   stampName?: string;
   replyTo?: string;
@@ -207,4 +241,11 @@ export const defaultPreferences: Preferences = {
   reopenSession: false,
   annotationDefaults: {},
   actions: [],
+  recentLimit: 15,
+  restoreLastView: true,
+  keepAnnotationTool: false,
+  pinnedTools: [],
+  ocrEngine: "system",
+  tesseractPath: "",
+  tesseractLanguage: "eng",
 };

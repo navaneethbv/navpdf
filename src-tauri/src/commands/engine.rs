@@ -249,12 +249,14 @@ pub async fn engine_compress(
     job_id: String,
     preset: compress::CompressionPreset,
     discard: Option<discard::DiscardOptions>,
+    structure: Option<compress::StructureOptions>,
 ) -> Result<EngineOutcome<compress::CompressionReport>, String> {
     let state = app.state::<AppState>();
     let bytes = state.engine.take(&input_id)?;
     let discard = discard.unwrap_or_default();
+    let structure = structure.unwrap_or_default();
     let result = run_job(&app, &job_id, move |cancel| {
-        compress::compress_with(&bytes, preset, &discard, cancel)
+        compress::compress_with_structure(&bytes, preset, &discard, &structure, cancel)
     })
     .await;
     logging::record(&state.root, "engine_compress", result.is_err());
@@ -301,6 +303,46 @@ pub async fn engine_inspect_page(
     tauri::async_runtime::spawn_blocking(move || edit::inspect(&bytes, page))
         .await
         .map_err(|_| "The page could not be scanned.")?
+}
+
+/// Copies an image placed on a page as a one-page PDF staged for pasting.
+#[tauri::command]
+pub async fn engine_copy_image(
+    app: AppHandle,
+    input_id: String,
+    page: u32,
+    object_id: String,
+) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result =
+        tauri::async_runtime::spawn_blocking(move || edit::copy_image(&bytes, page, &object_id))
+            .await
+            .map_err(|_| "The image could not be copied.")?;
+    logging::record(&state.root, "engine_copy_image", result.is_err());
+    state.engine.stage(result?)
+}
+
+/// Adds a copied image to a page, moved by an offset in points.
+#[tauri::command]
+pub async fn engine_paste_image(
+    app: AppHandle,
+    input_id: String,
+    page: u32,
+    clip_id: String,
+    dx: f64,
+    dy: f64,
+) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let clip = state.engine.take(&clip_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        edit::paste_image(&bytes, page, &clip, dx, dy)
+    })
+    .await
+    .map_err(|_| "The image could not be pasted. The document is unchanged.")?;
+    logging::record(&state.root, "engine_paste_image", result.is_err());
+    state.engine.stage(result?)
 }
 
 #[tauri::command]

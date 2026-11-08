@@ -145,13 +145,21 @@ describe("Properties", () => {
       width: 4.5,
     });
 
-    const opacitySlider = screen.getByLabelText("Selected annotation opacity");
-    fireEvent.change(opacitySlider, {
+    // Rectangles have a line and a fill, each with its own opacity, starting from /CA.
+    const lineSlider = screen.getByLabelText("Line opacity");
+    expect((lineSlider as HTMLInputElement).value).toBe("0.8");
+    fireEvent.change(lineSlider, {
       target: { value: "0.5" },
     });
-    fireEvent.pointerUp(opacitySlider);
+    fireEvent.pointerUp(lineSlider);
     expect(controller.updateSelectedAnnotation).toHaveBeenCalledWith({
-      opacity: 0.5,
+      strokeOpacity: 0.5,
+      fillOpacity: 0.8,
+    });
+    expect((screen.getByLabelText("Fill opacity") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("Fill"));
+    expect(controller.updateSelectedAnnotation).toHaveBeenCalledWith({
+      fillColor: expect.any(Array),
     });
 
     fireEvent.click(screen.getByText("Move left"));

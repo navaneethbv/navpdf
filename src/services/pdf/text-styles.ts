@@ -105,7 +105,8 @@ function glyphText(glyphs: unknown): string {
     .join("");
 }
 
-function resolveFont(page: PageLike, id: string): Promise<FontDescription | null> {
+/** The font PDF.js loaded under `id`, once the page's operator list has been read. */
+export function resolveFont(page: PageLike, id: string): Promise<FontDescription | null> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       resolve(null);

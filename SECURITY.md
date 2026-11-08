@@ -20,6 +20,8 @@ PDFs, attachments, extracted text and metadata are untrusted input.
 Embedded scripts are disabled and attachments are never launched automatically.
 External links require confirmation unless the user has approved that host for the current session; native URL validation still applies.
 Document processing is local; security reports must not include private user documents.
+NavPDF starts no other program except an installed Tesseract the user chooses for OCR, run with fixed arguments, an empty environment, a private page image, a time limit and an output cap.
+3D models are stored and saved as files but never displayed or run.
 Encrypted input remains read-only until explicitly unlocked, and decrypted recovery copies must not be written.
 Secure redaction must remove underlying content and pass text, object, image and hidden-data checks.
 Signature appearances do not provide cryptographic certification.

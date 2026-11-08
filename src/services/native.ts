@@ -1,5 +1,11 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { DocumentDescriptor, LocalState, Preferences, SaveResult } from "../types/document";
+import type {
+  DocumentDescriptor,
+  LastView,
+  LocalState,
+  Preferences,
+  SaveResult,
+} from "../types/document";
 import { defaultPreferences } from "../types/document";
 import type { OcrEngineInfo, OcrOptions, OcrPageResult } from "../types/operations";
 import { downloadBytes, safeFileName } from "../utils/download";
@@ -136,6 +142,10 @@ export function setBackgroundDirty(dirty: boolean) {
 }
 export async function markDirty(dirty: boolean) {
   if (native) await invoke("mark_dirty", { dirty: dirty || backgroundDirty });
+}
+/** Remember how a saved file is shown, so opening it again restores that view. */
+export async function rememberView(id: string, view: LastView) {
+  if (native) await invoke("remember_view", { id, view });
 }
 export async function rememberPage(id: string, page: number) {
   if (native) await invoke("remember_page", { id, page });

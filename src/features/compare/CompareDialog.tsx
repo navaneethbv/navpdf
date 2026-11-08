@@ -7,6 +7,7 @@ import { PdfPagePreview } from "../viewer/PdfPagePreview";
 import {
   alignPages,
   changedText,
+  filterComparison,
   pageSignatures,
   renderComparisonPage,
   visualDifference,
@@ -29,6 +30,8 @@ export function CompareDialog({
   const [rows, setRows] = useState<ComparedPage[]>([]),
     [selected, setSelected] = useState(0),
     [onlyChanges, setOnlyChanges] = useState(false);
+  const [showText, setShowText] = useState(true),
+    [showVisual, setShowVisual] = useState(true);
   const [difference, setDifference] = useState("");
   const [revisedName, setRevisedName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -119,12 +122,18 @@ export function CompareDialog({
       setSaving(false);
     }
   };
-  const visible = onlyChanges ? rows.filter((row) => row.status !== "unchanged") : rows;
+  const visible = filterComparison(
+    rows,
+    signatures,
+    { text: showText, visual: showVisual },
+    onlyChanges,
+  );
   const row = visible[Math.min(selected, visible.length - 1)];
   useEffect(() => {
     let alive = true;
     setDifference("");
-    if (!documents || !row?.before || !row.after || row.status === "unchanged") return;
+    if (!showVisual || !documents || !row?.before || !row.after || row.status === "unchanged")
+      return;
     void (async () => {
       const canvases: HTMLCanvasElement[] = [];
       try {
@@ -144,10 +153,10 @@ export function CompareDialog({
     return () => {
       alive = false;
     };
-  }, [documents, row]);
+  }, [documents, row, showVisual]);
   const beforeText = row?.before ? signatures[0][row.before - 1].text : "";
   const afterText = row?.after ? signatures[1][row.after - 1].text : "";
-  const text = row ? changedText(beforeText, afterText) : null;
+  const text = row && showText ? changedText(beforeText, afterText) : null;
   return (
     <FeatureDialog title="Compare PDF versions" onClose={onClose} busy={busy}>
       <div className="modal-dialog wide-tool-dialog">
@@ -203,9 +212,36 @@ export function CompareDialog({
                 />{" "}
                 Only changes
               </label>
-              {onlyChanges && !visible.length && (
+              <fieldset className="compare-filters">
+                <legend>Show</legend>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showText}
+                    onChange={(event) => {
+                      setShowText(event.target.checked);
+                      setSelected(0);
+                    }}
+                  />{" "}
+                  Text changes
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showVisual}
+                    onChange={(event) => {
+                      setShowVisual(event.target.checked);
+                      setSelected(0);
+                    }}
+                  />{" "}
+                  Visual changes
+                </label>
+              </fieldset>
+              {!visible.length && (
                 <output>
-                  No changed pages detected. Turn off Only changes to view matching pages.
+                  {showText && showVisual
+                    ? "No changed pages detected. Turn off Only changes to view matching pages."
+                    : "No page pairs match. Show more kinds of change or turn off Only changes."}
                 </output>
               )}
               <label>

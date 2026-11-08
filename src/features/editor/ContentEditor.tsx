@@ -26,6 +26,19 @@ export function ContentEditor({
   const sourcePdf = controller?.pdf;
   const s = useWorkspace();
   const [text, setText] = useState("");
+  const textArea = useRef<HTMLTextAreaElement>(null);
+  /** Wrap the selected text (or insert an empty pair) in a superscript or subscript marker. */
+  const markScript = (marker: "^" | "_") => {
+    const area = textArea.current;
+    const start = area?.selectionStart ?? text.length;
+    const end = area?.selectionEnd ?? text.length;
+    const next = `${text.slice(0, start)}${marker}{${text.slice(start, end)}}${text.slice(end)}`;
+    setText(next);
+    requestAnimationFrame(() => {
+      area?.focus();
+      area?.setSelectionRange(start + 2, end + 2);
+    });
+  };
   const [style, setStyle] = useState<TextStyle>(DEFAULT_TEXT_STYLE);
   const [maxWidth, setMaxWidth] = useState<number>(400);
   const [targetPage, setTargetPage] = useState(s.page);
@@ -165,6 +178,7 @@ export function ContentEditor({
                   Text Content
                 </label>
                 <textarea
+                  ref={textArea}
                   id={`${fieldIds}-field-2`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -172,6 +186,18 @@ export function ContentEditor({
                   rows={4}
                   className="text-input"
                 />
+                <fieldset className="property-row" aria-label="Script">
+                  <button type="button" onClick={() => markScript("^")}>
+                    x² Superscript
+                  </button>
+                  <button type="button" onClick={() => markScript("_")}>
+                    x₂ Subscript
+                  </button>
+                </fieldset>
+                <p className="field-hint">
+                  Text in ^&#123;…&#125; is raised and in _&#123;…&#125; lowered, at a smaller size.
+                  The characters themselves are not changed.
+                </p>
               </div>
 
               {!coverage.valid && (

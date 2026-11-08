@@ -14,7 +14,13 @@ import {
   type Slide,
 } from "./ooxml";
 import { readPageLayout, type PageProxy } from "./pdf-page";
-import { buildCsv, buildHtml, buildSpreadsheetXml, buildXmlDocument } from "./formats";
+import {
+  buildCsv,
+  buildHtml,
+  buildMarkdown,
+  buildSpreadsheetXml,
+  buildXmlDocument,
+} from "./formats";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
@@ -27,6 +33,7 @@ export type Format =
   | "pptx-images"
   | "rtf"
   | "html"
+  | "markdown"
   | "xml";
 
 const XML_SPREADSHEET = "xml-spreadsheet";
@@ -103,6 +110,14 @@ const FORMATS: {
       "A self-contained page with headings and paragraphs. Scripts and remote content are blocked.",
   },
   {
+    id: "markdown",
+    label: "Markdown (.md)",
+    extension: "md",
+    mime: "text/markdown",
+    description:
+      "CommonMark headings and paragraphs with a rule between pages. Markup characters from the PDF are escaped; images and tables are not carried over.",
+  },
+  {
     id: "xml",
     label: "XML document (.xml)",
     extension: "xml",
@@ -148,6 +163,7 @@ function textExport(format: Format, pages: PageLayout[], baseName: string) {
   if (format === "csv") return buildCsv(pages.map((page) => tableRows(page)));
   if (format === "html") return buildHtml(pages, baseName);
   if (format === "xml") return buildXmlDocument(pages, baseName);
+  if (format === "markdown") return buildMarkdown(pages, baseName);
   if (format === "pptx-text")
     return buildPptx(
       pages.map((page) => ({
