@@ -30,8 +30,10 @@ export async function batesAcrossFiles(
   if (files.length > MAX_BATES_FILES) throw new Error(`Choose at most ${MAX_BATES_FILES} files.`);
   let next = options.startNumber ?? 1;
   const results: BatesFileResult[] = [];
-  for (const [index, file] of files.entries()) {
-    if (cancelled()) break;
+  // The next file can start only after the current file's page count is known.
+  async function numberFile(index: number): Promise<void> {
+    if (index >= files.length || cancelled()) return;
+    const file = files[index];
     onProgress?.(index + 1, files.length);
     try {
       if (file.bytes.length > MAX_BATES_FILE_BYTES) throw new Error("Files are limited to 200 MB.");
@@ -53,7 +55,9 @@ export async function batesAcrossFiles(
         error: cause instanceof Error ? cause.message : String(cause),
       });
     }
+    return numberFile(index + 1);
   }
+  await numberFile(0);
   return results;
 }
 

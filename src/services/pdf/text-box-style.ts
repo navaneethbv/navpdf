@@ -57,8 +57,32 @@ type Rect = [number, number, number, number];
 
 function numbers(array: PDFArray | undefined) {
   return (
-    array?.asArray().map((value) => (value instanceof PDFNumber ? value.asNumber() : NaN)) ?? []
+    array?.asArray().map((value) => (value instanceof PDFNumber ? value.asNumber() : Number.NaN)) ??
+    []
   );
+}
+
+const NUMBER_TOKEN = /^[\d.]+$/;
+
+function numericSuffix(token: string): string {
+  let start = token.length;
+  while (start > 0 && /[\d.]/.test(token[start - 1])) start--;
+  return token.slice(start);
+}
+
+function appearanceOperands(
+  tokens: string[],
+  operator: RegExp,
+  count: number,
+): number[] | undefined {
+  // The first operand can end a token with a nonnumeric prefix. Other operands must be whole tokens.
+  for (let index = count; index < tokens.length; index++) {
+    if (!operator.test(tokens[index])) continue;
+    const first = numericSuffix(tokens[index - count]);
+    const rest = tokens.slice(index - count + 1, index);
+    if (first && rest.every((token) => NUMBER_TOKEN.test(token)))
+      return [first, ...rest].map(Number);
+  }
 }
 
 /** Font size and RGB text colour from a default appearance string such as "/Helv 12 Tf 0 0 1 rg". */
@@ -66,21 +90,14 @@ export function parseDefaultAppearance(da: string): {
   size: number;
   color: [number, number, number];
 } {
-  const size = Number(/([\d.]+)\s+Tf/.exec(da)?.[1]);
-  const rgb = /([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg/.exec(da);
-  const gray = /([\d.]+)\s+g(?![a-z])/.exec(da);
-  const color: [number, number, number] = rgb
-    ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])]
-    : gray
-      ? [Number(gray[1]), Number(gray[1]), Number(gray[1])]
-      : [0, 0, 0];
+  const tokens = da.split(/\s+/);
+  const [size = Number.NaN] = appearanceOperands(tokens, /^Tf/, 1) ?? [];
+  const rgb = appearanceOperands(tokens, /^rg/, 3);
+  const [gray = 0] = rgb ? [] : (appearanceOperands(tokens, /^g(?![a-z])/, 1) ?? []);
+  const [red, green, blue] = rgb ?? [gray, gray, gray];
   return {
     size: Number.isFinite(size) && size >= 2 && size <= 200 ? size : 12,
-    color: color.map((value) => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0)) as [
-      number,
-      number,
-      number,
-    ],
+    color: [unit(red, 0), unit(green, 0), unit(blue, 0)],
   };
 }
 
@@ -144,22 +161,7 @@ function unit(value: number | undefined, fallback: number) {
   return value !== undefined && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
 }
 
-/**
- * Restyle a text box: its border shape and the separate opacity of its text, border and fill.
- * The text keeps its place; an oval or circle grows the rectangle around it. Callouts are refused.
- */
-export async function styleTextBox(
-  bytes: Uint8Array,
-  id: string,
-  style: TextBoxStyle,
-): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(bytes);
-  const found = findAnnotation(doc, id);
-  if (!found) throw new Error("The selected text box no longer exists.");
-  const { annotation } = found;
-  if (annotation.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() !== "FreeText")
-    throw new Error("Only text boxes have a border shape.");
-  if (annotation.has(PDFName.of("CL"))) throw new Error("Callouts keep their rectangular box.");
+function textBoxInnerRect(annotation: PDFDict): Rect {
   const rect = numbers(annotation.lookupMaybe(PDFName.of("Rect"), PDFArray));
   if (rect.length !== 4 || !rect.every(Number.isFinite))
     throw new Error("The text box has no box.");
@@ -177,40 +179,25 @@ export async function styleTextBox(
       : outer;
   if (inner[2] - inner[0] < 1 || inner[3] - inner[1] < 1)
     throw new Error("The text box is too small.");
-  const current = annotation.lookupMaybe(PDFName.of(BORDER_SHAPE), PDFName)?.decodeText();
-  const shape: TextBoxShape =
-    style.shape ?? (current === "Oval" ? "oval" : current === "Circle" ? "circle" : "rectangle");
-  const text =
-    annotation.lookupMaybe(PDFName.of("Contents"), PDFString, PDFHexString)?.decodeText() ?? "";
-  if (text.length > MAX_TEXT) throw new Error("The text box's text is too long to redraw.");
-  const da = annotation.lookupMaybe(PDFName.of("DA"), PDFString, PDFHexString)?.decodeText() ?? "";
-  const { size, color } = parseDefaultAppearance(da);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  let lines: string[];
-  try {
-    lines = wrapLines(text, font, size, Math.max(1, inner[2] - inner[0] - 4));
-    for (const line of lines) font.encodeText(line);
-  } catch {
-    throw new Error(
-      "The text uses characters Helvetica cannot show, so its border cannot be redrawn.",
-    );
-  }
-  const bs = annotation.lookupMaybe(PDFName.of("BS"), PDFDict);
-  const width = Math.min(
-    12,
-    Math.max(0, bs?.lookupMaybe(PDFName.of("W"), PDFNumber)?.asNumber() ?? 1),
-  );
-  const background = numbers(annotation.lookupMaybe(PDFName.of("C"), PDFArray));
-  const fillColor =
-    background.length === 3 && background.every(Number.isFinite) ? background : null;
-  const opacity = unit(annotation.lookupMaybe(PDFName.of("CA"), PDFNumber)?.asNumber(), 1);
-  const stored = (key: string) => annotation.lookupMaybe(PDFName.of(key), PDFNumber)?.asNumber();
-  const textOpacity = unit(style.textOpacity ?? stored(TEXT_OPACITY), opacity);
-  const borderOpacity = unit(style.borderOpacity ?? stored(STROKE_OPACITY), opacity);
-  const fillOpacity = unit(style.fillOpacity ?? stored(FILL_OPACITY), opacity);
+  return inner;
+}
 
-  const bounds = shapeBounds(inner, shape, width);
-  const context = doc.context;
+function storedShape(annotation: PDFDict): TextBoxShape {
+  const current = annotation.lookupMaybe(PDFName.of(BORDER_SHAPE), PDFName)?.decodeText();
+  if (current === "Oval") return "oval";
+  if (current === "Circle") return "circle";
+  return "rectangle";
+}
+
+function textBoxOperators(
+  inner: Rect,
+  bounds: Rect,
+  shape: TextBoxShape,
+  width: number,
+  fillColor: number[] | null,
+  text: { color: [number, number, number]; size: number; lines: PDFHexString[] },
+): PDFOperator[] {
+  const { color, size, lines } = text;
   const shapePath =
     shape === "rectangle"
       ? [
@@ -252,27 +239,23 @@ export async function styleTextBox(
     setFontAndSize("Helv", size),
     ...lines.flatMap((line, index) => [
       setTextMatrix(1, 0, 0, 1, inner[0] + 2, inner[3] - 2 - size * (0.9 + index * 1.2)),
-      showText(font.encodeText(line)),
+      showText(line),
     ]),
     endText(),
     popGraphicsState(),
   );
-  const state = (alpha: number) => context.obj({ Type: "ExtGState", CA: alpha, ca: alpha });
-  const appearance = context.register(
-    context.formXObject(operators, {
-      BBox: bounds,
-      Matrix: [1, 0, 0, 1, 0, 0],
-      Resources: {
-        Font: { Helv: font.ref },
-        ExtGState: {
-          GSFill: state(fillOpacity),
-          GSBorder: state(borderOpacity),
-          GSText: state(textOpacity),
-        },
-      },
-      [GENERATED_APPEARANCE]: true,
-    }),
-  );
+  return operators;
+}
+
+function storeTextBoxStyle(
+  annotation: PDFDict,
+  context: PDFDocument["context"],
+  style: TextBoxStyle,
+  shape: TextBoxShape,
+  inner: Rect,
+  bounds: Rect,
+  textOpacity: number,
+) {
   annotation.set(PDFName.of("Rect"), context.obj(bounds));
   if (shape === "rectangle") {
     annotation.delete(PDFName.of("RD"));
@@ -297,6 +280,81 @@ export async function styleTextBox(
     if (value !== undefined) annotation.set(PDFName.of(key), PDFNumber.of(unit(value, 1)));
   // Readers that redraw the box themselves use /CA for all of it; the text's value is closest.
   if (style.textOpacity !== undefined) annotation.set(PDFName.of("CA"), PDFNumber.of(textOpacity));
+}
+
+/**
+ * Restyle a text box: its border shape and the separate opacity of its text, border and fill.
+ * The text keeps its place; an oval or circle grows the rectangle around it. Callouts are refused.
+ */
+export async function styleTextBox(
+  bytes: Uint8Array,
+  id: string,
+  style: TextBoxStyle,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes);
+  const found = findAnnotation(doc, id);
+  if (!found) throw new Error("The selected text box no longer exists.");
+  const { annotation } = found;
+  if (annotation.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() !== "FreeText")
+    throw new Error("Only text boxes have a border shape.");
+  if (annotation.has(PDFName.of("CL"))) throw new Error("Callouts keep their rectangular box.");
+  const inner = textBoxInnerRect(annotation);
+  const currentShape = storedShape(annotation);
+  const shape = style.shape ?? currentShape;
+  const text =
+    annotation.lookupMaybe(PDFName.of("Contents"), PDFString, PDFHexString)?.decodeText() ?? "";
+  if (text.length > MAX_TEXT) throw new Error("The text box's text is too long to redraw.");
+  const da = annotation.lookupMaybe(PDFName.of("DA"), PDFString, PDFHexString)?.decodeText() ?? "";
+  const { size, color } = parseDefaultAppearance(da);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  let lines: PDFHexString[];
+  try {
+    lines = wrapLines(text, font, size, Math.max(1, inner[2] - inner[0] - 4)).map((line) =>
+      font.encodeText(line),
+    );
+  } catch {
+    throw new Error(
+      "The text uses characters Helvetica cannot show, so its border cannot be redrawn.",
+    );
+  }
+  const bs = annotation.lookupMaybe(PDFName.of("BS"), PDFDict);
+  const width = Math.min(
+    12,
+    Math.max(0, bs?.lookupMaybe(PDFName.of("W"), PDFNumber)?.asNumber() ?? 1),
+  );
+  const background = numbers(annotation.lookupMaybe(PDFName.of("C"), PDFArray));
+  const fillColor =
+    background.length === 3 && background.every(Number.isFinite) ? background : null;
+  const opacity = unit(annotation.lookupMaybe(PDFName.of("CA"), PDFNumber)?.asNumber(), 1);
+  const stored = (key: string) => annotation.lookupMaybe(PDFName.of(key), PDFNumber)?.asNumber();
+  const textOpacity = unit(style.textOpacity ?? stored(TEXT_OPACITY), opacity);
+  const borderOpacity = unit(style.borderOpacity ?? stored(STROKE_OPACITY), opacity);
+  const fillOpacity = unit(style.fillOpacity ?? stored(FILL_OPACITY), opacity);
+
+  const bounds = shapeBounds(inner, shape, width);
+  const context = doc.context;
+  const operators = textBoxOperators(inner, bounds, shape, width, fillColor, {
+    color,
+    size,
+    lines,
+  });
+  const state = (alpha: number) => context.obj({ Type: "ExtGState", CA: alpha, ca: alpha });
+  const appearance = context.register(
+    context.formXObject(operators, {
+      BBox: bounds,
+      Matrix: [1, 0, 0, 1, 0, 0],
+      Resources: {
+        Font: { Helv: font.ref },
+        ExtGState: {
+          GSFill: state(fillOpacity),
+          GSBorder: state(borderOpacity),
+          GSText: state(textOpacity),
+        },
+      },
+      [GENERATED_APPEARANCE]: true,
+    }),
+  );
+  storeTextBoxStyle(annotation, context, style, shape, inner, bounds, textOpacity);
   annotation.set(PDFName.of("AP"), context.obj({ N: appearance }));
   annotation.set(PDFName.of("M"), PDFString.of(toPdfDate()));
   return doc.save();

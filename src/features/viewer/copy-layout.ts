@@ -68,8 +68,7 @@ export function runsToHtml(runs: Run[]): string {
   };
   for (const [index, run] of runs.entries()) {
     const previous = runs[index - 1];
-    const sameLine =
-      previous && previous.page === run.page && Math.abs(run.top - previousTop) < 0.6;
+    const sameLine = previous?.page === run.page && Math.abs(run.top - previousTop) < 0.6;
     if (!sameLine && previous) {
       const pitch = run.top - previousTop;
       flush();

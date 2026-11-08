@@ -57,8 +57,8 @@ describe("3D models", () => {
       { page: 2, format: "U3D", views: 0, script: false, description: "Bracket" },
     ]);
     const saved = await extract3dModel(bytes, 0);
-    expect(saved.extension).toBe("u3d");
-    expect([...saved.bytes]).toEqual([...u3d]);
+    expect(saved?.extension).toBe("u3d");
+    expect(Array.from(saved?.bytes ?? [])).toEqual([...u3d]);
   });
 
   it("draws a labelled frame without a poster and refuses files that are not models", async () => {
@@ -80,7 +80,7 @@ describe("3D models", () => {
     await expect(
       add3dModel(await blank(), { page: 1, rect: [0, 0, 5, 5], model: u3d, activation: "click" }),
     ).rejects.toThrow(/10 points/);
-    await expect(extract3dModel(bytes, 3)).rejects.toThrow(/no longer/);
+    await expect(extract3dModel(bytes, 3)).resolves.toBeNull();
   });
 
   it("flags models that ask readers to run JavaScript", async () => {

@@ -8,7 +8,7 @@ import type { EditableBookmark } from "../../services/pdf/bookmarks";
 const MAX_BOOKMARKS = 10_000;
 const MAX_DEPTH = 32;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
-const VIEWS = ["XYZ", "Fit", "FitH", "FitV", "FitR", "FitB", "FitBH", "FitBV"];
+const VIEWS = new Set(["XYZ", "Fit", "FitH", "FitV", "FitR", "FitB", "FitBH", "FitBV"]);
 /** Outline item flags: italic and bold. */
 const ITALIC = 1;
 const BOLD = 2;
@@ -68,11 +68,13 @@ export function bookmarksForDocument(
   return { nodes: visit(cloneBookmarks(nodes)), unplaced };
 }
 
+type DestinationView = NonNullable<EditableBookmark["view"]>;
+
 /** One bookmark in exported JSON. Pages count from 1. */
 export interface BookmarkJson {
   title: string;
   page: number | null;
-  view?: (number | string | null)[];
+  view?: DestinationView;
   color?: [number, number, number];
   bold?: boolean;
   italic?: boolean;
@@ -116,9 +118,33 @@ function invalid(reason: string): never {
   throw new Error(`This bookmark file is not valid: ${reason}.`);
 }
 
-function fromJson(value: unknown, depth: number, total: { count: number }): EditableBookmark {
-  if (depth > MAX_DEPTH) invalid(`bookmarks nest more than ${MAX_DEPTH} levels`);
-  if (++total.count > MAX_BOOKMARKS) invalid(`it has more than ${MAX_BOOKMARKS} bookmarks`);
+function readView(raw: unknown): DestinationView | undefined {
+  if (raw === undefined) return undefined;
+  if (
+    !Array.isArray(raw) ||
+    raw.length > 5 ||
+    typeof raw[0] !== "string" ||
+    !VIEWS.has(raw[0]) ||
+    raw
+      .slice(1)
+      .some((item) => item !== null && (typeof item !== "number" || !Number.isFinite(item)))
+  )
+    invalid("a view is not a PDF destination view");
+  return raw as DestinationView;
+}
+
+function readColor(raw: unknown): number[] | undefined {
+  if (raw === undefined) return undefined;
+  if (
+    !Array.isArray(raw) ||
+    raw.length !== 3 ||
+    !raw.every((item) => typeof item === "number" && item >= 0 && item <= 1)
+  )
+    invalid("colours must be three numbers from 0 to 1");
+  return raw as number[];
+}
+
+function readEntry(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     invalid("a bookmark is not an object");
   const entry = value as Record<string, unknown>;
@@ -128,48 +154,31 @@ function fromJson(value: unknown, depth: number, total: { count: number }): Edit
   const page = entry.page;
   if (page !== null && (typeof page !== "number" || !Number.isInteger(page) || page < 1))
     invalid("pages must be whole numbers from 1, or null");
-  let view: (number | string | null)[] | undefined;
-  if (entry.view !== undefined) {
-    const raw = entry.view;
-    if (
-      !Array.isArray(raw) ||
-      raw.length > 5 ||
-      typeof raw[0] !== "string" ||
-      !VIEWS.includes(raw[0]) ||
-      raw
-        .slice(1)
-        .some((item) => item !== null && (typeof item !== "number" || !Number.isFinite(item)))
-    )
-      invalid("a view is not a PDF destination view");
-    view = raw as (number | string | null)[];
-  }
-  let color: number[] | undefined;
-  if (entry.color !== undefined) {
-    const raw = entry.color;
-    if (
-      !Array.isArray(raw) ||
-      raw.length !== 3 ||
-      !raw.every((item) => typeof item === "number" && item >= 0 && item <= 1)
-    )
-      invalid("colours must be three numbers from 0 to 1");
-    color = raw as number[];
-  }
+  const view = readView(entry.view);
+  const color = readColor(entry.color);
   for (const key of ["bold", "italic", "open"])
     if (entry[key] !== undefined && typeof entry[key] !== "boolean")
       invalid(`${key} must be true or false`);
   const children = entry.children;
   if (children !== undefined && !Array.isArray(children)) invalid("children must be a list");
   const flags = (entry.bold ? BOLD : 0) | (entry.italic ? ITALIC : 0);
+  return { title, page, view, color, children, flags, open: entry.open };
+}
+
+function fromJson(value: unknown, depth: number, total: { count: number }): EditableBookmark {
+  if (depth > MAX_DEPTH) invalid(`bookmarks nest more than ${MAX_DEPTH} levels`);
+  if (++total.count > MAX_BOOKMARKS) invalid(`it has more than ${MAX_BOOKMARKS} bookmarks`);
+  const { title, page, view, color, children, flags, open } = readEntry(value);
   const node: EditableBookmark = {
     id: crypto.randomUUID(),
-    title: title as string,
-    page: page === null ? null : (page as number) - 1,
+    title,
+    page: page === null ? null : page - 1,
     children: (children ?? []).map((child: unknown) => fromJson(child, depth + 1, total)),
   };
   if (view && node.page !== null) node.view = view;
   if (color) node.color = color;
   if (flags) node.flags = flags;
-  if (node.children.length && entry.open === false) node.collapsed = true;
+  if (node.children.length && open === false) node.collapsed = true;
   return node;
 }
 
@@ -183,13 +192,8 @@ export function parseBookmarksJson(source: string): EditableBookmark[] {
     invalid("it is not JSON");
   }
   const file = parsed as Partial<BookmarkFile> | null;
-  if (
-    !file ||
-    file.format !== "navpdf-bookmarks" ||
-    file.version !== 1 ||
-    !Array.isArray(file.bookmarks)
-  )
+  if (file?.format !== "navpdf-bookmarks" || file.version !== 1 || !Array.isArray(file.bookmarks))
     invalid("it was not exported from NavPDF bookmarks");
   const total = { count: 0 };
-  return file.bookmarks!.map((entry) => fromJson(entry, 0, total));
+  return file.bookmarks.map((entry) => fromJson(entry, 0, total));
 }

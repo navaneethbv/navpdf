@@ -123,6 +123,14 @@ describe("Text box border shapes", () => {
     expect(parseDefaultAppearance("")).toEqual({ size: 12, color: [0, 0, 0] });
   });
 
+  it("finds valid appearance operands after a long malformed numeric token", () => {
+    const malformed = "1".repeat(100_000) + "x";
+    expect(parseDefaultAppearance(`${malformed} /Helv 14 Tf 0.3 g 2 0.5 . rg`)).toEqual({
+      size: 14,
+      color: [1, 0.5, 0],
+    });
+  });
+
   it("puts an oval through the text box's corners and a circle around it", () => {
     const oval = shapeBounds([0, 0, 100, 40], "oval", 0);
     expect(oval[2] - oval[0]).toBeCloseTo(100 * Math.SQRT2);

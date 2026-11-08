@@ -76,6 +76,53 @@ function styleOf(font: FontDescription | null, fallback: string, size: number) {
   };
 }
 
+function horizontalText(items: unknown[]) {
+  return items.filter(isTextItem).flatMap(({ str, transform, fontName }) => {
+    const [a, b, c, d, , baseline] = transform;
+    if (Math.abs(b) > 0.01 || Math.abs(c) > 0.01 || a <= 0) return [];
+    const size = roundSize(Math.abs(d) || Math.hypot(c, d));
+    return size ? [{ text: str, baseline, size, fontId: fontName ?? "" }] : [];
+  });
+}
+
+async function collectPageLines(
+  page: number,
+  proxy: StylePage,
+  styles: Map<string, DocumentTextStyle>,
+  lines: StyledLine[],
+) {
+  // Reading the operator list loads the page's fonts so their names can be resolved.
+  await proxy.getOperatorList();
+  const items = horizontalText((await proxy.getTextContent()).items);
+  const ids = new Set(items.map((item) => item.fontId).filter(Boolean));
+  const fonts = new Map(
+    await Promise.all([...ids].map(async (id) => [id, await resolveFont(proxy, id)] as const)),
+  );
+  const rotated = proxy.rotate % 360 !== 0;
+  let last: StyledLine | undefined;
+  for (const { text, baseline, size, fontId } of items) {
+    const style = styleOf(fonts.get(fontId) ?? null, fontId || "Unnamed font", size);
+    if (last?.key === style.key && Math.abs(last.baseline - baseline) <= size * 0.2) {
+      last.text += text;
+      continue;
+    }
+    if (!text.trim()) continue;
+    if (lines.length >= MAX_LINES) throw new Error("The document has too many lines to read.");
+    last = {
+      page,
+      key: style.key,
+      text,
+      top: rotated ? null : Math.round((baseline + size * 1.2) * 100) / 100,
+      baseline,
+      size,
+    };
+    lines.push(last);
+    const entry = styles.get(style.key);
+    if (entry) entry.lines++;
+    else styles.set(style.key, { ...style, size, lines: 1, sample: "" });
+  }
+}
+
 /**
  * Lists the document's text styles, largest first, and its lines in each style. Fonts are read
  * from each page's operator list, so this reads every page once.
@@ -88,39 +135,7 @@ export async function scanTextStyles(
   const lines: StyledLine[] = [];
   for await (const [page, proxy] of pagesInOrder(source, allPageNumbers(source.numPages))) {
     if (options.signal?.aborted) throw new DOMException("Reading cancelled.", "AbortError");
-    // Reading the operator list loads the page's fonts so their names can be resolved.
-    await proxy.getOperatorList();
-    const content = await proxy.getTextContent();
-    const fonts = new Map<string, FontDescription | null>();
-    const rotated = proxy.rotate % 360 !== 0;
-    let last = null as StyledLine | null;
-    for (const item of content.items.filter(isTextItem)) {
-      const [a, b, c, d, , f] = item.transform;
-      if (Math.abs(b) > 0.01 || Math.abs(c) > 0.01 || a <= 0) continue;
-      const size = roundSize(Math.abs(d) || Math.hypot(c, d));
-      if (!size) continue;
-      const id = item.fontName ?? "";
-      if (!fonts.has(id)) fonts.set(id, id ? await resolveFont(proxy, id) : null);
-      const style = styleOf(fonts.get(id)!, id || "Unnamed font", size);
-      if (last?.key === style.key && Math.abs(last.baseline - f) <= size * 0.2) {
-        last.text += item.str;
-        continue;
-      }
-      if (!item.str.trim()) continue;
-      if (lines.length >= MAX_LINES) throw new Error("The document has too many lines to read.");
-      last = {
-        page,
-        key: style.key,
-        text: item.str,
-        top: rotated ? null : Math.round((f + size * 1.2) * 100) / 100,
-        baseline: f,
-        size,
-      };
-      lines.push(last);
-      const entry = styles.get(style.key);
-      if (entry) entry.lines++;
-      else styles.set(style.key, { ...style, size, lines: 1, sample: "" });
-    }
+    await collectPageLines(page, proxy, styles, lines);
     options.onProgress?.(page, source.numPages);
   }
   for (const line of lines) {

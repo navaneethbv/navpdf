@@ -34,7 +34,9 @@ type Box = ReturnType<typeof visibleBox>;
 
 function numbers(array: PDFArray | undefined): number[] {
   if (!array) return [];
-  return array.asArray().map((value) => (value instanceof PDFNumber ? value.asNumber() : NaN));
+  return array
+    .asArray()
+    .map((value) => (value instanceof PDFNumber ? value.asNumber() : Number.NaN));
 }
 
 function subtypeOf(annotation: PDFDict) {
@@ -378,6 +380,67 @@ export interface PasteResult {
   ids: string[];
 }
 
+function copyPasteEntries(annots: PDFArray, source: PDFDocument, doc: PDFDocument) {
+  const copier = PDFObjectCopier.for(source.context, doc.context);
+  const refs: PDFRef[] = [];
+  const dicts: PDFDict[] = [];
+  for (let index = 0; index < annots.size(); index++) {
+    const entry = annots.get(index);
+    if (!(entry instanceof PDFRef)) continue;
+    const ref = copier.copy(entry);
+    const dict = doc.context.lookupMaybe(ref, PDFDict);
+    if (!dict) continue;
+    dicts.push(dict);
+    refs.push(ref);
+  }
+  return { dicts, refs };
+}
+
+function clampAxis(shift: number, min: number, max: number, start: number, length: number) {
+  if (max - min <= length) {
+    if (min < start) return shift + (start - min);
+    if (max > start + length) return shift - (max - start - length);
+  }
+  return shift;
+}
+
+function clampedPasteOffset(dicts: PDFDict[], box: Box, dx: number, dy: number) {
+  // One offset for the whole group, clamped so the group's bounds stay on the page.
+  const bounds = dicts
+    .map((dict) => numbers(dict.lookupMaybe(PDFName.of("Rect"), PDFArray)))
+    .filter((rect) => rect.length === 4 && rect.every(Number.isFinite));
+  if (!bounds.length) return [dx, dy];
+  const left = Math.min(...bounds.map((r) => Math.min(r[0], r[2]))) + dx;
+  const right = Math.max(...bounds.map((r) => Math.max(r[0], r[2]))) + dx;
+  const bottom = Math.min(...bounds.map((r) => Math.min(r[1], r[3]))) + dy;
+  const top = Math.max(...bounds.map((r) => Math.max(r[1], r[3]))) + dy;
+  return [
+    clampAxis(dx, left, right, box.x, box.width),
+    clampAxis(dy, bottom, top, box.y, box.height),
+  ];
+}
+
+function stampPastedEntries(
+  dicts: PDFDict[],
+  page: PDFPage,
+  names: Set<string>,
+  dx: number,
+  dy: number,
+) {
+  const ids: string[] = [];
+  const now = PDFString.of(toPdfDate());
+  for (const dict of dicts) {
+    // An appearance follows its rectangle, so moving the rectangle moves what readers draw.
+    shiftGeometry(dict, page.doc.context, dx, dy);
+    dict.set(PDFName.of("P"), page.ref);
+    const name = uniqueName(names);
+    dict.set(PDFName.of("NM"), PDFString.of(name));
+    dict.set(PDFName.of("M"), now);
+    if (!dict.has(PDFName.of("IRT")) && subtypeOf(dict) !== "Popup") ids.push(name);
+  }
+  return ids;
+}
+
 /**
  * Paste copied comments onto a page as one change. They keep their place from the source page,
  * shifted by `offset` points down and right, and stay within the target's visible page.
@@ -402,53 +465,13 @@ export async function pasteAnnotations(
   // Same offset from the visible page's corner, then stepped down and to the right.
   const baseDx = box.x - (Number.isFinite(sx) ? sx : 0) + offset;
   const baseDy = box.y - (Number.isFinite(sy) ? sy : 0) - offset;
-  const copier = PDFObjectCopier.for(source.context, doc.context);
   const names = annotationNames(doc);
-  const pasted: PDFRef[] = [];
-  const ids: string[] = [];
-  const dicts: PDFDict[] = [];
-  for (let index = 0; index < annots.size(); index++) {
-    const entry = annots.get(index);
-    if (!(entry instanceof PDFRef)) continue;
-    const ref = copier.copy(entry);
-    const dict = doc.context.lookupMaybe(ref, PDFDict);
-    if (!dict) continue;
-    dicts.push(dict);
-    pasted.push(ref);
-  }
-  // One offset for the whole group, clamped so the group's bounds stay on the page.
-  const bounds = dicts
-    .map((dict) => numbers(dict.lookupMaybe(PDFName.of("Rect"), PDFArray)))
-    .filter((rect) => rect.length === 4 && rect.every(Number.isFinite));
-  let dx = baseDx;
-  let dy = baseDy;
-  if (bounds.length) {
-    const left = Math.min(...bounds.map((r) => Math.min(r[0], r[2]))) + dx;
-    const right = Math.max(...bounds.map((r) => Math.max(r[0], r[2]))) + dx;
-    const bottom = Math.min(...bounds.map((r) => Math.min(r[1], r[3]))) + dy;
-    const top = Math.max(...bounds.map((r) => Math.max(r[1], r[3]))) + dy;
-    if (right - left <= box.width) {
-      if (left < box.x) dx += box.x - left;
-      else if (right > box.x + box.width) dx -= right - box.x - box.width;
-    }
-    if (top - bottom <= box.height) {
-      if (bottom < box.y) dy += box.y - bottom;
-      else if (top > box.y + box.height) dy -= top - box.y - box.height;
-    }
-  }
-  const now = PDFString.of(toPdfDate());
-  for (const dict of dicts) {
-    // An appearance follows its rectangle, so moving the rectangle moves what readers draw.
-    shiftGeometry(dict, doc.context, dx, dy);
-    dict.set(PDFName.of("P"), page.ref);
-    const name = uniqueName(names);
-    dict.set(PDFName.of("NM"), PDFString.of(name));
-    dict.set(PDFName.of("M"), now);
-    if (!dict.has(PDFName.of("IRT")) && subtypeOf(dict) !== "Popup") ids.push(name);
-  }
+  const { dicts, refs } = copyPasteEntries(annots, source, doc);
+  const [dx, dy] = clampedPasteOffset(dicts, box, baseDx, baseDy);
+  const ids = stampPastedEntries(dicts, page, names, dx, dy);
   const existing = page.node.Annots();
-  if (existing) for (const ref of pasted) existing.push(ref);
-  else page.node.set(PDFName.of("Annots"), doc.context.obj(pasted));
+  if (existing) for (const ref of refs) existing.push(ref);
+  else page.node.set(PDFName.of("Annots"), doc.context.obj(refs));
   return { bytes: await doc.save(), ids };
 }
 
@@ -481,16 +504,7 @@ function nameOf(dict: PDFDict) {
   return dict.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ?? "";
 }
 
-/**
- * Copy every comment from another PDF onto the page with the same number, at the same place
- * relative to the visible page, with its appearance, pop-up and replies. A comment whose name is
- * already used here replaces that comment. Redaction marks are left out, and a PDF that needs a
- * password is refused.
- */
-export async function importCommentsFromPdf(
-  bytes: Uint8Array,
-  sourceBytes: Uint8Array,
-): Promise<ImportedComments> {
+async function loadCommentSource(sourceBytes: Uint8Array) {
   let source: PDFDocument;
   try {
     source = await PDFDocument.load(sourceBytes);
@@ -503,6 +517,79 @@ export async function importCommentsFromPdf(
   }
   if (source.isEncrypted)
     throw new Error("Comments cannot be imported from a password-protected PDF.");
+  return source;
+}
+
+function importRoots(annots: PDFArray, hasTargetPage: boolean) {
+  let outside = 0;
+  let redactions = 0;
+  const roots = new Set<string>();
+  for (let i = 0; i < annots.size(); i++) {
+    const entry = annots.get(i);
+    const dict = annots.lookupMaybe(i, PDFDict);
+    if (!(entry instanceof PDFRef) || !dict) continue;
+    const subtype = subtypeOf(dict);
+    if (subtype === "Redact") {
+      redactions++;
+      continue;
+    }
+    if (NOT_COMMENTS.has(subtype) || dict.has(PDFName.of("IRT"))) continue;
+    if (!hasTargetPage) {
+      outside++;
+      continue;
+    }
+    roots.add(entry.toString());
+  }
+  return { roots, outside, redactions };
+}
+
+function importPageComments(
+  source: PDFDocument,
+  doc: PDFDocument,
+  copier: PDFObjectCopier,
+  sourcePage: PDFPage,
+  index: number,
+  annots: PDFArray,
+  roots: Set<string>,
+) {
+  let imported = 0;
+  const keep = relatedEntries(annots, roots);
+  const refs = annots
+    .asArray()
+    .filter((entry): entry is PDFRef => entry instanceof PDFRef && keep.has(entry.toString()));
+  detachForCopy(source, refs, keep);
+  const page = doc.getPage(index);
+  const from = visibleBox(sourcePage);
+  const to = visibleBox(page);
+  for (const ref of refs) {
+    const name = nameOf(source.context.lookup(ref, PDFDict));
+    // Same-named comments are replaced, with their own pop-ups and replies.
+    while (name && deleteAnnotationIn(doc, name, index + 1)) {
+      // Each pass removes one comment of that name.
+    }
+  }
+  for (const ref of refs) {
+    const copied = copier.copy(ref);
+    const dict = doc.context.lookup(copied, PDFDict);
+    shiftGeometry(dict, doc.context, to.x - from.x, to.y - from.y);
+    dict.set(PDFName.of("P"), page.ref);
+    page.node.addAnnot(copied);
+    if (roots.has(ref.toString())) imported++;
+  }
+  return imported;
+}
+
+/**
+ * Copy every comment from another PDF onto the page with the same number, at the same place
+ * relative to the visible page, with its appearance, pop-up and replies. A comment whose name is
+ * already used here replaces that comment. Redaction marks are left out, and a PDF that needs a
+ * password is refused.
+ */
+export async function importCommentsFromPdf(
+  bytes: Uint8Array,
+  sourceBytes: Uint8Array,
+): Promise<ImportedComments> {
+  const source = await loadCommentSource(sourceBytes);
   const doc = await PDFDocument.load(bytes);
   const copier = PDFObjectCopier.for(source.context, doc.context);
   let imported = 0;
@@ -512,49 +599,17 @@ export async function importCommentsFromPdf(
   for (const [index, sourcePage] of source.getPages().entries()) {
     const annots = sourcePage.node.Annots();
     if (!annots) continue;
-    const roots = new Set<string>();
-    for (let i = 0; i < annots.size(); i++) {
-      const entry = annots.get(i);
-      const dict = annots.lookupMaybe(i, PDFDict);
-      if (!(entry instanceof PDFRef) || !dict) continue;
-      const subtype = subtypeOf(dict);
-      if (subtype === "Redact") {
-        redactions++;
-        continue;
-      }
-      if (NOT_COMMENTS.has(subtype) || dict.has(PDFName.of("IRT"))) continue;
-      if (index >= doc.getPageCount()) {
-        outside++;
-        continue;
-      }
-      roots.add(entry.toString());
-    }
+    const {
+      roots,
+      outside: pageOutside,
+      redactions: pageRedactions,
+    } = importRoots(annots, index < doc.getPageCount());
+    outside += pageOutside;
+    redactions += pageRedactions;
     if (!roots.size) continue;
     if ((total += roots.size) > MAX_BATCH_COMMENTS * 20)
       throw new Error("The PDF has too many comments to import at once.");
-    const keep = relatedEntries(annots, roots);
-    const refs = annots
-      .asArray()
-      .filter((entry): entry is PDFRef => entry instanceof PDFRef && keep.has(entry.toString()));
-    detachForCopy(source, refs, keep);
-    const page = doc.getPage(index);
-    const from = visibleBox(sourcePage);
-    const to = visibleBox(page);
-    for (const ref of refs) {
-      const name = nameOf(source.context.lookup(ref, PDFDict));
-      // Same-named comments are replaced, with their own pop-ups and replies.
-      while (name && deleteAnnotationIn(doc, name, index + 1)) {
-        // Each pass removes one comment of that name.
-      }
-    }
-    for (const ref of refs) {
-      const copied = copier.copy(ref);
-      const dict = doc.context.lookup(copied, PDFDict);
-      shiftGeometry(dict, doc.context, to.x - from.x, to.y - from.y);
-      dict.set(PDFName.of("P"), page.ref);
-      page.node.addAnnot(copied);
-      if (roots.has(ref.toString())) imported++;
-    }
+    imported += importPageComments(source, doc, copier, sourcePage, index, annots, roots);
   }
   if (imported === 0)
     throw new Error(

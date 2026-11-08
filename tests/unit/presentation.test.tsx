@@ -56,6 +56,28 @@ describe("Present mode", () => {
     await vi.waitFor(() => expect(view.pdf.getPage).toHaveBeenCalledWith(3));
   });
 
+  it("opens a native dialog and leaves keyboard navigation to focused controls", () => {
+    const onClose = vi.fn();
+    render(<Presentation controller={controller() as never} onClose={onClose} />);
+    const dialog = screen.getByRole<HTMLDialogElement>("dialog");
+    expect(dialog.open).toBe(true);
+    const advance = screen.getByRole("combobox", { name: "Advance automatically" });
+    advance.focus();
+    expect(fireEvent.keyDown(advance, { key: "ArrowDown" })).toBe(true);
+    expect(dialog.getAttribute("aria-label")).toBe("Presentation, page 1 of 3");
+    const next = screen.getByRole("button", { name: "Next page" });
+    next.focus();
+    fireEvent.keyDown(next, { key: "PageDown" });
+    expect(dialog.getAttribute("aria-label")).toBe("Presentation, page 2 of 3");
+    expect(fireEvent.keyDown(next, { key: " " })).toBe(true);
+    expect(fireEvent.keyDown(next, { key: "Enter" })).toBe(true);
+    expect(dialog.getAttribute("aria-label")).toBe("Presentation, page 2 of 3");
+    fireEvent.keyDown(next, { key: "End" });
+    expect(dialog.getAttribute("aria-label")).toBe("Presentation, page 3 of 3");
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("advances on its own and loops", async () => {
     vi.useFakeTimers();
     useWorkspace.getState().set({ page: 3 });

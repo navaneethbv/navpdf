@@ -1,7 +1,7 @@
 import { mapInOrder } from "../../utils/async-sequence";
 import { readOcrReview } from "../../services/pdf/ocr-review";
 import { PdfPagePreview } from "../viewer/PdfPagePreview";
-import { useId, useState, useEffect, useRef } from "react";
+import { useId, useState, useEffect, useRef, type KeyboardEvent } from "react";
 import {
   Scan,
   Check,
@@ -520,6 +520,12 @@ export function OcrPanel({
         ?.focus(),
     );
   };
+  const handleSuspectShortcut = (event: KeyboardEvent) => {
+    if (event.key === "F8") {
+      event.preventDefault();
+      goToSuspect(event.shiftKey ? -1 : 1);
+    }
+  };
   const [reviewError, setReviewError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
 
@@ -689,6 +695,7 @@ export function OcrPanel({
   };
 
   const ocrActionLabel = mode === "searchable" ? "Apply Searchable Layer" : "Recognize Text";
+  const suspectNoun = suspects.length === 1 ? "word" : "words";
   return (
     <FeatureDialog title="Scan & OCR" onClose={onClose} busy={running}>
       <div className="modal-dialog">
@@ -732,67 +739,66 @@ export function OcrPanel({
                   </select>
                 </label>
               )}
-              <div
-                className="property-row"
-                role="group"
-                aria-label="Low-confidence words"
-                onKeyDown={(event) => {
-                  if (event.key === "F8") {
-                    event.preventDefault();
-                    goToSuspect(event.shiftKey ? -1 : 1);
-                  }
-                }}
-              >
-                <output>
-                  {suspects.length
-                    ? `${suspects.length} word${suspects.length === 1 ? "" : "s"} below ${Math.round(
-                        SUSPECT_CONFIDENCE * 100,
-                      )}% confidence`
-                    : "No low-confidence words"}
-                  {review.length > 1
-                    ? `; ${reviewedPages.size} of ${review.length} pages reviewed`
-                    : ""}
-                </output>
-                <button
-                  type="button"
-                  disabled={!suspects.length}
-                  title="Previous low-confidence word (Shift-F8)"
-                  onClick={() => goToSuspect(-1)}
-                >
-                  Previous suspect
-                </button>
-                <button
-                  type="button"
-                  disabled={!suspects.length}
-                  title="Next low-confidence word (F8)"
-                  onClick={() => goToSuspect(1)}
-                >
-                  Next suspect
-                </button>
-                <label className="check-label">
-                  <input
-                    type="checkbox"
-                    checked={suspectsOnly}
-                    onChange={(event) => setSuspectsOnly(event.target.checked)}
-                  />{" "}
-                  Show only low-confidence words
-                </label>
-                {review[reviewPage] && (
+              <fieldset>
+                <legend className="sr-only">Low-confidence words</legend>
+                <div className="property-row">
+                  <output>
+                    {suspects.length
+                      ? `${suspects.length} ${suspectNoun} below ${Math.round(
+                          SUSPECT_CONFIDENCE * 100,
+                        )}% confidence`
+                      : "No low-confidence words"}
+                    {review.length > 1
+                      ? `; ${reviewedPages.size} of ${review.length} pages reviewed`
+                      : ""}
+                  </output>
+                  <button
+                    type="button"
+                    disabled={!suspects.length}
+                    title="Previous low-confidence word (Shift-F8)"
+                    aria-keyshortcuts="Shift+F8"
+                    onKeyDown={handleSuspectShortcut}
+                    onClick={() => goToSuspect(-1)}
+                  >
+                    Previous suspect
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!suspects.length}
+                    title="Next low-confidence word (F8)"
+                    aria-keyshortcuts="F8"
+                    onKeyDown={handleSuspectShortcut}
+                    onClick={() => goToSuspect(1)}
+                  >
+                    Next suspect
+                  </button>
                   <label className="check-label">
                     <input
                       type="checkbox"
-                      checked={reviewedPages.has(reviewPage)}
-                      onChange={(event) => {
-                        const next = new Set(reviewedPages);
-                        if (event.target.checked) next.add(reviewPage);
-                        else next.delete(reviewPage);
-                        setReviewedPages(next);
-                      }}
+                      checked={suspectsOnly}
+                      onKeyDown={handleSuspectShortcut}
+                      onChange={(event) => setSuspectsOnly(event.target.checked)}
                     />{" "}
-                    Page {review[reviewPage].pageIndex + 1} reviewed
+                    Show only low-confidence words
                   </label>
-                )}
-              </div>
+                  {review[reviewPage] && (
+                    <label className="check-label">
+                      <input
+                        type="checkbox"
+                        checked={reviewedPages.has(reviewPage)}
+                        onKeyDown={handleSuspectShortcut}
+                        onChange={(event) => {
+                          const next = new Set(reviewedPages);
+                          if (event.target.checked) next.add(reviewPage);
+                          else next.delete(reviewPage);
+                          setReviewedPages(next);
+                        }}
+                      />{" "}
+                      Page {review[reviewPage].pageIndex + 1} reviewed
+                    </label>
+                  )}
+                </div>
+              </fieldset>
               {reviewSource.current && review[reviewPage] && (
                 <PdfPagePreview
                   pdf={reviewSource.current.pdf}
@@ -823,12 +829,7 @@ export function OcrPanel({
                                   <input
                                     aria-label={`Page ${page.pageIndex + 1} line ${li + 1} word ${wi + 1}`}
                                     data-ocr-word={`${pi}:${li}:${wi}`}
-                                    onKeyDown={(event) => {
-                                      if (event.key === "F8") {
-                                        event.preventDefault();
-                                        goToSuspect(event.shiftKey ? -1 : 1);
-                                      }
-                                    }}
+                                    onKeyDown={handleSuspectShortcut}
                                     value={word.text}
                                     maxLength={500}
                                     onChange={(event) => {

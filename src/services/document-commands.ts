@@ -1851,13 +1851,21 @@ function textOffset(
   return 0;
 }
 
+type TextLineDraw = {
+  x: number;
+  y: number;
+  size: number;
+  color: ReturnType<typeof rgb>;
+  opacity: number;
+};
+
 /** Draws one line word by word so the gaps fill the container; returns the drawn width. */
 function drawJustifiedLine(
   page: PDFPage,
   font: PDFFont,
   words: string[],
   containerWidth: number,
-  draw: { x: number; y: number; size: number; color: ReturnType<typeof rgb>; opacity: number },
+  draw: TextLineDraw,
 ): number {
   const wordWidths = words.map((word) => font.widthOfTextAtSize(word, draw.size));
   const gap =
@@ -1916,7 +1924,16 @@ function runsWidth(runs: ScriptRun[], font: PDFFont, size: number) {
   );
 }
 
-const hasScripts = (text: string) => parseScriptRuns(text).some((run) => run.script !== "normal");
+/** Draws script runs smaller on a raised or lowered baseline. */
+function drawScriptRuns(page: PDFPage, font: PDFFont, runs: ScriptRun[], draw: TextLineDraw) {
+  let x = draw.x;
+  for (const run of runs) {
+    const size = run.script === "normal" ? draw.size : draw.size * SCRIPT_SCALE;
+    const y = draw.y + SCRIPT_RISE[run.script] * draw.size;
+    page.drawText(run.text, { ...draw, x, y, size, font });
+    x += font.widthOfTextAtSize(run.text, size);
+  }
+}
 
 function drawTextContent(
   page: PDFPage,
@@ -1937,6 +1954,8 @@ function drawTextContent(
     if (!line.text) continue;
     const lineY = y - index * lineHeight;
     const words = line.text.trim().split(/\s+/);
+    const runs = parseScriptRuns(line.text);
+    const hasScripts = runs.some((run) => run.script !== "normal");
     let lineX = x;
     let drawnWidth: number;
     if (
@@ -1944,7 +1963,7 @@ function drawTextContent(
       wrapWidth &&
       !line.paragraphEnd &&
       words.length > 1 &&
-      !hasScripts(line.text)
+      !hasScripts
     ) {
       drawnWidth = drawJustifiedLine(page, font, words, wrapWidth, {
         x,
@@ -1953,18 +1972,10 @@ function drawTextContent(
         color,
         opacity,
       });
-    } else if (hasScripts(line.text)) {
-      // Superscript and subscript runs are drawn smaller on a raised or lowered baseline.
-      const runs = parseScriptRuns(line.text);
+    } else if (hasScripts) {
       drawnWidth = runsWidth(runs, font, fontSize);
       lineX = x + textOffset(options.alignment, wrapWidth ?? drawnWidth, drawnWidth);
-      let runX = lineX;
-      for (const run of runs) {
-        const size = run.script === "normal" ? fontSize : fontSize * SCRIPT_SCALE;
-        const runY = lineY + SCRIPT_RISE[run.script] * fontSize;
-        page.drawText(run.text, { x: runX, y: runY, size, font, color, opacity });
-        runX += font.widthOfTextAtSize(run.text, size);
-      }
+      drawScriptRuns(page, font, runs, { x: lineX, y: lineY, size: fontSize, color, opacity });
     } else {
       drawnWidth = font.widthOfTextAtSize(line.text, fontSize);
       lineX = x + textOffset(options.alignment, wrapWidth ?? drawnWidth, drawnWidth);
@@ -2405,7 +2416,7 @@ export function shrinkMatrix(
     ? box.height - HEADER_BASELINE - HEADER_FOOTER_SIZE * 0.25 - HEADER_FOOTER_CLEARANCE
     : box.height;
   const scale = (top - bottom) / box.height;
-  if (!(scale > 0.1) || scale >= 1) return null;
+  if (!Number.isFinite(scale) || scale <= 0.1 || scale >= 1) return null;
   return [
     scale,
     0,

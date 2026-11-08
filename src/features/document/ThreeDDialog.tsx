@@ -13,6 +13,10 @@ import {
 import { downloadBytes, safeFileName } from "../../utils/download";
 import { formatBytes } from "../compress/CompressDialog";
 
+function viewPlural(count: number) {
+  return count === 1 ? "" : "s";
+}
+
 /** 3D models: those the document has, saved as files, and new ones added with a poster. */
 export function ThreeDDialog({ controller, onClose }: Readonly<DocumentToolProps>) {
   const id = useId();
@@ -45,7 +49,12 @@ export function ThreeDDialog({ controller, onClose }: Readonly<DocumentToolProps
     try {
       const pdf = controller?.pdf;
       if (!pdf) return;
-      const { bytes, extension } = await extract3dModel(await pdf.saveDocument(), index);
+      const extracted = await extract3dModel(await pdf.saveDocument(), index);
+      if (!extracted) {
+        setLoadError("That 3D model no longer exists.");
+        return;
+      }
+      const { bytes, extension } = extracted;
       const name = useWorkspace.getState().document?.name ?? "document.pdf";
       await downloadBytes(
         bytes,
@@ -59,7 +68,10 @@ export function ThreeDDialog({ controller, onClose }: Readonly<DocumentToolProps
   const add = async () => {
     if (!model) return;
     const modelBytes = new Uint8Array(await model.arrayBuffer());
-    const posterBytes = poster ? new Uint8Array(await poster.arrayBuffer()) : null;
+    const posterType: "png" | "jpg" = poster?.type === "image/png" ? "png" : "jpg";
+    const posterInput = poster
+      ? { bytes: new Uint8Array(await poster.arrayBuffer()), type: posterType }
+      : null;
     const x = Number(box.x);
     const y = Number(box.y);
     const saved = await apply("3D model added", (bytes) =>
@@ -67,10 +79,7 @@ export function ThreeDDialog({ controller, onClose }: Readonly<DocumentToolProps
         page,
         rect: [x, y, x + Number(box.width), y + Number(box.height)],
         model: modelBytes,
-        poster:
-          posterBytes && poster
-            ? { bytes: posterBytes, type: poster.type === "image/png" ? "png" : "jpg" }
-            : null,
+        poster: posterInput,
         activation,
         description,
       }),
@@ -102,7 +111,7 @@ export function ThreeDDialog({ controller, onClose }: Readonly<DocumentToolProps
             {models.map((entry, index) => (
               <li key={`${entry.page}-${entry.name}`}>
                 Page {entry.page}: {entry.format} model, {formatBytes(entry.storedBytes)} stored
-                {entry.views ? `, ${entry.views} named view${entry.views === 1 ? "" : "s"}` : ""}
+                {entry.views ? `, ${entry.views} named view${viewPlural(entry.views)}` : ""}
                 {entry.description ? `. ${entry.description}` : ""}
                 {entry.script && (
                   <strong> It asks readers to run JavaScript; NavPDF never runs it.</strong>

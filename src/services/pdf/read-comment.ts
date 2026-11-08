@@ -166,6 +166,15 @@ function applyAppearance(comment: Comment, data: AnnotationData) {
   if (state) comment.reviewState = state;
 }
 
+function applyStoredAppearance(comment: Comment, stored: ReturnType<typeof storedAnnotation>) {
+  if (stored.vertices) comment.vertices = stored.vertices;
+  if (stored.fillColor) comment.fillColor = stored.fillColor;
+  if (stored.strokeOpacity !== undefined) comment.strokeOpacity = stored.strokeOpacity;
+  if (stored.fillOpacity !== undefined) comment.fillOpacity = stored.fillOpacity;
+  if (stored.borderShape === "Oval" || stored.borderShape === "Circle")
+    comment.borderShape = stored.borderShape === "Oval" ? "oval" : "circle";
+}
+
 /** Merge PDF.js display data with saved geometry using decoded annotation identifiers. */
 export function readComment(raw: unknown, page: number, annotations?: PDFArray): Comment | null {
   const data = raw as AnnotationData;
@@ -187,12 +196,7 @@ export function readComment(raw: unknown, page: number, annotations?: PDFArray):
     lineEndings,
     quads: stored.quads ?? quadBounds(data.quadPoints),
   };
-  if (stored.vertices) comment.vertices = stored.vertices;
-  if (stored.fillColor) comment.fillColor = stored.fillColor;
-  if (stored.strokeOpacity !== undefined) comment.strokeOpacity = stored.strokeOpacity;
-  if (stored.fillOpacity !== undefined) comment.fillOpacity = stored.fillOpacity;
-  if (stored.borderShape === "Oval" || stored.borderShape === "Circle")
-    comment.borderShape = stored.borderShape === "Oval" ? "oval" : "circle";
+  applyStoredAppearance(comment, stored);
   applyAppearance(comment, data);
   const author = data.titleObj?.str || data.title || stored.author;
   if (author) comment.author = author;

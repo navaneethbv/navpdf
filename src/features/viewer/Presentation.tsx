@@ -16,6 +16,15 @@ export function nextPage(page: number, pages: number, step: 1 | -1, loop: boolea
   return next < 1 ? pages : 1;
 }
 
+function usesControlKeys(event: KeyboardEvent): boolean {
+  if (!(event.target instanceof Element)) return false;
+  if (event.target.closest("select, input")) return true;
+  return (
+    (event.key === " " || event.key === "Enter") &&
+    event.target.closest(".presentation-controls button") !== null
+  );
+}
+
 /**
  * Present mode: one page at a time on a black screen. Click, Space, Page Down or the right arrow
  * goes forward; Shift-click, Backspace, Page Up or the left arrow goes back; Escape ends it.
@@ -33,7 +42,8 @@ export function Presentation({
   const [seconds, setSeconds] = useState<number>(0);
   const [loop, setLoop] = useState(false);
   const [error, setError] = useState("");
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDialogElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
 
   const step = useCallback(
@@ -49,19 +59,26 @@ export function Presentation({
   );
 
   useEffect(() => {
-    const element = root.current;
-    element?.focus();
-    // Full screen where the window allows it; otherwise the overlay fills the window.
-    void element?.requestFullscreen?.().catch(() => {});
+    const dialog = root.current;
+    const content = stage.current;
+    content?.setAttribute("autofocus", "");
+    dialog?.showModal();
+    content?.focus();
+    // A dialog cannot request full screen, so request it on its content.
+    void content?.requestFullscreen?.().catch(() => {});
     return () => {
-      if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+      if (document.fullscreenElement === content) void document.exitFullscreen?.().catch(() => {});
+      dialog?.close();
     };
   }, []);
 
   useEffect(() => {
+    const content = stage.current;
+    let wasFullscreen = document.fullscreenElement === content;
     const leave = () => {
-      if (!document.fullscreenElement && root.current?.dataset.fullscreen === "true") onClose();
-      if (root.current) root.current.dataset.fullscreen = String(!!document.fullscreenElement);
+      const fullscreen = document.fullscreenElement === content;
+      if (wasFullscreen && !fullscreen) onClose();
+      wasFullscreen = fullscreen;
     };
     document.addEventListener("fullscreenchange", leave);
     return () => document.removeEventListener("fullscreenchange", leave);
@@ -77,8 +94,8 @@ export function Presentation({
         if (cancelled || !canvas.current) return;
         const unit = proxy.getViewport({ scale: 1, rotation: proxy.rotate });
         const ratio = window.devicePixelRatio || 1;
-        const width = (root.current?.clientWidth || window.innerWidth) * ratio;
-        const height = (root.current?.clientHeight || window.innerHeight) * ratio;
+        const width = (stage.current?.clientWidth || window.innerWidth) * ratio;
+        const height = (stage.current?.clientHeight || window.innerHeight) * ratio;
         const fit = Math.min(width / unit.width, height / unit.height);
         const scale = Math.min(fit, Math.sqrt(MAX_PIXELS / (unit.width * unit.height)));
         const viewport = proxy.getViewport({ scale, rotation: proxy.rotate });
@@ -109,76 +126,86 @@ export function Presentation({
     return () => window.clearTimeout(timer);
   }, [page, seconds, step]);
 
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    const forward = [" ", "ArrowRight", "ArrowDown", "PageDown", "Enter"];
-    const back = ["ArrowLeft", "ArrowUp", "PageUp", "Backspace"];
-    if (event.key === "Escape") onClose();
-    else if (event.key === "Home") setPage(1);
-    else if (event.key === "End") setPage(pages);
-    else if (forward.includes(event.key)) step(event.shiftKey && event.key === " " ? -1 : 1);
-    else if (back.includes(event.key)) step(-1);
-    else return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
+  useEffect(() => {
+    const dialog = root.current;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const forward = [" ", "ArrowRight", "ArrowDown", "PageDown", "Enter"];
+      const back = ["ArrowLeft", "ArrowUp", "PageUp", "Backspace"];
+      if (event.key === "Escape") onClose();
+      else if (usesControlKeys(event)) return;
+      else if (event.key === "Home") setPage(1);
+      else if (event.key === "End") setPage(pages);
+      else if (forward.includes(event.key)) step(event.shiftKey && event.key === " " ? -1 : 1);
+      else if (back.includes(event.key)) step(-1);
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    dialog?.addEventListener("keydown", onKeyDown);
+    return () => dialog?.removeEventListener("keydown", onKeyDown);
+  }, [onClose, pages, step]);
 
   return (
-    <div
+    <dialog
       ref={root}
       className="presentation"
-      role="dialog"
-      aria-modal="true"
       aria-label={`Presentation, page ${page} of ${pages}`}
-      tabIndex={-1}
-      onKeyDown={onKeyDown}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
     >
-      <canvas
-        ref={canvas}
-        className="presentation-page"
-        aria-label={`Page ${page}`}
-        onClick={(event) => step(event.shiftKey ? -1 : 1)}
-      />
-      {error && (
-        <p role="alert" className="presentation-error">
-          {error}
-        </p>
-      )}
-      <div className="presentation-controls" role="toolbar" aria-label="Presentation controls">
-        <button type="button" aria-label="Previous page" onClick={() => step(-1)}>
-          <ChevronLeft size={18} />
+      <div className="presentation-stage" ref={stage} tabIndex={-1}>
+        <button
+          type="button"
+          className="presentation-page"
+          aria-label={`Page ${page}`}
+          onClick={(event) => step(event.shiftKey ? -1 : 1)}
+        >
+          <canvas ref={canvas} aria-hidden="true" />
         </button>
-        <output>
-          {page} / {pages}
-        </output>
-        <button type="button" aria-label="Next page" onClick={() => step(1)}>
-          <ChevronRight size={18} />
-        </button>
-        <label>
-          Advance{" "}
-          <select
-            aria-label="Advance automatically"
-            value={seconds}
-            onChange={(event) => setSeconds(Number(event.target.value))}
-          >
-            {ADVANCE_SECONDS.map((value) => (
-              <option key={value} value={value}>
-                {value ? `every ${value} s` : "on click"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={loop}
-            onChange={(event) => setLoop(event.target.checked)}
-          />{" "}
-          Loop
-        </label>
-        <button type="button" aria-label="End presentation" onClick={onClose}>
-          <X size={18} />
-        </button>
+        {error && (
+          <p role="alert" className="presentation-error">
+            {error}
+          </p>
+        )}
+        <div className="presentation-controls" role="toolbar" aria-label="Presentation controls">
+          <button type="button" aria-label="Previous page" onClick={() => step(-1)}>
+            <ChevronLeft size={18} />
+          </button>
+          <output>
+            {page} / {pages}
+          </output>
+          <button type="button" aria-label="Next page" onClick={() => step(1)}>
+            <ChevronRight size={18} />
+          </button>
+          <label>
+            Advance{" "}
+            <select
+              aria-label="Advance automatically"
+              value={seconds}
+              onChange={(event) => setSeconds(Number(event.target.value))}
+            >
+              {ADVANCE_SECONDS.map((value) => (
+                <option key={value} value={value}>
+                  {value ? `every ${value} s` : "on click"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={loop}
+              onChange={(event) => setLoop(event.target.checked)}
+            />{" "}
+            Loop
+          </label>
+          <button type="button" aria-label="End presentation" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
       </div>
-    </div>
+    </dialog>
   );
 }

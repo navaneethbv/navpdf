@@ -422,7 +422,7 @@ export function ObjectEditor({
                   <button className="button-secondary" disabled={working} onClick={transformImage}>
                     <RotateCw size={15} /> Apply Image Transform
                   </button>
-                  <div className="property-row" role="group" aria-label="Arrange image">
+                  <fieldset className="property-row" aria-label="Arrange image">
                     <button disabled={working} onClick={() => arrange("front")}>
                       Bring to Front
                     </button>
@@ -435,15 +435,15 @@ export function ObjectEditor({
                     <button disabled={working} onClick={() => arrange("back")}>
                       Send to Back
                     </button>
-                  </div>
-                  <div className="property-row" role="group" aria-label="Copy image">
+                  </fieldset>
+                  <fieldset className="property-row" aria-label="Copy image">
                     <button disabled={working} onClick={() => void copySelectedImage(false)}>
                       Copy Image
                     </button>
                     <button disabled={working} onClick={() => void copySelectedImage(true)}>
                       Cut Image
                     </button>
-                  </div>
+                  </fieldset>
                 </>
               )}
               {selected && (

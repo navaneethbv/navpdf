@@ -97,16 +97,21 @@ export function turnGray(gray: Gray, turn: QuarterTurn): Gray {
   const width = swap ? gray.height : gray.width;
   const height = swap ? gray.width : gray.height;
   const pixels = new Uint8Array(width * height);
-  for (let y = 0; y < gray.height; y++)
+  // In the rotated buffer, moving right or down in the source follows a fixed stride.
+  const columnStep = swap ? width : 1;
+  const rowStep = swap ? 1 : width;
+  const columnStride = turn === 90 ? columnStep : -columnStep;
+  const rowStride = turn === 270 ? rowStep : -rowStep;
+  const start =
+    (columnStride < 0 ? (gray.width - 1) * -columnStride : 0) +
+    (rowStride < 0 ? (gray.height - 1) * -rowStride : 0);
+  for (let y = 0; y < gray.height; y++) {
+    let target = start + y * rowStride;
     for (let x = 0; x < gray.width; x++) {
-      const [tx, ty] =
-        turn === 90
-          ? [gray.height - 1 - y, x]
-          : turn === 180
-            ? [gray.width - 1 - x, gray.height - 1 - y]
-            : [y, gray.width - 1 - x];
-      pixels[ty * width + tx] = gray.pixels[y * gray.width + x];
+      pixels[target] = gray.pixels[y * gray.width + x];
+      target += columnStride;
     }
+  }
   return { width, height, pixels };
 }
 
@@ -171,28 +176,33 @@ function uprightness(ink: Uint8Array, width: number, height: number) {
     const inLine = y < height && rows[y] > busy;
     if (inLine && start < 0) start = y;
     if (inLine || start < 0) continue;
-    let mass = 0;
-    let moment = 0;
-    for (let row = start; row < y; row++) {
-      mass += rows[row];
-      moment += rows[row] * row;
-    }
-    const middle = moment / Math.max(1, mass);
-    let second = 0;
-    let third = 0;
-    for (let row = start; row < y; row++) {
-      const distance = row - middle;
-      second += rows[row] * distance ** 2;
-      third += rows[row] * distance ** 3;
-    }
-    if (mass > 0 && second > 0) {
-      const skewness = third / mass / (second / mass) ** 1.5;
-      weighted += -skewness * mass;
-      total += mass;
+    const line = lineSkewness(rows, start, y);
+    if (line) {
+      weighted += -line.skewness * line.mass;
+      total += line.mass;
     }
     start = -1;
   }
   return total ? Math.max(-1, Math.min(1, weighted / total)) : 0;
+}
+
+/** The ink mass and skewness of a line covering the rows in [start, end). */
+function lineSkewness(rows: Float64Array, start: number, end: number) {
+  let mass = 0;
+  let moment = 0;
+  for (let row = start; row < end; row++) {
+    mass += rows[row];
+    moment += rows[row] * row;
+  }
+  const middle = moment / Math.max(1, mass);
+  let second = 0;
+  let third = 0;
+  for (let row = start; row < end; row++) {
+    const distance = row - middle;
+    second += rows[row] * distance ** 2;
+    third += rows[row] * distance ** 3;
+  }
+  return mass > 0 && second > 0 ? { mass, skewness: third / mass / (second / mass) ** 1.5 } : null;
 }
 
 /** The evidence for a turn: row-to-column banding and how upright each candidate reads. */

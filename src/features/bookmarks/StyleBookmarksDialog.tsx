@@ -13,8 +13,8 @@ import {
 } from "./style-bookmarks";
 
 function styleLabel(style: DocumentTextStyle) {
-  const weight = [style.bold && "bold", style.italic && "italic"].filter(Boolean).join(" ");
-  return `${style.fontName} ${style.size} pt${weight ? ` ${weight}` : ""} (${style.lines} line${
+  const weight = [style.bold && " bold", style.italic && " italic"].filter(Boolean).join("");
+  return `${style.fontName} ${style.size} pt${weight} (${style.lines} line${
     style.lines === 1 ? "" : "s"
   }): ${style.sample}`;
 }

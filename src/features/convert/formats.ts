@@ -134,8 +134,10 @@ const MARKDOWN_INLINE = /[\\`*_[\]<>|~&!]/g;
  * item has its leading marker escaped too.
  */
 export function escapeMarkdown(text: string) {
-  const inline = text.replaceAll(MARKDOWN_INLINE, (match) => `\\${match}`);
-  return inline.replace(/^(\s*)([#>+=-])/, "$1\\$2").replace(/^(\s*\d+)([.)])/, "$1\\$2");
+  const inline = text.replaceAll(MARKDOWN_INLINE, String.raw`\$&`);
+  return inline
+    .replace(/^(\s*)([#>+=-])/, String.raw`$1\$2`)
+    .replace(/^(\s*\d+)([.)])/, String.raw`$1\$2`);
 }
 
 /**

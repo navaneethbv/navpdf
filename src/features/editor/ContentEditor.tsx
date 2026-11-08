@@ -186,14 +186,14 @@ export function ContentEditor({
                   rows={4}
                   className="text-input"
                 />
-                <div className="property-row" role="group" aria-label="Script">
+                <fieldset className="property-row" aria-label="Script">
                   <button type="button" onClick={() => markScript("^")}>
                     x² Superscript
                   </button>
                   <button type="button" onClick={() => markScript("_")}>
                     x₂ Subscript
                   </button>
-                </div>
+                </fieldset>
                 <p className="field-hint">
                   Text in ^&#123;…&#125; is raised and in _&#123;…&#125; lowered, at a smaller size.
                   The characters themselves are not changed.

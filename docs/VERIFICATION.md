@@ -5,6 +5,19 @@ Use the [delivery tracker](DELIVERY-PHASES.md) for current status and the [accep
 Paths under ignored `output/` identify local artifacts and may not exist in another checkout.
 Older source and executable hashes identify only the build tested in their entry.
 
+## PR #75 quality follow-up
+
+The GitHub check annotations listed 45 SonarCloud findings and one Codacy finding on `d0c1fff`.
+The follow-up refactors the flagged PDF and UI code, replaces the default appearance regex scans with linear token scanning, and reports a missing 3D model in the dialog without attempting a download.
+Focused checks exercise malformed default appearance input, 3D extraction, OCR review shortcuts and presentation keyboard controls.
+Local SonarJS checks for cognitive complexity, nested template literals and slow regexes report no findings on changed lines in the touched source files.
+Hosted quality analysis is separate from these local checks.
+
+The cancelled macOS job reported that the `macos-14-arm64-us-default` configuration is no longer supported.
+Both macOS jobs use `macos-15`; the required Rust gate still requires Linux and macOS success, and the native acceptance job still depends on the macOS Rust job.
+Packaged NavPDF and independent-reader acceptance were not run for this follow-up.
+Browser fullscreen could not be exercised locally because Chromium could not launch in the sandbox.
+
 ## November 8 PDFCraft November gap batches 12 to 17
 
 The [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) compares upstream `5644d56` with `1cbacab` and records each addition's scope and limits; [ADR 0021](adr/0021-presentation-pinned-tools-3d-and-external-ocr.md) records batch 17's decisions.

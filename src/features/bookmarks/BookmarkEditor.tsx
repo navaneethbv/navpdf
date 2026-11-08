@@ -89,9 +89,14 @@ export function BookmarkEditor({
   const insert = (nodes: EditableBookmark[], parent: string, what: string) => {
     const { nodes: placed, unplaced } = bookmarksForDocument(nodes, pageCount());
     setRows((current) => [...current, ...flattenBookmarks(placed, parent)]);
-    setNotice(
-      `${what}${unplaced ? `; ${unplaced} bookmark${unplaced === 1 ? " has" : "s have"} no destination because this document has fewer pages` : ""}.`,
-    );
+    if (unplaced) {
+      const subject = unplaced === 1 ? "bookmark has" : "bookmarks have";
+      setNotice(
+        `${what}; ${unplaced} ${subject} no destination because this document has fewer pages.`,
+      );
+    } else {
+      setNotice(`${what}.`);
+    }
   };
   const paste = (parent: string) => {
     const clip = getBookmarkClipboard();
@@ -115,9 +120,8 @@ export function BookmarkEditor({
       if (importMode === "replace") {
         const { nodes: placed, unplaced } = bookmarksForDocument(nodes, pageCount());
         setRows(flattenBookmarks(placed));
-        setNotice(
-          `Replaced the bookmarks with ${file.name}${unplaced ? `; ${unplaced} have no destination` : ""}. Save to keep them.`,
-        );
+        const destinations = unplaced ? `; ${unplaced} have no destination` : "";
+        setNotice(`Replaced the bookmarks with ${file.name}${destinations}. Save to keep them.`);
       } else insert(nodes, "", `Added the bookmarks from ${file.name}. Save to keep them`);
       setError("");
     } catch (cause) {

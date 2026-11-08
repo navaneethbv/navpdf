@@ -55,6 +55,14 @@ function reshapePoints(comment: Comment): number[][] | null {
   return comment.vertices && comment.vertices.length >= 2 ? comment.vertices : null;
 }
 
+/** A reshape replaces one point without inserting, removing or reordering slots. */
+function reshapeHandles(comment: Comment) {
+  return reshapePoints(comment)?.map((point, slot) => ({
+    id: `${comment.id}:handle:${slot}`,
+    point,
+  }));
+}
+
 interface Drag {
   kind: "move" | "reshape";
   pointerId: number;
@@ -215,17 +223,19 @@ export function AnnotationSelectionLayer({
     if (image && dragRef.current?.active) setPreview({ page: primary.comment.page, image });
   };
 
+  const selectComment = (event: Parameters<typeof selectionMode>[0], id: string) => {
+    const mode = selectionMode(event);
+    if (mode === "replace") controller.selectAnnotation(id);
+    else controller.selectAnnotation(id, mode);
+  };
+
   const endDrag = async (event: ReactPointerEvent<HTMLElement>, comment: Comment) => {
     const current = dragRef.current;
     if (current?.pointerId !== event.pointerId) return;
     updateDrag(null);
     setPreview(null);
     if (!current.active) {
-      if (current.kind === "move") {
-        const mode = selectionMode(event);
-        if (mode === "replace") controller.selectAnnotation(comment.id);
-        else controller.selectAnnotation(comment.id, mode);
-      }
+      if (current.kind === "move") selectComment(event, comment.id);
       return;
     }
     const pageElement = document.querySelector<HTMLElement>(
@@ -253,7 +263,7 @@ export function AnnotationSelectionLayer({
 
   if (tool !== "select") return null;
   const selected = boxes.find((box) => box.comment.id === selectedId);
-  const reshape = selection.length === 1 && selected ? reshapePoints(selected.comment) : null;
+  const reshape = selection.length === 1 && selected ? reshapeHandles(selected.comment) : null;
   const reshapeGeometry = selected && pages.get(selected.comment.page);
   const dragging = drag?.active ? drag : null;
   const moving = dragging?.kind === "move";
@@ -290,9 +300,7 @@ export function AnnotationSelectionLayer({
               // A press on a selected comment is handled when the pointer is released.
               if (isSelected && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.detail)
                 return;
-              const mode = selectionMode(event);
-              if (mode === "replace") controller.selectAnnotation(box.comment.id);
-              else controller.selectAnnotation(box.comment.id, mode);
+              selectComment(event, box.comment.id);
             }}
           />
         );
@@ -339,7 +347,7 @@ export function AnnotationSelectionLayer({
             <svg className="annotation-reshape-preview" aria-hidden="true">
               <polyline
                 points={reshape
-                  .map((point, index) => {
+                  .map(({ point }, index) => {
                     const [x, y] = reshapeGeometry.toLayer(point[0], point[1]);
                     return index === dragging.index
                       ? `${x + dragging.dx},${y + dragging.dy}`
@@ -350,13 +358,13 @@ export function AnnotationSelectionLayer({
               />
             </svg>
           )}
-          {reshape.map((point, index) => {
+          {reshape.map(({ id, point }, index) => {
             const [x, y] = reshapeGeometry.toLayer(point[0], point[1]);
             const offset = dragging?.kind === "reshape" && dragging.index === index;
-            const neighbour = reshape[index === 0 ? 1 : index - 1];
+            const neighbour = reshape[index === 0 ? 1 : index - 1].point;
             return (
               <button
-                key={`handle-${index}`}
+                key={id}
                 type="button"
                 className="annotation-reshape-handle"
                 style={{

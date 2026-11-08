@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from "pdf-lib";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { OcrPanel } from "../../src/features/ocr/OcrPanel";
 import {
   applyOcrSearchableLayer,
@@ -242,7 +242,8 @@ describe("OcrPanel UI Component (P6.4)", () => {
     await waitFor(() => expect(applyBtn.hasAttribute("disabled")).toBe(false));
     fireEvent.click(applyBtn);
     expect(await screen.findByText(/2 words below 80% confidence/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Next suspect" }));
+    const controls = within(screen.getByRole("group", { name: "Low-confidence words" }));
+    fireEvent.click(controls.getByRole("button", { name: "Next suspect" }));
     await waitFor(() =>
       expect(document.activeElement).toBe(
         screen.getByRole("textbox", { name: "Page 1 line 1 word 2" }),
@@ -254,7 +255,15 @@ describe("OcrPanel UI Component (P6.4)", () => {
         screen.getByRole("textbox", { name: "Page 1 line 1 word 3" }),
       ),
     );
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show only low-confidence words" }));
+    const showOnly = controls.getByRole("checkbox", { name: "Show only low-confidence words" });
+    showOnly.focus();
+    fireEvent.keyDown(showOnly, { key: "F8", shiftKey: true });
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "Page 1 line 1 word 2" }),
+      ),
+    );
+    fireEvent.click(showOnly);
     expect(screen.queryByRole("textbox", { name: "Page 1 line 1 word 1" })).toBeNull();
     expect(screen.getByRole("textbox", { name: "Page 1 line 1 word 2" })).toBeTruthy();
   });

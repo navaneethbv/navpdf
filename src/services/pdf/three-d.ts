@@ -161,57 +161,54 @@ function modelStream(annotation: PDFDict) {
   return value instanceof PDFRawStream ? value : null;
 }
 
-/** The 3D annotations in a document, with what each model holds. */
-export async function list3dModels(bytes: Uint8Array): Promise<ModelEntry[]> {
-  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
-  const entries: ModelEntry[] = [];
+function* modelAnnotations(doc: PDFDocument) {
   for (const [index, page] of doc.getPages().entries()) {
     const annots = page.node.Annots();
     if (!annots) continue;
     for (let i = 0; i < annots.size(); i++) {
       const annotation = annots.lookupMaybe(i, PDFDict);
-      if (annotation?.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() !== "3D") continue;
-      const stream = modelStream(annotation);
-      const subtype = stream?.dict.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText();
-      const views = stream?.dict.lookupMaybe(PDFName.of("VA"), PDFArray)?.size() ?? 0;
-      entries.push({
-        page: index + 1,
-        name:
-          annotation.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ??
-          `3D model ${entries.length + 1}`,
-        format: subtype === "U3D" || subtype === "PRC" ? subtype : "unknown",
-        storedBytes: stream?.contents.length ?? 0,
-        views,
-        script: !!stream?.dict.has(PDFName.of("OnInstantiate")),
-        description:
-          annotation.lookupMaybe(PDFName.of("Contents"), PDFString, PDFHexString)?.decodeText() ??
-          "",
-      });
+      if (annotation?.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() === "3D") {
+        yield { annotation, page: index + 1 };
+      }
     }
   }
-  return entries;
 }
 
-/** The model file of the `index`th 3D annotation, decompressed, to save, never to open. */
+/** The 3D annotations in a document, with what each model holds. */
+export async function list3dModels(bytes: Uint8Array): Promise<ModelEntry[]> {
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  return Array.from(modelAnnotations(doc), ({ annotation, page }, index) => {
+    const stream = modelStream(annotation);
+    const subtype = stream?.dict.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText();
+    return {
+      page,
+      name:
+        annotation.lookupMaybe(PDFName.of("NM"), PDFString, PDFHexString)?.decodeText() ??
+        `3D model ${index + 1}`,
+      format: subtype === "U3D" || subtype === "PRC" ? subtype : "unknown",
+      storedBytes: stream?.contents.length ?? 0,
+      views: stream?.dict.lookupMaybe(PDFName.of("VA"), PDFArray)?.size() ?? 0,
+      script: !!stream?.dict.has(PDFName.of("OnInstantiate")),
+      description:
+        annotation.lookupMaybe(PDFName.of("Contents"), PDFString, PDFHexString)?.decodeText() ?? "",
+    };
+  });
+}
+
+function extractModelStream(annotation: PDFDict) {
+  const stream = modelStream(annotation);
+  if (!stream) throw new Error("This 3D annotation has no model stream.");
+  const bytes = decodeBoundedStream(stream, MAX_MODEL_BYTES);
+  const extension = modelFormat(bytes)?.toLowerCase() ?? "bin";
+  return { bytes, extension };
+}
+
+/** The decompressed model file to save, or null if the selected annotation no longer exists. */
 export async function extract3dModel(bytes: Uint8Array, index: number) {
   const doc = await PDFDocument.load(bytes, { updateMetadata: false });
   let seen = 0;
-  for (const page of doc.getPages()) {
-    const annots = page.node.Annots();
-    if (!annots) continue;
-    for (let i = 0; i < annots.size(); i++) {
-      const annotation = annots.lookupMaybe(i, PDFDict);
-      if (annotation?.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() !== "3D") continue;
-      if (seen++ !== index) continue;
-      const stream = modelStream(annotation);
-      if (!stream) throw new Error("This 3D annotation has no model stream.");
-      const data = decodeBoundedStream(stream, MAX_MODEL_BYTES);
-      const format = modelFormat(data);
-      return {
-        bytes: data,
-        extension: format === "PRC" ? "prc" : format === "U3D" ? "u3d" : "bin",
-      };
-    }
+  for (const { annotation } of modelAnnotations(doc)) {
+    if (seen++ === index) return extractModelStream(annotation);
   }
-  throw new Error("That 3D model no longer exists.");
+  return null;
 }

@@ -1593,12 +1593,9 @@ export class ViewerController {
     return this.mutate("Comments moved", async () => {
       const bytes = await this.pdf!.saveDocument();
       const result = await moveAnnotations(bytes, ids, dx, dy);
-      const label =
-        result.skipped > 0
-          ? `${result.moved} moved; text markup and locked comments stay in place`
-          : result.moved === 1
-            ? "Comment moved"
-            : `${result.moved} comments moved`;
+      let label = result.moved === 1 ? "Comment moved" : `${result.moved} comments moved`;
+      if (result.skipped > 0)
+        label = `${result.moved} moved; text markup and locked comments stay in place`;
       await this.replaceWithBytes(result.bytes, label, { preMutationBytes: bytes });
       useWorkspace.getState().set({
         selectedAnnotationId: primary,

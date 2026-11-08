@@ -1,4 +1,3 @@
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import { loadPdfFromBytes } from "../../services/pdf";
 import { copyAnnotations } from "../../services/pdf/comment-batch";
 
@@ -31,9 +30,8 @@ export async function renderCommentPreview(
     return null;
   }
   const task = loadPdfFromBytes(clip.bytes as Uint8Array<ArrayBuffer>);
-  let pdf: PDFDocumentProxy | null = null;
   try {
-    pdf = await task.promise;
+    const pdf = await task.promise;
     const page = await pdf.getPage(1);
     const unit = page.getViewport({ scale: 1, rotation: page.rotate });
     const fit = Math.min(scale, Math.sqrt(MAX_PREVIEW_PIXELS / (unit.width * unit.height)));
@@ -60,6 +58,5 @@ export async function renderCommentPreview(
     return null;
   } finally {
     await task.destroy().catch(() => {});
-    void pdf;
   }
 }
