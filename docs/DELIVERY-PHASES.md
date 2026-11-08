@@ -30,6 +30,7 @@ Batch 7's editing part adds sign-here and picture stamps, watermarks and backgro
 Batch 8 adds a local trusted-certificate list, certificate details, changes after signing with certification checks, opening a signed version and visible signature appearances under [ADR 0018](adr/0018-local-signature-trust-and-inspection.md).
 Batch 9 adds a Tags and Reading Order dialog with tag properties, reordering, artifacts, untagged content and automatic tagging under [ADR 0019](adr/0019-tag-editing-and-autotagging.md).
 Batch 10's PDF/A part adds PDF/A-2 and PDF/A-3 checks and conversion, sRGB output intents and a standards panel under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md); its actions part adds guided actions that run saved or built-in step sequences on the open document or on several files.
+On November 8 the user asked for every capability added upstream since October 21; the [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) plans batches 12 to 17 and records each feature's status.
 
 ## Phase status and remaining gates
 
