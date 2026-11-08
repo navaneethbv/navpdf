@@ -69,12 +69,12 @@ Each row's status changes from Planned to Implemented when its code and tests la
 
 | Upstream entry | Planned NavPDF behaviour | Status |
 | --- | --- | --- |
-| `edit.text-super-subscript` | Text placement and edit gains superscript and subscript using text rise and a reduced size, so extracted text stays the original characters. | Planned |
-| `edit.arrange-objects` | Object editor Bring to Front, Send to Back, Bring Forward and Send Backward for image XObject draws, moving the balanced `q ... Q` block in the content stream; unbalanced or marked-content-crossing blocks are refused. | Planned |
-| `edit.cut-copy-paste-objects` | Object editor Copy, Cut and Paste for images placed on a page, pasting onto the current page offset by 18 points, within or across tabs. | Planned |
-| `edit.image-rotate-free` | Object editor Rotate by any angle with a numeric field, applied as an extra `cm` about the image centre. | Planned |
-| `form.multiple-copies` | Form tools, Create field grid: rows, columns, spacing and a name pattern produce a table of text fields from one field's size, refusing name clashes. | Planned |
-| `edit.bates-multi-file` | Bates numbering on several files: consecutive ranges in file order, saved as copies in a ZIP with a per-file result. | Planned |
+| `edit.text-super-subscript` | Add Text and Images, Superscript and Subscript buttons wrap the selection in `^{...}` or `_{...}`; those runs are drawn at 62% size, raised 36% or lowered 16% of the font size, so extracted text keeps the original characters. | Implemented for placed text. Existing page text is not restyled, and justified lines with script runs are drawn left-aligned. |
+| `edit.arrange-objects` | Edit Existing Content, Bring to Front, Bring Forward, Send Backward and Send to Back for an image drawn in its own `q ... Q` group (or marked content holding only that group). The native engine moves the group past other drawing and stops before any top-level transform, clipping, graphics state or fill colour change. | Implemented. Images without their own group are refused (Apply Image Transform gives them one); vector paths and inline images are not arranged. |
+| `edit.cut-copy-paste-objects` | Edit Existing Content, Copy Image and Cut Image copy an image placement as a one-page PDF holding only it (with its soft mask and colour space); Paste Image adds it to the current page of this or another tab at the same place, 18 points further each time on its own page. | Implemented for images. Inline images, text runs and vector drawings are not copied. |
+| `edit.image-rotate-free` | Already provided: Edit Existing Content, Rotation (degrees) with Scale and Move applies any angle about the image's centre as one extra `cm`. | Already covered; no change. |
+| `form.multiple-copies` | Field Properties, Copy into a grid: rows, columns, spacing and a name pattern with `{name}`, `{row}` and `{column}` copy a text field or check box into same-sized fields, the source being the top-left cell. Refused whole when a cell leaves the page or a name is empty, repeated, already used or contains a period. | Implemented. Other field types and dragging the grid on the page are not provided. |
+| `edit.bates-multi-file` | Document Decorations, Bates Numbers, Several files: up to 50 PDFs of up to 200 MB numbered in the order chosen, each continuing where the last ended, saved as copies in a ZIP with a CSV of each file's first and last number. A file that fails keeps no numbers and is listed with its reason. | Implemented. Results go to a ZIP rather than a chosen folder. |
 
 ## Batch 16: optimizer, OCR and copying
 

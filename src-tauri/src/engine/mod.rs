@@ -1,6 +1,7 @@
 //! Pure-Rust PDF engine for protection, compression, existing-object edits and redaction.
 //! Scope, supported structures and rejection rules are recorded in ADR 0006.
 
+pub mod arrange;
 pub mod compress;
 pub mod content;
 pub mod coverup;

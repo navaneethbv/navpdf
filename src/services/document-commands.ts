@@ -1870,6 +1870,54 @@ function drawJustifiedLine(
   return containerWidth;
 }
 
+/** A run of placed text: normal, superscript or subscript. */
+export interface ScriptRun {
+  text: string;
+  script: "normal" | "super" | "sub";
+}
+
+/** Superscript and subscript size and baseline shift, as fractions of the font size. */
+const SCRIPT_SCALE = 0.62;
+const SCRIPT_RISE = { normal: 0, super: 0.36, sub: -0.16 } as const;
+
+/**
+ * Splits text marked with `^{...}` for superscript and `_{...}` for subscript into runs. A marker
+ * without its closing brace is kept as typed.
+ */
+export function parseScriptRuns(text: string): ScriptRun[] {
+  const runs: ScriptRun[] = [];
+  const push = (value: string, script: ScriptRun["script"]) => {
+    if (!value) return;
+    const last = runs.at(-1);
+    if (last?.script === script) last.text += value;
+    else runs.push({ text: value, script });
+  };
+  let index = 0;
+  while (index < text.length) {
+    const marker = text.slice(index, index + 2);
+    const close = marker === "^{" || marker === "_{" ? text.indexOf("}", index + 2) : -1;
+    if (close > index + 2) {
+      push(text.slice(index + 2, close), marker === "^{" ? "super" : "sub");
+      index = close + 1;
+    } else {
+      push(text[index], "normal");
+      index++;
+    }
+  }
+  return runs;
+}
+
+function runsWidth(runs: ScriptRun[], font: PDFFont, size: number) {
+  return runs.reduce(
+    (total, run) =>
+      total +
+      font.widthOfTextAtSize(run.text, run.script === "normal" ? size : size * SCRIPT_SCALE),
+    0,
+  );
+}
+
+const hasScripts = (text: string) => parseScriptRuns(text).some((run) => run.script !== "normal");
+
 function drawTextContent(
   page: PDFPage,
   font: PDFFont,
@@ -1891,7 +1939,13 @@ function drawTextContent(
     const words = line.text.trim().split(/\s+/);
     let lineX = x;
     let drawnWidth: number;
-    if (options.alignment === "justify" && wrapWidth && !line.paragraphEnd && words.length > 1) {
+    if (
+      options.alignment === "justify" &&
+      wrapWidth &&
+      !line.paragraphEnd &&
+      words.length > 1 &&
+      !hasScripts(line.text)
+    ) {
       drawnWidth = drawJustifiedLine(page, font, words, wrapWidth, {
         x,
         y: lineY,
@@ -1899,6 +1953,18 @@ function drawTextContent(
         color,
         opacity,
       });
+    } else if (hasScripts(line.text)) {
+      // Superscript and subscript runs are drawn smaller on a raised or lowered baseline.
+      const runs = parseScriptRuns(line.text);
+      drawnWidth = runsWidth(runs, font, fontSize);
+      lineX = x + textOffset(options.alignment, wrapWidth ?? drawnWidth, drawnWidth);
+      let runX = lineX;
+      for (const run of runs) {
+        const size = run.script === "normal" ? fontSize : fontSize * SCRIPT_SCALE;
+        const runY = lineY + SCRIPT_RISE[run.script] * fontSize;
+        page.drawText(run.text, { x: runX, y: runY, size, font, color, opacity });
+        runX += font.widthOfTextAtSize(run.text, size);
+      }
     } else {
       drawnWidth = font.widthOfTextAtSize(line.text, fontSize);
       lineX = x + textOffset(options.alignment, wrapWidth ?? drawnWidth, drawnWidth);
@@ -1942,7 +2008,12 @@ export async function insertTextContent(
   const font = await doc.embedFont(standardTextFont(options));
   const fontSize = clamp(options.fontSize ?? 14, 4, 144);
   const wrapWidth = options.maxWidth && options.maxWidth > 0 ? options.maxWidth : undefined;
-  const lines = wrapText(options.text, font, fontSize, wrapWidth);
+  // Script markers take no width, and script runs are measured at their own size.
+  const measured = {
+    widthOfTextAtSize: (value: string, size: number) =>
+      runsWidth(parseScriptRuns(value), font, size),
+  };
+  const lines = wrapText(options.text, measured, fontSize, wrapWidth);
   drawTextContent(page, font, lines, options, box);
   return doc.save();
 }

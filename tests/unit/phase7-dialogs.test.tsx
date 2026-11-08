@@ -10,6 +10,8 @@ const engine = vi.hoisted(() => ({
   compressDocument: vi.fn(),
   inspectPage: vi.fn(),
   editPage: vi.fn(),
+  copyImage: vi.fn(),
+  pasteImage: vi.fn(),
   saveProtectedCopy: vi.fn(),
   unlockDocument: vi.fn(),
 }));
@@ -590,6 +592,55 @@ describe("existing content editor", () => {
       1,
       expect.objectContaining({ type: "transformImage", objectId: "abc:9" }),
       undefined,
+    );
+  });
+
+  it("arranges an image and copies and pastes it", async () => {
+    seed();
+    const view = controller();
+    engine.inspectPage.mockResolvedValue(objects);
+    engine.editPage.mockResolvedValue({
+      bytes: new Uint8Array([3]),
+      report: {
+        applied: true,
+        message: "Image brought to the front.",
+        widthBefore: null,
+        widthAfter: null,
+        missingCharacters: [],
+      },
+    });
+    engine.copyImage.mockResolvedValue(new Uint8Array([7]));
+    engine.pasteImage.mockResolvedValue(new Uint8Array([8]));
+    render(<ObjectEditor controller={view as never} onClose={() => {}} />);
+    fireEvent.click(await screen.findByText("Image 2×2 px (shared)"));
+    fireEvent.click(screen.getByText("Bring to Front"));
+    await vi.waitFor(() =>
+      expect(engine.editPage).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        1,
+        { type: "arrangeImage", objectId: "abc:9", order: "front" },
+        undefined,
+      ),
+    );
+    await vi.waitFor(() => expect(screen.getByText("Image 2×2 px (shared)")).toBeTruthy());
+    fireEvent.click(screen.getByText("Image 2×2 px (shared)"));
+    fireEvent.click(screen.getByText("Copy Image"));
+    await vi.waitFor(() =>
+      expect(engine.copyImage).toHaveBeenCalledWith(expect.any(Uint8Array), 1, "abc:9"),
+    );
+    await vi.waitFor(() =>
+      expect((screen.getByText("Paste Image") as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(screen.getByText("Paste Image"));
+    // Pasting on the page it was copied from steps it 18 points down and to the right.
+    await vi.waitFor(() =>
+      expect(engine.pasteImage).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        1,
+        new Uint8Array([7]),
+        18,
+        -18,
+      ),
     );
   });
 });

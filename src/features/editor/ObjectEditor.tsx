@@ -12,8 +12,15 @@ import {
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { native } from "../../services/native";
-import { editPage, ENGINE_UNAVAILABLE, inspectPage } from "../../services/engine";
-import type { EditReport, EditRequest, PageObjects } from "../../types/engine";
+import {
+  copyImage,
+  editPage,
+  ENGINE_UNAVAILABLE,
+  inspectPage,
+  pasteImage,
+} from "../../services/engine";
+import type { EditReport, EditRequest, ImageOrder, PageObjects } from "../../types/engine";
+import { getImageClipboard, nextImagePasteOffset, setImageClipboard } from "./image-clipboard";
 import { placePageBoxes, type ViewerLike } from "../redact/redaction-marks";
 import { FeatureDialog } from "../../components/FeatureDialog";
 
@@ -126,6 +133,63 @@ export function ObjectEditor({
     }
   };
 
+  const [hasImageClip, setHasImageClip] = useState(() => !!getImageClipboard());
+  /** Copy the selected image to the image clipboard; Cut also deletes it from the page. */
+  const copySelectedImage = async (cut: boolean) => {
+    if (selected?.kind !== "image" || !controller?.pdf || !scan) return;
+    setWorking(true);
+    try {
+      const documentId = useWorkspace.getState().document?.id ?? "";
+      const clip = await copyImage(await controller.pdf.saveDocument(), scan.page, selected.id);
+      setImageClipboard(clip, documentId, scan.page);
+      setHasImageClip(true);
+      setReport({
+        applied: false,
+        message: "Image copied.",
+        widthBefore: null,
+        widthAfter: null,
+        missingCharacters: [],
+      });
+    } catch (error) {
+      s.set({ error: errorText(error) });
+      return;
+    } finally {
+      setWorking(false);
+    }
+    if (cut) await run({ type: "deleteObject", objectId: selected.id });
+  };
+  const pasteCopiedImage = async () => {
+    const clip = getImageClipboard();
+    if (!clip || !controller?.pdf || !scan) return;
+    setWorking(true);
+    try {
+      const offset = nextImagePasteOffset(useWorkspace.getState().document?.id ?? "", scan.page);
+      const bytes = await pasteImage(
+        await controller.pdf.saveDocument(),
+        scan.page,
+        clip,
+        offset,
+        -offset,
+      );
+      await controller.replaceWithBytes(bytes, "Image pasted", { expectedSource: sourcePdf });
+      setReport({
+        applied: true,
+        message: "Image pasted.",
+        widthBefore: null,
+        widthAfter: null,
+        missingCharacters: [],
+      });
+    } catch (error) {
+      s.set({ error: errorText(error) });
+    } finally {
+      setWorking(false);
+    }
+  };
+  const arrange = (order: ImageOrder) => {
+    if (selected?.kind === "image")
+      void run({ type: "arrangeImage", objectId: selected.id, order });
+  };
+
   const replaceImage = async (file: File) => {
     if (!selected) return;
     try {
@@ -198,6 +262,14 @@ export function ObjectEditor({
                   disabled={working}
                 >
                   <RefreshCw size={15} />
+                </button>
+                <button
+                  className="button-secondary"
+                  onClick={() => void pasteCopiedImage()}
+                  disabled={working || !hasImageClip || !scan}
+                  title="Paste the copied image on this page"
+                >
+                  Paste Image
                 </button>
               </div>
               {scan?.objects.map((object) => (
@@ -350,6 +422,28 @@ export function ObjectEditor({
                   <button className="button-secondary" disabled={working} onClick={transformImage}>
                     <RotateCw size={15} /> Apply Image Transform
                   </button>
+                  <div className="property-row" role="group" aria-label="Arrange image">
+                    <button disabled={working} onClick={() => arrange("front")}>
+                      Bring to Front
+                    </button>
+                    <button disabled={working} onClick={() => arrange("forward")}>
+                      Bring Forward
+                    </button>
+                    <button disabled={working} onClick={() => arrange("backward")}>
+                      Send Backward
+                    </button>
+                    <button disabled={working} onClick={() => arrange("back")}>
+                      Send to Back
+                    </button>
+                  </div>
+                  <div className="property-row" role="group" aria-label="Copy image">
+                    <button disabled={working} onClick={() => void copySelectedImage(false)}>
+                      Copy Image
+                    </button>
+                    <button disabled={working} onClick={() => void copySelectedImage(true)}>
+                      Cut Image
+                    </button>
+                  </div>
                 </>
               )}
               {selected && (

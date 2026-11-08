@@ -164,7 +164,11 @@ export type EditRequest =
       type: "transformImage";
       objectId: string;
       cm: [number, number, number, number, number, number];
-    };
+    }
+  | { type: "arrangeImage"; objectId: string; order: ImageOrder };
+
+/** Stacking moves for an image placed on a page. */
+export type ImageOrder = "front" | "back" | "forward" | "backward";
 
 export interface EditReport {
   applied: boolean;

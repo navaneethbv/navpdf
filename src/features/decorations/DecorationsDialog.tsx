@@ -14,6 +14,14 @@ import { pruneDocument } from "../../services/engine";
 import { parsePageRange } from "../pages/page-range";
 import { FeatureDialog } from "../../components/FeatureDialog";
 import { DecorationFile, type DecorationFileChoice } from "./DecorationFile";
+import {
+  batesAcrossFiles,
+  batesArchive,
+  MAX_BATES_FILE_BYTES,
+  MAX_BATES_FILES,
+  type BatesFileResult,
+} from "./bates-files";
+import { downloadBlob } from "../../utils/download";
 
 export function DecorationsDialog({
   controller,
@@ -157,6 +165,48 @@ export function DecorationsDialog({
       options.shrinkToFit = shrinkToFit;
     }
     return options;
+  };
+
+  const [batesProgress, setBatesProgress] = useState("");
+  const [batesResults, setBatesResults] = useState<BatesFileResult[] | null>(null);
+  const numberFiles = async (files: File[]) => {
+    setApplying(true);
+    setBatesResults(null);
+    try {
+      if (files.length > MAX_BATES_FILES)
+        throw new Error(`Choose at most ${MAX_BATES_FILES} files.`);
+      const loaded = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          bytes:
+            file.size > MAX_BATES_FILE_BYTES
+              ? new Uint8Array(MAX_BATES_FILE_BYTES + 1)
+              : new Uint8Array(await file.arrayBuffer()),
+        })),
+      );
+      const results = await batesAcrossFiles(
+        loaded,
+        {
+          prefix: batesPrefix,
+          suffix: batesSuffix,
+          startNumber: batesStart,
+          padding: batesPadding,
+          position: batesPosition,
+        },
+        (index, total) => setBatesProgress(`Numbering file ${index} of ${total}`),
+      );
+      setBatesResults(results);
+      const saved = await downloadBlob(
+        new Blob([batesArchive(results)], { type: "application/zip" }),
+        `Bates-${Date.now()}.zip`,
+      );
+      setBatesProgress(saved ? "Saved the numbered files in a ZIP archive." : "Save cancelled.");
+    } catch (err) {
+      setBatesProgress("");
+      s.set({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setApplying(false);
+    }
   };
 
   const handleApply = async () => {
@@ -551,6 +601,40 @@ export function DecorationsDialog({
                 {String(batesStart).padStart(batesPadding, "0")}
                 {batesSuffix}
               </p>
+              <fieldset className="preset-list">
+                <legend className="setting-title">Several files</legend>
+                <p className="field-hint">
+                  Number up to {MAX_BATES_FILES} PDFs one after another, each continuing where the
+                  last ended, with these settings on every page. The numbered copies and a list of
+                  each file&apos;s numbers are saved in a ZIP archive; the open document is not
+                  changed.
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  accept="application/pdf,.pdf"
+                  aria-label="PDF files to number"
+                  disabled={applying}
+                  onChange={(event) => {
+                    const chosen = [...(event.target.files ?? [])];
+                    event.target.value = "";
+                    if (chosen.length) void numberFiles(chosen);
+                  }}
+                />
+                {batesProgress && <output aria-live="polite">{batesProgress}</output>}
+                {batesResults && (
+                  <ul className="check-list" aria-label="Bates numbering results">
+                    {batesResults.map((result, index) => (
+                      <li key={`${result.name}-${index}`}>
+                        {result.name}:{" "}
+                        {result.error
+                          ? `not numbered: ${result.error}`
+                          : `${result.first} to ${result.last}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </fieldset>
             </>
           )}
 

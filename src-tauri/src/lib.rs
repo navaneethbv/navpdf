@@ -286,6 +286,8 @@ pub fn run() {
             commands::engine::engine_find_cover_ups,
             commands::engine::engine_inspect_page,
             commands::engine::engine_edit,
+            commands::engine::engine_copy_image,
+            commands::engine::engine_paste_image,
             commands::engine::engine_save_protected,
             commands::engine::engine_unlock,
             commands::engine::engine_choose_certificate,

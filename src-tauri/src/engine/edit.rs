@@ -65,6 +65,11 @@ pub enum EditRequest {
         object_id: String,
         cm: [f64; 6],
     },
+    /// Bring an image to the front, send it to the back, or move it one place.
+    ArrangeImage {
+        object_id: String,
+        order: super::arrange::Order,
+    },
 }
 
 impl EditRequest {
@@ -73,7 +78,8 @@ impl EditRequest {
             Self::ReplaceText { object_id, .. }
             | Self::DeleteObject { object_id }
             | Self::ReplaceImage { object_id, .. }
-            | Self::TransformImage { object_id, .. } => object_id,
+            | Self::TransformImage { object_id, .. }
+            | Self::ArrangeImage { object_id, .. } => object_id,
         }
     }
 }
@@ -116,6 +122,11 @@ fn page_content(doc: &Document, page: u32) -> Result<PageContent, String> {
         ops,
         fingerprint,
     })
+}
+
+/// The page's MediaBox, inherited from its parents when needed.
+pub fn page_media_box(doc: &Document, page_id: ObjectId) -> [f64; 4] {
+    media_box(doc, page_id)
 }
 
 fn media_box(doc: &Document, page_id: ObjectId) -> [f64; 4] {
@@ -311,6 +322,16 @@ pub fn apply(
     .ok_or(STALE)?;
     let mut report = EditReport::default();
     match (request, &item.kind) {
+        (EditRequest::ArrangeImage { order, .. }, ItemKind::Image { .. }) => {
+            ops = super::arrange::arrange(std::mem::take(&mut ops), index, *order)?;
+            report.message = match order {
+                super::arrange::Order::Front => "Image brought to the front.",
+                super::arrange::Order::Back => "Image sent to the back.",
+                super::arrange::Order::Forward => "Image brought forward.",
+                super::arrange::Order::Backward => "Image sent backward.",
+            }
+            .into();
+        }
         (EditRequest::TransformImage { cm, .. }, ItemKind::Image { ctm, .. }) => {
             if !cm.iter().all(|value| value.is_finite())
                 || cm[0].hypot(cm[1]) > 10_000.0
@@ -536,6 +557,36 @@ fn used_codes(
         .collect()
 }
 
+/// A one-page PDF holding only the chosen image where it is placed on its page.
+pub fn copy_image(bytes: &[u8], page: u32, object_id: &str) -> Result<Vec<u8>, String> {
+    let doc = super::load(bytes)?;
+    let content = page_content(&doc, page)?;
+    let index = operation_index(object_id, &content.fingerprint)?;
+    super::arrange::copy_image(&doc, content.page_id, &content.ops, index)
+}
+
+/// Adds an image copied with `copy_image` to a page, moved by (`dx`, `dy`) points.
+pub fn paste_image(
+    bytes: &[u8],
+    page: u32,
+    clip: &[u8],
+    dx: f64,
+    dy: f64,
+) -> Result<Vec<u8>, String> {
+    let mut doc = super::load(bytes)?;
+    let page_id = *doc
+        .get_pages()
+        .get(&page)
+        .ok_or_else(|| format!("Page {page} does not exist in this document."))?;
+    let expected_pages = doc.get_pages().len();
+    super::arrange::paste_image(&mut doc, page_id, clip, dx, dy)?;
+    let output = super::save(&mut doc)?;
+    if super::load(&output)?.get_pages().len() != expected_pages {
+        return Err("The edited PDF failed validation. The document is unchanged.".into());
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -628,6 +679,95 @@ mod tests {
         let composite = dictionary! {"Type" => "Font", "Subtype" => "Type0", "BaseFont" => "CID"};
         let blocked = FontInfo::load(&doc, &composite);
         assert!(text_blocker(Some(&blocked)).is_some() && text_blocker(None).is_some());
+    }
+
+    fn two_image_document() -> Vec<u8> {
+        let (mut doc, page) = page_document(
+            "q 50 0 0 50 100 100 cm /ImA Do Q q 50 0 0 50 120 120 cm /ImB Do Q",
+            dictionary! {},
+        );
+        let image = |doc: &mut Document, value: u8| {
+            doc.add_object(Stream::new(
+                dictionary! {"Type" => "XObject", "Subtype" => "Image", "Width" => 1, "Height" => 1,
+                "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8},
+                vec![value],
+            ))
+        };
+        let a = image(&mut doc, 10);
+        let b = image(&mut doc, 200);
+        doc.get_dictionary_mut(page)
+            .unwrap()
+            .get_mut(b"Resources")
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .set("XObject", dictionary! {"ImA" => a, "ImB" => b});
+        saved(&mut doc)
+    }
+
+    fn drawn_images(bytes: &[u8]) -> Vec<(u8, [f64; 4])> {
+        let doc = crate::engine::load(bytes).unwrap();
+        let page = *doc.get_pages().get(&1).unwrap();
+        let ops = crate::engine::page_operations(&doc, page).unwrap();
+        content::scan(
+            &doc,
+            &ops,
+            &Resources::for_page(&doc, page),
+            Matrix::IDENTITY,
+            &HashSet::new(),
+        )
+        .into_iter()
+        .filter_map(|item| match item.kind {
+            ItemKind::Image { id: Some(id), .. } => {
+                let stream = doc.get_object(id).unwrap().as_stream().unwrap();
+                Some((stream.content[0], item.bbox.to_array()))
+            }
+            _ => None,
+        })
+        .collect()
+    }
+
+    #[test]
+    fn images_are_arranged_and_copied_between_documents() {
+        let source = two_image_document();
+        let objects = inspect(&source, 1).unwrap().objects;
+        let request = EditRequest::ArrangeImage {
+            object_id: objects[0].id.clone(),
+            order: super::super::arrange::Order::Front,
+        };
+        let (output, report) = apply(&source, 1, &request, None).unwrap();
+        assert!(report.applied && report.message.contains("front"));
+        let order: Vec<u8> = drawn_images(&output.unwrap())
+            .iter()
+            .map(|image| image.0)
+            .collect();
+        assert_eq!(order, [200, 10]);
+
+        let clip = copy_image(&source, 1, &objects[1].id).unwrap();
+        let (mut target, _) = page_document("BT /F1 12 Tf 72 700 Td (Body) Tj ET", dictionary! {});
+        let target = saved(&mut target);
+        let pasted = paste_image(&target, 1, &clip, 18.0, -18.0).unwrap();
+        let images = drawn_images(&pasted);
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].0, 200);
+        let [x0, y0, x1, y1] = images[0].1;
+        assert!((x0 - 138.0).abs() < 1e-3 && (y0 - 102.0).abs() < 1e-3);
+        assert!((x1 - 188.0).abs() < 1e-3 && (y1 - 152.0).abs() < 1e-3);
+        assert!(text_of(&pasted, 1).contains("Body"));
+        // The pasted image can itself be arranged.
+        let id = inspect(&pasted, 1)
+            .unwrap()
+            .objects
+            .into_iter()
+            .find(|object| object.kind == "image")
+            .unwrap()
+            .id;
+        let back = EditRequest::ArrangeImage {
+            object_id: id,
+            order: super::super::arrange::Order::Back,
+        };
+        assert!(apply(&pasted, 1, &back, None).is_ok());
+        assert!(copy_image(&source, 1, "stale:0").is_err());
     }
 
     #[test]

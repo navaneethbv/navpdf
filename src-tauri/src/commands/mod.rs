@@ -1268,7 +1268,7 @@ mod tests {
         assert_eq!(
             views
                 .iter()
-                .filter(|r| r.path == PathBuf::from("/f50.pdf"))
+                .filter(|r| r.path == std::path::Path::new("/f50.pdf"))
                 .count(),
             1
         );
