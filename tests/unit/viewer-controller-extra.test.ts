@@ -69,6 +69,7 @@ vi.mock("../../src/services/native", () => ({
   native: false,
   markDirty: vi.fn(async () => {}),
   rememberPage: vi.fn(async () => {}),
+  rememberView: vi.fn(async () => {}),
   commitWorkingRevision: vi.fn(async () => "rev-mock"),
 }));
 

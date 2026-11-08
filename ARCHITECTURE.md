@@ -104,6 +104,8 @@ macOS OCR invokes Apple Vision through `src-tauri/src/ocr/vision.rs` and the com
 The native boundary returns text, normalized line geometry, confidence and language information.
 ImageIO uses a separate Swift bridge for bounded HEIC/HEIF and multipage TIFF import.
 The browser preview and unsupported platforms report that the local engine is unavailable.
+An optional installed Tesseract, chosen in Settings and off by default, runs through `src-tauri/src/ocr/tesseract.rs` as a separate process under the limits in [ADR 0021](docs/adr/0021-presentation-pinned-tools-3d-and-external-ocr.md).
+Recognition images can be turned upright and straightened first; `src/features/ocr/page-geometry.ts` maps word boxes back onto the rendered page.
 The acceptance corpus measures word error rate, character error rate and box geometry instead of substituting fixed sample text.
 OCR results become invisible PDF text rather than replacing scans with visible recognized text.
 Six native corpus samples passed in the dated verification record.

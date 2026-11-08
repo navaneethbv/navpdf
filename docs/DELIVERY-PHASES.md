@@ -30,7 +30,13 @@ Batch 7's editing part adds sign-here and picture stamps, watermarks and backgro
 Batch 8 adds a local trusted-certificate list, certificate details, changes after signing with certification checks, opening a signed version and visible signature appearances under [ADR 0018](adr/0018-local-signature-trust-and-inspection.md).
 Batch 9 adds a Tags and Reading Order dialog with tag properties, reordering, artifacts, untagged content and automatic tagging under [ADR 0019](adr/0019-tag-editing-and-autotagging.md).
 Batch 10's PDF/A part adds PDF/A-2 and PDF/A-3 checks and conversion, sRGB output intents and a standards panel under [ADR 0020](adr/0020-pdfa-validation-and-conversion.md); its actions part adds guided actions that run saved or built-in step sequences on the open document or on several files.
-On November 8 the user asked for every capability added upstream since October 21; the [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) plans batches 12 to 17 and records each feature's status.
+On November 8 the user asked for every capability added upstream since October 21; the [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) records each feature's scope, limits and status.
+Batch 12 adds Markdown export, a recent-file limit, per-file view restoring, layer reset, compare filters and header and footer shrinking.
+Batch 13 adds comment multi-selection, copy and paste, rotation-aware nudging, drag previews, reshape handles, Shift ortho drawing, part opacity, text-box border shapes and keeping drawing tools selected.
+Batch 14 adds bookmark cut, copy and paste, bookmark JSON exchange, bookmarks from text styles, comment import from another PDF and export of selected comments.
+Batch 15 adds image arranging and copy and paste, superscript and subscript text, field grids and Bates numbering across files.
+Batch 16 adds PDF version compatibility, object stream control, CCITT Group 4 images, OCR straightening and turn detection, a low-confidence review and rich-text copying.
+Batch 17 adds Present mode, pinned tools, 3D model authoring and listing and an optional installed Tesseract engine under [ADR 0021](adr/0021-presentation-pinned-tools-3d-and-external-ocr.md).
 
 ## Phase status and remaining gates
 
@@ -59,6 +65,7 @@ Reopened phases stay open until their remaining native and independent-reader ga
    Only tool-search interaction and the initial-view workflow have native development-build evidence; initial view has independent Preview inspection.
    Poster output has independent service-level checks, while XFDF, ZIP splits, accessibility reports and all second-batch native workflows remain open.
 3. Finish the per-entry PDFCraft comparison, map source/tests and deliberate exclusions, then scope remaining compatible implementations in delivery order.
+   Batches 12 to 17 need native save, close and reopen checks in NavPDF and Preview, Acrobat checks for 3D annotations, and Tesseract checks on Windows and Linux.
 4. Renew combined form, signature-storage, revision, OCR and save/recovery workflows on the current native build.
    Include rotated/cropped pages, mixed sizes, non-ASCII text, long-lived sessions and independent appearance checks.
 5. Complete Phase 9 release gates against that candidate without treating automated acceptance scripts as GUI or distribution acceptance.

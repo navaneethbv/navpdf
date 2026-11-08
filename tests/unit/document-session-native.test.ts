@@ -36,6 +36,7 @@ vi.mock("../../src/services/native", () => ({
   markDirty: vi.fn(async () => {}),
   discardRecovery: vi.fn(async () => {}),
   rememberPage: vi.fn(async () => {}),
+  rememberView: vi.fn(async () => {}),
   writeRecovery: vi.fn(async () => {}),
   saveDocument: vi.fn(async () => ({ name: "test.pdf", size: 100 })),
   savePreferences: vi.fn(async () => {}),
