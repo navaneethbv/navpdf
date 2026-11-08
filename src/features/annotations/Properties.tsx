@@ -1,4 +1,4 @@
-import type { ShapeKind } from "../../types/document";
+import type { Comment, ShapeKind } from "../../types/document";
 import { useState, useEffect } from "react";
 import { X, Circle, Eraser, Highlighter, Info, LockKeyhole, Square, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
@@ -6,6 +6,7 @@ import type { ViewerController } from "../viewer/controller";
 import { formatBytes } from "../compress/CompressDialog";
 import { LINE_ENDINGS, type LineEnding } from "../../services/pdf/annotation-appearance";
 import { savePreferences } from "../../services/native";
+import type { TextBoxShape, TextBoxStyle } from "../../services/pdf/text-box-style";
 
 const ENDING_LABELS: Record<LineEnding, string> = {
   None: "None",
@@ -21,6 +22,161 @@ const ENDING_LABELS: Record<LineEnding, string> = {
 };
 const SHAPE_TYPES = new Set(["Square", "Circle", "Line", "Arrow", "PolyLine", "Polygon"]);
 const LINE_TYPES = new Set(["Line", "Arrow", "PolyLine"]);
+/** Shapes with a line and a fill, each at an opacity of its own. */
+const PART_TYPES = new Set(["Square", "Circle", "Polygon"]);
+
+function hexColor(color: [number, number, number]) {
+  return `#${color
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+function rgbOf(hex: string): [number, number, number] {
+  return [
+    Number.parseInt(hex.slice(1, 3), 16) / 255,
+    Number.parseInt(hex.slice(3, 5), 16) / 255,
+    Number.parseInt(hex.slice(5, 7), 16) / 255,
+  ];
+}
+
+/** A text box's border shape and the opacity of its text, border and fill. */
+function TextBoxStyleControls({
+  comment,
+  busy,
+  onChange,
+}: Readonly<{
+  comment: Comment;
+  busy: boolean;
+  onChange: (style: TextBoxStyle) => void;
+}>) {
+  const start = comment.opacity ?? 1;
+  const [text, setText] = useState(start);
+  const [border, setBorder] = useState(comment.strokeOpacity ?? start);
+  const [fillOpacity, setFillOpacity] = useState(comment.fillOpacity ?? start);
+  const commit = () => onChange({ textOpacity: text, borderOpacity: border, fillOpacity });
+  const slider = (label: string, value: number, set: (value: number) => void) => (
+    <label className="range-label">
+      {label}{" "}
+      <input
+        type="range"
+        min="0.05"
+        max="1"
+        step="0.05"
+        aria-label={label}
+        value={value}
+        disabled={busy}
+        onChange={(event) => set(Number(event.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+      />
+      <span>{Math.round(value * 100)}%</span>
+    </label>
+  );
+  return (
+    <>
+      <label>
+        Border shape{" "}
+        <select
+          aria-label="Text box border shape"
+          value={comment.borderShape ?? "rectangle"}
+          disabled={busy}
+          onChange={(event) => onChange({ shape: event.target.value as TextBoxShape })}
+        >
+          <option value="rectangle">Rectangle</option>
+          <option value="oval">Oval</option>
+          <option value="circle">Circle</option>
+        </select>
+      </label>
+      {slider("Text opacity", text, setText)}
+      {slider("Border opacity", border, setBorder)}
+      {slider("Fill opacity", fillOpacity, setFillOpacity)}
+      <p className="muted">
+        NavPDF redraws the text box in Helvetica so every reader shows the shape and opacities.
+      </p>
+    </>
+  );
+}
+
+/** A shape's fill colour and the separate opacity of its line and its fill. */
+function PartStyle({
+  shape,
+  busy,
+  onChange,
+}: Readonly<{
+  shape: Comment;
+  busy: boolean;
+  onChange: (patch: {
+    fillColor?: [number, number, number] | null;
+    strokeOpacity?: number;
+    fillOpacity?: number;
+  }) => void;
+}>) {
+  const [line, setLine] = useState(shape.strokeOpacity ?? shape.opacity ?? 1);
+  const [fill, setFill] = useState(shape.fillOpacity ?? shape.opacity ?? 1);
+  const filled = !!shape.fillColor;
+  return (
+    <>
+      <label className="range-label">
+        Line opacity{" "}
+        <input
+          type="range"
+          min="0.05"
+          max="1"
+          step="0.05"
+          aria-label="Line opacity"
+          value={line}
+          disabled={busy}
+          onChange={(event) => setLine(Number(event.target.value))}
+          onPointerUp={() => onChange({ strokeOpacity: line, fillOpacity: fill })}
+          onKeyUp={() => onChange({ strokeOpacity: line, fillOpacity: fill })}
+        />
+        <span>{Math.round(line * 100)}%</span>
+      </label>
+      <div className="property-row">
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={filled}
+            disabled={busy}
+            onChange={(event) =>
+              onChange({ fillColor: event.target.checked ? (shape.color ?? [1, 1, 0]) : null })
+            }
+          />{" "}
+          Fill
+        </label>
+        {filled && (
+          <input
+            type="color"
+            aria-label="Fill color"
+            value={hexColor(shape.fillColor!)}
+            disabled={busy}
+            onChange={(event) => onChange({ fillColor: rgbOf(event.target.value) })}
+          />
+        )}
+      </div>
+      <label className="range-label">
+        Fill opacity{" "}
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          aria-label="Fill opacity"
+          value={fill}
+          disabled={busy || !filled}
+          onChange={(event) => setFill(Number(event.target.value))}
+          onPointerUp={() => onChange({ strokeOpacity: line, fillOpacity: fill })}
+          onKeyUp={() => onChange({ strokeOpacity: line, fillOpacity: fill })}
+        />
+        <span>{Math.round(fill * 100)}%</span>
+      </label>
+    </>
+  );
+}
 const CLOUDY_TYPES = new Set(["Square", "Circle", "Polygon"]);
 
 /** Saves a selected annotation's style as the starting style for new ones of its kind. */
@@ -131,24 +287,33 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
             />
             <span>{localWidth.toFixed(1)} pt</span>
           </label>
-          <label className="range-label">
-            Opacity{" "}
-            <input
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.05"
-              aria-label="Selected annotation opacity"
-              value={localOpacity}
-              onChange={(event) => setLocalOpacity(Number(event.target.value))}
-              onPointerUp={() => {
-                void controller.updateSelectedAnnotation({
-                  opacity: localOpacity,
-                });
-              }}
+          {PART_TYPES.has(selectedShape.type) ? (
+            <PartStyle
+              key={selectedShape.id}
+              shape={selectedShape}
+              busy={s.busy}
+              onChange={(patch) => void controller.updateSelectedAnnotation(patch)}
             />
-            <span>{Math.round(localOpacity * 100)}%</span>
-          </label>
+          ) : (
+            <label className="range-label">
+              Opacity{" "}
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                aria-label="Selected annotation opacity"
+                value={localOpacity}
+                onChange={(event) => setLocalOpacity(Number(event.target.value))}
+                onPointerUp={() => {
+                  void controller.updateSelectedAnnotation({
+                    opacity: localOpacity,
+                  });
+                }}
+              />
+              <span>{Math.round(localOpacity * 100)}%</span>
+            </label>
+          )}
           {LINE_TYPES.has(selectedShape.type) && (
             <div className="property-row">
               {(["Start", "End"] as const).map((end, index) => (
@@ -299,6 +464,15 @@ export function Properties({ controller }: Readonly<{ controller: ViewerControll
             }}
           />
         </label>
+      );
+    if (selected.type === "FreeText" && !selected.callout)
+      return (
+        <TextBoxStyleControls
+          key={selected.id}
+          comment={selected}
+          busy={s.busy}
+          onChange={(style) => void controller.styleSelectedTextBox(style)}
+        />
       );
     return <p className="muted">This annotation can be navigated and deleted here.</p>;
   };

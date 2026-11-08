@@ -562,6 +562,11 @@ function drawing(dict: PDFDict, subtype: string, rect: Rect): PDFOperator[] | nu
 }
 
 export const GENERATED_APPEARANCE = "NavPDFAppearance";
+/** NavPDF's own keys for a shape's separate line and fill opacity. */
+export const STROKE_OPACITY = "NavPDFStrokeOpacity";
+export const FILL_OPACITY = "NavPDFFillOpacity";
+/** NavPDF's key for the oval or circle drawn around a text box's text. */
+export const BORDER_SHAPE = "NavPDFBorderShape";
 
 /**
  * Builds and registers a normal appearance for a supported annotation without one.
@@ -574,14 +579,18 @@ export function generateAppearance(doc: PDFDocument, dict: PDFDict): PDFRef | nu
   if (!rect || rect[2] - rect[0] <= 0 || rect[3] - rect[1] <= 0) return null;
   const operators = drawing(dict, subtype.decodeText(), rect);
   if (!operators) return null;
-  const opacity = Math.min(1, Math.max(0, numberOf(dict, "CA", 1)));
+  const unit = (value: number) => Math.min(1, Math.max(0, value));
+  const opacity = unit(numberOf(dict, "CA", 1));
+  // Separate line and fill opacity use the stroking and non-stroking alpha of one state.
+  const stroking = unit(numberOf(dict, STROKE_OPACITY, opacity));
+  const filling = unit(numberOf(dict, FILL_OPACITY, opacity));
   const highlight = subtype.decodeText() === "Highlight";
   const state =
-    opacity < 1 || highlight
+    stroking < 1 || filling < 1 || highlight
       ? doc.context.obj({
           Type: "ExtGState",
-          CA: opacity,
-          ca: opacity,
+          CA: stroking,
+          ca: filling,
           ...(highlight ? { BM: "Multiply" } : {}),
         })
       : null;

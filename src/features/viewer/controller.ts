@@ -30,7 +30,7 @@ import type {
   LastView,
 } from "../../types/document";
 import type { DocumentRevision } from "../../types/operations";
-import { useWorkspace } from "../../stores/workspace";
+import { selectedCommentIds, useWorkspace } from "../../stores/workspace";
 import { positionSearchCursor } from "../search/select-result";
 import { boundedZoom, snippet, searchCriteriaKey } from "../../utils/search";
 import {
@@ -41,6 +41,21 @@ import {
   rememberView,
 } from "../../services/native";
 import { pruneDocument } from "../../services/engine";
+import {
+  copyAnnotations,
+  deleteAnnotations,
+  moveAnnotations,
+  pasteAnnotations,
+  reshapeAnnotation,
+} from "../../services/pdf/comment-batch";
+import { screenToPageOffset } from "../annotations/nudge";
+import { styleTextBox, type TextBoxStyle } from "../../services/pdf/text-box-style";
+import {
+  clipboardText,
+  getCommentClipboard,
+  nextPasteOffset,
+  setCommentClipboard,
+} from "../annotations/comment-clipboard";
 import { loadPdfFromBytes } from "../../services/pdf";
 import { RevisionHistory } from "../../services/revision-history";
 import { MutationQueue } from "../../services/mutation-queue";
@@ -1447,11 +1462,40 @@ export class ViewerController {
       useWorkspace.getState().set({ busy: false });
     }
   }
-  selectAnnotation(id: string) {
-    const comment = useWorkspace.getState().comments.find((item) => item.id === id);
+  /**
+   * Select a comment. "toggle" adds it to or takes it out of the selection, and "range" selects
+   * the comments listed from the one with the handles to this one.
+   */
+  selectAnnotation(id: string, mode: "replace" | "toggle" | "range" = "replace") {
+    const state = useWorkspace.getState();
+    const comment = state.comments.find((item) => item.id === id);
     if (!comment) return;
-    useWorkspace.getState().set({
+    if (mode !== "replace" && state.selectedAnnotationId) {
+      const current = selectedCommentIds(state);
+      let next: string[];
+      if (mode === "toggle") {
+        next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      } else {
+        const order = state.comments.map((item) => item.id);
+        const from = order.indexOf(state.selectedAnnotationId);
+        const to = order.indexOf(id);
+        next =
+          from < 0 || to < 0
+            ? [id]
+            : order.slice(Math.min(from, to), Math.max(from, to) + 1).filter((item) => item !== id);
+        next.push(id);
+      }
+      const primary = next.includes(id) ? id : (next.at(-1) ?? null);
+      state.set({
+        selectedAnnotationIds: next,
+        selectedAnnotationId: primary,
+        hasSelection: primary !== null,
+      });
+      return;
+    }
+    state.set({
       selectedAnnotationId: id,
+      selectedAnnotationIds: [id],
       hasSelection: true,
       sidebar: "comments",
       page: comment.page,
@@ -1459,6 +1503,10 @@ export class ViewerController {
     });
     this.setTool("select");
     this.goTo(comment.page);
+  }
+  /** Every selected comment, the one with the handles last. */
+  selectedIds() {
+    return selectedCommentIds(useWorkspace.getState());
   }
   private async applyAnnotationEdit(input: Parameters<typeof updateAnnotation>[1], status: string) {
     if (!this.pdf) throw new Error("Open a PDF before editing an annotation.");
@@ -1478,10 +1526,16 @@ export class ViewerController {
     await this.applyAnnotationEdit({ id, ...patch }, "Annotation properties updated");
   }
   async moveSelectedAnnotation(dx: number, dy: number) {
-    const selected = useWorkspace
-      .getState()
-      .comments.find((item) => item.id === useWorkspace.getState().selectedAnnotationId);
-    if (!selected?.rect) return;
+    const state = useWorkspace.getState();
+    const ids = selectedCommentIds(state);
+    const selected = state.comments.find((item) => item.id === state.selectedAnnotationId);
+    if (!selected) return;
+    // Rectangles, ovals and lines move through their own geometry; anything else, or several
+    // comments, moves every stored point together.
+    if (ids.length > 1 || !selected.rect || selected.vertices || selected.type === "Ink") {
+      await this.moveAnnotations(ids, dx, dy);
+      return;
+    }
     const [x1, y1, x2, y2] = selected.rect;
     if (selected.line) {
       const [sx, sy, ex, ey] = selected.line;
@@ -1494,6 +1548,101 @@ export class ViewerController {
         rect: [x1 + dx, y1 + dy, x2 + dx, y2 + dy],
       });
     }
+  }
+  /** Move the selected comments by screen directions, so up is up however the page is turned. */
+  async nudgeSelected(right: number, down: number) {
+    const state = useWorkspace.getState();
+    const selected = state.comments.find((item) => item.id === state.selectedAnnotationId);
+    if (!selected || !this.pdf) return;
+    const page = await this.pdf.getPage(selected.page);
+    const rotation = (page.rotate ?? 0) + (this.viewer.pagesRotation ?? 0);
+    const [dx, dy] = screenToPageOffset(right, down, rotation);
+    await this.moveSelectedAnnotation(dx, dy);
+  }
+  /** Move comments by an offset in PDF points as one undo step. */
+  async moveAnnotations(ids: string[], dx: number, dy: number) {
+    if (!this.pdf || ids.length === 0) return;
+    const state = useWorkspace.getState();
+    const primary = state.selectedAnnotationId;
+    const selection = state.selectedAnnotationIds;
+    return this.mutate("Comments moved", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const result = await moveAnnotations(bytes, ids, dx, dy);
+      const label =
+        result.skipped > 0
+          ? `${result.moved} moved; text markup and locked comments stay in place`
+          : result.moved === 1
+            ? "Comment moved"
+            : `${result.moved} comments moved`;
+      await this.replaceWithBytes(result.bytes, label, { preMutationBytes: bytes });
+      useWorkspace.getState().set({
+        selectedAnnotationId: primary,
+        selectedAnnotationIds: selection,
+        hasSelection: !!primary,
+      });
+    });
+  }
+  /** Change the selected text box's border shape or the opacity of its parts. */
+  async styleSelectedTextBox(style: TextBoxStyle) {
+    const id = useWorkspace.getState().selectedAnnotationId;
+    if (!id || !this.pdf) return;
+    return this.mutate("Text box style updated", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const updated = await styleTextBox(bytes, id, style);
+      await this.replaceWithBytes(updated, "Text box style updated", { preMutationBytes: bytes });
+      useWorkspace.getState().set({ selectedAnnotationId: id, hasSelection: true });
+    });
+  }
+  /** Move one end of a line or one corner of a polygon as one undo step. */
+  async reshapeSelectedAnnotation(index: number, point: [number, number]) {
+    const id = useWorkspace.getState().selectedAnnotationId;
+    if (!id || !this.pdf) return;
+    return this.mutate("Comment reshaped", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const updated = await reshapeAnnotation(bytes, id, index, point);
+      await this.replaceWithBytes(updated, "Comment reshaped", { preMutationBytes: bytes });
+      useWorkspace.getState().set({ selectedAnnotationId: id, hasSelection: true });
+    });
+  }
+  /**
+   * The text for the system clipboard when the selected comments are copied, available at once
+   * so a copy event can set it before the copy itself completes.
+   */
+  commentClipboardText() {
+    const state = useWorkspace.getState();
+    const ids = selectedCommentIds(state);
+    const texts = ids.map((id) => state.comments.find((item) => item.id === id)?.text ?? "");
+    return clipboardText(ids.length, texts);
+  }
+  /** Copy the selected comments with their pop-ups and replies to the comment clipboard. */
+  async copySelectedComments(marker = this.commentClipboardText()) {
+    const ids = this.selectedIds();
+    if (!this.pdf || ids.length === 0) return;
+    const clip = await copyAnnotations(await this.pdf.saveDocument(), ids);
+    setCommentClipboard(clip, marker);
+    useWorkspace.getState().set({
+      status: `${clip.count} comment${clip.count === 1 ? "" : "s"} copied`,
+      commentClipboardCount: clip.count,
+    });
+  }
+  /** Paste copied comments on the current page, each paste stepped 18 points further along. */
+  async pasteComments() {
+    const clip = getCommentClipboard();
+    const state = useWorkspace.getState();
+    if (!this.pdf || !clip || !state.document) return;
+    const page = state.page;
+    const offset = nextPasteOffset(state.document.id, page);
+    return this.mutate("Comments pasted", async () => {
+      const bytes = await this.pdf!.saveDocument();
+      const result = await pasteAnnotations(bytes, clip, page, offset);
+      const label = `${clip.count} comment${clip.count === 1 ? "" : "s"} pasted`;
+      await this.replaceWithBytes(result.bytes, label, { preMutationBytes: bytes });
+      useWorkspace.getState().set({
+        selectedAnnotationIds: result.ids,
+        selectedAnnotationId: result.ids.at(-1) ?? null,
+        hasSelection: result.ids.length > 0,
+      });
+    });
   }
   async resizeSelectedAnnotation(dw: number, dh: number) {
     const selected = useWorkspace
@@ -1520,11 +1669,16 @@ export class ViewerController {
     }
   }
   async deleteSelectedAnnotation() {
+    const ids = this.selectedIds();
     const id = useWorkspace.getState().selectedAnnotationId;
     if (!id || !this.pdf) return;
-    return this.mutate("Annotation deleted", async () => {
+    const label = ids.length > 1 ? `${ids.length} comments deleted` : "Annotation deleted";
+    return this.mutate(label, async () => {
       const bytes = await this.pdf!.saveDocument();
-      let deleted = await deleteAnnotation(bytes, id);
+      let deleted =
+        ids.length > 1
+          ? (await deleteAnnotations(bytes, ids)).bytes
+          : await deleteAnnotation(bytes, id);
       if (native) {
         try {
           deleted = await pruneDocument(deleted);
@@ -1536,11 +1690,12 @@ export class ViewerController {
           status: "Deleted objects remain in the file until saved from the desktop app.",
         });
       }
-      await this.replaceWithBytes(deleted, "Annotation deleted", {
+      await this.replaceWithBytes(deleted, label, {
         preMutationBytes: bytes,
       });
       useWorkspace.getState().set({
         selectedAnnotationId: null,
+        selectedAnnotationIds: [],
         hasSelection: false,
       });
     });

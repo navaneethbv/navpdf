@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 import { pageAt, pdfPoint } from "./page-pointer";
+import { orthoPoint } from "./ortho";
 import { measurementText, type MeasureKind, type Point } from "../../services/pdf/measure";
 
 interface Mark {
@@ -108,10 +109,17 @@ export function MeasureTool({
     }
   };
 
-  const markAt = async (event: { clientX: number; clientY: number }, element: HTMLElement) => ({
-    client: [event.clientX, event.clientY] as Point,
-    pdf: await pdfPoint(controller, element, event.clientX, event.clientY),
-  });
+  /** The point under the pointer; with Shift, level or plumb with the previous point. */
+  const markAt = async (
+    event: { clientX: number; clientY: number; shiftKey?: boolean },
+    element: HTMLElement,
+  ): Promise<Mark> => {
+    const client: Point = [event.clientX, event.clientY];
+    const pdf = await pdfPoint(controller, element, event.clientX, event.clientY);
+    const last = latest.current.at(-1);
+    if (!event.shiftKey || !last) return { client, pdf };
+    return { client: orthoPoint(last.client, client), pdf: orthoPoint(last.pdf, pdf) };
+  };
 
   const addPoint = async (event: PointerEvent) => {
     if (event.button !== 0 || useWorkspace.getState().busy || !controller.pdf) return;

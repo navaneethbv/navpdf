@@ -70,6 +70,13 @@ interface Workspace {
   comments: Comment[];
   redactionSelection: import("../types/document").SelectedTextGeometry[];
   selectedAnnotationId: string | null;
+  /**
+   * Comments selected together with `selectedAnnotationId`, which has the handles. Ignored when
+   * it does not contain that comment, so code that sets a single selection stays correct.
+   */
+  selectedAnnotationIds: string[];
+  /** How many comments are on the comment clipboard, shared by every tab. */
+  commentClipboardCount: number;
   renderedPages: number;
   firstRenderMs: number | null;
   highlightColor: string;
@@ -122,6 +129,7 @@ const cleanDocument = {
   canGoForward: false,
   redactionSelection: [],
   selectedAnnotationId: null,
+  selectedAnnotationIds: [],
   results: [],
   searchCount: 0,
   searchPending: false,
@@ -168,6 +176,7 @@ export const useWorkspace = create<Workspace>((set) => ({
   toolMode: null,
   activeModal: null,
   quickRailVisible: true,
+  commentClipboardCount: 0,
   set: (patch) => set({ ...(patch.sidebar ? { navigationVisible: true } : {}), ...patch }),
   reset: () =>
     set({
@@ -181,3 +190,13 @@ export const useWorkspace = create<Workspace>((set) => ({
       error: "",
     }),
 }));
+
+/** Every selected comment, the one with the handles last. */
+export function selectedCommentIds(
+  state: Pick<Workspace, "selectedAnnotationId" | "selectedAnnotationIds">,
+): string[] {
+  const primary = state.selectedAnnotationId;
+  if (!primary) return [];
+  if (!state.selectedAnnotationIds.includes(primary)) return [primary];
+  return [...state.selectedAnnotationIds.filter((id) => id !== primary), primary];
+}

@@ -49,6 +49,7 @@ import { stripExternalPageLinks } from "./pdf/link-targets.ts";
 import { walkEmbeddedFiles } from "./pdf/name-tree.ts";
 import { mergePreservingStructure } from "./pdf/merge.ts";
 import { visibleBox, clampRectToBox } from "./pdf/page-box.ts";
+import { FILL_OPACITY, STROKE_OPACITY } from "./pdf/annotation-appearance.ts";
 import type { ShapeKind } from "../types/document";
 import type { MergeInputItem, OperationManifestItem, OcrPageResult } from "../types/operations";
 
@@ -426,6 +427,51 @@ export interface AnnotationUpdateInput {
   lineEndings?: [LineEnding, LineEnding];
   /** Cloudy applies to rectangles, ovals and polygons. */
   borderStyle?: "solid" | "dashed" | "cloudy";
+  /** Interior colour of a rectangle, oval or polygon; null removes the fill. */
+  fillColor?: [number, number, number] | null;
+  /** Separate opacity of a rectangle's, oval's or polygon's line and fill. */
+  strokeOpacity?: number;
+  fillOpacity?: number;
+}
+
+/** Shapes with a line and a fill that NavPDF can draw at an opacity each. */
+export const PART_OPACITY_SUBTYPES = new Set(["Square", "Circle", "Polygon"]);
+
+/** Applies a shape's fill colour and part opacities. Returns true when one changed. */
+function updatePartStyle(
+  annotation: PDFDict,
+  context: PDFContext,
+  input: AnnotationUpdateInput,
+): boolean {
+  if (
+    input.fillColor === undefined &&
+    input.strokeOpacity === undefined &&
+    input.fillOpacity === undefined
+  )
+    return false;
+  const subtype = annotation.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText() ?? "";
+  if (!PART_OPACITY_SUBTYPES.has(subtype))
+    throw new Error("Only rectangles, ovals and polygons have a fill.");
+  if (input.fillColor === null) annotation.delete(PDFName.of("IC"));
+  else if (input.fillColor) {
+    if (!input.fillColor.every(finite)) throw new Error("Fill color is invalid.");
+    annotation.set(
+      PDFName.of("IC"),
+      context.obj(input.fillColor.map((channel) => clamp(channel, 0, 1))),
+    );
+  }
+  for (const [value, key] of [
+    [input.strokeOpacity, STROKE_OPACITY],
+    [input.fillOpacity, FILL_OPACITY],
+  ] as const) {
+    if (value === undefined) continue;
+    if (!finite(value)) throw new Error("Annotation opacity is invalid.");
+    annotation.set(PDFName.of(key), PDFNumber.of(clamp(value, 0, 1)));
+  }
+  // Readers that draw the shape themselves use /CA for all of it; the line's value is closest.
+  const stroke = annotation.lookupMaybe(PDFName.of(STROKE_OPACITY), PDFNumber)?.asNumber();
+  if (stroke !== undefined) annotation.set(PDFName.of("CA"), PDFNumber.of(stroke));
+  return true;
 }
 
 export function annotationIdentifier(value: unknown): string {
@@ -642,6 +688,8 @@ function updateAnnotationAppearance(
   if (input.opacity !== undefined) {
     if (!finite(input.opacity)) throw new Error("Annotation opacity is invalid.");
     annotation.set(PDFName.of("CA"), PDFNumber.of(clamp(input.opacity, 0, 1)));
+    annotation.delete(PDFName.of(STROKE_OPACITY));
+    annotation.delete(PDFName.of(FILL_OPACITY));
   }
   if (input.width !== undefined) {
     if (!finite(input.width)) throw new Error("Annotation width is invalid.");
@@ -754,9 +802,10 @@ export async function updateAnnotation(
   updateLine(found.annotation, context, box, input.line, input.width);
   updateAnnotationAppearance(found.annotation, context, input);
   const restyled = updateAnnotationStyle(found.annotation, context, input);
+  const reparted = updatePartStyle(found.annotation, context, input);
   // Endings and dashed or cloudy borders need an appearance to show alike in every reader; one
   // NavPDF drew earlier is redrawn so it follows every later change.
-  if (restyled || hasGeneratedAppearance(found.annotation)) {
+  if (restyled || reparted || hasGeneratedAppearance(found.annotation)) {
     if (restyled) fitAnnotationRect(found.annotation, context, box);
     const appearance = generateAppearance(doc, found.annotation);
     if (appearance) found.annotation.set(PDFName.of("AP"), context.obj({ N: appearance }));
@@ -823,8 +872,15 @@ export async function deleteAnnotation(
   page?: number,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(pdfBytes);
+  if (!deleteAnnotationIn(doc, id, page))
+    throw new Error("The selected annotation no longer exists.");
+  return doc.save();
+}
+
+/** Remove one annotation with its pop-up and replies from a loaded document. */
+export function deleteAnnotationIn(doc: PDFDocument, id: string, page?: number): boolean {
   const found = findAnnotation(doc, id, page);
-  if (!found) throw new Error("The selected annotation no longer exists.");
+  if (!found) return false;
 
   const annots = found.annots;
   const targetEntry = annots.get(found.index);
@@ -839,7 +895,7 @@ export async function deleteAnnotation(
   }
 
   if (annots.size() === 0) found.page.node.delete(PDFName.of("Annots"));
-  return doc.save();
+  return true;
 }
 
 export async function rotatePages(

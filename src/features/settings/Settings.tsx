@@ -383,6 +383,16 @@ export function Settings() {
               />
             </label>
           </div>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={preferences.keepAnnotationTool}
+              onChange={(e) => {
+                patch({ keepAnnotationTool: e.target.checked });
+              }}
+            />{" "}
+            Keep drawing tools selected after each shape
+          </label>
           <h3>OCR</h3>
           <div className="form-columns">
             <label>

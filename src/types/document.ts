@@ -93,6 +93,8 @@ export interface Preferences {
   recentLimit: number;
   /** Reopen a file at the page, zoom and layout it was last shown with. */
   restoreLastView: boolean;
+  /** Keep a drawing tool selected after each shape, instead of returning to Select. */
+  keepAnnotationTool: boolean;
 }
 
 /** The most recent files that can be kept. */
@@ -178,6 +180,13 @@ export interface Comment {
   opacity?: number;
   width?: number;
   vertices?: number[][];
+  /** Interior colour of a rectangle, oval or polygon. */
+  fillColor?: [number, number, number];
+  /** Separate line and fill opacity, when set. */
+  strokeOpacity?: number;
+  fillOpacity?: number;
+  /** An oval or circle drawn around a text box's text. */
+  borderShape?: "oval" | "circle";
   callout?: number[];
   stampName?: string;
   replyTo?: string;
@@ -226,4 +235,5 @@ export const defaultPreferences: Preferences = {
   actions: [],
   recentLimit: 15,
   restoreLastView: true,
+  keepAnnotationTool: false,
 };

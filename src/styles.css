@@ -4214,3 +4214,38 @@ p {
   padding: 0;
   border: 0;
 }
+.annotation-move-ghost {
+  position: absolute;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.annotation-move-preview {
+  position: absolute;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.annotation-reshape-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface, #fff);
+  cursor: crosshair;
+  pointer-events: auto;
+}
+.annotation-reshape-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.annotation-reshape-preview polyline {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}

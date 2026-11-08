@@ -71,6 +71,8 @@ pub struct Preferences {
     pub recent_limit: u32,
     /// Reopen a file at the page, zoom and layout it was last shown with.
     pub restore_last_view: bool,
+    /// Keep a drawing tool selected after each shape.
+    pub keep_annotation_tool: bool,
 }
 
 /// The most recent files that can be kept.
@@ -116,6 +118,7 @@ impl Default for Preferences {
             actions: Vec::new(),
             recent_limit: 15,
             restore_last_view: true,
+            keep_annotation_tool: false,
         }
     }
 }
@@ -1276,6 +1279,7 @@ mod tests {
         let parsed: Preferences = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
         assert_eq!(parsed.recent_limit, 15);
         assert!(parsed.restore_last_view);
+        assert!(!parsed.keep_annotation_tool);
         let local: LocalData = serde_json::from_str(r#"{"preferences":{},"recents":[]}"#).unwrap();
         assert!(local.views.is_empty());
     }

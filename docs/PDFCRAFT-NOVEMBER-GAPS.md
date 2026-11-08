@@ -45,15 +45,15 @@ Each row's status changes from Planned to Implemented when its code and tests la
 
 | Upstream entry | Planned NavPDF behaviour | Status |
 | --- | --- | --- |
-| `comment.multi-select` | Command-click or Shift-click adds or removes comments from the selection on the page and in the comments list; delete and move apply to all selected as one undo step. | Planned |
-| `comment.copy-paste` | Copy places the selected comments with their replies on an in-app clipboard (shared across tabs) and as text on the system clipboard; Paste adds them to the current page or the same page, offset, as one undo step. | Planned |
-| `comment.keyboard-nudge` | Arrow keys move the selected comments by one point; Shift or Command moves ten. Each press is one undo step. | Planned |
-| `comment.draw-ortho` | Holding Shift while drawing lines, arrows, connected lines, polygons and clouds keeps the segment level or plumb. | Planned |
-| `comment.reshape` | A selected line, arrow, connected line or polygon shows a handle on each end or corner; dragging one changes that point as one undo step. | Planned |
-| `comment.move-preview` | Dragging a selected comment shows its outline and a translucent copy at the destination before the move is applied. | Planned |
-| `comment.part-opacity` | Properties gains separate stroke and fill opacity for shapes, written as an appearance stream with separate graphics states. `/CA` keeps the stroke value for readers that ignore appearances. | Planned |
-| `comment.text-border-shape` | Text box border shape: rectangle, oval or circle, drawn by NavPDF's appearance generator around the text box. | Planned |
-| `comment.keep-tool-selected` | Settings and toolbar pin: keep the annotation tool active after each use; remembered across restarts. | Planned |
+| `comment.multi-select` | Command-click (Control-click) or Shift-click on the page adds or removes a comment; in the Comments list Command-click toggles and Shift-click selects the listed range. The one clicked last has the handles. Delete, Move, arrow keys and dragging act on every selected comment as one undo step. | Implemented. Text markup is selected from the list, not on the page, so it does not cover text selection. |
+| `comment.copy-paste` | Edit, Copy (or the Comments list's Copy) copies the selected comments of one page with their pop-ups and replies as a small in-memory PDF shared by every tab, and their text with a count to the system clipboard. Paste adds them to the current page at the same place, 18 points further each time, with new names, as one undo step. | Implemented. A paste counts only while the system clipboard still holds the copied text. Comments from several pages are copied one page at a time. |
+| `comment.keyboard-nudge` | Arrow keys already moved a selected comment by 1 point (Shift 10); they now follow the page's on-screen rotation, Command or Control also moves 10, and every selected comment moves. | Implemented. Moves are in points, not screen pixels. |
+| `comment.draw-ortho` | Shift keeps new lines and arrows, each side of connected lines and polygons, and measurements level or plumb with the previous point, in the preview and the saved comment; Shift also applies when dragging a reshape handle. | Implemented. Clouds are dragged as boxes, so ortho does not apply to them. |
+| `comment.reshape` | A single selected line, arrow, connected line or polygon (including clouds) shows a handle on each end or corner; dragging one shows the new outline and saves it as one undo step, refitting the rectangle and redrawing the appearance. | Implemented. Locked comments are refused. |
+| `comment.move-preview` | Dragging a selected comment shows dashed outlines and the comments themselves, rendered alone from a one-page copy holding only them, at the destination. | Implemented. Comments on several pages show outlines only. |
+| `comment.part-opacity` | Rectangles, ovals and polygons get a Fill colour and separate Line and Fill opacity, drawn with the stroking and non-stroking alpha of one graphics state; text boxes get Text, Border and Fill opacity. `/CA` holds the line or text value for readers that draw comments themselves. | Implemented. Other comments keep one opacity. |
+| `comment.text-border-shape` | Text box properties, Border shape: Rectangle, Oval through the box's corners or Circle around them. The text keeps its place through `/RD`; NavPDF redraws the box, border and text in Helvetica. | Implemented. Callouts keep a rectangle; text Helvetica cannot show is refused. |
+| `comment.keep-tool-selected` | Pin button in the annotation toolbar and a setting, kept across restarts: drawing tools stay selected after each shape instead of returning to Select. Polygon, connected-line and measurement tools already stayed active. | Implemented. |
 
 ## Batch 14: bookmarks and comment exchange
 
