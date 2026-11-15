@@ -3,7 +3,7 @@ import type { ViewerController } from "../viewer/controller";
 import { useWorkspace } from "../../stores/workspace";
 
 export interface EditResult {
-  bytes: Uint8Array;
+  bytes: Uint8Array | null;
   status: string;
 }
 
@@ -34,11 +34,13 @@ export function useDocumentEdit(controller: ViewerController | null) {
       const result = await edit(bytes);
       const changed = result instanceof Uint8Array ? result : result.bytes;
       const message = result instanceof Uint8Array ? status : result.status;
-      await controller.replaceWithBytes(changed, message, {
-        ...options,
-        expectedSource: source,
-        preMutationBytes: bytes,
-      });
+      if (changed) {
+        await controller.replaceWithBytes(changed, message, {
+          ...options,
+          expectedSource: source,
+          preMutationBytes: bytes,
+        });
+      }
       set({ status: message });
       return true;
     } catch (cause) {

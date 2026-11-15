@@ -40,6 +40,15 @@ No colour-managed comparison, press preflight, Preview or Acrobat check was run.
 
 Packaged NavPDF, macOS independent-reader acceptance, printing and hosted quality analysis were not run for this change.
 
+### PR #77 merge and quality follow-up
+
+This follow-up merges `origin/main` (`0276f69`, including `lopdf 0.47.0` and `rfd 0.18.0`) and resolves the `Cargo.toml` and npm lockfile conflicts.
+It resolves 11 Codacy findings, 3 SonarCloud findings, empty line-break text item filtering in `findExpressionMarks`, null-byte return handling in `useDocumentEdit`, `prepress` colour-operator formatting assertions updated for `lopdf 0.47.0`, and missing unit coverage for `findPattern` and `prepressDocument`.
+On unprivileged macOS with Node 24, `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm run build`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `git diff --check` pass.
+The frontend suite passes 1,231 tests across 169 files, with 84.47% statements, 76.48% branches, 82.91% functions and 87.5% lines, and coverage thresholds pass.
+The native Rust suite passes all 172 non-ignored tests (with 2 tests ignored by default), including the unprivileged read-only directory checks in `filesystem` and `signatures`.
+Packaged NavPDF, macOS independent-reader acceptance and physical printing were not run for this follow-up.
+
 ## November 8 PDFCraft November gap batches 12 to 17
 
 The [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) compares upstream `5644d56` with `1cbacab` and records each addition's scope and limits; [ADR 0021](adr/0021-presentation-pinned-tools-3d-and-external-ocr.md) records batch 17's decisions.

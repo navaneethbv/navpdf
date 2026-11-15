@@ -31,7 +31,10 @@ describe("marks from a typed expression", () => {
   it("joins a page's text items by one space and never crosses a page", async () => {
     const seen: string[] = [];
     const marks = await findExpressionMarks(
-      pdf([[item("Case", 100, 700), item("AB-1234 closed", 100, 680)], [item("AB-", 50, 500)]]),
+      pdf([
+        [item("Case", 100, 700), item("", 140, 700), item("AB-1234 closed", 100, 680)],
+        [item("AB-", 50, 500)],
+      ]),
       finder(/Case AB-\d{4}/g, seen),
     );
     expect(seen).toEqual(["Case AB-1234 closed", "AB-"]);

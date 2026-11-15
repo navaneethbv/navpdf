@@ -220,7 +220,9 @@ export async function findExpressionMarks(
   for await (const [page, source] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
     if (signal?.aborted) return [];
     const content = await source.getTextContent();
-    const items = content.items.filter(isTextItem);
+    const items = content.items.filter(
+      (item): item is TextItemLike => isTextItem(item) && item.str.length > 0,
+    );
     const starts: number[] = [];
     let text = "";
     for (const item of items) {

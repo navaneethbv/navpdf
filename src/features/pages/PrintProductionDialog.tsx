@@ -31,7 +31,11 @@ function pagesOf(range: string, total: number) {
   return range.trim() ? parsePageRange(range, total).map((index) => index + 1) : [];
 }
 
-class NothingChanged extends Error {}
+function taskLabels(task: Task): [string, string] {
+  if (task === "hairlines") return ["Fix Hairlines", "Hairlines widened"];
+  if (task === "colors") return ["Convert Colours", "Colours converted"];
+  return ["Add Marks", "Printer marks added"];
+}
 
 /** Printer marks, hairline widening and device colour conversion, run by the local engine. */
 export function PrintProductionDialog({ controller, onClose }: Readonly<DocumentToolProps>) {
@@ -39,13 +43,9 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
   const name = useWorkspace((state) => state.document?.name ?? "");
   const [task, setTask] = useState<Task>("marks");
   const [range, setRange] = useState("");
-  const [marks, setMarks] = useState<Record<MarkKey, boolean>>({
-    trimMarks: true,
-    bleedMarks: false,
-    registrationMarks: true,
-    colorBars: false,
-    pageInformation: false,
-  });
+  const [marks, setMarks] = useState<Set<MarkKey>>(
+    () => new Set<MarkKey>(["trimMarks", "registrationMarks"]),
+  );
   const [weight, setWeight] = useState("0.25");
   const [threshold, setThreshold] = useState("0.216");
   const [width, setWidth] = useState("0.72");
@@ -57,18 +57,11 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
 
   const run = async (build: () => PrepressEdit, status: string) => {
     setReport(null);
-    let outcome: PrepressReport | null = null;
-    const applied = await apply(status, async (bytes) => {
+    await apply(status, async (bytes) => {
       const result = await prepressDocument(bytes, build());
-      outcome = result.report;
-      // Nothing to record in the undo history when the engine changed nothing.
-      if (!result.bytes) throw new NothingChanged(result.report.message);
+      setReport(result.report);
       return { bytes: result.bytes, status: result.report.message };
     });
-    if (applied || outcome) {
-      setError("");
-      setReport(outcome);
-    }
   };
 
   const edit = (): PrepressEdit => {
@@ -79,7 +72,11 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
     return {
       kind: "addPrinterMarks",
       options: {
-        ...marks,
+        trimMarks: marks.has("trimMarks"),
+        bleedMarks: marks.has("bleedMarks"),
+        registrationMarks: marks.has("registrationMarks"),
+        colorBars: marks.has("colorBars"),
+        pageInformation: marks.has("pageInformation"),
         weight: Number(weight),
         fileName: name,
         date: new Date().toISOString().slice(0, 10),
@@ -88,11 +85,7 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
     };
   };
 
-  const labels: Record<Task, [string, string]> = {
-    marks: ["Add Marks", "Printer marks added"],
-    hairlines: ["Fix Hairlines", "Hairlines widened"],
-    colors: ["Convert Colours", "Colours converted"],
-  };
+  const [primaryLabel, statusLabel] = taskLabels(task);
 
   return (
     <ToolDialog
@@ -101,18 +94,20 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
       onClose={onClose}
       busy={busy}
       error={error}
-      primaryLabel={labels[task][0]}
-      primaryDisabled={!native || (task === "marks" && !Object.values(marks).some(Boolean))}
-      onPrimary={() => void run(edit, labels[task][1])}
+      primaryLabel={primaryLabel}
+      primaryDisabled={!native || (task === "marks" && marks.size === 0)}
+      onPrimary={() => {
+        void run(edit, statusLabel);
+      }}
       secondary={
         task === "marks" ? (
           <button
             type="button"
             className="button-secondary"
             disabled={busy || !native}
-            onClick={() =>
-              void run(() => ({ kind: "removePrinterMarks" }), "Printer marks removed")
-            }
+            onClick={() => {
+              void run(() => ({ kind: "removePrinterMarks" }), "Printer marks removed");
+            }}
           >
             Remove Marks
           </button>
@@ -145,8 +140,15 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
             <label key={key} className="checkbox-row">
               <input
                 type="checkbox"
-                checked={marks[key]}
-                onChange={(event) => setMarks({ ...marks, [key]: event.target.checked })}
+                checked={marks.has(key)}
+                onChange={(event) => {
+                  setMarks((current) => {
+                    const next = new Set(current);
+                    if (event.target.checked) next.add(key);
+                    else next.delete(key);
+                    return next;
+                  });
+                }}
               />
               <span>{label}</span>
             </label>
@@ -158,7 +160,9 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
             id={`${id}-weight`}
             className="select-input"
             value={weight}
-            onChange={(event) => setWeight(event.target.value)}
+            onChange={(event) => {
+              setWeight(event.target.value);
+            }}
           >
             <option value="0.25">0.25 pt</option>
             <option value="0.5">0.5 pt</option>
@@ -187,7 +191,9 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
             max="72"
             step="any"
             value={threshold}
-            onChange={(event) => setThreshold(event.target.value)}
+            onChange={(event) => {
+              setThreshold(event.target.value);
+            }}
           />
           <label className="setting-title" htmlFor={`${id}-width`}>
             New width (points)
@@ -200,7 +206,9 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
             max="72"
             step="any"
             value={width}
-            onChange={(event) => setWidth(event.target.value)}
+            onChange={(event) => {
+              setWidth(event.target.value);
+            }}
           />
           <p className="field-hint">
             Widths are measured on the page, after scaling; zero-width lines are always widened. The
@@ -218,7 +226,9 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
             aria-label="Convert to"
             className="select-input"
             value={target}
-            onChange={(event) => setTarget(event.target.value as ColorTarget)}
+            onChange={(event) => {
+              setTarget(event.target.value as ColorTarget);
+            }}
           >
             <option value="gray">Greyscale</option>
             <option value="rgb">RGB</option>
@@ -228,15 +238,17 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
             <input
               type="checkbox"
               checked={images}
-              onChange={(event) => setImages(event.target.checked)}
+              onChange={(event) => {
+                setImages(event.target.checked);
+              }}
             />
             <span>Also convert pictures</span>
           </label>
           <p className="field-hint">
             Colours are converted with the standard device formulas; no ICC profile is applied, so
             this is not a colour-managed conversion. Grey and black go to black ink alone in CMYK.
-            Spot, indexed, Lab and pattern colours, shadings, inline images and the colours of
-            comments and form fields are left as they are and counted below.
+            Spot, indexed, Lab and pattern colours, shadings and inline images are left as they are
+            and counted below; comments and form fields are not changed.
           </p>
         </fieldset>
       )}
@@ -250,7 +262,9 @@ export function PrintProductionDialog({ controller, onClose }: Readonly<Document
         type="text"
         placeholder={total ? `For example: 1-${total}` : "For example: 1-3, 5"}
         value={range}
-        onChange={(event) => setRange(event.target.value)}
+        onChange={(event) => {
+          setRange(event.target.value);
+        }}
       />
 
       {!native && <p className="field-hint">{ENGINE_UNAVAILABLE}</p>}

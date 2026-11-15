@@ -169,7 +169,7 @@ export async function findPattern(
   texts: string[],
 ): Promise<[number, number][][]> {
   requireEngine();
-  return invoke<[number, number][][]>("engine_find_pattern", {
+  return await invoke<[number, number][][]>("engine_find_pattern", {
     request: { pattern, caseInsensitive, texts },
   });
 }

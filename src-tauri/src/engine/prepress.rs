@@ -1335,7 +1335,7 @@ mod tests {
         let content = text(&page_ops(&gray));
         for expected in [
             "0.3 g",
-            "0 G",
+            "0.0 G",
             "/DeviceGray cs",
             "0.59 sc",
             "/Spot CS",
@@ -1352,11 +1352,11 @@ mod tests {
         assert_eq!(report.changed, 4);
         let content = text(&page_ops(&cmyk));
         for expected in [
-            "0 1 1 0 k",
-            "0 0 0 1 K",
+            "0.0 1.0 1.0 0.0 k",
+            "0.0 0.0 0.0 1.0 K",
             "/DeviceCMYK cs",
-            "1 0 1 0 sc",
-            "0 0 0 0.5 k",
+            "1.0 0.0 1.0 0.0 sc",
+            "0.0 0.0 0.0 0.5 k",
         ] {
             assert!(content.contains(expected), "{expected} in {content}");
         }

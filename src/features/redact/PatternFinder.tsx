@@ -11,13 +11,14 @@ const LABELS = new Map<PatternMark["kind"], string>([
   ["custom", "Expression matches"],
 ]);
 
+type Check = "none" | "luhn" | "iban";
+
 /** Checks that keep only matches whose digits or letters pass a checksum. */
-const CHECKS = {
-  none: () => true,
-  luhn: (text: string) => luhnValid(text.replaceAll(/\D/g, "")),
-  iban: ibanValid,
-} as const;
-type Check = keyof typeof CHECKS;
+function checkFor(check: Check): (text: string) => boolean {
+  if (check === "luhn") return (text: string) => luhnValid(text.replaceAll(/\D/g, ""));
+  if (check === "iban") return ibanValid;
+  return () => true;
+}
 
 /** "Marked 3 email addresses and 1 phone number on 2 pages." style summary. */
 export function patternSummary(marks: PatternMark[]) {
@@ -76,7 +77,7 @@ export function PatternFinder({
         await findExpressionMarks(
           controller.pdf,
           (texts) => findPattern(expression, ignoreCase, texts),
-          CHECKS[check],
+          checkFor(check),
         ),
       );
     } catch (cause) {
@@ -95,7 +96,9 @@ export function PatternFinder({
             <input
               type="checkbox"
               checked={kinds.has(kind)}
-              onChange={(event) => toggle(kind, event.target.checked)}
+              onChange={(event) => {
+                toggle(kind, event.target.checked);
+              }}
             />
             <span>{label}</span>
           </label>
@@ -104,7 +107,9 @@ export function PatternFinder({
           type="button"
           className="button-secondary"
           disabled={!kinds.size || !!searching || !controller?.pdf}
-          onClick={() => void search()}
+          onClick={() => {
+            void search();
+          }}
         >
           <ScanSearch size={15} /> {searching === "kinds" ? "Searching…" : "Mark Sensitive Data"}
         </button>
@@ -125,13 +130,17 @@ export function PatternFinder({
           autoCorrect="off"
           maxLength={1024}
           value={expression}
-          onChange={(event) => setExpression(event.target.value)}
+          onChange={(event) => {
+            setExpression(event.target.value);
+          }}
         />
         <label className="checkbox-row">
           <input
             type="checkbox"
             checked={ignoreCase}
-            onChange={(event) => setIgnoreCase(event.target.checked)}
+            onChange={(event) => {
+              setIgnoreCase(event.target.checked);
+            }}
           />
           <span>Ignore upper and lower case</span>
         </label>
@@ -141,7 +150,9 @@ export function PatternFinder({
             className="select-input"
             aria-label="Checksum"
             value={check}
-            onChange={(event) => setCheck(event.target.value as Check)}
+            onChange={(event) => {
+              setCheck(event.target.value as Check);
+            }}
           >
             <option value="none">no checksum</option>
             <option value="luhn">a card checksum (Luhn)</option>
@@ -152,7 +163,9 @@ export function PatternFinder({
           type="button"
           className="button-secondary"
           disabled={!native || !expression.trim() || !!searching || !controller?.pdf}
-          onClick={() => void searchExpression()}
+          onClick={() => {
+            void searchExpression();
+          }}
         >
           <Regex size={15} />{" "}
           {searching === "expression" ? "Searching…" : "Mark Expression Matches"}

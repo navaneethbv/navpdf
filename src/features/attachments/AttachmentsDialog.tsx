@@ -175,13 +175,14 @@ export function AttachmentsDialog({
         <input
           type="text"
           className="text-input"
-          autoFocus
           aria-label={`Description of ${att.name}`}
           placeholder="Leave empty to clear the description"
           maxLength={MAX_ATTACHMENT_DESCRIPTION_LENGTH}
           value={editing.text}
           disabled={saving}
-          onChange={(event) => setEditing({ name: att.name, text: event.target.value })}
+          onChange={(event) => {
+            setEditing({ name: att.name, text: event.target.value });
+          }}
         />
         <button type="submit" className="button-primary" disabled={saving}>
           Save
@@ -190,7 +191,9 @@ export function AttachmentsDialog({
           type="button"
           className="button-secondary"
           disabled={saving}
-          onClick={() => setEditing(null)}
+          onClick={() => {
+            setEditing(null);
+          }}
         >
           Cancel
         </button>
@@ -222,7 +225,9 @@ export function AttachmentsDialog({
             type="button"
             className="icon-button"
             title="Edit description"
-            onClick={() => setEditing({ name: att.name, text: att.description ?? "" })}
+            onClick={() => {
+              setEditing({ name: att.name, text: att.description ?? "" });
+            }}
             disabled={saving}
             aria-label={`Edit description of ${att.name}`}
           >
