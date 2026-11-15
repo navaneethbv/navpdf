@@ -65,6 +65,13 @@ beforeEach(() => {
         return { outputId: "out-pdfa", report: { message: "Converted" } };
       case "engine_tag_edit":
         return { outputId: "out-tags", report: { message: "Added 3 tags." } };
+      case "engine_find_pattern":
+        return [[[0, 4]]];
+      case "engine_prepress":
+        return {
+          outputId: "out-prepress",
+          report: { pages: 1, changed: 1, imagesConverted: 0, leftAlone: [], message: "Done" },
+        };
       default:
         return undefined;
     }
@@ -228,6 +235,26 @@ describe("engine service", () => {
     expect(invoke).toHaveBeenCalledWith("engine_take", { id: "out-tags" });
     expect(edited.report.message).toBe("Added 3 tags.");
     expect([...edited.bytes!]).toEqual([9, 8, 7]);
+  });
+
+  it("finds regex matches and runs prepress edits natively", async () => {
+    const service = await engine();
+    const matches = await service.findPattern("test", true, ["Test"]);
+    expect(matches).toEqual([[[0, 4]]]);
+    expect(invoke).toHaveBeenCalledWith("engine_find_pattern", {
+      request: { pattern: "test", caseInsensitive: true, texts: ["Test"] },
+    });
+
+    const prepressed = await service.prepressDocument(new Uint8Array([1]), {
+      kind: "removePrinterMarks",
+    });
+    expect(invoke).toHaveBeenCalledWith("engine_prepress", {
+      inputId: expect.any(String),
+      edit: { kind: "removePrinterMarks" },
+    });
+    expect(invoke).toHaveBeenCalledWith("engine_take", { id: "out-prepress" });
+    expect(prepressed.report.message).toBe("Done");
+    expect([...prepressed.bytes!]).toEqual([9, 8, 7]);
   });
 
   it("refuses engine work outside the desktop app", async () => {

@@ -290,6 +290,15 @@ export function documentTools(s: ReturnType<typeof useWorkspace.getState>): Tool
       disabled: !hasDoc || !!s.info?.encrypted,
     },
     {
+      id: "print-production",
+      label: "Print Production",
+      description: "Add printer marks, fix hairlines, convert colours to grey, RGB or CMYK",
+      category: "pages",
+      icon: Printer,
+      action: () => s.set({ activeModal: "print-production" }),
+      disabled: !hasDoc || !!s.info?.encrypted,
+    },
+    {
       id: "standards",
       label: "PDF/A and Standards",
       description: "Check or convert to PDF/A, add an output intent, see declared standards",

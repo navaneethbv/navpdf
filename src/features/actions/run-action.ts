@@ -45,6 +45,9 @@ const HIDDEN_INFORMATION: DiscardOptions = {
   metadata: false,
   attachments: false,
   privateData: true,
+  searchIndex: true,
+  formActions: false,
+  externalReferences: false,
 };
 
 /** A step with default options, for adding to an action. */

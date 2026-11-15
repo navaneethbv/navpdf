@@ -1,11 +1,11 @@
 //! Command-line access to the local PDF engine for acceptance scripts. Not bundled with NavPDF.
 //!
-//! Usage: `cargo run --example engine_cli -- <redact|protect|unlock|compress|sign|verify> <input> <output> <request.json>`
+//! Usage: `cargo run --example engine_cli -- <redact|protect|unlock|compress|prepress|sign|verify> <input> <output> <request.json>`
 //!
 //! `sign` reads the PKCS #12 password from standard input so it never appears in arguments.
 //! `verify` prints the signature report and writes no output file.
 
-use navpdf_lib::engine::{self, compress, protect, redact, sign};
+use navpdf_lib::engine::{self, compress, prepress, protect, redact, sign};
 use serde::Serialize;
 use serde_json::Value;
 use std::io::{self, Write};
@@ -23,6 +23,7 @@ enum CliReport {
     },
     Unlock {},
     Compress(compress::CompressionReport),
+    Prepress(prepress::PrepressReport),
     Sign {
         certificate: sign::CertificateSummary,
         pages: u32,
@@ -51,7 +52,7 @@ fn run() -> Result<CliReport, String> {
     let args: Vec<String> = env::args().skip(1).collect();
     let [operation, input, output, request] = args.as_slice() else {
         return Err(
-            "usage: engine_cli <redact|protect|unlock|compress|sign|verify> <input> <output> <request.json>"
+            "usage: engine_cli <redact|protect|unlock|compress|prepress|sign|verify> <input> <output> <request.json>"
                 .into(),
         );
     };
@@ -94,6 +95,15 @@ fn run() -> Result<CliReport, String> {
                     .map_err(|error| format!("Cannot write {output}: {error}"))?;
             }
             Ok(CliReport::Compress(report))
+        }
+        "prepress" => {
+            let edit: prepress::PrepressEdit = parse(request)?;
+            let (result, report) = prepress::apply(&bytes, &edit)?;
+            if let Some(result) = result {
+                fs::write(output, result)
+                    .map_err(|error| format!("Cannot write {output}: {error}"))?;
+            }
+            Ok(CliReport::Prepress(report))
         }
         "sign" => {
             let path = request["identity"]

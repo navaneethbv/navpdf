@@ -119,6 +119,9 @@ export interface DiscardOptions {
   metadata: boolean;
   attachments: boolean;
   privateData: boolean;
+  searchIndex: boolean;
+  formActions: boolean;
+  externalReferences: boolean;
 }
 
 export interface PermissionRequest {
@@ -379,3 +382,33 @@ export type StandardsEdit =
   | { action: "convert"; level: PdfaLevel }
   | { action: "addOutputIntent" }
   | { action: "removeIdentification" };
+
+export type ColorTarget = "gray" | "rgb" | "cmyk";
+
+export interface PrinterMarkOptions {
+  trimMarks: boolean;
+  bleedMarks: boolean;
+  registrationMarks: boolean;
+  colorBars: boolean;
+  pageInformation: boolean;
+  /** Line weight in points. */
+  weight: number;
+  fileName: string;
+  date: string;
+}
+
+/** Print production edits. An empty `pages` list means every page. */
+export type PrepressEdit =
+  | { kind: "fixHairlines"; threshold: number; width: number; pages: number[] }
+  | { kind: "convertColors"; target: ColorTarget; images: boolean; pages: number[] }
+  | { kind: "addPrinterMarks"; options: PrinterMarkOptions; pages: number[] }
+  | { kind: "removePrinterMarks" };
+
+export interface PrepressReport {
+  pages: number;
+  changed: number;
+  imagesConverted: number;
+  /** What was found and deliberately not changed, each with a count. */
+  leftAlone: string[];
+  message: string;
+}

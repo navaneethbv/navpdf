@@ -1,6 +1,7 @@
 //! Optional discards applied before compression: scripts, thumbnails, tags, bookmarks, print
-//! settings, alternate images, comments, multimedia, metadata, attachments and private data.
-//! Each discard is chosen explicitly and reported; nothing is removed by default.
+//! settings, alternate images, comments, multimedia, metadata, attachments, private data,
+//! embedded search indexes, form submit, import and reset actions, and references to other
+//! files. Each discard is chosen explicitly and reported; nothing is removed by default.
 
 use super::redact::{catalog_id, filter_annotations, names_dictionary};
 use lopdf::{Dictionary, Document, Object, ObjectId};
@@ -21,6 +22,9 @@ pub struct DiscardOptions {
     pub metadata: bool,
     pub attachments: bool,
     pub private_data: bool,
+    pub search_index: bool,
+    pub form_actions: bool,
+    pub external_references: bool,
 }
 
 impl DiscardOptions {
@@ -121,14 +125,362 @@ pub fn apply(doc: &mut Document, options: &DiscardOptions) -> Result<Vec<String>
             |doc, _, _| remove_from_objects(doc, |_| true, &[b"PieceInfo"]),
         ),
     ];
-    Ok(steps
+    let mut report: Vec<String> = steps
         .into_iter()
         .filter(|(enabled, _, _)| *enabled)
         .filter_map(|(_, what, discard)| {
             let count = discard(doc, catalog, &pages);
             (count > 0).then(|| format!("{what}: {count}"))
         })
-        .collect())
+        .collect();
+    let mut note = |what: &str, count: usize| {
+        if count > 0 {
+            report.push(format!("{what}: {count}"));
+        }
+    };
+    if options.search_index {
+        note(
+            "Embedded search index entries removed",
+            discard_search_index(doc, catalog),
+        );
+    }
+    if options.form_actions {
+        note(
+            "Form submit, import and reset actions removed",
+            remove_actions(doc, is_form_action)?.actions,
+        );
+    }
+    if options.external_references {
+        let removed = remove_actions(doc, is_external_reference)?;
+        note("References to other files removed", removed.actions);
+        note(
+            "Links left without a target removed",
+            remove_dead_links(doc, &pages, removed.emptied_links),
+        );
+    }
+    Ok(report)
+}
+
+/// Removes catalog `/PieceInfo` entries whose application name contains "index" in any letter
+/// case, such as `IBM-ODIndexes`. An indirect `/PieceInfo` is copied into the catalog without
+/// those entries, so the original object stays intact for anything else that uses it.
+fn discard_search_index(doc: &mut Document, catalog: ObjectId) -> usize {
+    let Some(mut piece_info) = doc
+        .get_dictionary(catalog)
+        .ok()
+        .and_then(|catalog| catalog.get(b"PieceInfo").ok())
+        .and_then(|value| doc.dereference(value).ok())
+        .and_then(|(_, value)| value.as_dict().ok())
+        .cloned()
+    else {
+        return 0;
+    };
+    let indexes: Vec<Vec<u8>> = piece_info
+        .iter()
+        .map(|(key, _)| key.clone())
+        .filter(|key| key.to_ascii_lowercase().windows(5).any(|w| w == b"index"))
+        .collect();
+    if indexes.is_empty() {
+        return 0;
+    }
+    for key in &indexes {
+        piece_info.remove(key);
+    }
+    if let Ok(catalog) = doc.get_dictionary_mut(catalog) {
+        if piece_info.is_empty() {
+            catalog.remove(b"PieceInfo");
+        } else {
+            catalog.set("PieceInfo", piece_info);
+        }
+    }
+    indexes.len()
+}
+
+/// The most values one action walk may visit before the optimization stops with an error.
+const MAX_WALK_VALUES: usize = 1_000_000;
+/// The most actions one chain may hold, and the deepest `/Next` nesting followed.
+const MAX_CHAIN_ACTIONS: usize = 4096;
+const MAX_CHAIN_DEPTH: usize = 64;
+/// Marks a link whose only action was removed until it is taken out of its page.
+const DEAD_LINK: &[u8] = b"NavPDFDeadLink";
+
+fn action_kind(action: &Dictionary) -> &[u8] {
+    action.get(b"S").and_then(Object::as_name).unwrap_or(b"")
+}
+
+fn is_form_action(action: &Dictionary) -> bool {
+    matches!(
+        action_kind(action),
+        b"SubmitForm" | b"ImportData" | b"ResetForm"
+    )
+}
+
+/// Actions that open or read another file: remote and embedded go-to, launch, import data and
+/// article threads in another file.
+fn is_external_reference(action: &Dictionary) -> bool {
+    match action_kind(action) {
+        b"GoToR" | b"GoToE" | b"Launch" | b"ImportData" => true,
+        b"Thread" => action.has(b"F"),
+        _ => false,
+    }
+}
+
+enum Step {
+    Key(Vec<u8>),
+    Index(usize),
+}
+
+/// Where an action is held: an object and the keys and array positions leading to the
+/// dictionary entry.
+type Slot = (ObjectId, Vec<Step>);
+
+#[derive(Default)]
+struct RemovedActions {
+    actions: usize,
+    emptied_links: usize,
+}
+
+/// An action and the actions chained after it through `/Next`, in the order they run, each
+/// without its own `/Next`. Cycles are followed once.
+fn flatten_chain(
+    doc: &Document,
+    action: &Object,
+    depth: usize,
+    seen: &mut HashSet<ObjectId>,
+    chain: &mut Vec<Dictionary>,
+) -> Result<(), String> {
+    const TOO_LONG: &str =
+        "An action chain in this document is too long or too deeply nested to change safely.";
+    if depth > MAX_CHAIN_DEPTH {
+        return Err(TOO_LONG.into());
+    }
+    if let Object::Reference(id) = action {
+        if !seen.insert(*id) {
+            return Ok(());
+        }
+    }
+    let Some(dict) = doc
+        .dereference(action)
+        .ok()
+        .and_then(|(_, object)| object.as_dict().ok())
+    else {
+        return Ok(());
+    };
+    let mut own = dict.clone();
+    own.remove(b"Next");
+    chain.push(own);
+    if chain.len() > MAX_CHAIN_ACTIONS {
+        return Err(TOO_LONG.into());
+    }
+    let Some(next) = dict.get(b"Next").ok().and_then(|next| {
+        doc.dereference(next)
+            .ok()
+            .map(|(id, object)| (id, next, object))
+    }) else {
+        return Ok(());
+    };
+    match next {
+        (id, _, Object::Array(actions)) => {
+            if id.is_some_and(|id| !seen.insert(id)) {
+                return Ok(());
+            }
+            for action in actions {
+                flatten_chain(doc, action, depth + 1, seen, chain)?;
+            }
+            Ok(())
+        }
+        (_, original, _) => flatten_chain(doc, original, depth + 1, seen, chain),
+    }
+}
+
+/// The replacement for an action entry once unwanted actions are taken out of its chain:
+/// `None` when nothing in the chain is unwanted, `Some(None)` when nothing is left.
+fn rewritten_chain(
+    doc: &Document,
+    action: &Object,
+    unwanted: fn(&Dictionary) -> bool,
+) -> Result<Option<(usize, Option<Object>)>, String> {
+    let mut chain = Vec::new();
+    flatten_chain(doc, action, 0, &mut HashSet::new(), &mut chain)?;
+    let before = chain.len();
+    chain.retain(|action| !unwanted(action));
+    let removed = before - chain.len();
+    if removed == 0 {
+        return Ok(None);
+    }
+    let mut rest = chain.into_iter();
+    let Some(mut first) = rest.next() else {
+        return Ok(Some((removed, None)));
+    };
+    let mut rest: Vec<Object> = rest.map(Object::Dictionary).collect();
+    match rest.len() {
+        0 => {}
+        1 => first.set("Next", rest.remove(0)),
+        _ => first.set("Next", rest),
+    }
+    Ok(Some((removed, Some(Object::Dictionary(first)))))
+}
+
+/// Every place an action can be held: `/A`, `/OpenAction` and each `/AA` trigger of any
+/// dictionary, however deeply it is stored inside an object. The walk keeps its own stack, so
+/// deep nesting cannot exhaust the thread's.
+fn action_slots(doc: &Document) -> Result<Vec<Slot>, String> {
+    let mut slots: Vec<Slot> = Vec::new();
+    let mut shared_triggers: HashSet<ObjectId> = HashSet::new();
+    let mut visited = 0_usize;
+    for (id, object) in &doc.objects {
+        let mut pending: Vec<(Vec<Step>, &Object)> = vec![(Vec::new(), object)];
+        while let Some((path, value)) = pending.pop() {
+            visited += 1;
+            if visited > MAX_WALK_VALUES {
+                return Err(
+                    "This document holds too many nested values to look for actions safely.".into(),
+                );
+            }
+            let with = |step: Step| {
+                let mut next: Vec<Step> = path.iter().map(Step::copy).collect();
+                next.push(step);
+                next
+            };
+            let dict = match value {
+                Object::Dictionary(dict) => dict,
+                Object::Stream(stream) => &stream.dict,
+                Object::Array(items) => {
+                    for (index, item) in items.iter().enumerate() {
+                        if matches!(item, Object::Array(_) | Object::Dictionary(_)) {
+                            pending.push((with(Step::Index(index)), item));
+                        }
+                    }
+                    continue;
+                }
+                _ => continue,
+            };
+            for (key, item) in dict.iter() {
+                match (key.as_slice(), item) {
+                    (b"A" | b"OpenAction", _) => slots.push((*id, with(Step::Key(key.clone())))),
+                    (b"AA", Object::Dictionary(triggers)) => {
+                        for (trigger, _) in triggers.iter() {
+                            let mut slot = with(Step::Key(key.clone()));
+                            slot.push(Step::Key(trigger.clone()));
+                            slots.push((*id, slot));
+                        }
+                    }
+                    (b"AA", Object::Reference(shared)) => {
+                        let triggers = doc.get_dictionary(*shared).ok();
+                        if let Some(triggers) = triggers.filter(|_| shared_triggers.insert(*shared))
+                        {
+                            for (trigger, _) in triggers.iter() {
+                                slots.push((*shared, vec![Step::Key(trigger.clone())]));
+                            }
+                        }
+                    }
+                    (_, Object::Array(_) | Object::Dictionary(_)) => {
+                        pending.push((with(Step::Key(key.clone())), item));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    Ok(slots)
+}
+
+impl Step {
+    fn copy(&self) -> Self {
+        match self {
+            Step::Key(key) => Step::Key(key.clone()),
+            Step::Index(index) => Step::Index(*index),
+        }
+    }
+}
+
+fn dictionary_of(object: &Object) -> Option<&Dictionary> {
+    match object {
+        Object::Dictionary(dict) => Some(dict),
+        Object::Stream(stream) => Some(&stream.dict),
+        _ => None,
+    }
+}
+
+fn dictionary_of_mut(object: &mut Object) -> Option<&mut Dictionary> {
+    match object {
+        Object::Dictionary(dict) => Some(dict),
+        Object::Stream(stream) => Some(&mut stream.dict),
+        _ => None,
+    }
+}
+
+fn step<'a>(object: &'a Object, step: &Step) -> Option<&'a Object> {
+    match step {
+        Step::Key(key) => dictionary_of(object)?.get(key).ok(),
+        Step::Index(index) => object.as_array().ok()?.get(*index),
+    }
+}
+
+fn step_mut<'a>(object: &'a mut Object, step: &Step) -> Option<&'a mut Object> {
+    match step {
+        Step::Key(key) => dictionary_of_mut(object)?.get_mut(key).ok(),
+        Step::Index(index) => object.as_array_mut().ok()?.get_mut(*index),
+    }
+}
+
+/// Takes the actions `unwanted` matches out of every action entry. The actions chained after a
+/// removed one still run, in order.
+fn remove_actions(
+    doc: &mut Document,
+    unwanted: fn(&Dictionary) -> bool,
+) -> Result<RemovedActions, String> {
+    let mut edits: Vec<(Slot, Option<Object>)> = Vec::new();
+    let mut removed = RemovedActions::default();
+    for (id, path) in action_slots(doc)? {
+        let held = doc.objects.get(&id).and_then(|root| {
+            path.iter()
+                .try_fold(root, |object, part| step(object, part))
+        });
+        let Some(held) = held else { continue };
+        if let Some((count, replacement)) = rewritten_chain(doc, held, unwanted)? {
+            removed.actions += count;
+            edits.push(((id, path), replacement));
+        }
+    }
+    for ((id, path), replacement) in edits {
+        let Some((Step::Key(key), parents)) = path.split_last() else {
+            continue;
+        };
+        let Some(root) = doc.objects.get_mut(&id) else {
+            continue;
+        };
+        let holder = parents
+            .iter()
+            .try_fold(root, |object, part| step_mut(object, part))
+            .and_then(dictionary_of_mut);
+        let Some(holder) = holder else { continue };
+        match replacement {
+            Some(action) => holder.set(key.clone(), action),
+            None => {
+                holder.remove(key);
+                if key == b"A" && is_subtype(holder, b"Link") && !holder.has(b"Dest") {
+                    holder.set(DEAD_LINK, true);
+                    removed.emptied_links += 1;
+                }
+            }
+        }
+    }
+    Ok(removed)
+}
+
+/// Takes links marked as left without a target out of their pages, then clears the mark from
+/// any that something else still refers to.
+fn remove_dead_links(doc: &mut Document, pages: &[ObjectId], marked: usize) -> usize {
+    if marked == 0 {
+        return 0;
+    }
+    let removed = pages
+        .iter()
+        .map(|page| filter_annotations(doc, *page, |_, annotation| annotation.has(DEAD_LINK)).count)
+        .sum();
+    remove_from_objects(doc, |_| true, &[DEAD_LINK]);
+    removed
 }
 
 fn discard_tags(doc: &mut Document, catalog: ObjectId, _: &[ObjectId]) -> usize {
@@ -423,6 +775,7 @@ mod tests {
             metadata: true,
             attachments: true,
             private_data: true,
+            ..DiscardOptions::default()
         };
         let report = apply(&mut doc, &all).unwrap();
         assert!(report.len() >= 9, "{report:?}");
@@ -472,5 +825,229 @@ mod tests {
             annotation_subtypes(&doc),
             vec![b"Link".to_vec(), b"Screen".to_vec()]
         );
+    }
+
+    fn action(kind: &str) -> Dictionary {
+        dictionary! {"S" => kind}
+    }
+
+    fn kinds(doc: &Document, action: &Object) -> Vec<String> {
+        let mut chain = Vec::new();
+        flatten_chain(doc, action, 0, &mut HashSet::new(), &mut chain).unwrap();
+        chain
+            .iter()
+            .map(|action| String::from_utf8_lossy(action_kind(action)).into_owned())
+            .collect()
+    }
+
+    fn only(options: DiscardOptions, doc: &mut Document) -> Vec<String> {
+        apply(doc, &options).unwrap()
+    }
+
+    #[test]
+    fn search_index_discard_keeps_other_private_data() {
+        let mut doc = sample();
+        let shared = doc.add_object(dictionary! {
+            "IBM-ODIndexes" => dictionary! {"Private" => 1},
+            "fullTextINDEX" => dictionary! {},
+            "Illustrator" => dictionary! {"Private" => 2},
+        });
+        let catalog = catalog_id(&doc).unwrap();
+        doc.get_dictionary_mut(catalog)
+            .unwrap()
+            .set("PieceInfo", shared);
+        let options = DiscardOptions {
+            search_index: true,
+            ..DiscardOptions::default()
+        };
+        assert_eq!(
+            only(options, &mut doc),
+            vec!["Embedded search index entries removed: 2"]
+        );
+        let kept = doc
+            .get_dictionary(catalog)
+            .unwrap()
+            .get(b"PieceInfo")
+            .unwrap()
+            .as_dict()
+            .unwrap();
+        assert!(kept.has(b"Illustrator") && kept.len() == 1);
+        // The shared object is left as it was for anything else that refers to it.
+        assert!(doc.get_dictionary(shared).unwrap().has(b"IBM-ODIndexes"));
+        // The page's own private data is not a document search index.
+        assert!(doc
+            .get_dictionary(doc.get_pages()[&1])
+            .unwrap()
+            .has(b"PieceInfo"));
+        assert!(only(options, &mut doc).is_empty());
+
+        doc.get_dictionary_mut(catalog)
+            .unwrap()
+            .set("PieceInfo", dictionary! {"SearchIndex" => dictionary! {}});
+        only(options, &mut doc);
+        assert!(!doc.get_dictionary(catalog).unwrap().has(b"PieceInfo"));
+    }
+
+    #[test]
+    fn form_actions_are_removed_and_the_actions_after_them_still_run() {
+        let mut doc = sample();
+        let page = doc.get_pages()[&1];
+        let named = doc.add_object(action("Named"));
+        let reset = doc.add_object(dictionary! {"S" => "ResetForm", "Next" => named});
+        let mut submit = action("SubmitForm");
+        submit.set(
+            "Next",
+            vec![Object::Reference(reset), action("Hide").into()],
+        );
+        let mut first = action("GoTo");
+        first.set("Next", submit);
+        let button = doc.add_object(dictionary! {
+            "Type" => "Annot", "Subtype" => "Widget",
+            "Rect" => vec![0.into(), 0.into(), 10.into(), 10.into()],
+            "A" => first,
+            "AA" => dictionary! {"U" => action("ImportData"), "D" => action("Hide")},
+        });
+        let shared_triggers = doc.add_object(dictionary! {"WS" => action("SubmitForm")});
+        doc.get_dictionary_mut(page).unwrap().set(
+            "Annots",
+            vec![
+                Object::Reference(button),
+                // An annotation stored directly in the page's list.
+                dictionary! {"Subtype" => "Widget", "A" => action("ResetForm")}.into(),
+            ],
+        );
+        let catalog = catalog_id(&doc).unwrap();
+        let catalog_dict = doc.get_dictionary_mut(catalog).unwrap();
+        catalog_dict.set("OpenAction", action("ResetForm"));
+        catalog_dict.set("AA", shared_triggers);
+
+        let options = DiscardOptions {
+            form_actions: true,
+            ..DiscardOptions::default()
+        };
+        assert_eq!(
+            only(options, &mut doc),
+            vec!["Form submit, import and reset actions removed: 6"]
+        );
+        let button = doc.get_dictionary(button).unwrap();
+        assert_eq!(
+            kinds(&doc, button.get(b"A").unwrap()),
+            vec!["GoTo", "Named", "Hide"]
+        );
+        let triggers = button.get(b"AA").unwrap().as_dict().unwrap();
+        assert!(!triggers.has(b"U") && triggers.has(b"D"));
+        assert!(doc.get_dictionary(shared_triggers).unwrap().is_empty());
+        assert!(!doc.get_dictionary(catalog).unwrap().has(b"OpenAction"));
+        let direct = doc.get_page_annotations(page).unwrap()[1];
+        assert!(!direct.has(b"A"));
+        // The script the sample opens with is not a form action; nothing more to remove.
+        assert!(only(options, &mut doc).is_empty());
+        assert!(crate::engine::save(&mut doc).is_ok());
+    }
+
+    #[test]
+    fn external_references_leave_and_links_without_a_target_go() {
+        let mut doc = sample();
+        let page = doc.get_pages()[&1];
+        let link = |doc: &mut Document, entries: Dictionary| {
+            let mut link = dictionary! {
+                "Type" => "Annot", "Subtype" => "Link",
+                "Rect" => vec![0.into(), 0.into(), 10.into(), 10.into()],
+            };
+            link.extend(&entries);
+            doc.add_object(link)
+        };
+        let remote = link(&mut doc, dictionary! {"A" => action("GoToR")});
+        let with_dest = link(
+            &mut doc,
+            dictionary! {"A" => action("Launch"), "Dest" => Object::string_literal("named")},
+        );
+        let mut launch = action("Launch");
+        launch.set("Next", action("URI"));
+        let chained = link(&mut doc, dictionary! {"A" => launch});
+        let local_thread = link(&mut doc, dictionary! {"A" => action("Thread")});
+        let mut remote_thread = action("Thread");
+        remote_thread.set("F", Object::string_literal("other.pdf"));
+        let other_thread = link(&mut doc, dictionary! {"A" => remote_thread});
+        let already_inert = link(&mut doc, dictionary! {});
+        let bookmark = doc.add_object(dictionary! {
+            "Title" => Object::string_literal("Other file"), "A" => action("GoToE"),
+        });
+        doc.get_dictionary_mut(page).unwrap().set(
+            "Annots",
+            vec![
+                remote.into(),
+                with_dest.into(),
+                chained.into(),
+                local_thread.into(),
+                other_thread.into(),
+                already_inert.into(),
+            ],
+        );
+        let options = DiscardOptions {
+            external_references: true,
+            ..DiscardOptions::default()
+        };
+        assert_eq!(
+            only(options, &mut doc),
+            vec![
+                "References to other files removed: 5",
+                "Links left without a target removed: 2",
+            ]
+        );
+        let kept: Vec<ObjectId> = doc
+            .get_dictionary(page)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry.as_reference().unwrap())
+            .collect();
+        assert_eq!(kept, vec![with_dest, chained, local_thread, already_inert]);
+        assert!(!doc.get_dictionary(with_dest).unwrap().has(b"A"));
+        let chained = doc.get_dictionary(chained).unwrap();
+        assert_eq!(kinds(&doc, chained.get(b"A").unwrap()), vec!["URI"]);
+        let bookmark = doc.get_dictionary(bookmark).unwrap();
+        assert!(bookmark.has(b"Title") && !bookmark.has(b"A"));
+        // No object keeps the mark used while links are taken out of their pages.
+        assert!(doc
+            .objects
+            .values()
+            .filter_map(dictionary_of)
+            .all(|dict| !dict.has(DEAD_LINK)));
+    }
+
+    #[test]
+    fn action_chains_that_loop_or_run_too_long_are_handled() {
+        let mut doc = sample();
+        let first = doc.new_object_id();
+        let second = doc.add_object(dictionary! {"S" => "ResetForm", "Next" => first});
+        doc.objects
+            .insert(first, dictionary! {"S" => "Named", "Next" => second}.into());
+        let page = doc.get_pages()[&1];
+        doc.get_dictionary_mut(page)
+            .unwrap()
+            .set("AA", dictionary! {"O" => first});
+        let options = DiscardOptions {
+            form_actions: true,
+            ..DiscardOptions::default()
+        };
+        assert_eq!(only(options, &mut doc).len(), 1);
+        let opened = doc.get_dictionary(page).unwrap().get(b"AA").unwrap();
+        let opened = opened.as_dict().unwrap().get(b"O").unwrap();
+        assert_eq!(kinds(&doc, opened), vec!["Named"]);
+
+        let mut deep = action("ResetForm");
+        for _ in 0..=MAX_CHAIN_DEPTH {
+            let mut outer = action("Named");
+            outer.set("Next", deep);
+            deep = outer;
+        }
+        doc.get_dictionary_mut(page).unwrap().set("A", deep);
+        assert!(apply(&mut doc, &options)
+            .unwrap_err()
+            .contains("too deeply nested"));
     }
 }

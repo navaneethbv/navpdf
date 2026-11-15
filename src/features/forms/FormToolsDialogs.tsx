@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { ScanSearch, SlidersHorizontal } from "lucide-react";
 import { ToolDialog } from "../../components/ToolDialog";
+import { useWorkspace } from "../../stores/workspace";
 import { addFormFields } from "../../services/document-commands";
 import {
   colorFromHex,
@@ -69,6 +70,7 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
   const [selected, setSelected] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tabOrderValue, setTabOrderValue] = useState<TabOrder | "mixed">(null);
+  const tabNumbers = useWorkspace((state) => state.tabNumbersVisible);
   const [duplicatePages, setDuplicatePages] = useState("");
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -429,6 +431,20 @@ export function FieldPropertiesDialog({ controller, onClose }: Readonly<Document
                 </option>
               ))}
             </select>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={tabNumbers}
+                onChange={(event) =>
+                  useWorkspace.getState().set({ tabNumbersVisible: event.target.checked })
+                }
+              />
+              <span>Show tab numbers on the page</span>
+            </label>
+            <p className="field-hint">
+              Each field that can be filled shows its place in the order the Tab key follows.
+              Numbers start again on every page and are not saved or printed.
+            </p>
           </fieldset>
         </>
       )}

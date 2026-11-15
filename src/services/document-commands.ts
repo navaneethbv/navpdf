@@ -3051,6 +3051,36 @@ export async function deleteEmbeddedAttachment(
   return doc.save();
 }
 
+export const MAX_ATTACHMENT_DESCRIPTION_LENGTH = 1000;
+
+/**
+ * Change or clear an embedded file's description. Only the file specification's /Desc is
+ * touched; the embedded stream and every other key stay as they are.
+ */
+export async function setEmbeddedAttachmentDescription(
+  pdfBytes: Uint8Array,
+  name: string,
+  description: string,
+): Promise<Uint8Array> {
+  const text = Array.from(description)
+    .filter((ch) => {
+      const code = ch.codePointAt(0) ?? 0;
+      return code >= 32 && code !== 127;
+    })
+    .join("")
+    .trim();
+  if (text.length > MAX_ATTACHMENT_DESCRIPTION_LENGTH)
+    throw new Error(
+      `Descriptions can be up to ${MAX_ATTACHMENT_DESCRIPTION_LENGTH} characters long.`,
+    );
+  const doc = await PDFDocument.load(pdfBytes);
+  const entry = walkEmbeddedFiles(doc).find((candidate) => candidate.name === name);
+  if (!entry) throw new Error("Attachment not found.");
+  if (text) entry.fileSpec.set(PDFName.of("Desc"), PDFHexString.fromText(text));
+  else entry.fileSpec.delete(PDFName.of("Desc"));
+  return doc.save();
+}
+
 function streamContainsText(streamObj: unknown): boolean {
   if (!(streamObj instanceof PDFRawStream)) return false;
   const text = new TextDecoder().decode(decodeBoundedStream(streamObj, MAX_ATTACHMENT_SIZE_BYTES));

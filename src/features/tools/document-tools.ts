@@ -26,6 +26,7 @@ import { TagsDialog } from "../document/TagsDialog";
 import { StandardsDialog } from "../document/StandardsDialog";
 import { ActionsDialog } from "../actions/ActionsDialog";
 import { ThreeDDialog } from "../document/ThreeDDialog";
+import { PrintProductionDialog } from "../pages/PrintProductionDialog";
 
 export interface DocumentToolProps {
   controller: ViewerController | null;
@@ -61,4 +62,5 @@ export const DOCUMENT_TOOL_DIALOGS: Readonly<Record<string, ComponentType<Docume
   tags: TagsDialog,
   standards: StandardsDialog,
   actions: ActionsDialog,
+  "print-production": PrintProductionDialog,
 };

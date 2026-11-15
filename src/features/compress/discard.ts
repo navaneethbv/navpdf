@@ -13,6 +13,9 @@ export const NO_DISCARDS: DiscardOptions = {
   metadata: false,
   attachments: false,
   privateData: false,
+  searchIndex: false,
+  formActions: false,
+  externalReferences: false,
 };
 
 export const DISCARD_LABELS: Record<keyof DiscardOptions, string> = {
@@ -27,6 +30,9 @@ export const DISCARD_LABELS: Record<keyof DiscardOptions, string> = {
   metadata: "Document information and metadata",
   attachments: "File attachments",
   privateData: "Private application data",
+  searchIndex: "Embedded search index",
+  formActions: "Form submit, import and reset actions",
+  externalReferences: "Links and actions that open other files",
 };
 
 /**

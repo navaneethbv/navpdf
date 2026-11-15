@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Paperclip, Plus, Download, Trash2, X } from "lucide-react";
+import { Paperclip, Pencil, Plus, Download, Trash2, X } from "lucide-react";
 import { useWorkspace } from "../../stores/workspace";
 import type { ViewerController } from "../viewer/controller";
 import { downloadBlob } from "../../utils/download";
@@ -10,6 +10,8 @@ import {
   addEmbeddedAttachment,
   extractEmbeddedAttachment,
   deleteEmbeddedAttachment,
+  setEmbeddedAttachmentDescription,
+  MAX_ATTACHMENT_DESCRIPTION_LENGTH,
   MAX_ATTACHMENT_SIZE_BYTES,
   type EmbeddedAttachmentSummary,
 } from "../../services/document-commands";
@@ -32,6 +34,7 @@ export function AttachmentsDialog({
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editing, setEditing] = useState<{ name: string; text: string } | null>(null);
 
   useEffect(() => {
     if (!controller?.pdf) return;
@@ -65,18 +68,14 @@ export function AttachmentsDialog({
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
       const currentBytes = await controller.pdf.saveDocument();
-      const newBytes = await addEmbeddedAttachment(
-        currentBytes,
-        file.name,
-        bytes,
-        `Attached by NavPDF on ${new Date().toLocaleDateString()}`,
-      );
+      const description = `Attached by NavPDF on ${new Date().toLocaleDateString()}`;
+      const newBytes = await addEmbeddedAttachment(currentBytes, file.name, bytes, description);
       await controller.replaceWithBytes(newBytes, `File "${file.name}" attached to PDF`, {
         expectedSource: sourcePdf,
       });
       setAttachments((prev) => [
         ...prev.filter((a) => a.name !== file.name),
-        { name: file.name, size: file.size, data: bytes },
+        { name: file.name, size: file.size, data: bytes, description },
       ]);
     } catch (err) {
       s.set({ error: err instanceof Error ? err.message : String(err) });
@@ -113,7 +112,11 @@ export function AttachmentsDialog({
         try {
           newBytes = await pruneDocument(newBytes);
         } catch {
-          // ignore or fall back
+          // The attachment is unlisted either way; say that its data is still in the file.
+          s.set({
+            status:
+              "The attachment was removed from the list, but its data could not be cleared from the file.",
+          });
         }
       } else {
         s.set({
@@ -129,6 +132,73 @@ export function AttachmentsDialog({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveDescription = async () => {
+    if (!controller?.pdf || !editing) return;
+    setSaving(true);
+    try {
+      const currentBytes = await controller.pdf.saveDocument();
+      const newBytes = await setEmbeddedAttachmentDescription(
+        currentBytes,
+        editing.name,
+        editing.text,
+      );
+      await controller.replaceWithBytes(
+        newBytes,
+        `Description of "${editing.name}" ${editing.text.trim() ? "changed" : "cleared"}`,
+        { expectedSource: sourcePdf },
+      );
+      const description = editing.text.trim() || undefined;
+      setAttachments((prev) =>
+        prev.map((a) => (a.name === editing.name ? { ...a, description } : a)),
+      );
+      setEditing(null);
+    } catch (err) {
+      s.set({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderDescription = (att: AttachmentItem) => {
+    if (editing?.name !== att.name)
+      return att.description ? <p className="field-hint">{att.description}</p> : null;
+    return (
+      <form
+        className="attachment-description"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSaveDescription();
+        }}
+      >
+        <input
+          type="text"
+          className="text-input"
+          aria-label={`Description of ${att.name}`}
+          placeholder="Leave empty to clear the description"
+          maxLength={MAX_ATTACHMENT_DESCRIPTION_LENGTH}
+          value={editing.text}
+          disabled={saving}
+          onChange={(event) => {
+            setEditing({ name: att.name, text: event.target.value });
+          }}
+        />
+        <button type="submit" className="button-primary" disabled={saving}>
+          Save
+        </button>
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={saving}
+          onClick={() => {
+            setEditing(null);
+          }}
+        >
+          Cancel
+        </button>
+      </form>
+    );
   };
 
   const renderAttachments = () => {
@@ -148,8 +218,21 @@ export function AttachmentsDialog({
           <span className="attachment-size">
             ({att.size !== undefined ? `${Math.round(att.size / 1024)} KB` : "unknown size"})
           </span>
+          {renderDescription(att)}
         </div>
         <div style={{ display: "flex", gap: "6px" }}>
+          <button
+            type="button"
+            className="icon-button"
+            title="Edit description"
+            onClick={() => {
+              setEditing({ name: att.name, text: att.description ?? "" });
+            }}
+            disabled={saving}
+            aria-label={`Edit description of ${att.name}`}
+          >
+            <Pencil size={16} />
+          </button>
           <button
             type="button"
             className="icon-button"

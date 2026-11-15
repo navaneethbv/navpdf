@@ -2509,6 +2509,7 @@ dependencies = [
  "objc2-vision",
  "p12-keystore",
  "p256",
+ "regex",
  "rfd",
  "rsa",
  "security-framework",

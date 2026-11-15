@@ -192,8 +192,62 @@ export async function findTermMarks(
 }
 
 export interface PatternMark extends RedactionRegion {
-  kind: SensitiveKind;
+  kind: SensitiveKind | "custom";
   text: string;
+}
+
+/** Finds matches of an expression in each page's text, as [start, end) offsets. */
+export type FindInPages = (texts: string[]) => Promise<[number, number][][]>;
+
+/**
+ * Marks each match of a typed expression. A page's text items are joined by one space, so a
+ * match can run across words and lines of a page but never across a page break. `accept`
+ * can reject matches, for example by a checksum.
+ */
+export async function findExpressionMarks(
+  pdf: TextSource,
+  find: FindInPages,
+  accept: (text: string) => boolean = () => true,
+  signal?: AbortSignal,
+): Promise<PatternMark[]> {
+  const pages: {
+    page: number;
+    items: TextItemLike[];
+    starts: number[];
+    text: string;
+    measure?: MeasureText;
+  }[] = [];
+  for await (const [page, source] of pagesInOrder(pdf, allPageNumbers(pdf.numPages))) {
+    if (signal?.aborted) return [];
+    const content = await source.getTextContent();
+    const items = content.items.filter(
+      (item): item is TextItemLike => isTextItem(item) && item.str.length > 0,
+    );
+    const starts: number[] = [];
+    let text = "";
+    for (const item of items) {
+      if (text) text += " ";
+      starts.push(text.length);
+      text += item.str;
+    }
+    pages.push({ page, items, starts, text, measure: canvasMeasure(content.styles) });
+  }
+  const found = await find(pages.map((entry) => entry.text));
+  const marks: PatternMark[] = [];
+  pages.forEach(({ page, items, starts, text, measure }, index) => {
+    for (const [from, to] of found[index] ?? []) {
+      const matched = text.slice(from, to);
+      if (!matched.trim() || !accept(matched)) continue;
+      items.forEach((item, position) => {
+        const start = Math.max(from - starts[position], 0);
+        const end = Math.min(to - starts[position], item.str.length);
+        if (start >= end) return;
+        for (const rect of rangeRects([item], () => [[start, end]], measure))
+          marks.push({ page, rect, kind: "custom", text: matched });
+      });
+    }
+  });
+  return marks;
 }
 
 /** Marks each sensitive-data match of the chosen kinds, page by page. */

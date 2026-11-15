@@ -22,6 +22,8 @@ import type {
   DocumentStandards,
   PdfaLevel,
   PdfaReport,
+  PrepressEdit,
+  PrepressReport,
   StandardsEdit,
   TagEdit,
   TagReport,
@@ -155,6 +157,21 @@ export async function findCoverUps(bytes: Uint8Array): Promise<CoverUpReport> {
   requireEngine();
   const inputId = await stage(bytes);
   return invoke<CoverUpReport>("engine_find_cover_ups", { inputId });
+}
+
+/**
+ * Matches of a typed regular expression in each text, as [start, end) offsets. The native
+ * engine matches in linear time and refuses expressions that can match the empty string.
+ */
+export async function findPattern(
+  pattern: string,
+  caseInsensitive: boolean,
+  texts: string[],
+): Promise<[number, number][][]> {
+  requireEngine();
+  return await invoke<[number, number][][]>("engine_find_pattern", {
+    request: { pattern, caseInsensitive, texts },
+  });
 }
 
 export async function saveProtectedCopy(
@@ -294,6 +311,16 @@ export async function editStandards(
   return resolve(
     await invoke<Outcome<{ message: string }>>("engine_standards_edit", { inputId, edit }),
   );
+}
+
+/** Widens hairlines, converts colours, or adds or removes printer marks. */
+export async function prepressDocument(
+  bytes: Uint8Array,
+  edit: PrepressEdit,
+): Promise<EngineResult<PrepressReport>> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return resolve(await invoke<Outcome<PrepressReport>>("engine_prepress", { inputId, edit }));
 }
 
 /** Prunes unreferenced objects, renumbers objects, and compresses streams. */

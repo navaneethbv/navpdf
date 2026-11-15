@@ -369,7 +369,7 @@ function OcrProgress({
   return (
     <div className="ocr-progress-box" style={{ marginTop: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <Loader2 size={18} className="spin" />
+        <Loader2 size={18} className="spinner" />
         <span>
           {statusText} ({progress}%)
         </span>

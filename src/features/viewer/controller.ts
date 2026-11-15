@@ -109,7 +109,7 @@ export interface ParkedDocument {
 }
 
 /** Reports the page left by link and bookmark jumps so Previous View can return to it. */
-class HistoryLinkService extends PDFLinkService {
+export class HistoryLinkService extends PDFLinkService {
   onJump: ((from: number) => void) | null = null;
   override async goToDestination(dest: string | unknown[]) {
     const from = this.page;
@@ -123,6 +123,15 @@ class HistoryLinkService extends PDFLinkService {
   }
   private jumped(from: number) {
     if (this.page !== from) this.onJump?.(from);
+  }
+  /**
+   * External links stay disabled in PDF.js, which blanks their `href`. The address is kept on
+   * the element so a click can ask before the operating system opens it.
+   */
+  override addLinkAttributes(link: HTMLAnchorElement, url: string, newWindow = false) {
+    super.addLinkAttributes(link, url, newWindow);
+    link.dataset.externalUrl = url;
+    link.title = link.title.replace(/^Disabled: /, "");
   }
 }
 
@@ -140,10 +149,11 @@ type OutlineItem = NonNullable<Awaited<ReturnType<PDFDocumentProxy["getOutline"]
 
 function mapBookmarks(nodes: OutlineItem[]): Bookmark[] {
   return nodes
-    .filter((node) => node.dest || (node.items && node.items.length > 0))
+    .filter((node) => node.dest || node.url || (node.items && node.items.length > 0))
     .map((node) => ({
       title: node.title,
       destination: (node.dest as string | unknown[]) ?? null,
+      ...(!node.dest && node.url ? { url: node.url } : {}),
       children: node.items ? mapBookmarks(node.items) : [],
     }));
 }
@@ -402,7 +412,9 @@ export class ViewerController {
       // by NavPDF and avoids leaving the loading icon over a finished page.
       enableDetailCanvas: false,
       enablePermissions: true,
-      enableAutoLinking: false,
+      // Web and email addresses written as page text become links that ask before opening,
+      // exactly as link annotations do.
+      enableAutoLinking: true,
       imagesRightClickMinSize: -1,
       annotationEditorHighlightColors: "yellow=#f5cf58,green=#80d49b,blue=#8cc9f7,pink=#f3a1c0",
       supportsPinchToZoom: true,
@@ -556,7 +568,7 @@ export class ViewerController {
         const anchor = (event.target as Element).closest("a");
         if (anchor && !anchor.classList.contains("internalLink")) {
           event.preventDefault();
-          const url = anchor.getAttribute("href") ?? anchor.href;
+          const url = anchor.dataset.externalUrl || anchor.getAttribute("href") || anchor.href;
           if (url) this.onExternalLink?.(url);
         }
       },
@@ -621,6 +633,10 @@ export class ViewerController {
 
     this.identity = await contentIdentity(pdf).catch(() => null);
     await this.readComments().catch(() => {});
+  }
+  /** Ask before following a web address, exactly as a clicked link annotation does. */
+  requestExternalLink(url: string) {
+    this.onExternalLink?.(url);
   }
   async detach() {
     this.flushViewRecord();

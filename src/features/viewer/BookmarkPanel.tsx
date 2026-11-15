@@ -24,13 +24,17 @@ export function BookmarkPanel({
           type="search"
           value={query}
           placeholder="Find bookmark titles"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+          }}
         />
         <button
           type="button"
           className="button-secondary"
           disabled={!query}
-          onClick={() => setQuery("")}
+          onClick={() => {
+            setQuery("");
+          }}
         >
           Clear bookmark search
         </button>
@@ -50,6 +54,42 @@ export function BookmarkPanel({
   );
 }
 
+function BookmarkItem({
+  node,
+  controller,
+}: Readonly<{ node: Bookmark; controller: ViewerController }>) {
+  if (node.destination) {
+    const destination = node.destination;
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void controller.links.goToDestination(destination).catch(() => {
+            useWorkspace.getState().set({ error: "This bookmark has an invalid destination." });
+          });
+        }}
+      >
+        {node.title}
+      </button>
+    );
+  }
+  if (node.url) {
+    const url = node.url;
+    return (
+      <button
+        type="button"
+        title={url}
+        onClick={() => {
+          controller.requestExternalLink(url);
+        }}
+      >
+        {node.title}
+      </button>
+    );
+  }
+  return <span className="bookmark-heading">{node.title}</span>;
+}
+
 function BookmarkTree({
   nodes,
   controller,
@@ -58,25 +98,7 @@ function BookmarkTree({
     <ul className="bookmarks">
       {nodes.map((node, index) => (
         <li key={`${node.title}-${index}`}>
-          {node.destination ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (!node.destination) return;
-                void controller.links
-                  .goToDestination(node.destination)
-                  .catch(() =>
-                    useWorkspace
-                      .getState()
-                      .set({ error: "This bookmark has an invalid destination." }),
-                  );
-              }}
-            >
-              {node.title}
-            </button>
-          ) : (
-            <span className="bookmark-heading">{node.title}</span>
-          )}
+          <BookmarkItem node={node} controller={controller} />
           {node.children.length > 0 && (
             <BookmarkTree nodes={node.children} controller={controller} />
           )}
