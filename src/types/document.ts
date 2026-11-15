@@ -168,6 +168,8 @@ export interface SearchResult {
 export interface Bookmark {
   title: string;
   destination: string | unknown[] | null;
+  /** A web address the bookmark opens instead of a place in this document. */
+  url?: string;
   children: Bookmark[];
 }
 export interface Comment {

@@ -149,10 +149,11 @@ type OutlineItem = NonNullable<Awaited<ReturnType<PDFDocumentProxy["getOutline"]
 
 function mapBookmarks(nodes: OutlineItem[]): Bookmark[] {
   return nodes
-    .filter((node) => node.dest || (node.items && node.items.length > 0))
+    .filter((node) => node.dest || node.url || (node.items && node.items.length > 0))
     .map((node) => ({
       title: node.title,
       destination: (node.dest as string | unknown[]) ?? null,
+      ...(!node.dest && node.url ? { url: node.url } : {}),
       children: node.items ? mapBookmarks(node.items) : [],
     }));
 }
@@ -632,6 +633,10 @@ export class ViewerController {
 
     this.identity = await contentIdentity(pdf).catch(() => null);
     await this.readComments().catch(() => {});
+  }
+  /** Ask before following a web address, exactly as a clicked link annotation does. */
+  requestExternalLink(url: string) {
+    this.onExternalLink?.(url);
   }
   async detach() {
     this.flushViewRecord();

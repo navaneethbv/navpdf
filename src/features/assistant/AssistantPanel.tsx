@@ -143,7 +143,7 @@ export function AssistantPanel({
               void find();
             }}
           >
-            <label className="visually-hidden" htmlFor="passage-query">
+            <label className="sr-only" htmlFor="passage-query">
               Words to find
             </label>
             <input

@@ -74,6 +74,14 @@ function BookmarkTree({
             >
               {node.title}
             </button>
+          ) : node.url ? (
+            <button
+              type="button"
+              title={node.url}
+              onClick={() => node.url && controller.requestExternalLink(node.url)}
+            >
+              {node.title}
+            </button>
           ) : (
             <span className="bookmark-heading">{node.title}</span>
           )}

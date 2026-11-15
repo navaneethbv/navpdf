@@ -133,6 +133,26 @@ describe("ViewerController lifecycle", () => {
     expect(bookmarks[0].children[0].title).toBe("Ch1");
   });
 
+  it("keeps a bookmark that opens a web address and asks before following it", async () => {
+    const asked: string[] = [];
+    const container = document.createElement("div");
+    const pages = document.createElement("div");
+    container.append(pages);
+    const asking = new ViewerController(container, pages, (url) => asked.push(url));
+    await asking.attach(
+      makePdf(3, [{ title: "Site", dest: null, url: "https://example.com/", items: [] }]) as never,
+    );
+    const [bookmark] = useWorkspace.getState().bookmarks;
+    expect(bookmark).toMatchObject({
+      title: "Site",
+      destination: null,
+      url: "https://example.com/",
+    });
+    asking.requestExternalLink(bookmark.url ?? "");
+    expect(asked).toEqual(["https://example.com/"]);
+    asking.destroy();
+  });
+
   it("reports text extraction failures without breaking attach", async () => {
     const pdf = makePdf();
     pdf.getPage = vi.fn(async () => {
