@@ -325,6 +325,25 @@ pub fn refuse_plaintext_overwrite(doc: &Opened, target: &std::path::Path) -> Res
     }
     Ok(())
 }
+/// The name proposed for a copy with applied redactions: `contract.pdf` gives
+/// `contract_Redacted.pdf`, and a name that already ends in `_Redacted` is kept.
+pub fn redacted_name(name: &str) -> String {
+    let path = std::path::Path::new(name);
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or("Document");
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("pdf");
+    if stem.ends_with("_Redacted") {
+        format!("{stem}.{extension}")
+    } else {
+        format!("{stem}_Redacted.{extension}")
+    }
+}
 fn opened(state: &AppState, path: PathBuf, remember: bool) -> Result<Descriptor, String> {
     // Taken before the snapshot, so a change during it is reported later rather than missed.
     let stamp = lifecycle::stamp(&path);
@@ -614,8 +633,6 @@ pub fn close_document(state: State<AppState>, id: String) -> Result<(), String> 
         .lock()
         .map_err(|_| "Document state unavailable.")?
         .remove(&id);
-    let _ = fs::remove_file(state.root.join(format!("recovery-{id}.pdf")));
-    let _ = fs::remove_file(state.root.join(format!("recovery-{id}.json")));
     Ok(())
 }
 fn header(request: &Request<'_>, name: &str) -> Result<String, String> {
@@ -674,14 +691,27 @@ pub async fn save_document(
             .source_encrypted
             .lock()
             .map_err(|_| "Document state unavailable.")?;
+        let armed_audit = doc
+            .redaction_audit
+            .lock()
+            .map_err(|_| "Document state unavailable.")?
+            .armed
+            .clone();
+        // A copy with applied redactions is proposed under its own name, so the picker does
+        // not start on the unredacted original.
+        let proposed_name = if armed_audit.is_some() {
+            redacted_name(&current_name)
+        } else {
+            current_name.clone()
+        };
         let suggested_name = if sensitive || source_encrypted {
-            let stem = std::path::Path::new(&current_name)
+            let stem = std::path::Path::new(&proposed_name)
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Document");
             format!("{stem}-unlocked.pdf")
         } else {
-            current_name.clone()
+            proposed_name
         };
         let target = if save_as
             || force_save_as
@@ -710,12 +740,6 @@ pub async fn save_document(
         } else {
             None
         };
-        let armed_audit = doc
-            .redaction_audit
-            .lock()
-            .map_err(|_| "Document state unavailable.")?
-            .armed
-            .clone();
         let worker_app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let new_hash =
@@ -1316,6 +1340,19 @@ mod tests {
         assert!(parsed.pinned_tools.is_empty());
         let local: LocalData = serde_json::from_str(r#"{"preferences":{},"recents":[]}"#).unwrap();
         assert!(local.views.is_empty());
+    }
+
+    #[test]
+    fn redacted_copies_are_proposed_under_a_suffixed_name() {
+        assert_eq!(redacted_name("contract.pdf"), "contract_Redacted.pdf");
+        assert_eq!(redacted_name("Résumé 日本.PDF"), "Résumé 日本_Redacted.PDF");
+        assert_eq!(redacted_name("a.b.pdf"), "a.b_Redacted.pdf");
+        assert_eq!(
+            redacted_name("contract_Redacted.pdf"),
+            "contract_Redacted.pdf"
+        );
+        assert_eq!(redacted_name("notes"), "notes_Redacted.pdf");
+        assert_eq!(redacted_name(""), "Document_Redacted.pdf");
     }
 
     #[test]

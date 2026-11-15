@@ -4003,6 +4003,91 @@ p {
 .column-selection.dragging {
   border-style: dashed;
 }
+/* Rows of attachments, redaction marks and audit terms: a label with its buttons beside it. */
+.attachments-action-bar {
+  margin-bottom: 12px;
+}
+.attachments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.attachment-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.attachment-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.attachment-info {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.attachment-info > svg {
+  flex: none;
+}
+.attachment-name {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.attachment-size {
+  color: var(--muted);
+  font-size: 12px;
+}
+.attachment-info .field-hint {
+  flex-basis: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.attachment-description {
+  display: flex;
+  flex-basis: 100%;
+  gap: 6px;
+}
+.attachment-description input {
+  flex: 1;
+  min-width: 0;
+}
+/* Tab numbers: each fillable field shows its place in the page's Tab order, which is the
+   order of the fields in the annotation layer. Nothing is written to the document. */
+.show-tab-numbers .page {
+  counter-reset: tab-number;
+}
+.show-tab-numbers
+  .annotationLayer
+  section:not([hidden]):has(:is(input, select, textarea):not(:disabled)) {
+  counter-increment: tab-number;
+}
+.show-tab-numbers
+  .annotationLayer
+  section:not([hidden]):has(:is(input, select, textarea):not(:disabled))::after {
+  content: counter(tab-number);
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 3;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #1d4ed8;
+  color: #fff;
+  font:
+    600 11px/16px system-ui,
+    sans-serif;
+  text-align: center;
+  pointer-events: none;
+}
 .page-size-label {
   position: absolute;
   left: 12px;

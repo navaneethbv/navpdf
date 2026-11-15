@@ -36,6 +36,8 @@ interface Workspace {
   nightMode: boolean;
   /** Comments and pop-ups are hidden on screen; fields and links still draw. */
   commentsHidden: boolean;
+  /** Each fillable field on the page shows its position in the page's Tab order. */
+  tabNumbersVisible: boolean;
   pageLabels: string[] | null;
   tool: Tool;
   sidebar: SidebarTab;
@@ -116,6 +118,7 @@ const cleanDocument = {
   readMode: false,
   nightMode: false,
   commentsHidden: false,
+  tabNumbersVisible: false,
   pageLabels: null,
   editingAllowed: true,
   dirty: false,

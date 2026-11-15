@@ -477,6 +477,22 @@ describe("ViewerController tools and navigation", () => {
     anchor.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
   });
+
+  it("asks about a disabled link through the address kept on it", () => {
+    const asked: string[] = [];
+    const host = document.createElement("div");
+    const linked = new ViewerController(host, document.createElement("div"), (url) =>
+      asked.push(url),
+    );
+    // PDF.js leaves a disabled external link with an empty href.
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "");
+    anchor.dataset.externalUrl = "https://example.org/report";
+    host.append(anchor);
+    anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(asked).toEqual(["https://example.org/report"]);
+    linked.destroy();
+  });
 });
 
 it("restores the current revision and dirty state after a late mutation failure", async () => {

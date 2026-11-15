@@ -65,6 +65,7 @@ export function ViewerHost({
   const [pageSize, setPageSize] = useState<string | null>(null);
   const [hoverCorner, setHoverCorner] = useState(false);
   const page = useWorkspace((s) => s.page);
+  const tabNumbers = useWorkspace((s) => s.tabNumbersVisible);
   const [externalLink, setExternalLink] = useState<{ url: string; reason?: string } | null>(null);
   const allowedHosts = useRef(new Set<string>());
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -289,7 +290,7 @@ export function ViewerHost({
   return (
     <div className={`viewer-frame ${hasDocument ? "" : "hidden"}`}>
       <div
-        className={`pdf-container ${tool === "hand" ? "hand-tool" : ""}`}
+        className={`pdf-container ${tool === "hand" ? "hand-tool" : ""} ${tabNumbers ? "show-tab-numbers" : ""}`}
         ref={container}
         aria-label="PDF document"
         inert={busy}

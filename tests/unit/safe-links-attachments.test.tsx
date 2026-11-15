@@ -13,6 +13,7 @@ import {
   listEmbeddedAttachments,
   extractEmbeddedAttachment,
   deleteEmbeddedAttachment,
+  setEmbeddedAttachmentDescription,
   MAX_ATTACHMENT_SIZE_BYTES,
 } from "../../src/services/document-commands";
 import { PDFDocument } from "pdf-lib";
@@ -161,6 +162,37 @@ describe("Safe links and attachments", () => {
       expect(listAfter).toHaveLength(0);
     });
 
+    it("changes and clears a description without touching the embedded file", async () => {
+      const data = new Uint8Array([1, 2, 3, 4]);
+      const attached = await addEmbeddedAttachment(samplePdf, "notes.bin", data, "First");
+      expect((await listEmbeddedAttachments(attached))[0].description).toBe("First");
+
+      const changed = await setEmbeddedAttachmentDescription(
+        attached,
+        "notes.bin",
+        "  Révision\u0007 finale 日本  ",
+      );
+      const [item] = await listEmbeddedAttachments(changed);
+      expect(item.description).toBe("Révision finale 日本");
+      expect(item.size).toBe(4);
+      expect(Array.from((await extractEmbeddedAttachment(changed, "notes.bin"))!)).toEqual([
+        1, 2, 3, 4,
+      ]);
+
+      const cleared = await setEmbeddedAttachmentDescription(changed, "notes.bin", "   ");
+      expect((await listEmbeddedAttachments(cleared))[0].description).toBeUndefined();
+      expect(Array.from((await extractEmbeddedAttachment(cleared, "notes.bin"))!)).toEqual([
+        1, 2, 3, 4,
+      ]);
+
+      await expect(setEmbeddedAttachmentDescription(attached, "missing.bin", "x")).rejects.toThrow(
+        "Attachment not found.",
+      );
+      await expect(
+        setEmbeddedAttachmentDescription(attached, "notes.bin", "x".repeat(1001)),
+      ).rejects.toThrow(/up to 1000 characters/);
+    });
+
     it("rejects attachments exceeding maximum size boundary (50MB)", async () => {
       // Mock large byte array length without allocating 50MB in RAM
       const fakeLarge = { length: MAX_ATTACHMENT_SIZE_BYTES + 1 } as unknown as Uint8Array;
@@ -234,6 +266,34 @@ describe("Safe links and attachments", () => {
           { expectedSource: mockController.pdf },
         );
       });
+    });
+
+    it("shows a description and saves an edited one", async () => {
+      const attached = await addEmbeddedAttachment(
+        samplePdf,
+        "notes.bin",
+        new Uint8Array([1]),
+        "First draft",
+      );
+      const mockController = {
+        pdf: { saveDocument: vi.fn().mockResolvedValue(attached) },
+        replaceWithBytes: vi.fn().mockResolvedValue(undefined),
+      } as unknown as ViewerController;
+      render(<AttachmentsDialog controller={mockController} onClose={vi.fn()} />);
+
+      expect(await screen.findByText("First draft")).toBeDefined();
+      fireEvent.click(screen.getByRole("button", { name: "Edit description of notes.bin" }));
+      const input = screen.getByRole("textbox", { name: "Description of notes.bin" });
+      fireEvent.change(input, { target: { value: "Signed copy" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        expect(mockController.replaceWithBytes).toHaveBeenCalledTimes(1);
+      });
+      const [saved] = vi.mocked(mockController.replaceWithBytes).mock.calls[0];
+      expect((await listEmbeddedAttachments(saved))[0].description).toBe("Signed copy");
+      expect(await screen.findByText("Signed copy")).toBeDefined();
+      expect(screen.queryByRole("textbox", { name: "Description of notes.bin" })).toBeNull();
     });
   });
 });

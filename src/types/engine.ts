@@ -119,6 +119,9 @@ export interface DiscardOptions {
   metadata: boolean;
   attachments: boolean;
   privateData: boolean;
+  searchIndex: boolean;
+  formActions: boolean;
+  externalReferences: boolean;
 }
 
 export interface PermissionRequest {
