@@ -11,6 +11,7 @@ This family-level comparison is a starting inventory, not a completed assessment
 The two batches merged in PR 68 as `c09576f`; this comparison still describes a partial inventory.
 The [delivery tracker](DELIVERY-PHASES.md) owns progress; the [verification ledger](VERIFICATION.md) owns acceptance evidence.
 The [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) compares upstream `5644d56` and plans batches 12 to 17.
+The [mid-November gap programme](PDFCRAFT-MID-NOVEMBER-GAPS.md) compares upstream `a11ea7a` and records batches 18 to 20.
 
 | Family | Shipped or partial upstream entries | Source comparison and remaining work |
 | --- | ---: | --- |

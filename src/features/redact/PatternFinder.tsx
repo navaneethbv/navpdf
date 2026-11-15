@@ -154,7 +154,8 @@ export function PatternFinder({
           disabled={!native || !expression.trim() || !!searching || !controller?.pdf}
           onClick={() => void searchExpression()}
         >
-          <Regex size={15} /> {searching === "expression" ? "Searching…" : "Mark Expression Matches"}
+          <Regex size={15} />{" "}
+          {searching === "expression" ? "Searching…" : "Mark Expression Matches"}
         </button>
         <p className="field-hint">
           Matches run within one page&apos;s text, with words and lines joined by a space.

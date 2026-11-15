@@ -15,6 +15,8 @@ A historical passing check does not establish acceptance of a later build.
 | [Architecture decisions](adr/README.md) | Accepted engines, dependency rationale and deferred capabilities. |
 | [PDFCraft comparison](PDFCRAFT-COMPARISON.md) | Pinned upstream inventory, implemented subsets and remaining comparisons. |
 | [PDFCraft November gaps](PDFCRAFT-NOVEMBER-GAPS.md) | Upstream changes since October 21 and the per-feature plan for batches 12 to 17. |
+| [PDFCraft mid-November gaps](PDFCRAFT-MID-NOVEMBER-GAPS.md) | Upstream changes since November 7 and the per-feature record for batches 18 to 20. |
+| [Code review, November 15](CODE-REVIEW-2026-11-15.md) | Findings from a full read of the code base, with what was fixed and what remains. |
 | [Security policy](../SECURITY.md) | Vulnerability reporting and document-safety boundaries. |
 | [Fixture corpus](../tests/pdf-fixtures/README.md) | Synthetic inputs and regeneration. |
 | [Vendored GLib](../src-tauri/vendor/README.md) | Security patch provenance and removal criteria. |

@@ -37,6 +37,10 @@ Batch 14 adds bookmark cut, copy and paste, bookmark JSON exchange, bookmarks fr
 Batch 15 adds image arranging and copy and paste, superscript and subscript text, field grids and Bates numbering across files.
 Batch 16 adds PDF version compatibility, object stream control, CCITT Group 4 images, OCR straightening and turn detection, a low-confidence review and rich-text copying.
 Batch 17 adds Present mode, pinned tools, 3D model authoring and listing and an optional installed Tesseract engine under [ADR 0021](adr/0021-presentation-pinned-tools-3d-and-external-ocr.md).
+On November 15 the user asked for the latest upstream features; the [mid-November gap programme](PDFCRAFT-MID-NOVEMBER-GAPS.md) records each of the 25 changed entries as implemented, deferred or declined.
+Batch 18 adds three optimizer discards, attachment descriptions, form tab numbers, a `_Redacted` save name, clickable plain-text web addresses and web bookmarks.
+Batch 19 adds redaction marks by regular expression and batch 20 adds printer marks, hairline fixing and device colour conversion under [ADR 0022](adr/0022-regular-expressions-text-links-and-print-production.md).
+The [November 15 code review](CODE-REVIEW-2026-11-15.md) lists open findings; none is fixed by claim alone.
 
 ## Phase status and remaining gates
 

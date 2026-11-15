@@ -23,6 +23,7 @@
 | [0019: Tag editing, artifacts and automatic tagging](0019-tag-editing-and-autotagging.md) | Accepted for PDFCraft gap batch 9 |
 | [0020: PDF/A checks, conversion and output intents](0020-pdfa-validation-and-conversion.md) | Accepted for PDFCraft gap batch 10 |
 | [0021: Present mode, pinned tools, 3D models and an installed OCR engine](0021-presentation-pinned-tools-3d-and-external-ocr.md) | Accepted for PDFCraft gap batch 17; supersedes ADR 0010 for 3D authoring only |
+| [0022: Regular expressions, text links and print production](0022-regular-expressions-text-links-and-print-production.md) | Accepted for PDFCraft gap batches 18 to 20 |
 
 Use the [template](template.md) for a new decision.
 Dated context explains the original choice; later ADRs and the [delivery tracker](../DELIVERY-PHASES.md) determine current scope and acceptance.

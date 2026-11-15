@@ -18,6 +18,28 @@ Both macOS jobs use `macos-15`; the required Rust gate still requires Linux and 
 Packaged NavPDF and independent-reader acceptance were not run for this follow-up.
 Browser fullscreen could not be exercised locally because Chromium could not launch in the sandbox.
 
+## November 15 PDFCraft mid-November gap batches 18 to 20 and code review
+
+The [mid-November gap programme](PDFCRAFT-MID-NOVEMBER-GAPS.md) compares upstream `a11ea7a` with `82dbc1f`; [ADR 0022](adr/0022-regular-expressions-text-links-and-print-production.md) records the decisions and the [code review](CODE-REVIEW-2026-11-15.md) records findings.
+This Linux container has Node 24 and runs as root.
+Lint, typecheck, formatting, the production build, `cargo fmt --check`, Clippy with `-D warnings` and `git diff --check` pass.
+The frontend suite passes 1,230 tests across 169 files, with 84.46% statements, 76.5% branches, 82.86% functions and 87.47% lines; the coverage gates pass.
+The native suite passes 169 tests and fails 2, `filesystem::tests::unwritable_destination_directory_keeps_the_original` and `signatures::tests::legacy_assets_stay_listed_when_the_upgrade_cannot_be_written`.
+Both expect a read-only directory to refuse writes, which root ignores; they failed the same way before any change and were not rerun as an unprivileged user in this session.
+
+The dead web-link defect was reproduced in the browser preview with Chromium on a synthetic two-link file: a click on a link annotation raised no confirmation before the fix and raises it after.
+Native WebKit reproduction was unavailable because NavPDF's desktop window was not run in this container; the browser result does not establish native behaviour.
+Plain-text addresses, the attachment description editor, tab number badges and the Print Production dialog were inspected in the same preview.
+Tools that need the native engine could not be run from the preview.
+
+Print production output was produced with the engine command-line example on corpus fixtures and rendered with poppler `pdftoppm`.
+Printer marks appear outside the trim box on upright and rotated pages and are gone after Remove Marks.
+Grey conversion of `scanned-images` takes the rendered chroma from 46 to 0.
+`mixed-forms-annotations` keeps a chroma of 7 after conversion; the cause was not isolated, and annotation and form field appearances, which the tool leaves alone, are the likely source.
+No colour-managed comparison, press preflight, Preview or Acrobat check was run.
+
+Packaged NavPDF, macOS independent-reader acceptance, printing and hosted quality analysis were not run for this change.
+
 ## November 8 PDFCraft November gap batches 12 to 17
 
 The [November gap programme](PDFCRAFT-NOVEMBER-GAPS.md) compares upstream `5644d56` with `1cbacab` and records each addition's scope and limits; [ADR 0021](adr/0021-presentation-pinned-tools-3d-and-external-ocr.md) records batch 17's decisions.
