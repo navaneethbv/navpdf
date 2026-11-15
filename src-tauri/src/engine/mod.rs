@@ -12,6 +12,7 @@ pub mod fonts;
 pub mod geometry;
 pub mod icc;
 pub mod images;
+pub mod pattern;
 pub mod pdfa;
 pub mod protect;
 pub mod prune;

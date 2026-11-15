@@ -157,6 +157,21 @@ export async function findCoverUps(bytes: Uint8Array): Promise<CoverUpReport> {
   return invoke<CoverUpReport>("engine_find_cover_ups", { inputId });
 }
 
+/**
+ * Matches of a typed regular expression in each text, as [start, end) offsets. The native
+ * engine matches in linear time and refuses expressions that can match the empty string.
+ */
+export async function findPattern(
+  pattern: string,
+  caseInsensitive: boolean,
+  texts: string[],
+): Promise<[number, number][][]> {
+  requireEngine();
+  return invoke<[number, number][][]>("engine_find_pattern", {
+    request: { pattern, caseInsensitive, texts },
+  });
+}
+
 export async function saveProtectedCopy(
   documentId: string,
   bytes: Uint8Array,

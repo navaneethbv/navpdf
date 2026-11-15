@@ -2,7 +2,9 @@
 //! while small typed command metadata stays in JSON and passwords never travel in headers.
 
 use super::{document, payload, AppState};
-use crate::engine::{compress, coverup, discard, edit, pdfa, protect, prune, redact, sign, tags};
+use crate::engine::{
+    compress, coverup, discard, edit, pattern, pdfa, protect, prune, redact, sign, tags,
+};
 use crate::{filesystem, logging};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -291,6 +293,17 @@ pub async fn engine_find_cover_ups(
         .map_err(|_| "The cover-up check failed.".to_string())?;
     logging::record(&state.root, "engine_find_cover_ups", result.is_err());
     result
+}
+
+/// Finds a typed regular expression in page text for marking redactions. Neither the
+/// expression nor the text is logged.
+#[tauri::command]
+pub async fn engine_find_pattern(
+    request: pattern::PatternRequest,
+) -> Result<Vec<Vec<[u32; 2]>>, String> {
+    tauri::async_runtime::spawn_blocking(move || pattern::find(&request))
+        .await
+        .map_err(|_| "The text could not be searched.")?
 }
 
 #[tauri::command]
