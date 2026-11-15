@@ -22,6 +22,8 @@ import type {
   DocumentStandards,
   PdfaLevel,
   PdfaReport,
+  PrepressEdit,
+  PrepressReport,
   StandardsEdit,
   TagEdit,
   TagReport,
@@ -309,6 +311,16 @@ export async function editStandards(
   return resolve(
     await invoke<Outcome<{ message: string }>>("engine_standards_edit", { inputId, edit }),
   );
+}
+
+/** Widens hairlines, converts colours, or adds or removes printer marks. */
+export async function prepressDocument(
+  bytes: Uint8Array,
+  edit: PrepressEdit,
+): Promise<EngineResult<PrepressReport>> {
+  requireEngine();
+  const inputId = await stage(bytes);
+  return resolve(await invoke<Outcome<PrepressReport>>("engine_prepress", { inputId, edit }));
 }
 
 /** Prunes unreferenced objects, renumbers objects, and compresses streams. */

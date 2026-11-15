@@ -3,7 +3,7 @@
 
 use super::{document, payload, AppState};
 use crate::engine::{
-    compress, coverup, discard, edit, pattern, pdfa, protect, prune, redact, sign, tags,
+    compress, coverup, discard, edit, pattern, pdfa, prepress, protect, prune, redact, sign, tags,
 };
 use crate::{filesystem, logging};
 use serde::Serialize;
@@ -465,6 +465,24 @@ pub async fn engine_standards_edit(
         output_id: Some(state.engine.stage(output)?),
         report,
     })
+}
+
+/// Widens hairlines, converts colours, or adds or removes printer marks.
+#[tauri::command]
+pub async fn engine_prepress(
+    app: AppHandle,
+    input_id: String,
+    edit: prepress::PrepressEdit,
+) -> Result<EngineOutcome<prepress::PrepressReport>, String> {
+    let state = app.state::<AppState>();
+    let bytes = state.engine.take(&input_id)?;
+    let result = tauri::async_runtime::spawn_blocking(move || prepress::apply(&bytes, &edit))
+        .await
+        .map_err(|_| "The document could not be changed. It is unchanged.")?;
+    logging::record(&state.root, "engine_prepress", result.is_err());
+    let (output, report) = result?;
+    let output_id = output.map(|bytes| state.engine.stage(bytes)).transpose()?;
+    Ok(EngineOutcome { output_id, report })
 }
 
 /// Encrypts the staged document and writes it through the native Save As picker with a

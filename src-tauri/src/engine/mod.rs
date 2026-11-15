@@ -14,6 +14,7 @@ pub mod icc;
 pub mod images;
 pub mod pattern;
 pub mod pdfa;
+pub mod prepress;
 pub mod protect;
 pub mod prune;
 pub mod redact;

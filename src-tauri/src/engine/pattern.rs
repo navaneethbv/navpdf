@@ -132,7 +132,11 @@ mod tests {
         assert!(find(&request(r"(?:\pL{1000}){1000}", text))
             .unwrap_err()
             .contains("too large"));
-        assert!(find(&request(&format!("{}a{}", "(".repeat(60), ")".repeat(60)), text)).is_err());
+        assert!(find(&request(
+            &format!("{}a{}", "(".repeat(60), ")".repeat(60)),
+            text
+        ))
+        .is_err());
     }
 
     #[test]
